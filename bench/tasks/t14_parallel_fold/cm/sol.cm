@@ -1,0 +1,47 @@
+const BLOCK: i32 = 4096;
+
+// Блоки по BLOCK подряд; сумма блока и итог — слева направо, поэтому итог
+// не зависит от числа потоков.
+pub fn parallel_sum(values: []f64, threads: i32) -> f64 {
+    let n = i32(len(values));
+    let blocks = (n + BLOCK - 1) / BLOCK;
+    var partial = repeat(0.0, blocks);
+    parallel for t in 0..threads {
+        var b = t;
+        while b < blocks {
+            let lo = b * BLOCK;
+            let hi = min(n, lo + BLOCK);
+            var s = 0.0;
+            for i in lo..hi {
+                s += values[i];
+            }
+            partial[b] = s;
+            b += threads;
+        }
+    }
+    var total = 0.0;
+    for p in &partial {
+        total += p;
+    }
+    return total;
+}
+
+// Локальные счётчики на поток и слияние по порядку потоков.
+pub fn parallel_histogram(values: []u32, buckets: i32, threads: i32) -> List[i64] {
+    let n = i64(len(values));
+    var local: List[List[i64]] = repeat(repeat(0, buckets), threads);
+    parallel for t in 0..threads {
+        let lo = n * i64(t) / i64(threads);
+        let hi = n * i64(t + 1) / i64(threads);
+        for i in lo..hi {
+            local[t][values[i] % u32(buckets)] += 1;
+        }
+    }
+    var out: List[i64] = repeat(0, buckets);
+    for h in &local {
+        for b in 0..buckets {
+            out[b] += h[b];
+        }
+    }
+    return out;
+}

@@ -1,0 +1,17 @@
+pub fn moving_average(values: []i32, window: i32) -> List[i32] {
+    var out: List[i32] = [];
+    let n = len(values);
+    if window < 1 || window > n {
+        return out;
+    }
+    var sum: i64 = 0;
+    for i in 0..window {
+        sum += i64(values[i]);
+    }
+    out.push(i32(sum / i64(window)));
+    for i in window..n {
+        sum += i64(values[i]) - i64(values[i - window]);
+        out.push(i32(sum / i64(window)));
+    }
+    return out;
+}
