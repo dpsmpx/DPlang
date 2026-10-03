@@ -1,0 +1,20 @@
+idle
+patrol 0
+patrol 1
+patrol 2
+patrol 3
+patrol 0
+chase 7
+chase 7
+chase 9
+patrol 0
+patrol 0
+flee 3
+flee 3
+flee 2
+flee 1
+idle
+patrol 0
+flee 3
+flee 3
+flee 2

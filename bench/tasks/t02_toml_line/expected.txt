@@ -1,0 +1,21 @@
+width int 64
+name str [stone wall]
+none
+none
+enabled bool true
+debug bool false
+offset int -12
+big int 9223372036854775807
+error BadValue
+min int -9223372036854775808
+error BadKey
+error BadKey
+error MissingEquals
+error MissingEquals
+error BadValue
+error BadValue
+error BadValue
+error BadValue
+error BadKey
+error BadValue
+a_b2 str []

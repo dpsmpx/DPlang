@@ -1,0 +1,23 @@
+push 1 ok
+push 2 ok
+push 3 ok
+push 4 full
+len 3
+pop 1
+push 4 ok
+pop 2
+pop 3
+pop 4
+pop none
+len 0
+push 10 ok
+push 11 ok
+pop 10
+push 12 ok
+push 13 ok
+pop 11
+push 14 ok
+push 15 full
+pop 12
+push 16 ok
+len 3
