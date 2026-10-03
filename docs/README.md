@@ -19,6 +19,7 @@
 | запустить проверки и прочитать результат | `../tools/check/run.sh`, `policy/TESTING.md` (разделы 5–6) |
 | понять, что делать дальше | `../ROADMAP/ROADMAP.md`, `../ROADMAP/IMPLEMENTATION.md`, `../TODO.md` |
 | понять, когда v1.0 | `direction/DEFINITION_OF_DONE.md` |
+| понять, как лицензируются компилятор, runtime и вывод | `research/LICENSING.md` (исследование), затем `direction/DECISIONS.md`, Р4 |
 
 ## 2. Каталоги
 

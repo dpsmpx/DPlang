@@ -2,7 +2,7 @@
 
 3 октября 2026. Основание — Р4 (уточнение 3 октября 2026: модель
 лицензирования проектируется сейчас), Р5 (проект закрыт до v1.0), Р38
-(имя DPlang). Источники — раздел 27, ссылки в тексте — [И1]…[И60].
+(имя DPlang). Источники — раздел 27, ссылки в тексте — [И1]…[И61].
 
 **Это не юридическая консультация и не решение.** Документ —
 инженерно-юридический анализ: факты о текстах лицензий, законах и
@@ -1246,7 +1246,7 @@ license» [И16].
 | вопрос | ответ |
 |---|---|
 | стратегические последствия, если бы Unlicense остался | всё содержимое можно было бы взять, изменить и продавать без условий — несовместимо с Р4 и Р5 |
-| можно ли заменить до появления кода компилятора | да, и это уже сделано (`bd28546`). Кода компилятора не было; передач третьим лицам не было |
+| можно ли заменить до появления кода компилятора | да, и это уже сделано (`bd28546`). Кода компилятора не было; передач третьим лицам не было. Временная редакция «все права защищены» — то же, что отсутствие лицензии: никто не вправе воспроизводить, распространять и создавать производные [И23] |
 | что с содержимым, созданным при Unlicense | это документы и скрипты, позже переписанные и дополненные. Практический риск — только если кто-то получил копию до замены. Получателей не было: репозиторий приватный, участник один |
 | судьба старых коммитов | **не переписывать историю:** переписывание приватной истории не меняет того, было ли что-то передано, а ломает ссылки и PR. Достаточно записи фактов (уже есть: Р4, п. 6 `LICENSE`) и этого аудита |
 | обозначать ли Unlicense ошибкой | обозначить как **шаблон по умолчанию при создании репозитория**, не предлагавшийся никому. Формулировка — в предложении записи решения (раздел 26) |
@@ -1427,7 +1427,7 @@ license» [И16].
 | отдельная лицензия runtime | не нужна | — | этап 2 (б): файл лицензии в каталоге runtime-компонентов с Apache-2.0 WITH LLVM-exception | появление `runtime/`, `stdlib/` и решение по Р5 |
 | уведомление о выводе | не нужно отдельным файлом | — | норма в `LICENSE`; в сгенерированный C — без строк о лицензии: они создают видимость, что код пользователя под лицензией DPlang | — |
 | лицензия документации | не нужна | — | при публикации (Р5) | решение по Р5 |
-| строки `SPDX-License-Identifier` в файлах | не нужны сейчас | машинная проверка лицензий | на этапе 1 — в файлах runtime-компонентов и официальных привязок (`LicenseRef-DPlang-SDK-1.0` или стандартное выражение); у остального — по каталогу | появление каталогов |
+| строки `SPDX-License-Identifier` в файлах | не нужны сейчас | машинная проверка лицензий [И3] | на этапе 1 — в файлах runtime-компонентов и официальных привязок (`LicenseRef-DPlang-SDK-1.0` или стандартное выражение); у остального — по каталогу | появление каталогов |
 | `docs/policy/LICENSING.md` | не нужен до решения | рабочие правила для агента | после решения: карта компонентов, правила допуска стороннего кода, вкладов, проверка в `tools/check/run.sh` | запись Р в `DECISIONS.md` |
 
 **Порядок зависимостей:**
@@ -2027,3 +2027,300 @@ Apache-2.0 WITH LLVM-exception для соответствующих компо�
 7. **Применимое право:** по совету юриста.
 8. **Проверка имени DPlang** у поверенного — до первого публичного
    использования имени (рекомендуется: сейчас, до вложений в бренд).
+
+---
+
+## 27. Источники
+
+Дата обращения — 3 октября 2026. Что подтверждает каждый источник —
+после тире.
+
+**Определения, SPDX, политика ASF**
+
+- **И1.** Open Source Initiative, The Open Source Definition —
+  https://opensource.org/osd — десять критериев; почему лицензии с
+  ограничением областей и лиц — не open source (разделы 4.3, 8.1, 15).
+- **И2.** SPDX Specification 2.3, Annex: SPDX License Expressions —
+  https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/ —
+  синтаксис `LicenseRef-` для лицензий вне списка SPDX (раздел 21.0).
+- **И3.** SPDX, Handling License Info —
+  https://spdx.dev/learn/handling-license-info/ — строки
+  `SPDX-License-Identifier`, операторы AND, OR, WITH (раздел 20).
+- **И15.** Apache Software Foundation, ASF 3rd Party License Policy —
+  https://www.apache.org/legal/resolved.html — категории A, B, X;
+  Unlicense, CC0, Boost — A; GPL, LGPL, Commons Clause, Facebook
+  BSD + Patents — X (разделы 5.2, 11.2, 12.2, 18.2).
+
+**Тексты лицензий и исключений**
+
+- **И4.** GCC Runtime Library Exception 3.1 —
+  https://spdx.org/licenses/GCC-exception-3.1.html (оригинал gnu.org был
+  недоступен) — «Target Code», «Compilation Process» (генераторы
+  исходников вне процесса), «Eligible Compilation Process» (разделы 5.4,
+  7.1, 9.3).
+- **И5.** GNU GPL FAQ — https://www.gnu.org/licenses/gpl-faq.html#WhatCaseIsOutputGPL
+  (сайт был недоступен; текст — по выдаче поиска) — вывод программы, как
+  правило, не покрыт её авторским правом; исключение — копируемые части,
+  как у Bison (разделы 3.1, 9.1).
+- **И6.** Classpath Exception 2.0 —
+  https://spdx.org/licenses/Classpath-exception-2.0.html;
+  https://openjdk.org/legal/gplv2+ce.html — линковка с независимыми
+  модулями на любых условиях (разделы 5.4, 7.1, 11.1).
+- **И7.** Bison Exception 2.2 —
+  https://spdx.org/licenses/Bison-exception-2.2.html — скелет парсера в
+  выводе на любых условиях (разделы 3.2, 9.1).
+- **И8.** Apache License 2.0 — https://www.apache.org/licenses/LICENSE-2.0
+  — §3 патенты и прекращение, §4(d) NOTICE, §5 вклады, §6 знаки, §9
+  платная поддержка (разделы 5.1, 8.1, 10.2, 12, 13, 17).
+- **И9.** LLVM, LICENSE.txt — https://llvm.org/LICENSE.txt — LLVM
+  Exceptions: встроенные части без условий 4(a), (b), (d); совместимость
+  с GPLv2 (разделы 7, 9, 10).
+- **И11.** Swift, LICENSE.txt — https://swift.org/LICENSE.txt — Runtime
+  Library Exception: встроенные части без атрибуции (разделы 7, 10).
+- **И12.** Mozilla Public License 2.0 — https://www.mozilla.org/en-US/MPL/2.0/
+  — §2.3 знаки, §3.3 большая работа, §5.2 прекращение всех прав при
+  патентном иске (разделы 5.3, 12.2, 13.1).
+- **И13.** GNU AGPL 3.0 — https://spdx.org/licenses/AGPL-3.0-only.html —
+  §13 исходники для пользователей сети, §11 патенты (разделы 5.2, 12.2,
+  14.1).
+- **И14.** The Unlicense — https://unlicense.org/;
+  https://opensource.org/license/unlicense — текст; одобрение OSI 12 июня
+  2020 (раздел 18).
+- **И16.** Business Source License 1.1 — https://mariadb.com/bsl11/ —
+  непроизводственное использование, Change Date до четырёх лет, «not an
+  Open Source license» (разделы 5.5, 15).
+- **И17.** Functional Source License — https://fsl.software/;
+  https://fsl.software/FSL-1.1-ALv2.template.md — «Competing Use»,
+  переход в Apache-2.0 через два года, патентная оговорка (разделы 5.5,
+  12.2, 15.2, 23).
+- **И18.** PolyForm Small Business 1.0.0 —
+  https://spdx.org/licenses/PolyForm-Small-Business-1.0.0.html; PolyForm
+  Internal Use 1.0.0 —
+  https://scancode-licensedb.aboutcode.org/polyform-internal-use-1.0.0.html
+  — простой язык, 32 дня на устранение, защитное патентное прекращение;
+  неясность «внутреннего использования» (разделы 5.5, 21).
+- **И19.** Elastic License 2.0 — https://www.elastic.co/licensing/elastic-license
+  — запрет управляемого сервиса и обхода ключей (разделы 5.5, 14.1,
+  21.5).
+- **И47.** SDL, LICENSE.txt (Zlib) —
+  https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt;
+  https://spdx.org/licenses/Zlib.html; история перехода SDL с LGPL на
+  Zlib — https://en.wikipedia.org/wiki/Simple_DirectMedia_Layer
+  (вторичный) — Zlib не требует атрибуции в двоичной форме; LGPL мешал
+  статической линковке (разделы 5.3, 10, 11).
+- **И61.** Boost Software License 1.0 — https://spdx.org/licenses/BSL-1.0.html
+  — уведомления не нужны для объектного кода (раздел 10.1).
+
+**Вклады**
+
+- **И20.** Developer Certificate of Origin 1.1 —
+  https://developercertificate.org/ — DCO ссылается на открытую лицензию
+  (раздел 17).
+- **И21.** Apache Individual Contributor License Agreement —
+  https://www.apache.org/licenses/icla.pdf — лицензия с правом
+  сублицензии, патентная лицензия, заверения о работодателе (раздел 17).
+- **И22.** GCC Steering Committee, Update to GCC copyright assignment
+  policy, 1 июня 2021 —
+  https://gcc.gnu.org/pipermail/gcc/2021-June/236182.html — отказ от
+  обязательной передачи прав FSF, DCO (разделы 7.2, 17.2).
+
+**GitHub**
+
+- **И23.** GitHub Docs, Licensing a repository —
+  https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository
+  — без лицензии действует обычное авторское право (раздел 18.3).
+- **И24.** GitHub Terms of Service —
+  https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
+  — D.5 просмотр и форки публичных репозиториев; D.6 inbound=outbound,
+  CLA имеет приоритет; E конфиденциальность приватных (разделы 6, 17,
+  22).
+- **И25.** GitHub and Trade Controls —
+  https://docs.github.com/en/site-policy/other-site-policies/github-and-trade-controls
+  — ограничения по странам (разделы 24, 25).
+
+**Языки и toolchain**
+
+- **И10.** LLVM Developer Policy, Copyright, License, and Patents —
+  https://llvm.org/docs/DeveloperPolicy.html — причины перелицензирования,
+  runtime-библиотеки, вклады без передачи прав, с 1 июня 2024 — только
+  новая лицензия, больше 99% вкладов покрыто (разделы 7, 10, 17).
+- **И26.** Rust, Licenses — https://www.rust-lang.org/policies/licenses —
+  MIT OR Apache-2.0 (раздел 7).
+- **И27.** Rust Foundation, Rust Trademark Policy —
+  https://rustfoundation.org/policy/rust-trademark-policy/ —
+  номинативное использование, изменённые компиляторы (разделы 7, 13).
+- **И28.** Rust Internals, «Does the standard library have linking
+  exceptions to their licensing?» —
+  https://internals.rust-lang.org/t/does-the-standard-library-have-linking-exceptions-to-their-licensing/11377
+  — спор об атрибуции в бинарниках без явного исключения (разделы 6, 7,
+  9, 10).
+- **И29.** Go, LICENSE и PATENTS — https://go.dev/LICENSE;
+  https://github.com/golang/go/blob/master/PATENTS — BSD-3-Clause;
+  отдельная патентная лицензия на «эту реализацию» с защитным
+  прекращением (разделы 7, 12).
+- **И30.** Go Brand and Trademark Usage Guidelines — https://go.dev/brand —
+  форки и изменённые поставки (разделы 7, 13).
+- **И31.** Haxe Foundation, Open Source —
+  https://haxe.org/foundation/open-source.html — компилятор GPL, std MIT,
+  вывод — пользователя (разделы 3.1, 7).
+- **И32.** Free Pascal FAQ — https://www.freepascal.org/faq.var —
+  компилятор GPL, RTL изменённая LGPL со статическим исключением (разделы
+  5.3, 7).
+- **И33.** D Announce, «dmd Backend converted to Boost License», 7 апреля
+  2017 —
+  https://digitalmars.com/d/archives/digitalmars/D/announce/dmd_Backend_converted_to_Boost_License_47248.html
+  — переход от проприетарного бэкенда; Boost — в корпоративных списках
+  (раздел 7).
+- **И34.** Zig — https://codeberg.org/ziglang/zig/raw/branch/master/LICENSE
+  (MIT); Odin — https://github.com/odin-lang/Odin/blob/master/LICENSE
+  (Zlib); Nim — https://github.com/nim-lang/Nim/blob/devel/copying.txt
+  (MIT) — лицензии языков (раздел 7).
+- **И35.** Modular, «Mojo is now open source», 18 августа 2026 —
+  https://www.modular.com/blog/mojo-open-source; Modular Community License
+  — https://www.modular.com/legal/community — закрытый компилятор до 1.0
+  и открытая stdlib; затем Apache-2.0 WITH LLVM-exception; запрет
+  использования как данных обучения ИИ (разделы 1, 5, 7, 10, 21.14).
+- **И36.** Oracle Java SE Licensing FAQ —
+  https://www.oracle.com/java/technologies/javase/jdk-faqs.html — NFTC:
+  бесплатное использование, распространение не за плату (разделы 5.13,
+  14.2, 22.2).
+- **И37.** Technology Compatibility Kit —
+  https://en.wikipedia.org/wiki/Technology_Compatibility_Kit (вторичный);
+  https://openjdk.org/groups/conformance/JckAccess/ — «Java SE compatible»
+  только после TCK и по лицензии на знак (разделы 7.2, 13).
+- **И38.** Microsoft, Redistribute Visual C++ Files —
+  https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+  — «Distributable Code» и список REDIST; условия Visual Studio Community
+  для «enterprise» — ответы Microsoft Q&A
+  https://learn.microsoft.com/en-us/answers/questions/529694/visual-studio-community-edition-commercial-use-and
+  (вторичный) (разделы 4.3, 5.6, 7, 8.1, 9.3, 11.1).
+- **И39.** NVIDIA, License Agreement for NVIDIA Software Development Kits
+  — https://docs.nvidia.com/cuda/eula/index.html — распространяемые части
+  только внутри приложения; приложения — пользователя; запрет обратной
+  разработки (разделы 3.1, 5.6, 7, 21).
+- **И40.** Android SDK License Agreement —
+  https://developer.android.com/studio/terms — §4.1 приложения —
+  пользователя; §3.2 запрет на несовместимые реализации (разделы 3.1,
+  5.6, 7, 9.3, 11.1, 21).
+- **И41.** Unreal Engine EULA и FAQ —
+  https://www.unrealengine.com/en-US/license (сайт отвечал 403; условия —
+  по выдаче поиска, вторичные) — роялти 5% выше $1 млн, исходники только
+  лицензиатам (разделы 4.3, 5.5, 5.7, 7).
+- **И42.** Unity, «Unity is canceling the Runtime Fee», 12 сентября 2024 —
+  https://unity.com/blog/unity-is-canceling-the-runtime-fee — обещание
+  прежних условий для текущей версии (разделы 4.2, 7, 16, 21.12).
+- **И43.** HashiCorp, «HashiCorp adopts Business Source License», 10
+  августа 2023 —
+  https://www.hashicorp.com/en/blog/hashicorp-adopts-business-source-license;
+  OpenTofu — https://en.wikipedia.org/wiki/OpenTofu (вторичный) — смена
+  лицензии будущих версий, форк последней MPL-версии (разделы 4.2, 6, 7,
+  16).
+- **И44.** KDE Free Qt Foundation —
+  https://kde.org/community/whatiskde/kdefreeqtfoundation/; Qt — двойное
+  лицензирование и Contribution License Agreement (https://www.qt.io) —
+  резервное открытие; CLA с коммерческим лицензированием (разделы 5.9,
+  7, 16, 17).
+- **И45.** Delphi Community Edition —
+  https://blog.marcocantu.com/blog/2018-july-delphi-ce.html;
+  https://ideasawakened.com/post/delphi-community-edition-5000-revenue-limit-explained
+  (вторичные) — порог $5 000 и пять разработчиков (разделы 4.3, 7, 8.1).
+- **И46.** Facebook перелицензирует React под MIT, сентябрь 2017 —
+  https://redmonk.com/sogrady/2017/09/26/facebooks-bsd-patents/;
+  https://thenextweb.com/news/facebook-re-licenses-react-mit-license-developer-backlash
+  (вторичные) — урок широкого патентного возмездия (раздел 12.2).
+
+**Сторонние компоненты, первичные заголовки**
+
+- **И48.** Khronos, Vulkan-Headers: `registry/vk.xml`,
+  `include/vulkan/vulkan_core.h` —
+  https://github.com/KhronosGroup/Vulkan-Headers — «SPDX-License-Identifier:
+  Apache-2.0 OR MIT»; `vk.xml` — нормативная часть спецификации (разделы
+  3.2, 11).
+- **И49.** AOSP libnativehelper, `include_jni/jni.h` —
+  https://android.googlesource.com/platform/libnativehelper/+/refs/heads/main/include_jni/jni.h
+  — Apache-2.0 (раздел 11).
+- **И50.** MinGW-w64, COPYING.MinGW-w64-runtime.txt —
+  https://github.com/mingw-w64/mingw-w64/blob/master/COPYING.MinGW-w64-runtime/COPYING.MinGW-w64-runtime.txt
+  — части runtime требуют уведомлений в двоичных поставках (разделы 9.3,
+  11).
+- **И51.** musl, About — https://musl.libc.org/about.html — MIT,
+  статическая линковка (раздел 11).
+
+**Право ЕС и США**
+
+- **И52.** Directive 2009/24/EC on the legal protection of computer
+  programs — https://www.legislation.gov.uk/eudr/2009/24/article/1,
+  …/article/6, …/article/8 (EUR-Lex отдавал пустую страницу) — ст. 1(2)
+  идеи и принципы интерфейсов не охраняются; ст. 6 декомпиляция для
+  взаимодействия; ст. 8 противоречащие условия договора ничтожны
+  (разделы 3, 8, 9, 14, 21.6).
+- **И53.** CJEU, SAS Institute Inc. v World Programming Ltd, C-406/10, 2
+  мая 2012, п. 46 —
+  https://www.europeanlawblog.eu/pub/c-40610-sas-institute-v-world-programming-ltd-wpl;
+  https://en.wikipedia.org/wiki/SAS_Institute_Inc_v_World_Programming_Ltd
+  (вторичные) — функциональность, язык программирования и форматы файлов
+  не охраняются как выражение программы (разделы 1, 3, 4.3, 9, 22).
+- **И54.** Google LLC v. Oracle America, Inc., 593 U.S. 1 (5 апреля
+  2021) —
+  https://www.davispolk.com/insights/client-update/supreme-court-sides-google-decade-long-copyright-battle-against-oracle;
+  https://en.wikipedia.org/wiki/Google_LLC_v._Oracle_America,_Inc.
+  (вторичные) — копирование объявляющего кода Java SE API признано
+  добросовестным использованием; охраноспособность API суд не решал
+  (раздел 22).
+- **И55.** U.S. Copyright Office, Copyright and Artificial Intelligence,
+  Part 2: Copyrightability, 29 января 2025 —
+  https://copyright.gov/newsnet/2025/1060.html — охраняется только
+  человеческий выразительный вклад; одни подсказки недостаточны
+  (разделы 1, 17, 24, 25).
+- **И56.** Thaler v. Perlmutter, D.C. Cir., 18 марта 2025 —
+  https://ipwatchdog.com/2025/03/24/d-c-circuit-upholds-human-authorship-requirement-thaler-v-perlmutter/;
+  certiorari отказано 2 марта 2026 —
+  https://www.scotusblog.com/cases/case-files/thaler-v-perlmutter;
+  https://www.bakerbotts.com/thought-leadership/publications/2026/march/supreme-court-denies-petition-on-copyright-authorship-by-ai
+  (вторичные) — человеческое авторство обязательно (разделы 1, 17, 24).
+- **И59.** Alice Corp. v. CLS Bank International, 573 U.S. 208 (2014) —
+  https://www.law.cornell.edu/supct/cert/13-298; EPO, Case Law of the
+  Boards of Appeal, I.A.2.4.3 «Programs for computers» —
+  https://epo.org/en/legal/case-law/2019/clr_i_a_2_4_3_c.html — границы
+  патентоспособности ПО (раздел 12.1).
+
+**Условия провайдера ИИ**
+
+- **И57.** Anthropic, Commercial Terms of Service —
+  https://www.anthropic.com/legal/commercial-terms; Consumer Terms —
+  https://www.anthropic.com/legal/consumer-terms — результаты
+  принадлежат клиенту; Anthropic передаёт свои права «if any» (раздел
+  17).
+
+**Право РФ**
+
+- **И58.** Гражданский кодекс РФ, часть четвёртая —
+  https://legalacts.ru/kodeks/GK-RF-chast-4/ :
+  - ст. 1228 — автор — гражданин; личные права неотчуждаемы;
+  - ст. 1232 — регистрация предоставления прав на регистрируемые объекты;
+  - ст. 1233 п. 5 — публичное заявление о свободном использовании;
+  - ст. 1234 — отчуждение исключительного права;
+  - ст. 1235 — лицензионный договор: способы, форма, территория, срок,
+    вознаграждение;
+  - ст. 1238 — сублицензия;
+  - ст. 1259 п. 5 — языки программирования не охраняются;
+  - ст. 1270 п. 2 — способы использования;
+  - ст. 1280 — права пользователя программы, декомпиляция;
+  - ст. 1282 — общественное достояние;
+  - ст. 1286 п. 5 — договор присоединения для программ;
+  - ст. 1286.1 — открытая лицензия;
+  - ст. 1295 — служебное произведение;
+  - ст. 1350 п. 5 — программы как таковые не изобретения;
+  - ст. 1465 — секрет производства;
+  - ст. 1477, 1480, 1481 — товарный знак и его регистрация
+
+  (разделы 1, 3, 8, 12–18, 21, 25).
+
+**Проверка имени**
+
+- **И60.** Результаты поиска 3 октября 2026 по запросам «DPlang»,
+  «DPlang programming language», `site:github.com`; D Language
+  Foundation — https://dlang.org/foundation/about.html; реестры
+  crates.io, PyPI, npm (ответ 404 для `dplang`); `dplang.com` —
+  перенаправление на `/lander` — вывод о риске смешения с D (dlang)
+  (раздел 13.2).
