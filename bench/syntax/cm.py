@@ -1365,7 +1365,10 @@ class Emitter:
         self.refs = refs
         self.errnames = set()
         out = [self.fn_head(f, refs) + ' {']
-        out += self.stmts(f.body.stmts, 1)
+        try:
+            out += self.stmts(f.body.stmts, 1)
+        except CmError as e:
+            raise CmError(f'в функции {f.name}: {e}') from None
         if isinstance(f.ret, TResult) and isinstance(f.ret.val, TName) and f.ret.val.name == 'void':
             out.append('    return {};')
         out.append('}')
@@ -1419,12 +1422,19 @@ class Emitter:
         if isinstance(s, If):
             return self.if_stmt(s, ind)
         if isinstance(s, While):
-            return [f'{pad}while ({self.ex(s.cond)}) {{'] + self.stmts(s.body.stmts, ind + 1) + [pad + '}']
+            return [f'{pad}while ({self.cond(s.cond)}) {{'] + self.stmts(s.body.stmts, ind + 1) + [pad + '}']
         if isinstance(s, For):
             return self.for_stmt(s, ind)
         if isinstance(s, Match):
             return self.match(s, ind)
         raise CmError(f'перевод: неизвестная инструкция {s!r}')
+
+    def cond(self, e):
+        """Условие if/while без лишней пары скобок: clang ругается на «if ((a == b))»."""
+        s = self.ex(e)
+        if isinstance(e, Binary) and e.op not in ARITH and e.op != '??' and s.startswith('(') and s.endswith(')'):
+            return s[1:-1]
+        return s
 
     def let(self, s):
         q = '' if s.mutable else 'const '
@@ -1437,12 +1447,33 @@ class Emitter:
             return f'{q}double {mangle(s.name)} = {self.ex(v)}'
         return f'{q}auto {mangle(s.name)} = {self.ex(v)}'
 
-    def err_value(self, e):
+    def err_tag(self, e, want=None):
+        """Вариант ошибки .X или E.X → имя варианта (None — не вариант). Вариант должен
+        существовать, а при известном типе ошибки want — принадлежать ему."""
         if isinstance(e, EnumLit):
-            return f'cm::Err{{"{e.name}"}}'
+            enum, name = None, e.name
+            owners = self.info.variant_of.get(name, [])
+            if not owners:
+                raise CmError(f'нет варианта перечисления .{name}')
+            if want is not None and want not in owners:
+                raise CmError(f'в {want} нет варианта {name}')
+            return name
         ep = self.info.enum_path(e)
-        if ep:
-            return f'cm::Err{{"{ep[1]}"}}'
+        if not ep:
+            return None
+        enum, name = ep
+        if not any(isinstance(v, Variant) and v.name == name for v in self.info.enums[enum].variants):
+            raise CmError(f'в {enum} нет варианта {name}')
+        if want is not None and enum != want:
+            raise CmError(f'ошибка {enum}.{name} — не того типа: функция возвращает ошибку {want}')
+        return name
+
+    def err_value(self, e):
+        ret = self.fn.ret
+        want = ret.err.name if isinstance(ret, TResult) and isinstance(ret.err, TName) else None
+        tag = self.err_tag(e, want)
+        if tag is not None:
+            return f'cm::Err{{"{tag}"}}'
         if isinstance(e, Name) and e.id in self.errnames:
             return mangle(e.id)
         raise CmError('fail: ожидался вариант ошибки .X или имя, связанное err(e)')
@@ -1454,7 +1485,7 @@ class Emitter:
             head = [f'{pad}if (auto&& {o} = {self.ex(s.cond.expr)}; {o}.has_value()) {{',
                     f'{pad}    const auto& {mangle(s.cond.name)} = *{o};']
         else:
-            head = [f'{pad}if ({self.ex(s.cond)}) {{']
+            head = [f'{pad}if ({self.cond(s.cond)}) {{']
         out = head + self.stmts(s.then.stmts, ind + 1)
         if s.els is None:
             return out + [pad + '}']
@@ -1478,7 +1509,8 @@ class Emitter:
                          f'{pad}        {th}.emplace_back([&, {i}] {{', f'{pad}            const auto {var} = {i};']
                         + ['    ' + x for x in body] +
                         [f'{pad}        }});', f'{pad}    }}', f'{pad}    for (auto& t : {th}) t.join();', f'{pad}}}'])
-            return [f'{pad}{loop} {{', f'{pad}    const auto {var} = {i};'] + body + [pad + '}']
+            bind = [] if s.var == '_' else [f'{pad}    const auto {var} = {i};']
+            return [f'{pad}{loop} {{'] + bind + body + [pad + '}']
         src = self.ex(s.iter)
         if s.mode == 'mut':
             head = f'{pad}for (auto& {var} : {src}) {{'
@@ -1660,7 +1692,7 @@ class Emitter:
         op = e.op
         if op in ('==', '!=') and (self.is_err_name(e.left) or self.is_err_name(e.right)):
             name, lit = (e.left, e.right) if self.is_err_name(e.left) else (e.right, e.left)
-            tag = lit.name if isinstance(lit, EnumLit) else (self.info.enum_path(lit) or (None, None))[1]
+            tag = self.err_tag(lit)
             if tag is None:
                 raise CmError('ошибку сравнивают с вариантом: e == .X')
             s = f'cm::err_is({mangle(name.id)}, "{tag}")'

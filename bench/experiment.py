@@ -1,0 +1,924 @@
+#!/usr/bin/env python3
+"""Измерительная обвязка опыта v0.0 (шаг 0.2, Р35).
+
+Модель (субагент с чистым контекстом) решает задачу эталонного набора на
+C++ или на варианте синтаксиса DPlang (A, B, C), зная язык только по
+краткой спецификации. Обвязка:
+
+- prepare — песочница задания: PROMPT.md (правила, постановка, у t13 —
+  целевой интерфейс, у DPlang — спецификация варианта) и начальный код в
+  src/ (заготовка, код с ошибками или модули до рефакторинга — в записи
+  варианта); драйвер и ожидаемый вывод в песочницу не попадают;
+- check — единственная проверка, доступная модели: перевод прототипом
+  (DPlang), сборка со скрытым драйвером, запуск, сверка с expected.txt;
+  итог — класс и первая ошибка; каждая попытка и снимок кода — в журнал;
+- session — записать расход сессии субагента (из итога инструмента Agent);
+- tokens — точный счёт токенов API Claude (count_tokens, ключ
+  ANTHROPIC_API_KEY): прочитано на входе, прочитано диагностик, написано,
+  итоговое решение;
+- report — таблица прогона и сводка по языкам; --save — в bench/results/;
+- selftest — проверка самой обвязки (шаг «обвязка» в tools/check/run.sh).
+
+    python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A]
+    python3 bench/experiment.py check DIR
+    python3 bench/experiment.py session RUN TASK LANG --tokens N [--tool-uses K] [--seconds S]
+    python3 bench/experiment.py tokens RUN [--model M]
+    python3 bench/experiment.py report RUN [--save]
+    python3 bench/experiment.py selftest
+
+Прогоны лежат в $DPLANG_EXP_WORK или build/experiment/. Подробно —
+bench/README.md.
+"""
+import argparse
+import concurrent.futures
+import datetime
+import difflib
+import glob
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+BENCH = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(BENCH)
+TASKS = os.path.join(BENCH, 'tasks')
+SYNTAX = os.path.join(BENCH, 'syntax')
+RESULTS = os.path.join(BENCH, 'results')
+sys.path.insert(0, BENCH)
+sys.path.insert(0, SYNTAX)
+
+import cm  # noqa: E402
+import mkspec  # noqa: E402
+import run_refs  # noqa: E402
+
+LANGS = ('cpp', 'A', 'B', 'C')
+TITLE = {'cpp': 'C++', 'A': 'DPlang, вариант A', 'B': 'DPlang, вариант B', 'C': 'DPlang, вариант C'}
+ATTEMPTS = 5
+RUN_TIMEOUT = 20
+COUNT_MODEL = 'claude-opus-5-5'
+MARK = '// --- driver ---'
+ACCEPTED = 'принято'
+# Классы итога проверки. «прототип» — сбой переводчика, а не решения:
+# такие попытки разбираются вручную.
+CLASSES = ('разбор', 'перевод', 'сборка', 'интерфейс', 'ловушка', 'время', 'вывод', 'прототип', ACCEPTED)
+SRC_EXT = {'cpp': ('.cpp', '.hpp', '.h'), 'dp': ('.cm',)}
+MAX_SRC = 200_000
+
+
+class HarnessError(Exception):
+    pass
+
+
+def read(path):
+    with open(path, encoding='utf-8') as f:
+        return f.read()
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(text)
+
+
+def work_dir():
+    return os.environ.get('DPLANG_EXP_WORK') or os.path.join(ROOT, 'build', 'experiment')
+
+
+def is_dp(lang):
+    return lang != 'cpp'
+
+
+def demote(text, by=1):
+    """Заголовки Markdown на уровень ниже (вне блоков кода)."""
+    out, fence = [], False
+    for line in text.splitlines():
+        if line.startswith('```'):
+            fence = not fence
+        elif not fence and line.startswith('#'):
+            line = '#' * by + line
+        out.append(line)
+    return '\n'.join(out) + '\n'
+
+
+# ---------------------------------------------------------------- задачи
+
+
+class Task:
+    def __init__(self, path):
+        self.path = path
+        self.name = os.path.basename(path)
+        self.id = self.name.split('_')[0]
+        self.cm = os.path.join(path, 'cm')
+        if os.path.isdir(os.path.join(path, 'before')):
+            self.kind = 'refactor'
+        elif os.path.exists(os.path.join(path, 'buggy.cpp')):
+            self.kind = 'fix'
+        else:
+            self.kind = 'write'
+        self.expected = read(os.path.join(path, 'expected.txt'))
+
+    def cm_paths(self, which):
+        if self.kind == 'refactor':
+            return sorted(glob.glob(os.path.join(self.cm, 'before' if which == 'start' else 'ref', '*.cm')))
+        if which == 'ref':
+            return [os.path.join(self.cm, 'sol.cm')]
+        return [os.path.join(self.cm, 'buggy.cm' if self.kind == 'fix' else 'stub.cm')]
+
+    def files(self, lang, which):
+        """Начальный код (which='start') или эталон ('ref'): имя в src/ → текст."""
+        if is_dp(lang):
+            mods = cm.load(self.cm_paths(which), 'A')
+            info = cm.Info(mods)
+            texts = {m.name + '.cm': cm.print_module(m, lang, info) for m in mods}
+            if self.kind == 'refactor':
+                return texts
+            return {'sol.cm': next(iter(texts.values()))}
+        if self.kind == 'refactor':
+            d = os.path.join(self.path, 'before' if which == 'start' else 'ref')
+            return {os.path.basename(p): read(p) for p in sorted(glob.glob(os.path.join(d, '*.?pp')))
+                    if os.path.basename(p) != 'main.cpp'}
+        name = {'start': 'buggy.cpp' if self.kind == 'fix' else 'stub.cpp', 'ref': 'ref.cpp'}[which]
+        text = read(os.path.join(self.path, name))
+        if MARK in text:
+            text = text.split(MARK)[0].rstrip('\n') + '\n'
+        return {'sol.cpp': text}
+
+    def cpp_driver(self):
+        """Драйвер однофайловой задачи на C++: его #include и всё под чертой."""
+        top, drv = read(os.path.join(self.path, 'ref.cpp')).split(MARK, 1)
+        incs = [ln for ln in top.splitlines() if ln.startswith('#include')]
+        return '\n'.join(incs) + '\n' + MARK + drv
+
+    def interface(self, lang):
+        """Целевой интерфейс задачи на рефакторинг: имя → текст (у остальных — пусто)."""
+        if self.kind != 'refactor':
+            return {}
+        if lang == 'cpp':
+            return {os.path.basename(p): read(p) for p in sorted(glob.glob(os.path.join(self.path, 'ref', '*.hpp')))}
+        mods = cm.load(self.cm_paths('ref'), 'A')
+        info = cm.Info(mods)
+        out = {}
+        for m in mods:
+            items, pending = [], []
+            for it in m.items:
+                if isinstance(it, cm.Comment):
+                    pending.append(it)
+                    continue
+                if isinstance(it, cm.Import) or getattr(it, 'pub', False):
+                    if isinstance(it, cm.Fn):
+                        it = cm.Fn(it.name, it.params, it.ret, cm.Block([cm.Comment('...')]), it.pub, it.attrs)
+                    items += pending + [it]
+                pending = []
+            out[m.name + '.cm'] = cm.print_module(cm.Module(m.name, items), lang, info)
+        return out
+
+
+def all_tasks():
+    return [Task(os.path.join(TASKS, t)) for t in sorted(os.listdir(TASKS))
+            if os.path.isdir(os.path.join(TASKS, t, 'cm'))]
+
+
+def find_task(key):
+    for t in all_tasks():
+        if key in (t.id, t.name):
+            return t
+    raise HarnessError(f'нет задачи {key}')
+
+
+# ---------------------------------------------------------------- задание
+
+
+def cxx_line(flags):
+    san = ', с ASan и UBSan' if run_refs.SAN_FLAGS[0] in flags else ''
+    base = ' '.join(run_refs.BASE_FLAGS)
+    return f'`{os.path.basename(run_refs.CXX)} {base}`{san}'
+
+
+def prompt(task, lang, sandbox, attempts, flags, start):
+    exe = os.path.join(BENCH, 'experiment.py')
+    dp = is_dp(lang)
+    files = ', '.join(f'`src/{n}`' for n in start)
+    lines = [
+        f'# Задача {task.id} на {TITLE[lang]}', '',
+        'Задание опыта: написать код по постановке'
+        + (', зная язык только по спецификации в конце этого файла.' if dp else '.'), '',
+        '## Правила', '',
+        f'- Работай только в папке `{sandbox}`: читай этот файл и `src/`, правь файлы в `src/`. '
+        'Других файлов не открывай, по диску и в сети не ищи.',
+        '- Компилятор и другие программы сам не запускай. Проверка — только командой', '',
+        f'      python3 {exe} check {sandbox}', '',
+        '  Она ' + ('переводит код прототипом языка в C++, ' if dp else '')
+        + 'собирает его со скрытым драйвером, запускает и сравнивает вывод с ожидаемым; '
+        'печатает «принято» или первую ошибку.',
+        f'- Попыток проверки — не больше {attempts}, каждая записывается. Проверяй, когда решение '
+        'готово целиком, а не для разведки.',
+        '- Работа кончается на «принято» или когда попытки кончились. Ответ — одна строка: '
+        'номер последней попытки и её итог.', '',
+        '## Код', '',
+    ]
+    if task.kind == 'write':
+        lines.append(f'В {files} — заготовка: объявления, на которые опирается драйвер. Напиши тела '
+                     'функций. Сигнатуры, перечисления и поля структур не меняй; поля структур с '
+                     'пометкой «на ваш выбор» — свои. Вспомогательные функции и типы добавлять можно.')
+    elif task.kind == 'fix':
+        lines.append(f'В {files} — реализация с ошибками. Найди и исправь ошибки, не переписывая '
+                     'решение заново; сигнатуры не меняй.')
+    else:
+        lines.append(f'В {files} — модули до рефакторинга. Измени их так, чтобы интерфейс стал как в '
+                     'разделе «Целевой интерфейс»; поведение не меняется.')
+    lines.append('')
+    if dp:
+        lines.append('Ошибки типов прототип находит при сборке переведённого C++: сообщение называет '
+                     'функцию, в которой ошибка, а текст — от компилятора C++.')
+    elif task.kind == 'refactor':
+        lines.append(f'Сборка — {cxx_line(flags)}. Драйвер `main.cpp` подключает заголовки модулей и '
+                     'собирается вместе со всеми `src/*.cpp`.')
+    else:
+        lines.append(f'Сборка — {cxx_line(flags)}. Драйвер дописывается в конец `src/sol.cpp`.')
+    lines.append('')
+    text = '\n'.join(lines) + '\n' + demote(read(os.path.join(task.path, 'task.md')))
+    iface = task.interface(lang)
+    if iface:
+        fence = 'dplang' if dp else 'cpp'
+        text += '\n## Целевой интерфейс\n'
+        for name, body in iface.items():
+            text += f'\n`{name}`:\n\n```{fence}\n{body}```\n'
+    if dp:
+        spec = read(mkspec.out_path(lang))
+        spec = re.sub(r'\A<!--.*?-->\n+', '', spec, flags=re.S)
+        text += '\n' + demote(spec)
+    return text
+
+
+def git_commit():
+    r = subprocess.run(['git', '-C', ROOT, 'rev-parse', 'HEAD'], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ''
+
+
+def cxx_version():
+    r = subprocess.run([run_refs.CXX, '--version'], capture_output=True, text=True)
+    return r.stdout.splitlines()[0] if r.returncode == 0 and r.stdout else run_refs.CXX
+
+
+def build_flags():
+    with tempfile.TemporaryDirectory() as tmp:
+        return run_refs.BASE_FLAGS + (run_refs.SAN_FLAGS if run_refs.sanitizers_work(tmp) else [])
+
+
+def cell_paths(run_dir, task_id, lang):
+    return os.path.join(run_dir, task_id, lang), os.path.join(run_dir, '_log', task_id, lang)
+
+
+def snapshot(files, dest):
+    os.makedirs(dest, exist_ok=True)
+    for name, text in files.items():
+        write(os.path.join(dest, name), text)
+
+
+def read_files(d):
+    if not os.path.isdir(d):
+        return {}
+    return {n: read(os.path.join(d, n)) for n in sorted(os.listdir(d)) if os.path.isfile(os.path.join(d, n))}
+
+
+def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, quiet=False):
+    run_dir = os.path.join(work_dir(), run)
+    flags = build_flags()
+    common = {'run': run, 'commit': git_commit(), 'cxx': cxx_version(), 'flags': flags,
+              'attempts_max': attempts, 'agent_model': agent_model}
+    made = []
+    for task in tasks:
+        for lang in langs:
+            sandbox, log = cell_paths(run_dir, task.id, lang)
+            if os.path.exists(log) and not force:
+                raise HarnessError(f'{task.id} {lang}: уже есть в прогоне {run} (--force — пересоздать)')
+            for d in (sandbox, log):
+                if os.path.exists(d):
+                    shutil.rmtree(d)
+            start = task.files(lang, 'start')
+            snapshot(start, os.path.join(sandbox, 'src'))
+            write(os.path.join(sandbox, 'PROMPT.md'), prompt(task, lang, sandbox, attempts, flags, start))
+            snapshot(start, os.path.join(log, 'attempt-0'))
+            meta = dict(common, task=task.name, id=task.id, lang=lang, kind=task.kind,
+                        created=datetime.datetime.now().isoformat(timespec='seconds'))
+            write(os.path.join(log, 'meta.json'), json.dumps(meta, ensure_ascii=False, indent=1) + '\n')
+            made.append(sandbox)
+    if not quiet:
+        for s in made:
+            print(s)
+        print(f'песочниц: {len(made)}. Сообщение субагенту — «Прочитай <песочница>/PROMPT.md и выполни '
+              'задание оттуда.» (bench/README.md)')
+    return made
+
+
+# ---------------------------------------------------------------- проверка
+
+ERR = re.compile(r'^(?P<file>[^:\s][^:]*):(?P<line>\d+):(?P<col>\d+): (?:fatal )?error: (?P<msg>.*)$')
+FN_HEAD = re.compile(r'^\S[^(]*?(\w+)\(.*\) \{$')
+
+
+def compile_errors(stderr):
+    """Первая ошибка сборки: (строки до неё включительно, сама ошибка, её фрагмент кода, всего ошибок)."""
+    lines = stderr.splitlines()
+    idx = [i for i, ln in enumerate(lines) if ERR.match(ln)]
+    if not idx:
+        return lines, None, [], 1
+    i = idx[0]
+    snippet = []
+    for ln in lines[i + 1:i + 3]:
+        if re.match(r'^\s*\d*\s*\|', ln):
+            snippet.append(ln)
+        else:
+            break
+    return lines[:i + 1], ERR.match(lines[i]), snippet, len(idx)
+
+
+def plain(stderr, build_dir):
+    """Сообщение без путей каталога сборки."""
+    return stderr.replace(build_dir + os.sep, '').replace(SYNTAX + os.sep, '')
+
+
+def generated_fn(code_lines, line):
+    """Функция DPlang, в переведённом коде которой стоит строка line (с 1)."""
+    for k in range(min(line, len(code_lines)) - 1, -1, -1):
+        m = FN_HEAD.match(code_lines[k])
+        if m:
+            name = m.group(1)
+            return name[:-1] if name.endswith('_') and name[:-1] in cm.CPP_KEYWORDS else name
+        if code_lines[k].startswith('struct ') or code_lines[k] == '}' and k < line - 1:
+            break
+    return None
+
+
+def diagnose_build(stderr, lang, build_dir, own, driver, sol_lines=0, code_lines=None):
+    """Ошибка сборки → (класс, сообщение)."""
+    text = plain(stderr, build_dir)
+    head, err, snippet, total = compile_errors(text)
+    more = f'\n(всего ошибок: {total})' if total > 1 else ''
+    if err is None:
+        first = next((ln for ln in head if 'error' in ln or 'undefined reference' in ln), head[0] if head else '')
+        return 'сборка', first.strip() + more
+    msg = 'error: ' + err.group('msg')
+    # Место ошибки: сама строка ошибки или ближайшее «required from» в своих файлах.
+    where = None
+    for ln in reversed(head):
+        m = re.match(r'^(?:\s*from\s+|In file included from\s+)?([^:\s]+):(\d+)(?::\d+)?', ln.strip())
+        if m and (os.path.basename(m.group(1)) in own or os.path.basename(m.group(1)) == driver):
+            where = (os.path.basename(m.group(1)), int(m.group(2)), ln)
+            if 'included from' not in ln and not ln.strip().startswith('from '):
+                break
+    if where is None:
+        return 'сборка', msg + more
+    fname, line, _ = where
+    if is_dp(lang):
+        if fname == driver:
+            return 'интерфейс', 'драйвер не собирается с решением: ' + msg + more
+        fn = generated_fn(code_lines or [], line)
+        place = f'в функции {fn}' if fn else 'в объявлениях'
+        return 'сборка', f'{place}: {msg}\n' + '\n'.join(snippet) + more
+    if fname == driver or (fname == 'sol.cpp' and sol_lines and line > sol_lines):
+        return 'интерфейс', 'драйвер не собирается с решением: ' + msg + more
+    return 'сборка', f'{fname}:{line}: {msg}\n' + '\n'.join(snippet) + more
+
+
+def diagnose_run(proc, build_dir):
+    err = plain(proc.stderr, build_dir)
+    for key in ('ловушка:', 'runtime error:', 'ERROR: AddressSanitizer', 'ThreadSanitizer', 'LeakSanitizer'):
+        ln = next((x for x in err.splitlines() if key in x), None)
+        if ln:
+            return ln.strip()
+    first = err.strip().splitlines()[0] if err.strip() else ''
+    return f'код возврата {proc.returncode}' + (f': {first}' if first else '')
+
+
+def compare(expected, got):
+    exp, out = expected.splitlines(), got.splitlines()
+    if exp == out:
+        return None
+    for k in range(max(len(exp), len(out))):
+        e = exp[k] if k < len(exp) else None
+        g = out[k] if k < len(out) else None
+        if e != g:
+            fe = f'«{e}»' if e is not None else 'конец вывода'
+            fg = f'«{g}»' if g is not None else 'конец вывода'
+            return f'строка {k + 1}: ожидалось {fe}, получено {fg} (строк: ожидалось {len(exp)}, получено {len(out)})'
+    return None
+
+
+def source_files(files, lang):
+    ext = SRC_EXT['dp' if is_dp(lang) else 'cpp']
+    return {n: t for n, t in files.items() if n.endswith(ext)}
+
+
+def evaluate(task, lang, files, build_dir, flags, build=True):
+    """Проверка решения: (класс, сообщение). build=False — только разбор и перевод."""
+    files = source_files(files, lang)
+    if not files:
+        return 'разбор', 'в src/ нет файлов ' + ' '.join('*' + e for e in SRC_EXT['dp' if is_dp(lang) else 'cpp'])
+    if sum(len(t) for t in files.values()) > MAX_SRC:
+        return 'разбор', f'файлы в src/ больше {MAX_SRC} символов'
+    os.makedirs(build_dir, exist_ok=True)
+    exe = os.path.join(build_dir, 'driver')
+    code_lines = None
+    sol_lines = 0
+    if is_dp(lang):
+        mods = []
+        for name, text in files.items():
+            try:
+                mods.append(cm.parse(text, lang, os.path.splitext(name)[0]))
+            except cm.CmError as e:
+                return 'разбор', f'{name}:{e}'
+            except Exception as e:  # noqa: BLE001 — сбой прототипа, не решения
+                return 'прототип', f'разбор {name}: {type(e).__name__}: {e}'
+        try:
+            code = cm.translate(mods, {m.name: lang for m in mods})
+        except cm.CmError as e:
+            return 'перевод', str(e)
+        except Exception as e:  # noqa: BLE001
+            return 'прототип', f'перевод: {type(e).__name__}: {e}'
+        if not build:
+            return None, ''
+        write(os.path.join(build_dir, 'cm_out.hpp'), code)
+        code_lines = code.splitlines()
+        driver = 'driver.cpp'
+        shutil.copy(os.path.join(task.cm, 'driver.cpp'), os.path.join(build_dir, driver))
+        own = {'cm_out.hpp'}
+        cmd = [run_refs.CXX] + flags + ['-I', SYNTAX, '-I', build_dir, os.path.join(build_dir, driver), '-o', exe]
+    else:
+        if not build:
+            return None, ''
+        own = set(files)
+        for name, text in files.items():
+            write(os.path.join(build_dir, name), text)
+        if task.kind == 'refactor':
+            driver = 'main.cpp'
+            shutil.copy(os.path.join(task.path, 'ref', 'main.cpp'), os.path.join(build_dir, driver))
+        else:
+            driver = '-'
+            sol = files.get('sol.cpp')
+            if sol is None:
+                return 'разбор', 'нет файла src/sol.cpp'
+            if not sol.endswith('\n'):
+                sol += '\n'
+            sol_lines = sol.count('\n')
+            write(os.path.join(build_dir, 'sol.cpp'), sol + task.cpp_driver())
+        srcs = sorted(glob.glob(os.path.join(build_dir, '*.cpp')))
+        cmd = [run_refs.CXX] + flags + ['-I', build_dir] + srcs + ['-o', exe]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        return diagnose_build(r.stderr, lang, build_dir, own, driver, sol_lines, code_lines)
+    try:
+        p = subprocess.run([exe], capture_output=True, text=True, timeout=RUN_TIMEOUT, cwd=build_dir)
+    except subprocess.TimeoutExpired:
+        return 'время', f'драйвер не закончил за {RUN_TIMEOUT} с'
+    if p.returncode != 0:
+        return 'ловушка', diagnose_run(p, build_dir)
+    diff = compare(task.expected, p.stdout)
+    if diff:
+        return 'вывод', diff
+    return ACCEPTED, ''
+
+
+def read_attempts(log):
+    path = os.path.join(log, 'attempts.jsonl')
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding='utf-8') as f:
+        return [json.loads(ln) for ln in f if ln.strip()]
+
+
+def locate(sandbox):
+    sandbox = os.path.abspath(sandbox.rstrip('/'))
+    lang = os.path.basename(sandbox)
+    task_id = os.path.basename(os.path.dirname(sandbox))
+    run_dir = os.path.dirname(os.path.dirname(sandbox))
+    log = os.path.join(run_dir, '_log', task_id, lang)
+    if not os.path.exists(os.path.join(log, 'meta.json')):
+        raise HarnessError(f'{sandbox}: не песочница опыта (нет журнала {log})')
+    return sandbox, log
+
+
+def check(sandbox):
+    sandbox, log = locate(sandbox)
+    meta = json.loads(read(os.path.join(log, 'meta.json')))
+    attempts = read_attempts(log)
+    done = next((a for a in attempts if a['class'] == ACCEPTED), None)
+    if done:
+        print(f'уже принято на попытке {done["n"]}; больше проверять не нужно')
+        return 0
+    if len(attempts) >= meta['attempts_max']:
+        print(f'попытки кончились ({len(attempts)} из {meta["attempts_max"]}) — задача не принята')
+        return 2
+    n = len(attempts) + 1
+    files = source_files(read_files(os.path.join(sandbox, 'src')), meta['lang'])
+    snapshot(files, os.path.join(log, f'attempt-{n}'))
+    task = find_task(meta['task'])
+    t0 = time.monotonic()
+    with tempfile.TemporaryDirectory() as tmp:
+        cls, msg = evaluate(task, meta['lang'], files, tmp, meta['flags'])
+    out = f'попытка {n} из {meta["attempts_max"]}: {cls}' + (f'\n{msg.rstrip()}' if msg else '')
+    entry = {'n': n, 'time': datetime.datetime.now().isoformat(timespec='seconds'),
+             'seconds': round(time.monotonic() - t0, 1), 'class': cls, 'output': out,
+             'files': {k: hashlib.sha256(v.encode()).hexdigest()[:16] for k, v in files.items()}}
+    with open(os.path.join(log, 'attempts.jsonl'), 'a', encoding='utf-8') as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    print(out)
+    return 0 if cls == ACCEPTED else 1
+
+
+def session(run, task_id, lang, tokens, tool_uses=None, seconds=None):
+    _, log = cell_paths(os.path.join(work_dir(), run), find_task(task_id).id, lang)
+    path = os.path.join(log, 'meta.json')
+    meta = json.loads(read(path))
+    meta['session'] = {'total_tokens': tokens, 'tool_uses': tool_uses, 'seconds': seconds}
+    write(path, json.dumps(meta, ensure_ascii=False, indent=1) + '\n')
+
+
+# ---------------------------------------------------------------- токены
+
+
+def added_lines(before, after):
+    """Строки, появившиеся или изменённые от снимка before к снимку after."""
+    out = []
+    for name, text in after.items():
+        old = before.get(name, '').splitlines()
+        new = text.splitlines()
+        for op, _, _, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+            if op in ('replace', 'insert'):
+                out += new[j1:j2]
+    return '\n'.join(out)
+
+
+def joined(files):
+    return ''.join(f'=== {n}\n{t}' for n, t in files.items())
+
+
+def cell_texts(run_dir, task_id, lang):
+    """Тексты ячейки для счёта: прочитано на входе, диагностики, написано, итоговое решение."""
+    sandbox, log = cell_paths(run_dir, task_id, lang)
+    attempts = read_attempts(log)
+    snaps = [read_files(os.path.join(log, f'attempt-{k}')) for k in range(len(attempts) + 1)]
+    written = [added_lines(snaps[k - 1], snaps[k]) for k in range(1, len(snaps))]
+    return {
+        'prompt': read(os.path.join(sandbox, 'PROMPT.md')) + joined(snaps[0]),
+        'diagnostics': '\n'.join(a['output'] for a in attempts),
+        'written': '\n'.join(w for w in written if w),
+        'final': joined(snaps[-1]) if attempts else '',
+    }
+
+
+class TokenCounter:
+    """Счёт токенов POST /v1/messages/count_tokens (Р35); кэш — по тексту и модели."""
+
+    def __init__(self, model, cache_path):
+        self.model = model
+        self.key = os.environ.get('ANTHROPIC_API_KEY', '')
+        base = os.environ.get('ANTHROPIC_BASE_URL') or 'https://api.anthropic.com'
+        self.url = base.rstrip('/') + '/v1/messages/count_tokens'
+        self.cache_path = cache_path
+        self.cache = json.loads(read(cache_path)) if os.path.exists(cache_path) else {}
+
+    def save(self):
+        write(self.cache_path, json.dumps(self.cache, indent=0, sort_keys=True) + '\n')
+
+    def count(self, text):
+        if not text.strip():
+            return 0
+        h = hashlib.sha256((self.model + '\0' + text).encode()).hexdigest()
+        if h not in self.cache:
+            self.cache[h] = self.request(text)
+        return self.cache[h]
+
+    def request(self, text):
+        body = json.dumps({'model': self.model, 'messages': [{'role': 'user', 'content': text}]}).encode()
+        headers = {'x-api-key': self.key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json'}
+        for k in range(5):
+            req = urllib.request.Request(self.url, data=body, headers=headers, method='POST')
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    return int(json.load(r)['input_tokens'])
+            except urllib.error.HTTPError as e:
+                if e.code in (429, 500, 502, 503, 529) and k < 4:
+                    time.sleep(min(float(e.headers.get('retry-after') or 2 ** k), 60))
+                    continue
+                detail = e.read().decode('utf-8', 'replace')[:300]
+                raise HarnessError(f'count_tokens: HTTP {e.code}: {detail}') from None
+            except urllib.error.URLError as e:
+                if k < 4:
+                    time.sleep(2 ** k)
+                    continue
+                raise HarnessError(f'count_tokens: {e.reason}') from None
+        raise HarnessError('count_tokens: попытки кончились')
+
+
+def cells(run_dir):
+    out = []
+    for meta_path in sorted(glob.glob(os.path.join(run_dir, '_log', '*', '*', 'meta.json'))):
+        log = os.path.dirname(meta_path)
+        out.append((os.path.basename(os.path.dirname(log)), os.path.basename(log)))
+    order = {lang: i for i, lang in enumerate(LANGS)}
+    return sorted(out, key=lambda c: (c[0], order.get(c[1], 9)))
+
+
+def tokens(run, model=COUNT_MODEL):
+    run_dir = os.path.join(work_dir(), run)
+    counter = TokenCounter(model, os.path.join(work_dir(), 'token_cache.json'))
+    if not counter.key:
+        print('нет ключа ANTHROPIC_API_KEY: точный счёт токенов недоступен (Р35, TODO.md); '
+              'report покажет символы')
+        return 2
+    n = 0
+    try:
+        for task_id, lang in cells(run_dir):
+            texts = cell_texts(run_dir, task_id, lang)
+            counts = {k: counter.count(v) for k, v in texts.items()}
+            _, log = cell_paths(run_dir, task_id, lang)
+            write(os.path.join(log, 'tokens.json'), json.dumps(dict(counts, model=model), indent=1) + '\n')
+            n += 1
+    finally:
+        counter.save()
+    print(f'токены: {n} ячеек прогона {run} сосчитаны ({model})')
+    return 0
+
+
+# ---------------------------------------------------------------- отчёт
+
+MEASURES = ('prompt', 'diagnostics', 'written', 'final')
+MEASURE_TITLE = {'prompt': 'прочитано на входе', 'diagnostics': 'диагностик', 'written': 'написано',
+                 'final': 'решение'}
+
+
+def collect(run_dir):
+    rows = []
+    for task_id, lang in cells(run_dir):
+        _, log = cell_paths(run_dir, task_id, lang)
+        meta = json.loads(read(os.path.join(log, 'meta.json')))
+        attempts = read_attempts(log)
+        accepted = next((a['n'] for a in attempts if a['class'] == ACCEPTED), None)
+        texts = cell_texts(run_dir, task_id, lang)
+        tok_path = os.path.join(log, 'tokens.json')
+        toks = json.loads(read(tok_path)) if os.path.exists(tok_path) else None
+        rows.append({
+            'task': task_id, 'lang': lang, 'kind': meta['kind'],
+            'status': ACCEPTED if accepted else ('не начато' if not attempts else 'не принято'),
+            'attempts': len(attempts), 'accepted_at': accepted, 'first_try': accepted == 1,
+            'path': [a['class'] for a in attempts],
+            'chars': {k: len(v) for k, v in texts.items()},
+            'tokens': {k: toks[k] for k in MEASURES} if toks else None,
+            'token_model': toks.get('model') if toks else None,
+            'session': meta.get('session'),
+            'meta': {k: meta.get(k) for k in ('commit', 'cxx', 'agent_model', 'attempts_max', 'created')},
+        })
+    return rows
+
+
+def summary(rows):
+    langs = [lang for lang in LANGS if any(r['lang'] == lang for r in rows)]
+    tasks = sorted({r['task'] for r in rows})
+    by = {(r['task'], r['lang']): r for r in rows}
+    common = [t for t in tasks if all(by.get((t, lang), {}).get('status') == ACCEPTED for lang in langs)]
+    unit = 'tokens' if rows and all(r['tokens'] for r in rows) else 'chars'
+    out = {'langs': langs, 'tasks': tasks, 'common': common, 'unit': unit, 'by_lang': {}}
+    for lang in langs:
+        rs = [r for r in rows if r['lang'] == lang]
+        acc = [r for r in rs if r['status'] == ACCEPTED]
+        com = [by[(t, lang)] for t in common]
+        sess = [r['session']['total_tokens'] for r in com if r['session'] and r['session'].get('total_tokens')]
+        out['by_lang'][lang] = {
+            'cells': len(rs), 'accepted': len(acc), 'first_try': sum(r['first_try'] for r in rs),
+            'mean_attempts': round(sum(r['accepted_at'] for r in acc) / len(acc), 2) if acc else None,
+            'classes': {c: sum(r['path'].count(c) for r in rs) for c in CLASSES if c != ACCEPTED},
+            'common': {k: sum(r[unit][k] for r in com) for k in MEASURES},
+            'session': sum(sess) if len(sess) == len(com) and com else None,
+        }
+    return out
+
+
+def render(run, rows, s):
+    unit = 'токены' if s['unit'] == 'tokens' else 'символы (токены не сосчитаны — нет ключа, Р35)'
+    key = s['unit']
+    lines = [f'# Опыт v0.0: прогон {run}', '']
+    if rows:
+        m = rows[0]['meta']
+        lines += [f'Коммит `{m["commit"][:12]}`, {m["cxx"]}; модель субагентов — {m["agent_model"] or "как у сессии"}; '
+                  f'попыток на задачу — {m["attempts_max"]}. Меры — {unit}'
+                  + (f', модель счёта `{rows[0]["token_model"]}`' if key == 'tokens' else '') + '.', '']
+    lines += ['## Сводка по языкам', '',
+              '| язык | принято | с первой попытки | попыток на принятую | ' + ' | '.join(MEASURE_TITLE[k] for k in MEASURES)
+              + ' | сессия |', '|---|---|---|---|' + '---|' * (len(MEASURES) + 1)]
+    for lang in s['langs']:
+        b = s['by_lang'][lang]
+        sess = str(b['session']) if b['session'] is not None else '—'
+        lines.append(f'| {TITLE[lang]} | {b["accepted"]} из {b["cells"]} | {b["first_try"]} | {b["mean_attempts"] or "—"} | '
+                     + ' | '.join(str(b['common'][k]) for k in MEASURES) + f' | {sess} |')
+    lines += ['', f'Меры в сводке — суммы по задачам, принятым на всех языках прогона ({len(s["common"])}: '
+              + (', '.join(s['common']) or 'нет') + '); сравниваются только решения, равные по корректности '
+              '(GOAL.md, раздел 2). «Написано» — оценка снизу: изменённые строки между попытками.', '',
+              '## Сбои по классам', '', '| язык | ' + ' | '.join(c for c in CLASSES if c != ACCEPTED) + ' |',
+              '|---|' + '---|' * (len(CLASSES) - 1)]
+    for lang in s['langs']:
+        cl = s['by_lang'][lang]['classes']
+        lines.append(f'| {TITLE[lang]} | ' + ' | '.join(str(cl[c]) for c in CLASSES if c != ACCEPTED) + ' |')
+    lines += ['', '## Задачи', '', '| задача | язык | итог | путь | ' + ' | '.join(MEASURE_TITLE[k] for k in MEASURES)
+              + ' | сессия |', '|---|---|---|---|' + '---|' * (len(MEASURES) + 1)]
+    for r in rows:
+        vals = r[key] or r['chars']
+        sess = r['session']['total_tokens'] if r['session'] and r['session'].get('total_tokens') else '—'
+        lines.append(f'| {r["task"]} | {r["lang"]} | {r["status"]} | {" → ".join(r["path"]) or "—"} | '
+                     + ' | '.join(str(vals[k]) for k in MEASURES) + f' | {sess} |')
+    return '\n'.join(lines) + '\n'
+
+
+def report(run, save=False):
+    run_dir = os.path.join(work_dir(), run)
+    if not os.path.isdir(os.path.join(run_dir, '_log')):
+        raise HarnessError(f'нет прогона {run_dir}')
+    rows = collect(run_dir)
+    s = summary(rows)
+    text = render(run, rows, s)
+    sys.stdout.write(text)
+    if save:
+        dest = os.path.join(RESULTS, run)
+        if os.path.exists(dest):
+            shutil.rmtree(dest)
+        shutil.copytree(os.path.join(run_dir, '_log'), os.path.join(dest, 'log'))
+        write(os.path.join(dest, 'summary.md'), text)
+        write(os.path.join(dest, 'summary.json'),
+              json.dumps({'rows': rows, 'summary': s}, ensure_ascii=False, indent=1) + '\n')
+        print(f'\nзаписано: {os.path.relpath(dest, ROOT)}')
+    return 0
+
+
+# ---------------------------------------------------------------- самопроверка
+
+START_CLASS = {'write': {'сборка'}, 'fix': {'вывод', 'ловушка'}, 'refactor': {'интерфейс'}}
+FULL = ('cpp', 'A')
+
+
+def selftest_cell(task, lang, sandbox, tmp, flags):
+    fails = []
+    tag = f'{task.id} {lang}'
+    p = read(os.path.join(sandbox, 'PROMPT.md'))
+    if f'check {sandbox}' not in p:
+        fails.append(f'{tag}: в PROMPT.md нет команды проверки')
+    if MARK in p or task.expected.strip() in p:
+        fails.append(f'{tag}: в PROMPT.md попал драйвер или ожидаемый вывод')
+    if is_dp(lang) and f'вариант {lang} — краткая спецификация' not in p:
+        fails.append(f'{tag}: в PROMPT.md нет спецификации варианта')
+    start = read_files(os.path.join(sandbox, 'src'))
+    if start != task.files(lang, 'start'):
+        fails.append(f'{tag}: src/ не совпадает с начальным кодом')
+    build = lang in FULL
+    cls, msg = evaluate(task, lang, start, os.path.join(tmp, tag.replace(' ', '_') + '_start'), flags, build)
+    if build and cls not in START_CLASS[task.kind]:
+        fails.append(f'{tag}: начальный код — «{cls}», ожидалось {"/".join(sorted(START_CLASS[task.kind]))}: '
+                     f'{msg.splitlines()[0] if msg else ""}')
+    if not build and cls is not None:
+        fails.append(f'{tag}: начальный код не переводится: {cls}: {msg}')
+    cls, msg = evaluate(task, lang, task.files(lang, 'ref'), os.path.join(tmp, tag.replace(' ', '_') + '_ref'),
+                        flags, build)
+    if cls != (ACCEPTED if build else None):
+        fails.append(f'{tag}: эталон не принят: {cls}: {msg}')
+    return fails
+
+
+def selftest_stub_cpp(task, tmp):
+    """Заготовка C++ собирается с драйвером (без тел) и называет те же функции, что заготовка DPlang."""
+    stub = os.path.join(task.path, 'stub.cpp')
+    if not os.path.exists(stub):
+        return []
+    src = os.path.join(tmp, task.id + '_stub.cpp')
+    write(src, read(stub) + task.cpp_driver())
+    flags = [f for f in run_refs.BASE_FLAGS if f != '-Werror'] + ['-fsyntax-only', '-Wno-return-type']
+    r = subprocess.run([run_refs.CXX] + flags + [src], capture_output=True, text=True)
+    if r.returncode != 0:
+        first = next((ln for ln in r.stderr.splitlines() if 'error' in ln), r.stderr[:200])
+        return [f'{task.id}: stub.cpp не собирается с драйвером: {first}']
+    dp = {it.name for it in cm.load([os.path.join(task.cm, 'stub.cm')], 'A')[0].items if isinstance(it, cm.Fn)}
+    cpp = set(re.findall(r'^\S[^(\n]*?(\w+)\([^;\n]*\) \{$', read(stub), re.M))
+    if dp != cpp:
+        return [f'{task.id}: функции stub.cpp ({", ".join(sorted(cpp))}) и stub.cm ({", ".join(sorted(dp))}) расходятся']
+    return []
+
+
+def selftest_log(tmp):
+    """Путь модели: проверка заготовки, эталона, повтор; журнал и отчёт."""
+    task = find_task('t01')
+    (sandbox,) = prepare('log', [task], ['cpp'], attempts=2, quiet=True)
+    fails = []
+    quiet = open(os.devnull, 'w')
+    old = sys.stdout
+    sys.stdout = quiet
+    try:
+        rc1 = check(sandbox)
+        snapshot(task.files('cpp', 'ref'), os.path.join(sandbox, 'src'))
+        rc2 = check(sandbox)
+        rc3 = check(sandbox)
+        report('log')
+        has_key = bool(os.environ.get('ANTHROPIC_API_KEY'))
+        rc4 = None if has_key else tokens('log')
+    finally:
+        sys.stdout = old
+        quiet.close()
+    _, log = cell_paths(os.path.join(work_dir(), 'log'), task.id, 'cpp')
+    att = read_attempts(log)
+    if (rc1, rc2, rc3) != (1, 0, 0) or [a['class'] for a in att] != ['сборка', ACCEPTED]:
+        fails.append(f'журнал: коды {rc1, rc2, rc3}, попытки {[a["class"] for a in att]}')
+    if rc4 not in (None, 2):
+        fails.append('tokens без ключа не сообщает об отсутствии ключа')
+    texts = cell_texts(os.path.join(work_dir(), 'log'), task.id, 'cpp')
+    if not texts['written'] or not texts['diagnostics'] or 'ring_push' not in texts['final']:
+        fails.append('журнал: тексты для счёта токенов пусты')
+    return fails
+
+
+def selftest():
+    tasks = all_tasks()
+    saved = os.environ.get('DPLANG_EXP_WORK')
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ['DPLANG_EXP_WORK'] = os.path.join(tmp, 'work')
+        flags = build_flags()
+        sandboxes = prepare('self', tasks, LANGS, quiet=True)
+        jobs = [(t, lang, s) for (t, lang), s in zip([(t, lang) for t in tasks for lang in LANGS], sandboxes)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
+            results = list(pool.map(lambda j: selftest_cell(j[0], j[1], j[2], tmp, flags), jobs))
+            results += list(pool.map(lambda t: selftest_stub_cpp(t, tmp), tasks))
+        results.append(selftest_log(tmp))
+    if saved is None:
+        del os.environ['DPLANG_EXP_WORK']
+    else:
+        os.environ['DPLANG_EXP_WORK'] = saved
+    fails = [f for r in results for f in r]
+    if fails:
+        print('обвязка: сбоев ' + str(len(fails)))
+        for f in fails:
+            print('  ' + f)
+        return 1
+    print(f'обвязка: {len(tasks)} задач × {len(LANGS)} языка — задания собираются, начальный код не проходит, '
+          f'эталоны принимаются ({"/".join(FULL)} — со сборкой), журнал и отчёт работают')
+    return 0
+
+
+# ---------------------------------------------------------------- командная строка
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    p = sub.add_parser('prepare')
+    p.add_argument('run')
+    p.add_argument('--tasks', default='')
+    p.add_argument('--langs', default=','.join(LANGS))
+    p.add_argument('--attempts', type=int, default=ATTEMPTS)
+    p.add_argument('--agent-model', default='')
+    p.add_argument('--force', action='store_true')
+    p = sub.add_parser('check')
+    p.add_argument('dir')
+    p = sub.add_parser('session')
+    p.add_argument('run')
+    p.add_argument('task')
+    p.add_argument('lang', choices=LANGS)
+    p.add_argument('--tokens', type=int, required=True)
+    p.add_argument('--tool-uses', type=int)
+    p.add_argument('--seconds', type=float)
+    p = sub.add_parser('tokens')
+    p.add_argument('run')
+    p.add_argument('--model', default=COUNT_MODEL)
+    p = sub.add_parser('report')
+    p.add_argument('run')
+    p.add_argument('--save', action='store_true')
+    sub.add_parser('selftest')
+    a = ap.parse_args(argv)
+    try:
+        if a.cmd == 'prepare':
+            tasks = [find_task(t) for t in a.tasks.split(',') if t] or all_tasks()
+            langs = [x for x in a.langs.split(',') if x]
+            bad = [x for x in langs if x not in LANGS]
+            if bad:
+                raise HarnessError(f'неизвестный язык: {", ".join(bad)} (есть: {", ".join(LANGS)})')
+            prepare(a.run, tasks, langs, a.attempts, a.agent_model, a.force)
+            return 0
+        if a.cmd == 'check':
+            return check(a.dir)
+        if a.cmd == 'session':
+            session(a.run, a.task, a.lang, a.tokens, a.tool_uses, a.seconds)
+            return 0
+        if a.cmd == 'tokens':
+            return tokens(a.run, a.model)
+        if a.cmd == 'report':
+            return report(a.run, a.save)
+        return selftest()
+    except HarnessError as e:
+        print(f'ошибка: {e}', file=sys.stderr)
+        return 3
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,8 @@
+// t14: заготовка — напишите тела функций по task.md.
+pub fn parallel_sum(values: []f64, threads: i32) -> f64 {
+    // ...
+}
+
+pub fn parallel_histogram(values: []u32, buckets: i32, threads: i32) -> List[i64] {
+    // ...
+}

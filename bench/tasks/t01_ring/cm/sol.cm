@@ -31,6 +31,6 @@ pub fn ring_pop(r: &mut Ring) -> ?i32 {
     return v;
 }
 
-pub fn ring_len(r: &Ring) -> int {
-    return r.count;
+pub fn ring_len(r: &Ring) -> i32 {
+    return i32(r.count);
 }

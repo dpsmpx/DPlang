@@ -1,0 +1,6 @@
+circle 3.142
+rect 7.000
+square 6.250
+largest rect
+largest of none: none
+scaled circle 28.274

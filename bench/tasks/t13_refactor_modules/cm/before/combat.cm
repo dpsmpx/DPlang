@@ -1,0 +1,37 @@
+// Модуль combat (до рефакторинга): урон.
+import world;
+
+fn after_armor(dmg: i32, armor: i32) -> i32 {
+    return max(1, dmg - armor);
+}
+
+// Урон после брони: max(1, dmg - armor); здоровье не опускается ниже 0,
+// при 0 юнит погибает. Код: 0 — попадание, -1 — нет юнита, -2 — уже мёртв.
+pub fn hit(w: &mut world.World, id: i32, dmg: i32) -> i32 {
+    if id < 0 || id >= len(w.units) {
+        return -1;
+    }
+    if !w.units[id].alive {
+        return -2;
+    }
+    w.units[id].hp -= after_armor(dmg, w.units[id].armor);
+    if w.units[id].hp <= 0 {
+        w.units[id].hp = 0;
+        w.units[id].alive = false;
+    }
+    return 0;
+}
+
+// Бьёт всех живых в квадрате |x - cx| <= r, |y - cy| <= r по порядку
+// номеров; возвращает число задетых.
+pub fn blast(w: &mut world.World, cx: i32, cy: i32, r: i32, dmg: i32) -> i32 {
+    var n: i32 = 0;
+    for i in 0..len(w.units) {
+        let u = w.units[i];
+        if u.alive && abs(u.x - cx) <= r && abs(u.y - cy) <= r {
+            hit(&mut w, i32(i), dmg);
+            n += 1;
+        }
+    }
+    return n;
+}

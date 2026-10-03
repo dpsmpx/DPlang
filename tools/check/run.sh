@@ -6,7 +6,10 @@
 #
 # Вывод краткий: по строке на проверку; на красном — первые строки
 # сбоя. Полный журнал — build/check/run.log. Эталоны набора задач —
-# bench/run_refs.py; с появлением компилятора сюда добавляются его тесты.
+# bench/run_refs.py; решения на вариантах синтаксиса —
+# bench/syntax/run_variants.py; обвязка опыта v0.0 —
+# bench/experiment.py selftest; с появлением компилятора сюда
+# добавляются его тесты.
 # ============================================================
 set -u
 
@@ -71,6 +74,8 @@ step "ссылки"          python3 "$ROOT/tools/check/check_links.py"
 step "корень"          check_root
 step "скрипты"         check_scripts
 step "эталоны"         python3 "$ROOT/bench/run_refs.py"
+step "варианты"        python3 "$ROOT/bench/syntax/run_variants.py"
+step "обвязка"         python3 "$ROOT/bench/experiment.py" selftest
 
 if [ "$FAILED" -eq 0 ]; then
     echo "Итог: PASS ($TOTAL/$TOTAL). Журнал: build/check/run.log"
