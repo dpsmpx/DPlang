@@ -1,0 +1,38 @@
+name: Проверки
+
+# Репозиторий закрыт: минуты Actions ограничены (2 000 в месяц на GitHub
+# Free). Поэтому, как в VoxelRPG:
+#   * прогон — на запросе на слияние не в черновике и в main, вручную —
+#     workflow_dispatch; черновик не гоняется — проверки в сессии
+#     обязательны и так (CLAUDE.md, «Проверки»);
+#   * новый пуш отменяет идущий прогон того же запроса.
+# Документы не исключены: проверка ссылок — их проверка; прогон короткий.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: 'tools/check/run.sh'
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Проверки
+        run: ./tools/check/run.sh
+
+      - name: Журнал при провале
+        if: failure()
+        run: cat build/check/run.log || true
