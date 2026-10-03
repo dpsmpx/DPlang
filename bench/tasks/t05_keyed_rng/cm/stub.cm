@@ -1,0 +1,8 @@
+// t05: заготовка — напишите тела функций по task.md.
+pub fn hash32(seed: u64, x: i32, y: i32) -> u32 {
+    // ...
+}
+
+pub fn height(seed: u64, x: i32, y: i32) -> i32 {
+    // ...
+}

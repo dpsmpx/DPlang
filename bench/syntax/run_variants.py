@@ -11,7 +11,11 @@
   проходит;
 - задача на рефакторинг (cm/before/, cm/ref/) — старые модули со старым
   драйвером cm/before_driver.cpp проходят, новые модули с новым драйвером
-  проходят, старые модули с новым драйвером — НЕ проходят.
+  проходят, старые модули с новым драйвером — НЕ проходят;
+- заготовка для модели (cm/stub.cm) — в каноническом виде, печатается и
+  разбирается во всех вариантах и совпадает с интерфейсом решения:
+  сигнатуры функций, перечисления, поля структур (у структуры без полей
+  в заготовке поля — на выбор модели).
 
 Флаги сборки — как у эталонов (bench/run_refs.py): C++20, -Werror, без
 исключений и RTTI, с ASan и UBSan, если компилятор их умеет.
@@ -111,6 +115,46 @@ def canonical(paths):
     return fails
 
 
+def head(fn):
+    """Сигнатура функции в записи A — для сравнения заготовки с решением."""
+    bare = cm.Fn(fn.name, fn.params, fn.ret, cm.Block([]), fn.pub, fn.attrs)
+    return cm.Printer('A', cm.Info([])).item(bare)[0]
+
+
+def check_stub(stub, sol):
+    """Заготовка: канонична, живёт во всех вариантах, совпадает с интерфейсом решения."""
+    rel = os.path.relpath(stub, TASKS)
+    fails = canonical([stub])
+    for v in VARIANTS:
+        texts = to_variant([stub], v)
+        for name, src in texts.items():
+            m = cm.parse(src, v, name)
+            if cm.print_module(m, v, cm.Info([m])) != src:
+                fails.append(f'{rel} ({v}): печать не идемпотентна')
+    st = cm.load([stub], 'A')[0]
+    so = cm.load([sol], 'A')[0]
+    by_name = {it.name: it for it in so.items if not isinstance(it, (cm.Comment, cm.Import))}
+    for it in st.items:
+        if isinstance(it, (cm.Comment, cm.Import)):
+            continue
+        got = by_name.get(it.name)
+        if got is None or type(got) is not type(it):
+            fails.append(f'{rel}: в решении нет {it.name}')
+        elif isinstance(it, cm.Fn):
+            if head(it) != head(got):
+                fails.append(f'{rel}: сигнатура {it.name} расходится с решением')
+        elif isinstance(it, cm.Enum):
+            p = cm.Printer('A', cm.Info([st]))
+            if p.item(it) != p.item(got):
+                fails.append(f'{rel}: перечисление {it.name} расходится с решением')
+        elif isinstance(it, cm.Struct):
+            want = [(f.name, cm.Printer('A', cm.Info([])).type(f.type)) for f in it.fields if isinstance(f, cm.Field)]
+            have = [(f.name, cm.Printer('A', cm.Info([])).type(f.type)) for f in got.fields if isinstance(f, cm.Field)]
+            if want and want != have:
+                fails.append(f'{rel}: поля {it.name} расходятся с решением')
+    return fails
+
+
 def check_task(t, tmp, flags):
     d = os.path.join(TASKS, t)
     cmd = os.path.join(d, 'cm')
@@ -132,6 +176,9 @@ def check_task(t, tmp, flags):
             sol = [os.path.join(cmd, 'sol.cm')]
             fails += canonical(sol)
             fails += case(t, sol, os.path.join(cmd, 'driver.cpp'), expected, out + '/sol', flags)
+            stub = os.path.join(cmd, 'stub.cm')
+            if os.path.exists(stub):
+                fails += check_stub(stub, sol[0])
             buggy = os.path.join(cmd, 'buggy.cm')
             if os.path.exists(buggy):
                 fails += canonical([buggy])
