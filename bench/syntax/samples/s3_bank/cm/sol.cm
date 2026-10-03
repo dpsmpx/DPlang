@@ -1,0 +1,97 @@
+// Счета и переводы: список структур, изменяемые ссылки, ошибки без
+// изменения состояния, разбор результата в match, заворачивающая
+// арифметика.
+pub struct Account {
+    id: i32,
+    balance: i64,
+}
+
+pub enum BankError {
+    NoAccount,
+    Insufficient,
+    BadAmount,
+}
+
+pub struct Bank {
+    accounts: List[Account],
+    log: List[str],
+}
+
+pub struct Op {
+    from: i32,
+    to: i32,
+    amount: i64,
+}
+
+pub fn bank_new() -> Bank {
+    return Bank { accounts: [], log: [] };
+}
+
+pub fn open(b: &mut Bank, id: i32, initial: i64) -> BankError!void {
+    if initial < 0 {
+        fail BankError.BadAmount;
+    }
+    b.accounts.push(Account { id, balance: initial });
+    b.log.push("open " + str(id));
+}
+
+fn find(b: &Bank, id: i32) -> ?int {
+    for i in 0..len(b.accounts) {
+        if b.accounts[i].id == id {
+            return i;
+        }
+    }
+    return none;
+}
+
+// Перевод; при ошибке состояние не меняется.
+pub fn transfer(b: &mut Bank, from: i32, to: i32, amount: i64) -> BankError!void {
+    if amount <= 0 {
+        fail BankError.BadAmount;
+    }
+    let f = find(&b, from) ?? -1;
+    let t = find(&b, to) ?? -1;
+    if f < 0 || t < 0 {
+        fail BankError.NoAccount;
+    }
+    if b.accounts[f].balance < amount {
+        fail BankError.Insufficient;
+    }
+    b.accounts[f].balance -= amount;
+    b.accounts[t].balance += amount;
+    b.log.push("transfer " + str(from) + "->" + str(to) + " " + str(amount));
+}
+
+// Переводы по порядку; возвращает число отклонённых.
+pub fn apply_all(b: &mut Bank, ops: []Op) -> i32 {
+    var rejected: i32 = 0;
+    for op in &ops {
+        match transfer(&mut b, op.from, op.to, op.amount) {
+            ok(_) => {}
+            err(e) => {
+                rejected += 1;
+                if e == BankError.Insufficient {
+                    b.log.push("insufficient " + str(op.from));
+                }
+            }
+        }
+    }
+    return rejected;
+}
+
+pub fn total(b: &Bank) -> i64 {
+    var sum: i64 = 0;
+    for a in &b.accounts {
+        sum += a.balance;
+    }
+    return sum;
+}
+
+// FNV-1a по балансам: умножение по модулю 2^64 — явной операцией *%.
+pub fn checksum(b: &Bank) -> u64 {
+    var h: u64 = 14695981039346656037;
+    for a in &b.accounts {
+        h = (h ^ u64.wrap(a.balance)) *% 1099511628211;
+    }
+    return h;
+}

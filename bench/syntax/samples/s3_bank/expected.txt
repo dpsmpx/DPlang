@@ -1,0 +1,16 @@
+open 1: ok
+open 2: ok
+open 3: BadAmount
+move 1->2 30: ok
+move 2->1 50: Insufficient
+move 1->9 1: NoAccount
+move 1->2 0: BadAmount
+rejected 2, total 100, checksum 0891b007b53c4869
+account 1: 100
+account 2: 0
+log open 1
+log open 2
+log transfer 1->2 30
+log transfer 1->2 10
+log insufficient 2
+log transfer 2->1 40

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Проверяет решения эталонного набора на вариантах синтаксиса (v0.0, шаг 0.4).
 
-Для каждой задачи с каталогом cm/ (bench/tasks/tNN/cm):
+Для каждой задачи с каталогом cm/ (bench/tasks/tNN/cm) и каждой образцовой
+программы спецификаций (bench/syntax/samples/sNN/cm — устроена так же):
 - исходники в варианте A — в каноническом виде (печать A → A ничего не
   меняет);
 - для каждого варианта A, B, C: исходник печатается в записи варианта,
@@ -34,6 +35,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
 TASKS = os.path.join(BENCH, 'tasks')
+SAMPLES = os.path.join(HERE, 'samples')
 sys.path.insert(0, HERE)
 sys.path.insert(0, BENCH)
 
@@ -111,7 +113,7 @@ def canonical(paths):
             src = f.read()
         mods = cm.load([p], 'A')
         if cm.print_module(mods[0], 'A', cm.Info(mods)) != src:
-            fails.append(f'{os.path.relpath(p, TASKS)}: не в каноническом виде (cm.py fmt -v A)')
+            fails.append(f'{os.path.relpath(p, BENCH)}: не в каноническом виде (cm.py fmt -v A)')
     return fails
 
 
@@ -123,7 +125,7 @@ def head(fn):
 
 def check_stub(stub, sol):
     """Заготовка: канонична, живёт во всех вариантах, совпадает с интерфейсом решения."""
-    rel = os.path.relpath(stub, TASKS)
+    rel = os.path.relpath(stub, BENCH)
     fails = canonical([stub])
     for v in VARIANTS:
         texts = to_variant([stub], v)
@@ -155,8 +157,8 @@ def check_stub(stub, sol):
     return fails
 
 
-def check_task(t, tmp, flags):
-    d = os.path.join(TASKS, t)
+def check_task(d, tmp, flags):
+    t = os.path.basename(d)
     cmd = os.path.join(d, 'cm')
     with open(os.path.join(d, 'expected.txt')) as f:
         expected = f.read()
@@ -190,11 +192,12 @@ def check_task(t, tmp, flags):
 
 
 def main():
-    tasks = sorted(t for t in os.listdir(TASKS) if os.path.isdir(os.path.join(TASKS, t, 'cm')))
+    tasks = sorted(os.path.join(TASKS, t) for t in os.listdir(TASKS) if os.path.isdir(os.path.join(TASKS, t, 'cm')))
+    samples = sorted(os.path.join(SAMPLES, s) for s in os.listdir(SAMPLES) if os.path.isdir(os.path.join(SAMPLES, s, 'cm')))
     with tempfile.TemporaryDirectory() as tmp:
         flags = run_refs.BASE_FLAGS + (run_refs.SAN_FLAGS if run_refs.sanitizers_work(tmp) else [])
         with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
-            results = list(pool.map(lambda t: check_task(t, tmp, flags), tasks))
+            results = list(pool.map(lambda d: check_task(d, tmp, flags), tasks + samples))
     fails = [f for r in results for f in r]
     if fails:
         print('варианты: сбоев ' + str(len(fails)))
@@ -202,7 +205,8 @@ def main():
             print('  ' + line)
         return 1
     san = 'с ASan/UBSan' if run_refs.SAN_FLAGS[0] in flags else 'без санитайзеров'
-    print(f'варианты: {len(tasks)} задач × {len(VARIANTS)} варианта совпадают ({run_refs.CXX}, {san})')
+    print(f'варианты: {len(tasks)} задач и {len(samples)} образца × {len(VARIANTS)} варианта совпадают '
+          f'({run_refs.CXX}, {san})')
     return 0
 
 
