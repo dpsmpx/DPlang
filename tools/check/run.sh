@@ -51,10 +51,25 @@ check_root() {
     echo "корень: только точки входа"
 }
 
+# Скрипты разбираются без ошибок: bash -n и компиляция Python.
+check_scripts() {
+    local n=0 f
+    while IFS= read -r f; do
+        case "$f" in
+            *.sh) bash -n "$ROOT/$f" || return 1 ;;
+            *.py) python3 -m py_compile "$ROOT/$f" || return 1 ;;
+            *) continue ;;
+        esac
+        n=$((n + 1))
+    done < <(git -C "$ROOT" ls-files -- '*.sh' '*.py')
+    echo "скрипты: разбираются ($n)"
+}
+
 echo "Проверки репозитория:"
 step "секреты"         python3 "$ROOT/tools/check/check_secrets.py"
 step "ссылки"          python3 "$ROOT/tools/check/check_links.py"
 step "корень"          check_root
+step "скрипты"         check_scripts
 
 if [ "$FAILED" -eq 0 ]; then
     echo "Итог: PASS ($TOTAL/$TOTAL). Журнал: build/check/run.log"
