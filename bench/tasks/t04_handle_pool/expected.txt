@@ -1,0 +1,21 @@
+a = (0,1)
+b = (1,1)
+c = (2,1)
+create full 1
+destroy b 1
+destroy b 0
+get b stale
+d = (1,2)
+get b stale
+get d 50
+set b 0
+set d 1
+get d 55
+count 3
+destroy a 1
+destroy c 1
+e = (0,2)
+get a stale
+get e 60
+count 2
+get bad stale

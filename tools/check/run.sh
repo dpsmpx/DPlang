@@ -5,8 +5,8 @@
 #   ./tools/check/run.sh          — все проверки
 #
 # Вывод краткий: по строке на проверку; на красном — первые строки
-# сбоя. Полный журнал — build/check/run.log. С появлением компилятора
-# сюда добавляются его тесты.
+# сбоя. Полный журнал — build/check/run.log. Эталоны набора задач —
+# bench/run_refs.py; с появлением компилятора сюда добавляются его тесты.
 # ============================================================
 set -u
 
@@ -70,6 +70,7 @@ step "секреты"         python3 "$ROOT/tools/check/check_secrets.py"
 step "ссылки"          python3 "$ROOT/tools/check/check_links.py"
 step "корень"          check_root
 step "скрипты"         check_scripts
+step "эталоны"         python3 "$ROOT/bench/run_refs.py"
 
 if [ "$FAILED" -eq 0 ]; then
     echo "Итог: PASS ($TOTAL/$TOTAL). Журнал: build/check/run.log"
