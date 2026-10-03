@@ -13,9 +13,10 @@
 
 | что | состояние |
 |---|---|
-| постановка, требования, решения | Р0–Р24 (`docs/direction/DECISIONS.md`) |
+| постановка, требования, решения | Р0–Р33 (`docs/direction/DECISIONS.md`) |
 | исследование | сделано (`docs/research/`) |
-| замер до компилятора (этап 2) | следующий |
+| формальная постановка проекта | сделана: видение, архитектура, политики, DoD v1.0, риски, аудит |
+| v0.0 — замер до компилятора | следующая версия |
 | спецификация | нет |
 | компилятор | нет |
 | VoxelRPG на языке | не раньше v1.0 и только по решению VoxelRPG (Р22) |
@@ -24,9 +25,13 @@
 
 ## Документы
 
+- [`docs/README.md`](docs/README.md) — карта документации: что где и с
+  чего начать.
 - [`CLAUDE.md`](CLAUDE.md) — правила работы в репозитории.
 - [`docs/direction/DECISIONS.md`](docs/direction/DECISIONS.md) — что
   решено.
+- [`docs/direction/VISION.md`](docs/direction/VISION.md) — техническое
+  видение и принципы.
 - [`docs/direction/GOAL.md`](docs/direction/GOAL.md) — ради чего язык и как
   мерить цели.
 - [`docs/research/LANGUAGE_RESEARCH.md`](docs/research/LANGUAGE_RESEARCH.md)

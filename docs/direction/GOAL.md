@@ -44,6 +44,9 @@
 
 Что из других языков применить и как — исследование
 [`docs/research/LANGUAGE_RESEARCH.md`](../research/LANGUAGE_RESEARCH.md).
+Техническое видение и принципы — [`VISION.md`](VISION.md); главная
+метрика проекта — Р32 и [`DEFINITION_OF_DONE.md`](DEFINITION_OF_DONE.md),
+раздел 3.
 
 ## 2. Что значит каждая цель и как её мерить
 

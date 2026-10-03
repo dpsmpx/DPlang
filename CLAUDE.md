@@ -1,8 +1,9 @@
 # Правила проекта
 
-Репозиторий языка C- и его компилятора. Зачем язык —
-`docs/direction/GOAL.md`; что решено — `docs/direction/DECISIONS.md`.
-Правила ниже — поручения автора; пояснения и история — в `docs/`.
+Репозиторий языка C- и его компилятора. Карта документации —
+`docs/README.md`; видение — `docs/direction/VISION.md`; что решено —
+`docs/direction/DECISIONS.md`. Правила ниже — обязательный минимум;
+полные инженерные правила — `docs/policy/ENGINEERING.md`.
 
 ## Источник истины
 
@@ -97,8 +98,11 @@
 
 - В корне — только точки входа: `README.md`, `CLAUDE.md`, `TODO.md`,
   `LICENSE`. Проверяет `tools/check/run.sh`.
-- `docs/direction/` — `DECISIONS.md`, `GOAL.md`; `docs/research/` —
-  исследования и заметки с источниками; `docs/archive/` — отработанное,
+- `docs/direction/` — видение, цели, решения, открытые решения,
+  Definition of Done, риски; `docs/design/` — проект архитектуры и
+  языка; `docs/policy/` — правила (совместимость, детерминизм, тесты,
+  замеры, платформы, инженерия, безопасность, выпуск); `docs/audits/` —
+  аудиты; `docs/research/` — исследования и заметки с источниками; `docs/archive/` — отработанное,
   с описью в `docs/archive/README.md` (каталог появится с первым
   архивным документом); остальное в `docs/` — как
   устроено сейчас. `ROADMAP/` — `ROADMAP.md` и файлы задач.
