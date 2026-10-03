@@ -1419,12 +1419,19 @@ class Emitter:
         if isinstance(s, If):
             return self.if_stmt(s, ind)
         if isinstance(s, While):
-            return [f'{pad}while ({self.ex(s.cond)}) {{'] + self.stmts(s.body.stmts, ind + 1) + [pad + '}']
+            return [f'{pad}while ({self.cond(s.cond)}) {{'] + self.stmts(s.body.stmts, ind + 1) + [pad + '}']
         if isinstance(s, For):
             return self.for_stmt(s, ind)
         if isinstance(s, Match):
             return self.match(s, ind)
         raise CmError(f'перевод: неизвестная инструкция {s!r}')
+
+    def cond(self, e):
+        """Условие if/while без лишней пары скобок: clang ругается на «if ((a == b))»."""
+        s = self.ex(e)
+        if isinstance(e, Binary) and e.op not in ARITH and e.op != '??' and s.startswith('(') and s.endswith(')'):
+            return s[1:-1]
+        return s
 
     def let(self, s):
         q = '' if s.mutable else 'const '
@@ -1454,7 +1461,7 @@ class Emitter:
             head = [f'{pad}if (auto&& {o} = {self.ex(s.cond.expr)}; {o}.has_value()) {{',
                     f'{pad}    const auto& {mangle(s.cond.name)} = *{o};']
         else:
-            head = [f'{pad}if ({self.ex(s.cond)}) {{']
+            head = [f'{pad}if ({self.cond(s.cond)}) {{']
         out = head + self.stmts(s.then.stmts, ind + 1)
         if s.els is None:
             return out + [pad + '}']
