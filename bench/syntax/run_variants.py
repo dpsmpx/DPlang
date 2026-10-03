@@ -16,7 +16,10 @@
 - заготовка для модели (cm/stub.cm) — в каноническом виде, печатается и
   разбирается во всех вариантах и совпадает с интерфейсом решения:
   сигнатуры функций, перечисления, поля структур (у структуры без полей
-  в заготовке поля — на выбор модели).
+  в заготовке поля — на выбор модели);
+- спецификации вариантов (docs/research/syntax/spec_*.md) не устарели
+  относительно шаблона и образцов (bench/syntax/mkspec.py), а их примеры
+  во всех вариантах переводятся и собираются.
 
 Флаги сборки — как у эталонов (bench/run_refs.py): C++20, -Werror, без
 исключений и RTTI, с ASan и UBSan, если компилятор их умеет.
@@ -40,6 +43,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, BENCH)
 
 import cm  # noqa: E402
+import mkspec  # noqa: E402
 import run_refs  # noqa: E402
 
 VARIANTS = sorted(cm.VARIANTS)
@@ -191,6 +195,29 @@ def check_task(d, tmp, flags):
     return fails
 
 
+def check_specs(tmp, flags):
+    """Спецификации свежие; примеры из них собираются в каждом варианте."""
+    fails = []
+    driver = os.path.join(tmp, 'spec_main.cpp')
+    with open(driver, 'w') as f:
+        f.write('#include "cm_out.hpp"\nint main() { return 0; }\n')
+    for v in VARIANTS:
+        path = mkspec.out_path(v)
+        try:
+            body = mkspec.render(v)
+            with open(path, encoding='utf-8') as f:
+                if f.read() != body:
+                    fails.append(f'{os.path.relpath(path, mkspec.ROOT)}: устарела — python3 bench/syntax/mkspec.py')
+            d = os.path.join(tmp, 'spec', v)
+            translate(mkspec.examples(v), v, d)
+            _, err = build_run(driver, d, flags)
+            if err:
+                fails.append(f'примеры спецификации {v}: {err}')
+        except (cm.CmError, OSError) as e:
+            fails.append(f'спецификация {v}: {e}')
+    return fails
+
+
 def main():
     tasks = sorted(os.path.join(TASKS, t) for t in os.listdir(TASKS) if os.path.isdir(os.path.join(TASKS, t, 'cm')))
     samples = sorted(os.path.join(SAMPLES, s) for s in os.listdir(SAMPLES) if os.path.isdir(os.path.join(SAMPLES, s, 'cm')))
@@ -198,6 +225,7 @@ def main():
         flags = run_refs.BASE_FLAGS + (run_refs.SAN_FLAGS if run_refs.sanitizers_work(tmp) else [])
         with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
             results = list(pool.map(lambda d: check_task(d, tmp, flags), tasks + samples))
+        results.append(check_specs(tmp, flags))
     fails = [f for r in results for f in r]
     if fails:
         print('варианты: сбоев ' + str(len(fails)))
@@ -205,8 +233,8 @@ def main():
             print('  ' + line)
         return 1
     san = 'с ASan/UBSan' if run_refs.SAN_FLAGS[0] in flags else 'без санитайзеров'
-    print(f'варианты: {len(tasks)} задач и {len(samples)} образца × {len(VARIANTS)} варианта совпадают '
-          f'({run_refs.CXX}, {san})')
+    print(f'варианты: {len(tasks)} задач и {len(samples)} образца × {len(VARIANTS)} варианта совпадают, '
+          f'спецификации свежие ({run_refs.CXX}, {san})')
     return 0
 
 
