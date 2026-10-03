@@ -1,24 +1,106 @@
-This is free and unencumbered software released into the public domain.
+ЛИЦЕНЗИЯ — ВРЕМЕННАЯ РЕДАКЦИЯ от 3 октября 2026 года
+(English version below)
 
-Anyone is free to copy, modify, publish, use, compile, sell, or
-distribute this software, either in source code form or as a compiled
-binary, for any purpose, commercial or non-commercial, and by any
-means.
+Copyright (c) 2026 dpsmpx. Все права защищены.
 
-In jurisdictions that recognize copyright laws, the author or authors
-of this software dedicate any and all copyright interest in the
-software to the public domain. We make this dedication for the benefit
-of the public at large and to the detriment of our heirs and
-successors. We intend this dedication to be an overt act of
-relinquishment in perpetuity of all present and future rights to this
-software under copyright law.
+Правообладатель — автор, выступающий под псевдонимом dpsmpx (аккаунт
+GitHub dpsmpx).
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
+1. Объект. Настоящий текст относится ко всему содержимому этого
+   репозитория, кроме сторонних компонентов (п. 5): исходному коду
+   языка программирования с рабочим названием «C-», его компилятора,
+   runtime, стандартной библиотеки, инструментов и SDK; спецификации и
+   документации; тестам и наборам замеров; а также к двоичным файлам и
+   иным результатам сборки, полученным из этого содержимого (далее —
+   «Материалы»).
 
-For more information, please refer to <https://unlicense.org>
+2. Права не предоставляются. Настоящий текст не предоставляет никаких
+   прав на Материалы — ни явно, ни подразумеваемо. Без предварительного
+   письменного разрешения правообладателя запрещается использовать,
+   воспроизводить, копировать, изменять, переводить, создавать
+   производные произведения, распространять, публиковать, продавать,
+   сублицензировать или иным образом передавать третьим лицам:
+   2.1. исходный код;
+   2.2. двоичные файлы и иные результаты сборки;
+   2.3. SDK, инструменты и библиотеки;
+   2.4. спецификацию, документацию и внутренние материалы, в том числе
+        наборы замеров и тестов.
+   Любое распространение Материалов — только по отдельному письменному
+   соглашению с правообладателем.
+
+3. Доступ не означает права. Доступ к закрытому репозиторию, в том числе
+   доступ сервисов и инструментов, через которые работает
+   правообладатель, не предоставляет прав на Материалы сверх
+   разрешённого правообладателем письменно.
+
+4. Без гарантий. Материалы предоставляются «как есть», без каких-либо
+   гарантий; правообладатель не отвечает за последствия их
+   использования.
+
+5. Сторонние компоненты распространяются на условиях своих лицензий.
+   Их перечень — в файле docs/THIRD_PARTY.md; уведомления включаются в
+   поставку, когда она появится.
+
+6. Предыдущая редакция. Настоящий текст заменяет ранее размещённый в
+   репозитории текст Unlicense.
+
+7. Временная редакция. Окончательный текст лицензии определяет
+   правообладатель — при необходимости после проверки юристом по
+   интеллектуальной собственности (docs/direction/DECISIONS.md, Р4).
+
+Разрешения — у правообладателя (аккаунт GitHub dpsmpx).
+
+При расхождении русского и английского текстов прав русский.
+
+------------------------------------------------------------------------
+
+LICENSE — INTERIM VERSION of 3 October 2026
+
+Copyright (c) 2026 dpsmpx. All rights reserved.
+
+The rights holder is the author known under the pseudonym dpsmpx
+(GitHub account dpsmpx).
+
+1. Subject. This text applies to all contents of this repository except
+   third-party components (section 5): the source code of the programming
+   language with the working name "C-", its compiler, runtime, standard
+   library, tools and SDK; the specification and documentation; tests and
+   benchmark sets; and binaries and other build outputs produced from
+   these contents (the "Materials").
+
+2. No rights granted. This text grants no rights to the Materials,
+   whether express or implied. Without the prior written permission of
+   the rights holder, it is prohibited to use, reproduce, copy, modify,
+   translate, create derivative works of, distribute, publish, sell,
+   sublicense or otherwise make available to third parties:
+   2.1. the source code;
+   2.2. binaries and other build outputs;
+   2.3. the SDK, tools and libraries;
+   2.4. the specification, documentation and internal materials,
+        including benchmark and test sets.
+   Any distribution of the Materials requires a separate written
+   agreement with the rights holder.
+
+3. Access is not a license. Access to the private repository, including
+   access by services and tools the rights holder works through, grants
+   no rights to the Materials beyond those granted by the rights holder
+   in writing.
+
+4. No warranty. The Materials are provided "as is", without warranty of
+   any kind; the rights holder is not liable for any consequences of
+   their use.
+
+5. Third-party components are distributed under their own licenses.
+   They are listed in docs/THIRD_PARTY.md; their notices are included
+   with any distribution once one exists.
+
+6. Previous version. This text replaces the Unlicense text previously
+   placed in this repository.
+
+7. Interim version. The final license text is determined by the rights
+   holder, if needed after review by an intellectual property lawyer
+   (docs/direction/DECISIONS.md, Р4).
+
+Permissions: contact the rights holder (GitHub account dpsmpx).
+
+If the Russian and English texts differ, the Russian text prevails.
