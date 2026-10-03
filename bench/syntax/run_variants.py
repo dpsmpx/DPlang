@@ -137,7 +137,7 @@ def check_task(t, tmp, flags):
                 fails += canonical([buggy])
                 fails += case(t + ' buggy', [buggy], os.path.join(cmd, 'driver.cpp'), expected,
                               out + '/buggy', flags, must_pass=False)
-    except cm.CmError as e:
+    except (cm.CmError, OSError) as e:
         fails.append(f'{t}: {e}')
     return fails
 

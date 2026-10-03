@@ -1485,7 +1485,8 @@ class Emitter:
                          f'{pad}        {th}.emplace_back([&, {i}] {{', f'{pad}            const auto {var} = {i};']
                         + ['    ' + x for x in body] +
                         [f'{pad}        }});', f'{pad}    }}', f'{pad}    for (auto& t : {th}) t.join();', f'{pad}}}'])
-            return [f'{pad}{loop} {{', f'{pad}    const auto {var} = {i};'] + body + [pad + '}']
+            bind = [] if s.var == '_' else [f'{pad}    const auto {var} = {i};']
+            return [f'{pad}{loop} {{'] + bind + body + [pad + '}']
         src = self.ex(s.iter)
         if s.mode == 'mut':
             head = f'{pad}for (auto& {var} : {src}) {{'
