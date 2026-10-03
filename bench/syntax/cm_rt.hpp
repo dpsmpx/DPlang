@@ -217,9 +217,9 @@ void bounds(const C& c, I i) {
 }
 
 template <class T, class I>
-T& at(std::vector<T>& c, I i) { bounds(c, i); return c[(size_t)i]; }
+decltype(auto) at(std::vector<T>& c, I i) { bounds(c, i); return c[(size_t)i]; }
 template <class T, class I>
-const T& at(const std::vector<T>& c, I i) { bounds(c, i); return c[(size_t)i]; }
+decltype(auto) at(const std::vector<T>& c, I i) { bounds(c, i); return c[(size_t)i]; }
 template <class T, class I>
 const T& at(std::span<const T> c, I i) { bounds(c, i); return c[(size_t)i]; }
 template <class I>

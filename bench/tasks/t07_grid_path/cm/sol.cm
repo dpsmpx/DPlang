@@ -1,0 +1,44 @@
+const DX: List[int] = [1, -1, 0, 0];
+const DY: List[int] = [0, 0, 1, -1];
+
+pub fn shortest_path(rows: []str) -> ?i32 {
+    let h = len(rows);
+    if h == 0 {
+        return none;
+    }
+    let w = len(rows[0]);
+    var dist = repeat(-1, w * h);
+    var queue: List[int] = [];
+    for y in 0..h {
+        for x in 0..w {
+            if rows[y][x] == 'S' {
+                queue.push(y * w + x);
+                dist[y * w + x] = 0;
+            }
+        }
+    }
+    var head = 0;
+    while head < len(queue) {
+        let cur = queue[head];
+        head += 1;
+        let cx = cur % w;
+        let cy = cur / w;
+        if rows[cy][cx] == 'G' {
+            return i32(dist[cur]);
+        }
+        for d in 0..4 {
+            let nx = cx + DX[d];
+            let ny = cy + DY[d];
+            if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                continue;
+            }
+            let next = ny * w + nx;
+            if rows[ny][nx] == '#' || dist[next] >= 0 {
+                continue;
+            }
+            dist[next] = dist[cur] + 1;
+            queue.push(next);
+        }
+    }
+    return none;
+}

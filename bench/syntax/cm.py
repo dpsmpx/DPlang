@@ -1208,6 +1208,7 @@ class Emitter:
     def __init__(self, modules):
         self.mods = modules
         self.info = Info(modules)
+        self.refs = False
         self.tmp = 0
         self.fn = None
         self.errnames = set()
@@ -1361,6 +1362,7 @@ class Emitter:
 
     def fn_def(self, f, refs):
         self.fn = f
+        self.refs = refs
         self.errnames = set()
         out = [self.fn_head(f, refs) + ' {']
         out += self.stmts(f.body.stmts, 1)
@@ -1429,7 +1431,7 @@ class Emitter:
         if s.type is not None:
             return f'{q}{self.ctype(s.type)} {mangle(s.name)} = {self.ex(s.value, s.type)}'
         v = s.value
-        if isinstance(v, Int) or (isinstance(v, Unary) and v.op == '-' and isinstance(v.expr, Int)):
+        if is_int_lit(v):
             return f'{q}int64_t {mangle(s.name)} = {self.ex(v)}'
         if isinstance(v, Float):
             return f'{q}double {mangle(s.name)} = {self.ex(v)}'
@@ -1690,7 +1692,7 @@ class Emitter:
                 elem = expect.elem if isinstance(expect, TList) else None
                 if elem is not None:
                     return f'cm::repeat<{self.ctype(elem)}>({self.ex(args[0], elem)}, {self.ex(args[1])})'
-                if isinstance(args[0], Int):
+                if is_int_lit(args[0]):
                     return f'cm::repeat<int64_t>({self.ex(args[0])}, {self.ex(args[1])})'
             if f.id in BUILTIN_FNS and f.id not in self.info.fns:
                 return f'{BUILTIN_FNS[f.id]}(' + ', '.join(self.ex(a) for a in args) + ')'
@@ -1717,6 +1719,13 @@ class Emitter:
             raise CmError(f'нет функции {name}')
         if len(args) != len(fn.params):
             raise CmError(f'{name}: ожидалось аргументов {len(fn.params)}, передано {len(args)}')
+        if self.refs:
+            for i, (a, p) in enumerate(zip(args, fn.params)):
+                want = {'val': None, 'ref': False, 'mut': True}[p.mode]
+                got = a.mut if isinstance(a, RefArg) else None
+                if want != got:
+                    mark = {None: 'без пометки', False: '&x', True: '&mut x'}
+                    raise CmError(f'{name}: аргумент {i + 1} ({p.name}) пишется {mark[want]}, а не {mark[got]}')
         return f'{mangle(name)}(' + ', '.join(self.ex(a, p.type) for a, p in zip(args, fn.params)) + ')'
 
     def variant_call(self, enum, name, args):
@@ -1764,6 +1773,10 @@ class Emitter:
             raise CmError(f'{sname}: не заданы поля {", ".join(missing)}')
         inits = ', '.join(f'.{mangle(f.name)} = {self.ex(given[f.name], f.type)}' for f in decl if f.name in given)
         return f'{mangle(sname)}{{{inits}}}'
+
+
+def is_int_lit(e):
+    return isinstance(e, Int) or (isinstance(e, Unary) and e.op == '-' and isinstance(e.expr, Int))
 
 
 TAKE = '''
