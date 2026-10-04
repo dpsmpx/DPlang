@@ -1,0 +1,99 @@
+// t09: инвентарь со стопками.
+pub enum InvError {
+    Invalid
+    NotEnough
+}
+
+pub struct Inventory {
+    // предмет в ячейке; 0 — ячейка пуста
+    items List[i32]
+    // число предметов в ячейке
+    counts List[i32]
+}
+
+fn max_stack(item i32) i32 {
+    if item < 100 {
+        return 64
+    }
+    return 1
+}
+
+pub fn inv_new(slots i32) Inventory {
+    var items List[i32] = []
+    var counts List[i32] = []
+    for _ in 0..slots {
+        items.push(0)
+        counts.push(0)
+    }
+    return Inventory { items, counts }
+}
+
+pub fn inv_add(inv mut Inventory, item i32, count i32) !i32 {
+    if count <= 0 || item < 1 {
+        fail .Invalid
+    }
+    limit := max_stack(item)
+    rest := count
+    n := len(inv.items)
+    for i in 0..n {
+        if rest > 0 && inv.items[i] == item && inv.counts[i] < limit {
+            room := limit - inv.counts[i]
+            take := min(room, rest)
+            inv.counts[i] += take
+            rest -= take
+        }
+    }
+    for i in 0..n {
+        if rest > 0 && inv.items[i] == 0 {
+            take := min(limit, rest)
+            inv.items[i] = item
+            inv.counts[i] = take
+            rest -= take
+        }
+    }
+    return rest
+}
+
+pub fn inv_total(inv Inventory, item i32) i32 {
+    var sum i32 = 0
+    for i in 0..len(inv.items) {
+        if inv.items[i] == item {
+            sum += inv.counts[i]
+        }
+    }
+    return sum
+}
+
+pub fn inv_remove(inv mut Inventory, item i32, count i32) !void {
+    if inv_total(inv, item) < count {
+        fail .NotEnough
+    }
+    rest := count
+    i := len(inv.items) - 1
+    while i >= 0 && rest > 0 {
+        if inv.items[i] == item {
+            take := min(inv.counts[i], rest)
+            inv.counts[i] -= take
+            rest -= take
+            if inv.counts[i] == 0 {
+                inv.items[i] = 0
+            }
+        }
+        i -= 1
+    }
+}
+
+pub fn inv_describe(inv Inventory) str {
+    out := ""
+    for i in 0..len(inv.items) {
+        if i > 0 {
+            out += " "
+        }
+        if inv.items[i] == 0 {
+            out += "-"
+        } else {
+            out += str(inv.items[i]) + ":" + str(inv.counts[i])
+        }
+    }
+    return out
+}
