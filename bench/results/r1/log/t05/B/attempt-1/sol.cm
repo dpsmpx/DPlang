@@ -1,0 +1,33 @@
+// t05: заготовка — напишите тела функций по task.md.
+const GOLDEN: u64 = 0x9E3779B97F4A7C15
+const MIX1: u64 = 0xBF58476D1CE4E5B9
+const MIX2: u64 = 0x94D049BB133111EB
+const ONE: i32 = 1
+const BASE: i32 = 32
+const SPREAD: u32 = 16
+const COUNT: i32 = 5
+
+pub fn hash32(seed: u64, x: i32, y: i32) u32 {
+    let ux: u64 = u64(u32.wrap(x))
+    let uy: u64 = u64(u32.wrap(y))
+    let k: u64 = seed ^ (ux << 32) ^ uy
+    var z: u64 = k +% GOLDEN
+    z = (z ^ (z >> 30)) *% MIX1
+    z = (z ^ (z >> 27)) *% MIX2
+    z = z ^ (z >> 31)
+    return u32(z >> 32)
+}
+
+fn raw(seed: u64, x: i32, y: i32) i32 {
+    let h: u32 = hash32(seed, x, y)
+    return BASE + i32(h % SPREAD)
+}
+
+pub fn height(seed: u64, x: i32, y: i32) i32 {
+    var sum: i32 = raw(seed, x, y)
+    sum += raw(seed, x +% ONE, y)
+    sum += raw(seed, x -% ONE, y)
+    sum += raw(seed, x, y +% ONE)
+    sum += raw(seed, x, y -% ONE)
+    return sum / COUNT
+}
