@@ -1,0 +1,5 @@
+// spec: lex.space
+let	a=1
+let  b	 =	2
+ab a b
+x+y x + y	x	+	y
