@@ -14,6 +14,8 @@
 #include <string_view>
 #include <vector>
 
+#include "ir/lower.h"
+#include "ir/verify.h"
 #include "sema/sema.h"
 #include "support/diag.h"
 #include "support/source.h"
@@ -147,7 +149,8 @@ bool check_parse(const std::string& input) {
 }
 
 // Инварианты проверки: модуль без ошибок разбора проходит сбор
-// объявлений и проверку тел без падения; места сообщений — внутри файла.
+// объявлений и проверку тел без падения; места сообщений — внутри файла;
+// модуль без ошибок понижается в Core IR, и верификатор его принимает.
 // Модули с import пропускаются: фаззер проверяет один файл.
 bool check_sema(const std::string& input) {
     if (input.find("import") != std::string::npos) return true;
@@ -170,6 +173,10 @@ bool check_sema(const std::string& input) {
         }
     }
     dp::render_text(diags.list(), sources);
+    if (diags.has_errors()) return true;
+    auto ir = dp::ir::lower(*prog);
+    std::vector<std::string> errors = dp::ir::verify(*ir);
+    if (!errors.empty()) return fail("invalid Core IR: " + errors[0], input);
     return true;
 }
 

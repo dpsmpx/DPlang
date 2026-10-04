@@ -1,0 +1,45 @@
+// Целые, плавающие, преобразования, запись чисел (expr.ops, expr.convert).
+fn show(name: str, v: i64) {
+    println(name + " = " + str(v))
+}
+
+fn main() {
+    show("7 / 2", 7 / 2)
+    show("-7 / 2", -7 / 2)
+    show("-7 % 2", -7 % 2)
+    show("7 % -2", 7 % -2)
+    let big: i64 = 9223372036854775807
+    show("big +% 1", big +% 1)
+    show("min -% 1", (0 - big - 1) -% 1)
+    show("3 *% big", 3 *% big)
+    let b: u8 = 200
+    println("u8 200 +% 100 = " + str(b +% 100))
+    println("u8 ~200 = " + str(~b))
+    println("u8 200 >> 3 = " + str(b >> 3))
+    println("u8 200 << 1 = " + str(b << 1))
+    let n: i8 = -128
+    println("i8 -128 >> 1 = " + str(n >> 1))
+    println("i8 -128 % -1 = " + str(n % -1))
+    println("i32 0x7f & 0x3c = " + str(0x7f & 0x3c) + ", | = " + str(0x40 | 0x3) + ", ^ = " + str(0xff ^ 0x0f))
+    println("u32.wrap(-1) = " + str(u32.wrap(-1)))
+    println("i8.wrap(300) = " + str(i8.wrap(300)))
+    println("u8(250) = " + str(u8(250)) + ", i64(u32(7)) = " + str(i64(u32(7))))
+    let x: i32 = 100000
+    let wide: i64 = x * 3
+    println("widen = " + str(wide))
+    println("i32(-3.99) = " + str(i32(-3.99)) + ", u8(2.5) = " + str(u8(2.5)))
+    println("f64(7) / 2 = " + str(f64(7) / 2.0))
+    println("0.1 + 0.2 = " + str(0.1 + 0.2))
+    let a: f32 = 0.1
+    let c: f32 = 0.2
+    println("f32 0.1 + 0.2 = " + str(a + c))
+    println("f64(f32 0.1) = " + str(f64(a)))
+    println("1e20 = " + str(1e20) + ", 1.5e-7 = " + str(1.5e-7) + ", -0.0 = " + str(-0.0))
+    println("1.0 / 0.0 = " + str(1.0 / 0.0) + ", -1.0 / 0.0 = " + str(-1.0 / 0.0))
+    let zero = 0.0
+    println("0.0 / 0.0 = " + str(zero / zero) + ", nan == nan: " + str(zero / zero == zero / zero))
+    println("min = " + str(min(3, -4)) + ", max = " + str(max(2.5, 1.0)) + ", abs = " + str(abs(-9)) + ", " + str(abs(-0.0)))
+    println("-(5) = " + str(-(5)) + ", -x = " + str(-x))
+    println("str(true) = " + str(true) + ", str(str) = " + str("s"))
+    println("1 < 2: " + str(1 < 2) + ", 2.0 >= 2.0: " + str(2.0 >= 2.0) + ", u8 255 > 1: " + str(b + 55 > 1))
+}

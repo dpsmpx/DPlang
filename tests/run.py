@@ -11,7 +11,8 @@ build/compiler/ и прогоняет золотые тесты наборов t
     [exit N]              (если код выхода не 0)
 
 Команда запускается из каталога набора, пути в выводе — относительные.
-Наборы и их команды — SUITES ниже; устройство — docs/compiler/README.md.
+Наборы и их команды — SUITES ниже; проход verify — верификатор Core IR на
+каждой программе наборов. Устройство — docs/compiler/README.md.
 
     python3 tests/run.py              — собрать и прогнать
     python3 tests/run.py --bless      — переписать ожидаемое (дифф — на ревью)
@@ -54,11 +55,17 @@ SUITES = {
     'types': ('.dpm', DPLANG, lambda name, path: ['debug', 'types', name]),
     'fail': ('.dpm', DPLANG, lambda name, path: ['check', name]),
     'diag': ('.dpm', DPLANG, lambda name, path: ['check', '--format=json', name]),
+    'ir': ('.dpm', DPLANG, lambda name, path: ['debug', 'ir', name]),
+    'run': ('.dpm', DPLANG, lambda name, path: ['debug', 'run', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
 # Наборы, где тест может быть каталогом из нескольких модулей: вход —
 # X/main.dpm, ожидаемое — X.out рядом с каталогом.
-DIR_SUITES = {'sema', 'summary', 'types', 'fail'}
+DIR_SUITES = {'sema', 'summary', 'types', 'fail', 'ir', 'run'}
+# Проход verify: каждая программа наборов понижается в Core IR, и
+# верификатор проверяет её (docs/ir/README.md). Ожидаемого нет: программа
+# с ошибками даёт код 1, без них — 0; внутренняя ошибка и падение — сбой.
+VERIFY_FROM = ('.dpm',)
 
 
 def build():
@@ -92,7 +99,8 @@ def discover(pattern):
                 continue
             if pattern in os.path.relpath(path, TESTS):
                 tests.append((suite, path))
-    return tests
+    verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
+    return tests + verify
 
 
 def suite_dir_of(suite, path):
@@ -124,7 +132,21 @@ def expected_path(suite, path):
     return path[:-len(ext)] + '.out'
 
 
+def verify_one(path):
+    cwd = os.path.dirname(path)
+    try:
+        r = subprocess.run([DPLANG, 'debug', 'ir', os.path.basename(path)], capture_output=True, text=True,
+                           errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'debug ir: [timeout {TIMEOUT} s]'
+    if r.returncode in (0, 1):
+        return None
+    return f'debug ir: код {r.returncode}:\n' + '\n'.join(r.stderr.splitlines()[:20])
+
+
 def run_one(suite, path, bless):
+    if suite == 'verify':
+        return verify_one(path)
     got = actual_output(suite, path)
     exp_path = expected_path(suite, path)
     if bless:
