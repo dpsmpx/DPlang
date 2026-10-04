@@ -1,0 +1,14 @@
+// Реестр кодов диагностики (Р15, Р47; docs/compiler/diagnostics.md).
+//
+// DP_CODE(код, краткое название, объяснение для `dplang explain`).
+// Тексты — по-английски (Р47). Код, однажды выпущенный, не меняет
+// смысла; удалённый код не переиспользуется. У каждого кода — хотя бы
+// один тест отказа (docs/policy/TESTING.md, правило 4).
+//
+// Диапазоны: E00xx — файлы и запуск; E01xx — лексика; E02xx — грамматика;
+// E03xx — модули и имена; E04xx — типы; E05xx — поток: инициализация,
+// ссылки, обработка ошибок.
+
+DP_CODE(E0001, "cannot read source file",
+        "The compiler could not open or read a source file named on the command line or found by an "
+        "`import`. Check that the path exists and is readable.")

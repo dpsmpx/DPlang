@@ -1,0 +1,6 @@
+usage: dplang <command> [arguments]
+
+commands:
+  explain <code>   explain a diagnostic code, e.g. E0001
+  help             show this help
+  --version        print the compiler version

@@ -8,8 +8,8 @@
 # сбоя. Полный журнал — build/check/run.log. Эталоны набора задач —
 # bench/run_refs.py; решения на вариантах синтаксиса —
 # bench/syntax/run_variants.py; обвязка опыта v0.0 —
-# bench/experiment.py selftest; с появлением компилятора сюда
-# добавляются его тесты.
+# bench/experiment.py selftest; компилятор и его тесты — tests/run.py
+# (docs/compiler/README.md).
 # ============================================================
 set -u
 
@@ -76,6 +76,7 @@ step "скрипты"         check_scripts
 step "эталоны"         python3 "$ROOT/bench/run_refs.py"
 step "варианты"        python3 "$ROOT/bench/syntax/run_variants.py"
 step "обвязка"         python3 "$ROOT/bench/experiment.py" selftest
+step "компилятор"      python3 "$ROOT/tests/run.py"
 
 if [ "$FAILED" -eq 0 ]; then
     echo "Итог: PASS ($TOTAL/$TOTAL). Журнал: build/check/run.log"

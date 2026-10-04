@@ -13,7 +13,7 @@
 | узнать, что ещё не решено | `direction/OPEN_DECISIONS.md` |
 | понять архитектуру toolchain | `design/ARCHITECTURE.md` |
 | понять устройство языка | `design/LANGUAGE.md`, затем спецификация (`spec/`, появится в v0.1) |
-| найти компонент в коде | `design/ARCHITECTURE.md`, раздел 10; затем `compiler/`, `ir/`, `runtime/`, `stdlib/` (появятся с кодом) |
+| найти компонент в коде | `design/ARCHITECTURE.md`, раздел 10; затем `compiler/README.md` (устройство компилятора); `ir/`, `runtime/`, `stdlib/` появятся с кодом |
 | понять контракт для потребителя | `policy/COMPATIBILITY.md`, `policy/DETERMINISM.md`, спецификация |
 | внести изменение | `../CLAUDE.md` (обязательный минимум), `policy/ENGINEERING.md` |
 | запустить проверки и прочитать результат | `../tools/check/run.sh`, `policy/TESTING.md` (разделы 5–6) |
@@ -31,7 +31,8 @@
 | `research/` | исследования с источниками | материал, не решения |
 | `audits/` | аудиты на дату | срез на дату |
 | `spec/` | спецификация языка | появится в v0.1 |
-| `compiler/`, `ir/`, `runtime/`, `stdlib/` | описание устройства | появятся с кодом |
+| `compiler/` | описание устройства компилятора, сборка, тесты | v0.1, по шагам |
+| `ir/`, `runtime/`, `stdlib/` | описание устройства | появятся с кодом |
 | `archive/` | отработанное, с описью | появится с первым архивным документом |
 
 Корень репозитория: `README.md`, `CLAUDE.md`, `TODO.md`, `LICENSE`;
