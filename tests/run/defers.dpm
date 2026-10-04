@@ -1,0 +1,78 @@
+// spec: stmt.defer stmt.loop error.flow
+enum E {
+    Bad
+}
+
+fn log(s: str) {
+    println(s)
+}
+
+fn early(flag: bool) int {
+    defer log("  early: defer 1")
+    defer {
+        log("  early: defer 2")
+    }
+    if flag {
+        defer log("  early: inner defer")
+        return 1
+    }
+    log("  early: end of body")
+    return 2
+}
+
+fn loop_exits() {
+    for i in 0..4 {
+        defer log("  loop: end of iteration " + str(i))
+        if i == 1 {
+            continue
+        }
+        if i == 3 {
+            break
+        }
+        log("  loop: body " + str(i))
+    }
+    var n = 0
+    while true {
+        defer log("  while: defer " + str(n))
+        n += 1
+        if n == 2 {
+            break
+        }
+    }
+}
+
+fn may_fail(bad: bool) E!int {
+    if bad {
+        fail .Bad
+    }
+    return 7
+}
+
+fn with_try(bad: bool) E!int {
+    defer log("  try: defer")
+    let v = try may_fail(bad)
+    log("  try: got " + str(v))
+    return v
+}
+
+fn with_fail() E!void {
+    defer log("  fail: defer")
+    {
+        defer log("  fail: inner block defer")
+        fail .Bad
+    }
+}
+
+fn main() {
+    log("early(true) = " + str(early(true)))
+    log("early(false) = " + str(early(false)))
+    loop_exits()
+    _ = with_try(false)
+    _ = with_try(true)
+    _ = with_fail()
+    {
+        defer log("block: defer")
+        log("block: body")
+    }
+    log("done")
+}

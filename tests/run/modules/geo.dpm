@@ -1,0 +1,48 @@
+// Модуль с открытыми типами, константами и функциями.
+pub const ORIGIN_NAME: str = "origin"
+pub const LIMITS: List[i32] = [10, 20, 30]
+const HIDDEN: i32 = 7
+
+pub struct Point {
+    x: i32
+    y: i32
+    label: str = ORIGIN_NAME
+}
+
+pub enum Kind {
+    Wall
+    Floor(i32)
+    Door { open: bool }
+}
+
+pub enum GeoError {
+    OutOfRange
+}
+
+pub fn origin() Point {
+    return Point { x: 0, y: 0 }
+}
+
+pub fn shifted(p: Point, d: i32) GeoError!Point {
+    if d > LIMITS[0] {
+        fail .OutOfRange
+    }
+    return Point { x: p.x + d, y: p.y + d + secret(), label: p.label + "+" }
+}
+
+pub fn kind_cost(k: Kind) i32 {
+    match k {
+        .Wall => return 100
+        .Floor(c) => return c
+        .Door { open } => {
+            if open {
+                return 1
+            }
+            return 50
+        }
+    }
+}
+
+fn secret() i32 {
+    return HIDDEN - 7
+}

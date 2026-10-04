@@ -1,0 +1,5 @@
+// spec: trap.int
+fn main() {
+    let z: u16 = 0
+    println(str(7 % z))
+}

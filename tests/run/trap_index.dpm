@@ -1,0 +1,9 @@
+// spec: trap.index
+fn main() {
+    let xs: List[i32] = [1, 2, 3]
+    var i = 0
+    while true {
+        println(str(xs[i]))
+        i += 1
+    }
+}

@@ -1,0 +1,5 @@
+// spec: trap.convert
+fn main() {
+    println(str(i64(-9.2e18)))
+    println(str(i32(3.0e9)))
+}

@@ -1,0 +1,4 @@
+2
+--- stderr ---
+trap_insert.dpm:6:5: trap: insert position 3 is out of bounds for length 2
+[exit 101]

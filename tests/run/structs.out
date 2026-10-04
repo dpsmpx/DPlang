@@ -1,0 +1,16 @@
+knight 11,2 hp 100 tags 1
+copy 11,-5 hp 100 tags 2
+0 point
+12 other
+12 other
+-1 greeting at 7
+3 unit circle
+0 flat rect
+10 rect of height 2, w = 5
+-1 label 'yo' at 3,4
+0 point
+1 other
+zero, small, minus one, big 40
+vec: false true true
+enum: true true true true
+point; unit circle; other; other; other; 

@@ -1,0 +1,10 @@
+123: ok 123
+12a: bad digit 97
+empty: empty
+huge: too big
+pair: ok 42
+pair bad: bad digit 120
+5 is positive
+-5: negative = true
+first word: hello
+no word: empty = true

@@ -1,0 +1,3 @@
+--- stderr ---
+error[E0322]: module 'main_missing' has no function 'main' to start the program
+[exit 1]

@@ -1,0 +1,14 @@
+// Модуль, зависящий от geo: ошибки и типы чужого модуля.
+import geo
+
+pub fn walk(steps: []i32) geo.GeoError!geo.Point {
+    var p = geo.origin()
+    for s in &steps {
+        p = try geo.shifted(p, s)
+    }
+    return p
+}
+
+pub fn describe(p: geo.Point) str {
+    return p.label + "(" + str(p.x) + "," + str(p.y) + ")"
+}

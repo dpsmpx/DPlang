@@ -1,0 +1,4 @@
+м
+--- stderr ---
+trap_str_slice.dpm:5:13: trap: slice 0..3 of a str does not fall on character boundaries
+[exit 101]

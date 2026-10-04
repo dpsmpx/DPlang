@@ -1,0 +1,4 @@
+// spec: module.main
+fn start() {
+    println("never")
+}

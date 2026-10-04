@@ -1,0 +1,15 @@
+// spec: trap.index ref.slices
+fn sum(xs: []i32) i32 {
+    var t: i32 = 0
+    for x in &xs {
+        t += x
+    }
+    return t
+}
+
+fn main() {
+    let xs: List[i32] = [1, 2, 3]
+    println(str(sum(xs[1..3])))
+    let lo = 2
+    println(str(sum(xs[lo..1])))
+}

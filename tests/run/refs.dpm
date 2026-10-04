@@ -1,0 +1,72 @@
+// spec: ref.marks ref.slices memory.values stmt.assign stmt.for expr.field
+struct Stats {
+    hits: i32
+    names: List[str]
+}
+
+struct World {
+    stats: Stats
+    grid: List[List[i32]]
+}
+
+fn record(s: &mut Stats, name: str) {
+    s.hits += 1
+    s.names.push(name)
+}
+
+fn total(s: &Stats) i32 {
+    var copy = s.names
+    copy.push("local only")
+    return s.hits * 100 + i32(len(copy))
+}
+
+fn set_cell(cell: &mut i32, v: i32) {
+    cell = v
+}
+
+fn swap(a: &mut i32, b: &mut i32) {
+    let t = a
+    a = b
+    b = t
+}
+
+fn grow_while_reading(xs: &mut List[i32]) int {
+    var seen = 0
+    for x in &xs {
+        seen += 1
+        if x < 3 {
+            xs.push(x + 10)
+        }
+    }
+    return seen
+}
+
+fn main() {
+    var w = World { stats: Stats { hits: 0, names: [] }, grid: repeat(repeat(0, 2), 2) }
+    record(&mut w.stats, "a")
+    record(&mut w.stats, "b")
+    println("hits = " + str(w.stats.hits) + ", names = " + str(len(w.stats.names)) + ", total = " + str(total(&w.stats)))
+    println("names after total = " + str(len(w.stats.names)))
+    set_cell(&mut w.grid[1][0], 42)
+    var i = 0
+    set_cell(&mut w.grid[i][i + 1], 7)
+    println("grid = " + str(w.grid[0][0]) + " " + str(w.grid[0][1]) + " " + str(w.grid[1][0]) + " " + str(w.grid[1][1]))
+    var a: i32 = 1
+    var b: i32 = 2
+    swap(&mut a, &mut b)
+    println("swap: a = " + str(a) + ", b = " + str(b))
+    swap(&mut a, &mut w.grid[1][0])
+    println("swap with cell: a = " + str(a) + ", cell = " + str(w.grid[1][0]))
+    var xs: List[i32] = [1, 5, 2]
+    let seen = grow_while_reading(&mut xs)
+    var line = ""
+    for x in &xs {
+        line += str(x) + " "
+    }
+    println("seen = " + str(seen) + ", xs = " + line)
+    var words: List[str] = ["x", "y"]
+    for wd in &mut words {
+        wd += "!"
+    }
+    println("words = " + words[0] + words[1])
+}

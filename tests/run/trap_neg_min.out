@@ -1,0 +1,3 @@
+--- stderr ---
+trap_neg_min.dpm:4:17: trap: integer overflow in '-' on 'i8'
+[exit 101]

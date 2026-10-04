@@ -1,0 +1,5 @@
+// spec: trap.memory
+fn main() {
+    let xs = repeat(0, 1000000000)
+    println(str(len(xs)))
+}

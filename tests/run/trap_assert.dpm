@@ -1,0 +1,6 @@
+// spec: builtin.functions trap.def
+fn main() {
+    assert(1 + 1 == 2)
+    println("first assert passed")
+    assert(len("ab") == 3)
+}

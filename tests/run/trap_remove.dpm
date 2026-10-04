@@ -1,0 +1,6 @@
+// spec: builtin.methods trap.index
+fn main() {
+    var xs: List[str] = ["a"]
+    println(xs.remove(0))
+    println(xs.remove(0))
+}

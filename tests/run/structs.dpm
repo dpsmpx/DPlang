@@ -1,0 +1,79 @@
+// spec: type.enum expr.struct expr.compare stmt.match pattern.types pattern.or memory.values
+struct Vec2 {
+    x: i32
+    y: i32
+}
+
+struct Unit {
+    name: str
+    pos: Vec2
+    hp: i32 = 100
+    tags: List[str] = []
+}
+
+enum Shape {
+    Dot
+    Circle(i32)
+    Rect { w: i32, h: i32 }
+    Label(str, Vec2)
+}
+
+fn area(s: Shape) i64 {
+    match s {
+        .Dot => return 0
+        .Circle(r) => return 3 * i64(r) * i64(r)
+        .Rect { w, h } => return i64(w) * i64(h)
+        .Label(_, _) => return -1
+    }
+}
+
+fn describe(s: Shape) str {
+    match s {
+        .Circle(0) | .Dot => return "point"
+        .Circle(1) => return "unit circle"
+        .Rect { w: 0 } | .Rect { h: 0 } => return "flat rect"
+        .Rect { w, h: 2 } => return "rect of height 2, w = " + str(w)
+        .Label("hi", p) => return "greeting at " + str(p.y)
+        .Label(text, p) => return "label '" + text + "' at " + str(p.x) + "," + str(p.y)
+        _ => return "other"
+    }
+}
+
+fn grade(n: i32) str {
+    match n {
+        0 => return "zero"
+        1 | 2 | 3 => return "small"
+        -1 => return "minus one"
+        other => return "big " + str(other)
+    }
+}
+
+fn main() {
+    var u = Unit { name: "knight", pos: Vec2 { x: 1, y: 2 } }
+    u.pos.x += 10
+    u.tags.push("brave")
+    var v = u
+    v.name = "copy"
+    v.pos.y = -5
+    v.tags.push("second")
+    println(u.name + " " + str(u.pos.x) + "," + str(u.pos.y) + " hp " + str(u.hp) + " tags " + str(len(u.tags)))
+    println(v.name + " " + str(v.pos.x) + "," + str(v.pos.y) + " hp " + str(v.hp) + " tags " + str(len(v.tags)))
+    let shapes: List[Shape] = [.Dot, .Circle(2), Shape.Rect { w: 3, h: 4 }, .Label("hi", Vec2 { x: 0, y: 7 }), .Circle(1), .Rect { w: 0, h: 9 }, .Rect { w: 5, h: 2 }, .Label("yo", Vec2 { x: 3, y: 4 }), .Circle(0), .Rect { h: 1, w: 1 }]
+    for s in &shapes {
+        println(str(area(s)) + " " + describe(s))
+    }
+    println(grade(0) + ", " + grade(2) + ", " + grade(-1) + ", " + grade(40))
+    let a = Vec2 { x: 1, y: 2 }
+    let b = Vec2 { x: 1, y: 3 }
+    println("vec: " + str(a == b) + " " + str(a < b) + " " + str(a == Vec2 { x: 1, y: 2 }))
+    let c1: Shape = .Circle(5)
+    let r1: Shape = .Rect { w: 1, h: 1 }
+    println("enum: " + str(c1 < r1) + " " + str(c1 == .Circle(5)) + " " + str(c1 < .Circle(6)) + " " + str(Shape.Dot < c1))
+    var sorted: List[Shape] = [.Rect { w: 2, h: 1 }, .Circle(3), .Dot, .Rect { w: 1, h: 9 }, .Circle(1)]
+    sorted.sort()
+    var line = ""
+    for s in &sorted {
+        line += describe(s) + "; "
+    }
+    println(line)
+}

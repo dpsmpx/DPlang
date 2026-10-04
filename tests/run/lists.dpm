@@ -1,0 +1,78 @@
+// spec: type.names type.conv memory.values ref.slices stmt.for expr.compare builtin.functions builtin.methods
+fn show(name: str, xs: []i32) {
+    var s = name + " ["
+    for i in 0..len(xs) {
+        if i > 0 {
+            s += ", "
+        }
+        s += str(xs[i])
+    }
+    println(s + "]")
+}
+
+fn sum(xs: []i32) i64 {
+    var total: i64 = 0
+    for x in &xs {
+        total += x
+    }
+    return total
+}
+
+fn bump_all(xs: &mut List[i32]) {
+    for x in &mut xs {
+        x *= 10
+    }
+}
+
+fn main() {
+    var xs: List[i32] = [5, 3, 8]
+    xs.push(1)
+    xs.insert(0, 9)
+    xs.insert(len(xs), 7)
+    show("after push/insert", xs)
+    let removed = xs.remove(2)
+    println("removed " + str(removed))
+    show("after remove", xs)
+    if let last = xs.pop() {
+        println("popped " + str(last))
+    }
+    var empty: List[i32] = []
+    let p = empty.pop()
+    println("pop of empty is none: " + str(p == none))
+    show("slice 1..3", xs[1..3])
+    show("slice ..2", xs[..2])
+    show("slice 2..", xs[2..])
+    show("slice of slice", xs[1..][1..])
+    show("empty slice", xs[2..2])
+    println("sum = " + str(sum(xs)) + ", contains 8: " + str(xs.contains(8)) + ", contains 4: " + str(xs.contains(4)))
+    var ys = xs
+    ys.push(100)
+    show("copy grew", ys)
+    show("original kept", xs)
+    xs.sort()
+    show("sorted", xs)
+    bump_all(&mut xs)
+    show("bumped", xs)
+    xs.clear()
+    println("cleared len = " + str(len(xs)))
+    var grid = repeat(repeat(0, 3), 2)
+    grid[1][2] = 5
+    grid[0][0] += 1
+    println("grid = " + str(grid[0][0]) + str(grid[0][1]) + str(grid[0][2]) + " " + str(grid[1][0]) + str(grid[1][1]) + str(grid[1][2]))
+    var names: List[str] = ["b", "a", "c", "a"]
+    names.sort()
+    var line = ""
+    for n in &names {
+        line += n
+    }
+    println("names sorted = " + line + ", contains c: " + str(names.contains("c")))
+    let a: List[i32] = [1, 2, 3]
+    let b: List[i32] = [1, 2]
+    println("list compare: " + str(a == [1, 2, 3]) + " " + str(b < a) + " " + str(a < [1, 3]) + " " + str(a != b))
+    var nested: List[List[str]] = []
+    nested.push(["x"])
+    nested[0].push("y")
+    nested.push(nested[0])
+    nested[1][0] = "z"
+    println("nested = " + nested[0][0] + nested[0][1] + " " + nested[1][0] + nested[1][1])
+}

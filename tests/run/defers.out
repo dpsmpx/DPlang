@@ -1,0 +1,24 @@
+  early: inner defer
+  early: defer 2
+  early: defer 1
+early(true) = 1
+  early: end of body
+  early: defer 2
+  early: defer 1
+early(false) = 2
+  loop: body 0
+  loop: end of iteration 0
+  loop: end of iteration 1
+  loop: body 2
+  loop: end of iteration 2
+  loop: end of iteration 3
+  while: defer 1
+  while: defer 2
+  try: got 7
+  try: defer
+  try: defer
+  fail: inner block defer
+  fail: defer
+block: body
+block: defer
+done

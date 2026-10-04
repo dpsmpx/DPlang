@@ -1,0 +1,6 @@
+// spec: trap.int
+fn main() {
+    let m: i64 = -9223372036854775807 - 1
+    println("rem = " + str(m % -1))
+    println(str(m / -1))
+}

@@ -1,0 +1,6 @@
+// spec: trap.int
+fn main() {
+    let x: i64 = 256
+    let k: i8 = -1
+    println(str(x >> k))
+}

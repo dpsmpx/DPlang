@@ -1,0 +1,9 @@
+// spec: trap.int
+fn main() {
+    let x: u32 = 1
+    var k = 0
+    while k <= 32 {
+        println(str(x << k))
+        k += 8
+    }
+}

@@ -1,0 +1,26 @@
+// spec: module.file module.import module.graph module.pub module.lookup module.main error.sig
+import geo
+import util
+
+fn main() {
+    let o = geo.origin()
+    println(util.describe(o) + ", limit " + str(geo.LIMITS[2]) + ", " + geo.ORIGIN_NAME)
+    let steps: List[i32] = [1, 2, 3]
+    match util.walk(steps) {
+        ok(p) => println("walked to " + util.describe(p))
+        err(e) => println("walk failed")
+    }
+    let far: List[i32] = [1, 11]
+    match util.walk(far) {
+        ok(p) => println("walked to " + util.describe(p))
+        err(e) => println("walk failed: out of range = " + str(e == geo.GeoError.OutOfRange))
+    }
+    let kinds: List[geo.Kind] = [geo.Kind.Wall, .Floor(3), geo.Kind.Door { open: true }, .Door { open: false }]
+    var total: i32 = 0
+    for k in &kinds {
+        total += geo.kind_cost(k)
+    }
+    println("total cost = " + str(total))
+    let p = geo.Point { x: 5, y: 6, label: "custom" }
+    println(util.describe(p) + " == origin: " + str(p == o))
+}

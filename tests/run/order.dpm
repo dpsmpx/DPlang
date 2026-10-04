@@ -1,0 +1,55 @@
+// spec: expr.ops expr.call expr.struct stmt.assign
+struct P {
+    x: i32
+    y: i32
+}
+
+fn next(c: &mut i32, tag: str) i32 {
+    c += 1
+    println("  eval " + tag + " -> " + str(c))
+    return c
+}
+
+fn yes(tag: str) bool {
+    println("  eval " + tag)
+    return true
+}
+
+fn no(tag: str) bool {
+    println("  eval " + tag)
+    return false
+}
+
+fn pair(a: i32, b: i32) str {
+    return str(a) + "," + str(b)
+}
+
+fn main() {
+    var c: i32 = 0
+    println("args: " + pair(next(&mut c, "first"), next(&mut c, "second")))
+    c = 0
+    let s = c + next(&mut c, "right operand")
+    println("place read before the call: " + str(s))
+    c = 10
+    c += next(&mut c, "compound")
+    println("compound: " + str(c))
+    println("and: " + str(no("left") && yes("right")))
+    println("or: " + str(yes("left") || no("right")))
+    println("and both: " + str(yes("left") && no("right")))
+    let some: ?i32 = 5
+    let nothing: ?i32 = none
+    c = 0
+    println("coalesce some: " + str(some ?? next(&mut c, "fallback")))
+    println("coalesce none: " + str(nothing ?? next(&mut c, "fallback")))
+    let p = P { y: next(&mut c, "field y"), x: next(&mut c, "field x") }
+    println("struct: x = " + str(p.x) + ", y = " + str(p.y))
+    let xs: List[i32] = [next(&mut c, "item 0"), next(&mut c, "item 1")]
+    println("list: " + str(xs[0]) + " " + str(xs[1]))
+    var ys: List[i32] = [1, 2, 3]
+    let t = ys[2] + (ys.pop() ?? 0) + i32(len(ys))
+    println("index before pop: " + str(t))
+    var zs: List[i32] = [10, 20, 30]
+    c = -1
+    zs[next(&mut c, "index")] = next(&mut c, "value")
+    println("zs = " + str(zs[0]) + " " + str(zs[1]) + " " + str(zs[2]))
+}

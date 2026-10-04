@@ -1,0 +1,8 @@
+before
+2147483610
+2147483620
+2147483630
+2147483640
+--- stderr ---
+trap_overflow.dpm:6:9: trap: integer overflow in '+' on 'i32'
+[exit 101]

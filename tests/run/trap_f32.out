@@ -1,0 +1,4 @@
+1e+38 inf
+--- stderr ---
+trap_f32.dpm:7:17: trap: value 1e+39 does not fit 'f32'
+[exit 101]

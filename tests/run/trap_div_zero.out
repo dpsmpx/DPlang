@@ -1,0 +1,4 @@
+3
+--- stderr ---
+trap_div_zero.dpm:3:14: trap: division by zero
+[exit 101]

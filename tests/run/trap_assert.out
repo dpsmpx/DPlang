@@ -1,0 +1,4 @@
+first assert passed
+--- stderr ---
+trap_assert.dpm:5:5: trap: assertion failed
+[exit 101]

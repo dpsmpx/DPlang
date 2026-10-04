@@ -1,0 +1,7 @@
+hits = 2, names = 2, total = 203
+names after total = 2
+grid = 0 7 42 0
+swap: a = 2, b = 1
+swap with cell: a = 42, cell = 2
+seen = 5, xs = 1 5 2 11 12 
+words = x!y!

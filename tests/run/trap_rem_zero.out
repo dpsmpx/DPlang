@@ -1,0 +1,3 @@
+--- stderr ---
+trap_rem_zero.dpm:4:19: trap: division by zero
+[exit 101]

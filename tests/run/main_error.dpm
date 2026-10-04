@@ -1,0 +1,16 @@
+// spec: module.main trap.exit
+enum StartError {
+    NoConfig
+    Other
+}
+
+fn load() StartError!int {
+    fail .NoConfig
+}
+
+fn main() StartError!void {
+    defer println("main defer runs")
+    println("loading")
+    let v = try load()
+    println(str(v))
+}

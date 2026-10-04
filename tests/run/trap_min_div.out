@@ -1,0 +1,4 @@
+rem = 0
+--- stderr ---
+trap_min_div.dpm:5:19: trap: integer overflow in '/' on 'i64'
+[exit 101]
