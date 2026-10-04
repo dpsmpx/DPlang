@@ -17,6 +17,11 @@ if(DPLANG_SANITIZE)
 endif()
 
 add_library(dpcore STATIC
+    ir/dump.cpp
+    ir/interp.cpp
+    ir/ir.cpp
+    ir/lower.cpp
+    ir/verify.cpp
     support/source.cpp
     support/diag.cpp
     sema/check.cpp

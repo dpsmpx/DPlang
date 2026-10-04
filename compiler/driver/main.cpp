@@ -10,6 +10,10 @@
 #include <string_view>
 #include <vector>
 
+#include "ir/dump.h"
+#include "ir/interp.h"
+#include "ir/lower.h"
+#include "ir/verify.h"
 #include "sema/sema.h"
 #include "support/diag.h"
 #include "support/json.h"
@@ -37,7 +41,9 @@ constexpr std::string_view kUsage =
     "  debug parse <file.dpm>   print the syntax tree of a file\n"
     "  debug print <file.dpm>   print a file in canonical form\n"
     "  debug summary <file.dpm> print the interface summaries of a program\n"
-    "  debug types <file.dpm>   print the syntax tree of the main module with types\n";
+    "  debug types <file.dpm>   print the syntax tree of the main module with types\n"
+    "  debug ir <file.dpm>      print the Core IR of a program\n"
+    "  debug run <file.dpm>     run a program in the reference interpreter\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
 
@@ -237,6 +243,50 @@ int cmd_debug_types(const Cli& cli, const std::vector<std::string_view>& args) {
     return finish(diags, sources);
 }
 
+// Понижение проверенной программы в Core IR и верификация. nullptr —
+// IR нарушает инварианты (внутренняя ошибка, сообщение уже напечатано).
+std::unique_ptr<dp::ir::Program> lower_program(dp::sema::Program& prog, const dp::SourceMap& sources) {
+    auto ir = dp::ir::lower(prog);
+    std::vector<std::string> errors = dp::ir::verify(*ir);
+    if (errors.empty()) return ir;
+    std::string msg = "invalid Core IR:\n";
+    for (const std::string& e : errors) msg += "  " + e + "\n";
+    msg += dp::ir::dump_program(*ir, sources);
+    internal_error(msg);
+    return nullptr;
+}
+
+// debug ir: Core IR всех функций программы (после верификатора).
+int cmd_debug_ir(const Cli& cli, const std::vector<std::string_view>& args) {
+    if (args.size() != 1) return usage_error("debug ir takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, args[0], sources, diags);
+    if (!prog || diags.has_errors()) return finish(diags, sources);
+    auto ir = lower_program(*prog, sources);
+    if (!ir) return 3;
+    put(dp::ir::dump_program(*ir, sources));
+    return finish(diags, sources);
+}
+
+// debug run: исполнение программы эталонным интерпретатором (Р43).
+// Код выхода — код программы (docs/ir/README.md, «Интерпретатор»).
+int cmd_debug_run(const Cli& cli, const std::vector<std::string_view>& args) {
+    if (args.size() != 1) return usage_error("debug run takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, args[0], sources, diags);
+    if (prog && !diags.has_errors() && !dp::sema::check_main(*prog, diags)) return finish(diags, sources);
+    if (!prog || diags.has_errors()) return finish(diags, sources);
+    auto ir = lower_program(*prog, sources);
+    if (!ir) return 3;
+    std::fflush(stdout);
+    dp::ir::RunResult r = dp::ir::run(*ir, sources);
+    std::fflush(stdout);
+    if (r.internal) return internal_error(r.message);
+    return r.exit_code;
+}
+
 int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args.empty()) return usage_error("debug needs a subcommand");
     std::vector<std::string_view> rest(args.begin() + 1, args.end());
@@ -245,6 +295,8 @@ int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args[0] == "print") return cmd_debug_parse(rest, true);
     if (args[0] == "summary") return cmd_debug_summary(cli, rest);
     if (args[0] == "types") return cmd_debug_types(cli, rest);
+    if (args[0] == "ir") return cmd_debug_ir(cli, rest);
+    if (args[0] == "run") return cmd_debug_run(cli, rest);
     return usage_error("unknown debug subcommand '" + std::string(args[0]) + "'");
 }
 

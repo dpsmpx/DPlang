@@ -388,6 +388,21 @@ void Checker::fail_stmt(FailStmt* s) {
     flow_.live = false;
 }
 
+bool check_main(Program& prog, Diagnostics& diags) {
+    auto it = prog.root->scope.find("main");
+    if (it == prog.root->scope.end() || it->second.kind != SymKind::Fn) {
+        diags.error(Code::E0322, "module '" + prog.root->name + "' has no function 'main' to start the program");
+        return false;
+    }
+    const FnDef& f = *it->second.fn;
+    bool ok_ret = f.ret->kind == TK::Void || (f.ret->kind == TK::Result && f.ret->elem->kind == TK::Void);
+    if (!f.params.empty() || !ok_ret) {
+        diags.error(Code::E0322, f.span, "'main' must take no parameters and return nothing or 'E!void'");
+        return false;
+    }
+    return true;
+}
+
 void check(Program& prog, Diagnostics& diags) {
     for (auto& m : prog.modules) infer_errors(prog, *m, diags);
     for (auto& m : prog.modules) Checker(prog, *m, diags).run();

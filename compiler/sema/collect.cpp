@@ -18,6 +18,20 @@ public:
     void run() {
         for (auto& m : prog_.modules) declare(*m);
         for (auto& m : prog_.modules) signatures(*m);
+        for (StructDef& d : prog_.structs) {
+            if (!d.node) continue;
+            std::vector<const void*> path;
+            if (contains(prog_.types.struct_type(&d), &d, path, true)) {
+                diags_.error(Code::E0423, d.span, "struct '" + d.name + "' contains itself; keep the nested values in a List");
+            }
+        }
+        for (EnumDef& d : prog_.enums) {
+            if (!d.node) continue;
+            std::vector<const void*> path;
+            if (contains(prog_.types.enum_type(&d), &d, path, true)) {
+                diags_.error(Code::E0423, d.span, "enum '" + d.name + "' contains itself; keep the nested values in a List");
+            }
+        }
     }
 
 private:
@@ -131,6 +145,36 @@ private:
                     break;
                 default: break;
             }
+        }
+    }
+
+    // Значение типа t хранит внутри себя (не через List) значение типа
+    // объявления self (E0423). path — объявления на пути, против зацикливания.
+    bool contains(const sema::Type* t, const void* self, std::vector<const void*>& path, bool top) {
+        if (!t) return false;
+        switch (t->kind) {
+            case TK::Optional: return contains(t->elem, self, path, false);
+            case TK::Result: return contains(t->elem, self, path, false) || contains(t->err, self, path, false);
+            case TK::Struct: case TK::Enum: {
+                const void* d = t->kind == TK::Struct ? static_cast<const void*>(t->sdef) : t->edef;
+                if (!top && d == self) return true;
+                for (const void* p : path) {
+                    if (p == d) return false;
+                }
+                path.push_back(d);
+                bool found = false;
+                if (t->kind == TK::Struct) {
+                    for (const FieldDef& f : t->sdef->fields) found = found || contains(f.type, self, path, false);
+                } else {
+                    for (const VariantDef& v : t->edef->variants) {
+                        for (const sema::Type* x : v.types) found = found || contains(x, self, path, false);
+                        for (const FieldDef& f : v.fields) found = found || contains(f.type, self, path, false);
+                    }
+                }
+                path.pop_back();
+                return found;
+            }
+            default: return false;  // List и срез хранят элементы отдельно
         }
     }
 

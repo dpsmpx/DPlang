@@ -4,6 +4,7 @@
 
 #include "sema/builtins.h"
 #include "sema/checker.h"
+#include "support/format.h"
 
 namespace dp::sema {
 
@@ -1162,10 +1163,9 @@ bool in_range(int64_t sv, uint64_t uv, bool use_signed, const Type* t) {
     return bits == 64 || v < (1ull << bits);
 }
 
-std::string float_str(double v) {
-    char buf[40];
-    std::snprintf(buf, sizeof buf, "%.17g", v);
-    return buf;
+// Значение f32 округляется на каждом шаге — как при исполнении.
+double round_to(double v, const Type* t) {
+    return t && t->kind == TK::F32 ? static_cast<double>(static_cast<float>(v)) : v;
 }
 
 }  // namespace
@@ -1181,13 +1181,13 @@ bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
         case ExprKind::Int:
             if (t && is_float(t)) {
                 v.kind = ConstValue::Kind::Float;
-                v.f = static_cast<double>(static_cast<IntExpr*>(e)->value);
+                v.f = round_to(static_cast<double>(static_cast<IntExpr*>(e)->value), t);
             } else {
                 v.kind = ConstValue::Kind::Int;
                 v.i = static_cast<IntExpr*>(e)->value;
             }
             break;
-        case ExprKind::Float: v.kind = ConstValue::Kind::Float; v.f = static_cast<FloatExpr*>(e)->value; break;
+        case ExprKind::Float: v.kind = ConstValue::Kind::Float; v.f = round_to(static_cast<FloatExpr*>(e)->value, t); break;
         case ExprKind::Bool: v.kind = ConstValue::Kind::Bool; v.b = static_cast<BoolExpr*>(e)->value; break;
         case ExprKind::Str: v.kind = ConstValue::Kind::Str; v.s = static_cast<StrExpr*>(e)->value; break;
         case ExprKind::Byte: v.kind = ConstValue::Kind::Int; v.i = static_cast<ByteExpr*>(e)->value; break;
@@ -1264,11 +1264,13 @@ bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
             if (x.kind == ConstValue::Kind::Float || y.kind == ConstValue::Kind::Float) {
                 double a = x.kind == ConstValue::Kind::Float ? x.f : static_cast<double>(x.i);
                 double c = y.kind == ConstValue::Kind::Float ? y.f : static_cast<double>(y.i);
+                bool single = ot && ot->kind == TK::F32;
+                float sa = static_cast<float>(a), sc = static_cast<float>(c);
                 switch (b->op) {
-                    case BinOp::Add: v.f = a + c; break;
-                    case BinOp::Sub: v.f = a - c; break;
-                    case BinOp::Mul: v.f = a * c; break;
-                    case BinOp::Div: v.f = a / c; break;
+                    case BinOp::Add: v.f = single ? static_cast<double>(sa + sc) : a + c; break;
+                    case BinOp::Sub: v.f = single ? static_cast<double>(sa - sc) : a - c; break;
+                    case BinOp::Mul: v.f = single ? static_cast<double>(sa * sc) : a * c; break;
+                    case BinOp::Div: v.f = single ? static_cast<double>(sa / sc) : a / c; break;
                     default: {
                         v.kind = ConstValue::Kind::Bool;
                         v.b = b->op == BinOp::Eq ? a == c : b->op == BinOp::Ne ? a != c : b->op == BinOp::Lt ? a < c
@@ -1352,7 +1354,7 @@ bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
             if (to->kind == TK::Str) {
                 v.kind = ConstValue::Kind::Str;
                 if (a.kind == ConstValue::Kind::Bool) v.s = a.b ? "true" : "false";
-                else if (a.kind == ConstValue::Kind::Float) v.s = float_str(a.f);
+                else if (a.kind == ConstValue::Kind::Float) v.s = format_float(a.f, from->kind == TK::F32);
                 else if (a.kind == ConstValue::Kind::Str) v.s = a.s;
                 else v.s = is_signed(from) ? std::to_string(as_signed(a.i, from)) : std::to_string(a.i);
             } else if (is_float(to)) {

@@ -27,6 +27,10 @@ void collect(Program& prog, Diagnostics& diags);
 // Тела функций, константы, значения полей по умолчанию: имена и типы.
 void check(Program& prog, Diagnostics& diags);
 
+// Вход программы: `main` главного модуля без параметров, результат —
+// нет или `E!void` (E0322). Нужен для сборки и запуска, не для check.
+bool check_main(Program& prog, Diagnostics& diags);
+
 // Сводка модуля — его открытый интерфейс в записи языка.
 std::string summary_text(const ModuleInfo& m);
 

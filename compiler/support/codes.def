@@ -130,6 +130,10 @@ DP_CODE(E0320, "not a struct",
 DP_CODE(E0321, "binding in an alternative pattern",
         "Patterns joined by `|` must not bind names, because each alternative would bind different values "
         "(spec: pattern.or). Split the arm or use `_`.")
+DP_CODE(E0322, "missing or invalid `main`",
+        "A program starts at the function `main` of its root module. It takes no parameters and returns "
+        "nothing, or `E!void` (`!void`) if it can fail (spec: module.main). A module that is only imported "
+        "needs no `main`.")
 
 // --- E04xx: типы (docs/spec/core.md, разделы 4–6 и 9)
 
@@ -204,6 +208,9 @@ DP_CODE(E0421, "not a constant expression",
 DP_CODE(E0422, "values of this type cannot be compared",
         "`==` and `!=` work on all values except results `E!T`; `<`, `<=`, `>`, `>=` and `sort` need numbers, "
         "`bool`, `str`, or structs, enums and lists of such values (spec: expr.compare).")
+DP_CODE(E0423, "type contains itself",
+        "A struct or an enum cannot hold a value of its own type directly, also through `?T` or another "
+        "struct: such a value would have no end (spec: type.recursive). Keep the nested values in a `List`.")
 
 // --- E05xx: поток, ошибки, ссылки (docs/spec/core.md, разделы 6–8)
 
