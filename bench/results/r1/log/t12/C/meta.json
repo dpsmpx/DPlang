@@ -1,0 +1,29 @@
+{
+ "run": "r1",
+ "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
+ "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+ "flags": [
+  "-std=c++20",
+  "-O1",
+  "-pthread",
+  "-Wall",
+  "-Wextra",
+  "-Werror",
+  "-fno-exceptions",
+  "-fno-rtti",
+  "-fsanitize=address,undefined",
+  "-fno-sanitize-recover=all"
+ ],
+ "attempts_max": 5,
+ "agent_model": "opus",
+ "task": "t12_bugfix_average",
+ "id": "t12",
+ "lang": "C",
+ "kind": "fix",
+ "created": "2026-10-04T04:39:39",
+ "session": {
+  "total_tokens": 55994,
+  "tool_uses": 4,
+  "seconds": 13.4
+ }
+}

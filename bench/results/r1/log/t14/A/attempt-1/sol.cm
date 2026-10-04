@@ -1,0 +1,70 @@
+// t14: заготовка — напишите тела функций по task.md.
+const BLOCK: int = 4096;
+
+// Сумма значений блока b слева направо, начиная с 0.0.
+fn block_sum(values: []f64, b: int) -> f64 {
+    let n = len(values);
+    let lo = b * BLOCK;
+    let hi = min(lo + BLOCK, n);
+    var s = 0.0;
+    for i in lo..hi {
+        s += values[i];
+    }
+    return s;
+}
+
+pub fn parallel_sum(values: []f64, threads: i32) -> f64 {
+    let n = len(values);
+    if n == 0 {
+        return 0.0;
+    }
+    let nt = int(threads);
+    let nblocks = (n + BLOCK - 1) / BLOCK;
+    var empty: List[f64] = [];
+    var part: List[List[f64]] = repeat(empty, nt);
+    // Поток t считает непрерывный отрезок блоков; разбиение фиксировано.
+    parallel for t in 0..nt {
+        let b0 = t * nblocks / nt;
+        let b1 = (t + 1) * nblocks / nt;
+        var local: List[f64] = [];
+        for b in b0..b1 {
+            local.push(block_sum(values, b));
+        }
+        part[t] = local;
+    }
+    // Слияние сумм блоков слева направо.
+    var total = 0.0;
+    for t in 0..nt {
+        for s in &part[t] {
+            total += s;
+        }
+    }
+    return total;
+}
+
+pub fn parallel_histogram(values: []u32, buckets: i32, threads: i32) -> List[i64] {
+    let n = len(values);
+    let nb = int(buckets);
+    let nt = int(threads);
+    let zero: i64 = 0;
+    var empty: List[i64] = [];
+    var part: List[List[i64]] = repeat(empty, nt);
+    // Поток t считает свой отрезок значений в локальные счётчики.
+    parallel for t in 0..nt {
+        let lo = t * n / nt;
+        let hi = (t + 1) * n / nt;
+        var local: List[i64] = repeat(zero, nb);
+        for i in lo..hi {
+            let k = int(values[i]) % nb;
+            local[k] += 1;
+        }
+        part[t] = local;
+    }
+    var result: List[i64] = repeat(zero, nb);
+    for t in 0..nt {
+        for k in 0..nb {
+            result[k] += part[t][k];
+        }
+    }
+    return result;
+}

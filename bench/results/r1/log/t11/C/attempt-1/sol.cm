@@ -1,0 +1,43 @@
+// t11: заготовка — напишите тела функций по task.md.
+pub struct Particle {
+    x i32
+    y i32
+    vx i32
+    vy i32
+}
+
+const G i32 = -6554
+
+pub fn step(particles mut List[Particle]) {
+    for mut p in particles {
+        var vx i64 = i64(p.vx)
+        var vy i64 = i64(p.vy) + i64(G)
+        var x i64 = i64(p.x) + vx
+        var y i64 = i64(p.y) + vy
+        if y < 0 {
+            y = 0
+            vy = -(vy * 3) / 4
+            vx = vx * 7 / 8
+        }
+        p.x = i32(x)
+        p.y = i32(y)
+        p.vx = i32(vx)
+        p.vy = i32(vy)
+    }
+}
+
+fn mix(h u32, v i32) u32 {
+    var k u32 = 31
+    return h *% k +% u32.wrap(v)
+}
+
+pub fn checksum(particles []Particle) u32 {
+    var h u32 = 17
+    for p in particles {
+        h = mix(h, p.x)
+        h = mix(h, p.y)
+        h = mix(h, p.vx)
+        h = mix(h, p.vy)
+    }
+    return h
+}

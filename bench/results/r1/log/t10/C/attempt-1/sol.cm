@@ -1,0 +1,132 @@
+// t10: кодек правок мира — varint, zigzag, разности координат.
+pub struct Edit {
+    x i32
+    y i32
+    z i32
+    block i32
+}
+
+pub enum DecodeError {
+    Truncated
+    BadValue
+    TrailingBytes
+}
+
+const LOW7 u64 = 0x7F
+const CONT u64 = 0x80
+const ZERO u64 = 0
+const ONE u64 = 1
+const MAX_BLOCK u64 = 65535
+const DIFF_LIM i64 = 4294967296
+const MIN32 i64 = -2147483648
+const MAX32 i64 = 2147483647
+
+fn put_varint(out mut List[u8], v u64) {
+    var x u64 = v
+    while x >= CONT {
+        out.push(u8((x & LOW7) | CONT))
+        x = x >> 7
+    }
+    out.push(u8(x))
+}
+
+fn zigzag(n i64) u64 {
+    if n >= 0 {
+        pos_m := u64(n)
+        return pos_m + pos_m
+    }
+    neg_m := u64(-(n + 1))
+    return neg_m + neg_m + ONE
+}
+
+fn unzigzag(u u64) i64 {
+    half := i64(u >> 1)
+    if (u & ONE) == ZERO {
+        return half
+    }
+    return -half - 1
+}
+
+pub fn encode(edits []Edit) List[u8] {
+    var out List[u8] = []
+    put_varint(out, u64(len(edits)))
+    var px i64 = 0
+    var py i64 = 0
+    var pz i64 = 0
+    for e in edits {
+        x := i64(e.x)
+        y := i64(e.y)
+        z := i64(e.z)
+        put_varint(out, zigzag(x - px))
+        put_varint(out, zigzag(y - py))
+        put_varint(out, zigzag(z - pz))
+        put_varint(out, u64(e.block))
+        px = x
+        py = y
+        pz = z
+    }
+    return out
+}
+
+// Беззнаковый varint: не больше 10 байт; лишние старшие биты 10-го байта
+// отбрасываются.
+fn read_varint(bytes []u8, pos mut int) !u64 {
+    var result u64 = 0
+    for i in 0..10 {
+        if pos >= len(bytes) {
+            fail .Truncated
+        }
+        b := u64(bytes[pos])
+        pos += 1
+        var part u64 = b & LOW7
+        if i == 9 {
+            part = part & ONE
+        }
+        result = result | (part << (7 * i))
+        if (b & CONT) == ZERO {
+            return result
+        }
+    }
+    fail .BadValue
+}
+
+fn read_coord(bytes []u8, pos mut int, prev i64) !i64 {
+    u := try read_varint(bytes, pos)
+    d := unzigzag(u)
+    if d > DIFF_LIM || d < -DIFF_LIM {
+        fail .BadValue
+    }
+    v := prev + d
+    if v < MIN32 || v > MAX32 {
+        fail .BadValue
+    }
+    return v
+}
+
+pub fn decode(bytes []u8) !List[Edit] {
+    var pos int = 0
+    count := try read_varint(bytes, pos)
+    var out List[Edit] = []
+    var px i64 = 0
+    var py i64 = 0
+    var pz i64 = 0
+    var k u64 = 0
+    while k < count {
+        x := try read_coord(bytes, pos, px)
+        y := try read_coord(bytes, pos, py)
+        z := try read_coord(bytes, pos, pz)
+        blk := try read_varint(bytes, pos)
+        if blk > MAX_BLOCK {
+            fail .BadValue
+        }
+        out.push(Edit { x: i32(x), y: i32(y), z: i32(z), block: i32(blk) })
+        px = x
+        py = y
+        pz = z
+        k += 1
+    }
+    if pos != len(bytes) {
+        fail .TrailingBytes
+    }
+    return out
+}

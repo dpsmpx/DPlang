@@ -1,0 +1,90 @@
+// t04: заготовка — напишите тела функций по task.md.
+pub struct Handle {
+    index: i32,
+    generation: i32,
+}
+
+pub enum PoolError {
+    Full,
+}
+
+// Слот пула: значение, поколение и признак занятости.
+pub struct Slot {
+    value: i32,
+    generation: i32,
+    live: bool,
+}
+
+pub struct Pool {
+    slots: List[Slot],
+    live_count: i32,
+}
+
+pub fn pool_new(capacity: i32) -> Pool {
+    var n: int = 0;
+    if capacity > 0 {
+        n = int(capacity);
+    }
+    var slots: List[Slot] = repeat(Slot { value: 0, generation: 1, live: false }, n);
+    return Pool { slots, live_count: 0 };
+}
+
+// Индекс живого слота, на который указывает хэндл; нет — если устарел.
+fn slot_of(p: &Pool, h: Handle) -> ?int {
+    if h.index < 0 {
+        return none;
+    }
+    let i = int(h.index);
+    if i >= len(p.slots) {
+        return none;
+    }
+    if !p.slots[i].live {
+        return none;
+    }
+    if p.slots[i].generation != h.generation {
+        return none;
+    }
+    return i;
+}
+
+pub fn pool_create(p: &mut Pool, value: i32) -> PoolError!Handle {
+    for i in 0..len(p.slots) {
+        if !p.slots[i].live {
+            p.slots[i].live = true;
+            p.slots[i].value = value;
+            p.live_count += 1;
+            return Handle { index: i32(i), generation: p.slots[i].generation };
+        }
+    }
+    fail PoolError.Full;
+}
+
+pub fn pool_get(p: &Pool, h: Handle) -> ?i32 {
+    if let i = slot_of(&p, h) {
+        return p.slots[i].value;
+    }
+    return none;
+}
+
+pub fn pool_set(p: &mut Pool, h: Handle, value: i32) -> bool {
+    if let i = slot_of(&p, h) {
+        p.slots[i].value = value;
+        return true;
+    }
+    return false;
+}
+
+pub fn pool_destroy(p: &mut Pool, h: Handle) -> bool {
+    if let i = slot_of(&p, h) {
+        p.slots[i].live = false;
+        p.slots[i].value = 0;
+        p.slots[i].generation += 1;
+        p.live_count -= 1;
+        return true;
+    }
+    return false;
+}
+
+pub fn pool_count(p: &Pool) -> i32 {
+    return p.live_count;
+}

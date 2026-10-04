@@ -1,0 +1,37 @@
+// t04: заготовка — напишите тела функций по task.md.
+pub struct Handle {
+    index i32
+    generation i32
+}
+
+pub enum PoolError {
+    Full
+}
+
+pub struct Pool {
+    // поля — на ваш выбор
+}
+
+pub fn pool_new(capacity i32) Pool {
+    // ...
+}
+
+pub fn pool_create(p mut Pool, value i32) !Handle {
+    // ...
+}
+
+pub fn pool_get(p Pool, h Handle) ?i32 {
+    // ...
+}
+
+pub fn pool_set(p mut Pool, h Handle, value i32) bool {
+    // ...
+}
+
+pub fn pool_destroy(p mut Pool, h Handle) bool {
+    // ...
+}
+
+pub fn pool_count(p Pool) i32 {
+    // ...
+}

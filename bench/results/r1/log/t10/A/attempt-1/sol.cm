@@ -1,0 +1,130 @@
+// t10: кодек правок мира — varint (LEB128), zigzag, разности координат.
+pub struct Edit {
+    x: i32,
+    y: i32,
+    z: i32,
+    block: i32,
+}
+
+pub enum DecodeError {
+    Truncated,
+    BadValue,
+    TrailingBytes,
+}
+
+const MASK7: u64 = 0x7F;
+const CONT: u64 = 0x80;
+const MAX_BLOCK: u64 = 65535;
+const I32_MIN: i64 = -2147483648;
+const I32_MAX: i64 = 2147483647;
+// Разность двух i32 по модулю меньше 2^33: больше — координата вне i32.
+const DELTA_LIMIT: i64 = 8589934592;
+
+fn put_varint(out: &mut List[u8], value: u64) {
+    var v = value;
+    while v >= CONT {
+        out.push(u8((v & MASK7) | CONT));
+        v >>= 7;
+    }
+    out.push(u8(v));
+}
+
+fn zigzag(n: i64) -> u64 {
+    if n >= 0 {
+        return u64(n) * 2;
+    }
+    return u64(-(n + 1)) * 2 + 1;
+}
+
+fn unzigzag(u: u64) -> i64 {
+    let half = i64(u >> 1);
+    if (u & 1) == 0 {
+        return half;
+    }
+    return -half - 1;
+}
+
+pub fn encode(edits: []Edit) -> List[u8] {
+    var out: List[u8] = [];
+    put_varint(&mut out, u64(len(edits)));
+    var px: i64 = 0;
+    var py: i64 = 0;
+    var pz: i64 = 0;
+    for e in &edits {
+        let x = i64(e.x);
+        let y = i64(e.y);
+        let z = i64(e.z);
+        put_varint(&mut out, zigzag(x - px));
+        put_varint(&mut out, zigzag(y - py));
+        put_varint(&mut out, zigzag(z - pz));
+        put_varint(&mut out, u64(e.block));
+        px = x;
+        py = y;
+        pz = z;
+    }
+    return out;
+}
+
+// Беззнаковый varint: не больше 10 байт, значение в пределах u64.
+fn read_varint(bytes: []u8, pos: &mut int) -> DecodeError!u64 {
+    var result: u64 = 0;
+    var shift: u64 = 0;
+    var count = 0;
+    while count < 10 {
+        if pos >= len(bytes) {
+            fail DecodeError.Truncated;
+        }
+        let b = u64(bytes[pos]);
+        pos += 1;
+        let low = b & MASK7;
+        if shift == 63 && low > 1 {
+            fail DecodeError.BadValue;
+        }
+        result |= low << shift;
+        if (b & CONT) == 0 {
+            return result;
+        }
+        shift += 7;
+        count += 1;
+    }
+    fail DecodeError.BadValue;
+}
+
+// Координата: предыдущая плюс разность из zigzag-varint, в пределах i32.
+fn read_coord(bytes: []u8, pos: &mut int, prev: i64) -> DecodeError!i64 {
+    let u = try read_varint(bytes, &mut pos);
+    let d = unzigzag(u);
+    if d > DELTA_LIMIT || d < -DELTA_LIMIT {
+        fail DecodeError.BadValue;
+    }
+    let v = prev + d;
+    if v < I32_MIN || v > I32_MAX {
+        fail DecodeError.BadValue;
+    }
+    return v;
+}
+
+pub fn decode(bytes: []u8) -> DecodeError!List[Edit] {
+    var pos = 0;
+    let count = try read_varint(bytes, &mut pos);
+    var out: List[Edit] = [];
+    var x: i64 = 0;
+    var y: i64 = 0;
+    var z: i64 = 0;
+    var k: u64 = 0;
+    while k < count {
+        x = try read_coord(bytes, &mut pos, x);
+        y = try read_coord(bytes, &mut pos, y);
+        z = try read_coord(bytes, &mut pos, z);
+        let blk = try read_varint(bytes, &mut pos);
+        if blk > MAX_BLOCK {
+            fail DecodeError.BadValue;
+        }
+        out.push(Edit { x: i32(x), y: i32(y), z: i32(z), block: i32(blk) });
+        k += 1;
+    }
+    if pos != len(bytes) {
+        fail DecodeError.TrailingBytes;
+    }
+    return out;
+}

@@ -1,0 +1,82 @@
+// t04: заготовка — напишите тела функций по task.md.
+pub struct Handle {
+    index i32
+    generation i32
+}
+
+pub enum PoolError {
+    Full
+}
+
+pub struct Pool {
+    // поля — на ваш выбор
+    values List[i32]
+    gens List[i32]
+    alive List[bool]
+    live i32 = 0
+}
+
+pub fn pool_new(capacity i32) Pool {
+    n := 0
+    if capacity > 0 {
+        n = int(capacity)
+    }
+    var values List[i32] = repeat(i32(0), n)
+    var gens List[i32] = repeat(i32(1), n)
+    var alive List[bool] = repeat(false, n)
+    return Pool { values, gens, alive }
+}
+
+// Хэндл жив: индекс в пределах, слот занят, поколение совпадает.
+fn is_live(p Pool, h Handle) bool {
+    if h.index < 0 {
+        return false
+    }
+    i := int(h.index)
+    if i >= len(p.alive) {
+        return false
+    }
+    return p.alive[i] && p.gens[i] == h.generation
+}
+
+pub fn pool_create(p mut Pool, value i32) !Handle {
+    for i in 0..len(p.alive) {
+        if !p.alive[i] {
+            p.alive[i] = true
+            p.values[i] = value
+            p.live += 1
+            return Handle { index: i32(i), generation: p.gens[i] }
+        }
+    }
+    fail .Full
+}
+
+pub fn pool_get(p Pool, h Handle) ?i32 {
+    if !is_live(p, h) {
+        return none
+    }
+    return p.values[int(h.index)]
+}
+
+pub fn pool_set(p mut Pool, h Handle, value i32) bool {
+    if !is_live(p, h) {
+        return false
+    }
+    p.values[int(h.index)] = value
+    return true
+}
+
+pub fn pool_destroy(p mut Pool, h Handle) bool {
+    if !is_live(p, h) {
+        return false
+    }
+    i := int(h.index)
+    p.alive[i] = false
+    p.gens[i] += 1
+    p.live -= 1
+    return true
+}
+
+pub fn pool_count(p Pool) i32 {
+    return p.live
+}

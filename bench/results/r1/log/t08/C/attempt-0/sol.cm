@@ -1,0 +1,16 @@
+// t08: заготовка — напишите тела функций по task.md.
+pub struct Box {
+    min_x i32
+    min_y i32
+    max_x i32
+    max_y i32
+}
+
+pub struct Pair {
+    i i32
+    j i32
+}
+
+pub fn overlapping_pairs(boxes []Box) List[Pair] {
+    // ...
+}

@@ -1,0 +1,61 @@
+// t07: кратчайший путь на сетке — обход в ширину от S до G.
+pub fn shortest_path(rows: []str) -> ?i32 {
+    let h = len(rows);
+    if h == 0 {
+        return none;
+    }
+    let w = len(rows[0]);
+    if w == 0 {
+        return none;
+    }
+    var start = -1;
+    var goal = -1;
+    for r in 0..h {
+        let row = rows[r];
+        for c in 0..w {
+            let b = row[c];
+            if b == 'S' {
+                start = r * w + c;
+            } else if b == 'G' {
+                goal = r * w + c;
+            }
+        }
+    }
+    if start < 0 || goal < 0 {
+        return none;
+    }
+    let n = h * w;
+    var dist: List[i32] = repeat(i32(-1), n);
+    var queue: List[int] = [];
+    dist[start] = 0;
+    queue.push(start);
+    let dr: List[int] = [-1, 1, 0, 0];
+    let dc: List[int] = [0, 0, -1, 1];
+    var head = 0;
+    while head < len(queue) {
+        let cur = queue[head];
+        head += 1;
+        if cur == goal {
+            return dist[cur];
+        }
+        let r = cur / w;
+        let c = cur % w;
+        for k in 0..4 {
+            let nr = r + dr[k];
+            let nc = c + dc[k];
+            if nr < 0 || nr >= h || nc < 0 || nc >= w {
+                continue;
+            }
+            let ni = nr * w + nc;
+            if dist[ni] >= 0 {
+                continue;
+            }
+            if rows[nr][nc] == '#' {
+                continue;
+            }
+            dist[ni] = dist[cur] + 1;
+            queue.push(ni);
+        }
+    }
+    return none;
+}

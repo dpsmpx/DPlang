@@ -1,0 +1,162 @@
+// t02: заготовка — напишите тела функций по task.md.
+pub enum ParseError {
+    BadKey,
+    MissingEquals,
+    BadValue,
+}
+
+pub enum Value {
+    Int(i64),
+    Bool(bool),
+    Str(str),
+}
+
+pub struct Entry {
+    key: str,
+    value: Value,
+}
+
+// Пробел или табуляция.
+fn is_blank(c: u8) -> bool {
+    return c == ' ' || c == u8(9);
+}
+
+fn skip_blanks(s: str, start: int) -> int {
+    var i = start;
+    while i < len(s) && is_blank(s[i]) {
+        i += 1;
+    }
+    return i;
+}
+
+fn is_key_start(c: u8) -> bool {
+    return (c >= 'a' && c <= 'z') || c == '_';
+}
+
+fn is_key_char(c: u8) -> bool {
+    return is_key_start(c) || (c >= '0' && c <= '9');
+}
+
+// Ключ: [a-z_][a-z0-9_]*.
+fn valid_key(k: str) -> bool {
+    if len(k) == 0 {
+        return false;
+    }
+    if !is_key_start(k[0]) {
+        return false;
+    }
+    for i in 1..len(k) {
+        if !is_key_char(k[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// После значения допустимы только пробелы и комментарий.
+fn rest_is_empty(s: str, start: int) -> bool {
+    let i = skip_blanks(s, start);
+    return i == len(s) || s[i] == '#';
+}
+
+// Целое: необязательный минус, затем цифры; вне i64 — нет значения.
+// Копим отрицательное, чтобы поместилось и наименьшее i64.
+fn parse_int_token(t: str) -> ?i64 {
+    var i = 0;
+    var neg = false;
+    if len(t) > 0 && t[0] == '-' {
+        neg = true;
+        i = 1;
+    }
+    if i == len(t) {
+        return none;
+    }
+    let min_i64: i64 = -9223372036854775807 - 1;
+    var v: i64 = 0;
+    while i < len(t) {
+        let c = t[i];
+        if !is_digit(c) {
+            return none;
+        }
+        let d = i64(c - '0');
+        if v < (min_i64 + d) / 10 {
+            return none;
+        }
+        v = v * 10 - d;
+        i += 1;
+    }
+    if neg {
+        return v;
+    }
+    if v == min_i64 {
+        return none;
+    }
+    return -v;
+}
+
+fn no_entry() -> ?Entry {
+    return none;
+}
+
+fn some_entry(e: Entry) -> ?Entry {
+    return e;
+}
+
+pub fn parse_line(line: str) -> ParseError!?Entry {
+    let n = len(line);
+    var i = skip_blanks(line, 0);
+    if i == n || line[i] == '#' {
+        return no_entry();
+    }
+    // Ключ — всё до пробела, `=` или `#`.
+    let key_start = i;
+    while i < n && !is_blank(line[i]) && line[i] != '=' && line[i] != '#' {
+        i += 1;
+    }
+    let key = line[key_start..i];
+    if !valid_key(key) {
+        fail ParseError.BadKey;
+    }
+    i = skip_blanks(line, i);
+    if i == n || line[i] != '=' {
+        fail ParseError.MissingEquals;
+    }
+    i = skip_blanks(line, i + 1);
+    if i == n || line[i] == '#' {
+        fail ParseError.BadValue;
+    }
+    // Строка в кавычках без экранирования.
+    if line[i] == '"' {
+        let body = i + 1;
+        var j = body;
+        while j < n && line[j] != '"' {
+            j += 1;
+        }
+        if j == n {
+            fail ParseError.BadValue;
+        }
+        if !rest_is_empty(line, j + 1) {
+            fail ParseError.BadValue;
+        }
+        return some_entry(Entry { key, value: Value.Str(line[body..j]) });
+    }
+    // Целое или true/false — всё до пробела или `#`.
+    let tok_start = i;
+    while i < n && !is_blank(line[i]) && line[i] != '#' {
+        i += 1;
+    }
+    let tok = line[tok_start..i];
+    if !rest_is_empty(line, i) {
+        fail ParseError.BadValue;
+    }
+    if tok == "true" {
+        return some_entry(Entry { key, value: Value.Bool(true) });
+    }
+    if tok == "false" {
+        return some_entry(Entry { key, value: Value.Bool(false) });
+    }
+    if let v = parse_int_token(tok) {
+        return some_entry(Entry { key, value: Value.Int(v) });
+    }
+    fail ParseError.BadValue;
+}

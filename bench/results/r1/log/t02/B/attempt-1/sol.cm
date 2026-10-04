@@ -1,0 +1,148 @@
+// t02: заготовка — напишите тела функций по task.md.
+pub enum ParseError {
+    BadKey
+    MissingEquals
+    BadValue
+}
+
+pub enum Value {
+    Int(i64)
+    Bool(bool)
+    Str(str)
+}
+
+pub struct Entry {
+    key: str
+    value: Value
+}
+
+fn is_blank(c: u8) bool {
+    return c == ' ' || c == '\t'
+}
+
+fn skip_blank(s: str, from: int) int {
+    var i = from
+    while i < len(s) && is_blank(s[i]) {
+        i += 1
+    }
+    return i
+}
+
+fn is_key_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_key_char(c: u8) bool {
+    return is_key_start(c) || (c >= '0' && c <= '9')
+}
+
+fn valid_key(k: str) bool {
+    if len(k) == 0 {
+        return false
+    }
+    if !is_key_start(k[0]) {
+        return false
+    }
+    for c in &k {
+        if !is_key_char(c) {
+            return false
+        }
+    }
+    return true
+}
+
+// После значения допустимы только пробелы и комментарий.
+fn rest_ok(s: str, from: int) bool {
+    let i = skip_blank(s, from)
+    return i == len(s) || s[i] == '#'
+}
+
+// Целое: необязательный «-», затем цифры; вне i64 — нет значения.
+fn parse_int_text(t: str) ?i64 {
+    var i = 0
+    var neg = false
+    if len(t) > 0 && t[0] == '-' {
+        neg = true
+        i = 1
+    }
+    if i == len(t) {
+        return none
+    }
+    let min_val: i64 = -9223372036854775807 - 1
+    var v: i64 = 0
+    while i < len(t) {
+        let c = t[i]
+        if !is_digit(c) {
+            return none
+        }
+        let d = i64(c - '0')
+        if v < (min_val + d) / 10 {
+            return none
+        }
+        v = v * 10 - d
+        i += 1
+    }
+    if neg {
+        return v
+    }
+    if v == min_val {
+        return none
+    }
+    return -v
+}
+
+pub fn parse_line(line: str) !?Entry {
+    let n = len(line)
+    var i = skip_blank(line, 0)
+    if i == n || line[i] == '#' {
+        return none
+    }
+    let ks = i
+    while i < n && !is_blank(line[i]) && line[i] != '=' && line[i] != '#' {
+        i += 1
+    }
+    let key = line[ks..i]
+    if !valid_key(key) {
+        fail .BadKey
+    }
+    i = skip_blank(line, i)
+    if i == n || line[i] != '=' {
+        fail .MissingEquals
+    }
+    i = skip_blank(line, i + 1)
+    if i == n || line[i] == '#' {
+        fail .BadValue
+    }
+    if line[i] == '"' {
+        let vs = i + 1
+        var j = vs
+        while j < n && line[j] != '"' {
+            j += 1
+        }
+        if j == n {
+            fail .BadValue
+        }
+        if !rest_ok(line, j + 1) {
+            fail .BadValue
+        }
+        return Entry { key, value: .Str(line[vs..j]) }
+    }
+    let ts = i
+    while i < n && !is_blank(line[i]) && line[i] != '#' {
+        i += 1
+    }
+    let tok = line[ts..i]
+    if !rest_ok(line, i) {
+        fail .BadValue
+    }
+    if tok == "true" {
+        return Entry { key, value: .Bool(true) }
+    }
+    if tok == "false" {
+        return Entry { key, value: .Bool(false) }
+    }
+    if let v = parse_int_text(tok) {
+        return Entry { key, value: .Int(v) }
+    }
+    fail .BadValue
+}

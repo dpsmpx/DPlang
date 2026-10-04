@@ -1,0 +1,119 @@
+// t10: заготовка — напишите тела функций по task.md.
+pub struct Edit {
+    x: i32
+    y: i32
+    z: i32
+    block: i32
+}
+
+pub enum DecodeError {
+    Truncated
+    BadValue
+    TrailingBytes
+}
+
+// Беззнаковый varint: по 7 бит, младшие первыми.
+fn put_varint(out: &mut List[u8], value: u64) {
+    var v = value
+    while v >= 0x80 {
+        out.push(u8((v & 0x7F) | 0x80))
+        v = v >> 7
+    }
+    out.push(u8(v))
+}
+
+// zigzag без знаковых сдвигов: 0 -> 0, -1 -> 1, 1 -> 2, -2 -> 3.
+fn zigzag(n: i64) u64 {
+    if n >= 0 {
+        return u64(n) * 2
+    }
+    return u64(-(n + 1)) * 2 + 1
+}
+
+pub fn encode(edits: []Edit) List[u8] {
+    var out: List[u8] = []
+    put_varint(&mut out, u64(len(edits)))
+    var px: i32 = 0
+    var py: i32 = 0
+    var pz: i32 = 0
+    for e in &edits {
+        put_varint(&mut out, zigzag(i64(e.x) - i64(px)))
+        put_varint(&mut out, zigzag(i64(e.y) - i64(py)))
+        put_varint(&mut out, zigzag(i64(e.z) - i64(pz)))
+        put_varint(&mut out, u64(e.block))
+        px = e.x
+        py = e.y
+        pz = e.z
+    }
+    return out
+}
+
+// Чтение varint с позиции pos; не длиннее 10 байт и без бит за пределами u64.
+fn read_varint(bytes: []u8, pos: &mut int) !u64 {
+    var result: u64 = 0
+    var shift: u64 = 0
+    for i in 0..10 {
+        if pos >= len(bytes) {
+            fail .Truncated
+        }
+        let b = bytes[pos]
+        pos += 1
+        let low = u64(b & 0x7F)
+        if i == 9 && low > 1 {
+            fail .BadValue
+        }
+        result = result | (low << shift)
+        if (b & 0x80) == 0 {
+            return result
+        }
+        shift += 7
+    }
+    fail .BadValue
+}
+
+// Координата: zigzag-разность с предыдущей, итог должен лежать в i32.
+fn read_coord(bytes: []u8, pos: &mut int, prev: i32) !i32 {
+    let z = try read_varint(bytes, &mut pos)
+    let half = i64(z >> 1)
+    var d: i64 = half
+    if (z & 1) != 0 {
+        d = -half - 1
+    }
+    let lim: i64 = 4294967296
+    if d > lim || d < -lim {
+        fail .BadValue
+    }
+    let s = i64(prev) + d
+    if s < -2147483648 || s > 2147483647 {
+        fail .BadValue
+    }
+    return i32(s)
+}
+
+pub fn decode(bytes: []u8) !List[Edit] {
+    var pos = 0
+    let count = try read_varint(bytes, &mut pos)
+    var edits: List[Edit] = []
+    var px: i32 = 0
+    var py: i32 = 0
+    var pz: i32 = 0
+    var k: u64 = 0
+    while k < count {
+        let x = try read_coord(bytes, &mut pos, px)
+        let y = try read_coord(bytes, &mut pos, py)
+        let z = try read_coord(bytes, &mut pos, pz)
+        let b = try read_varint(bytes, &mut pos)
+        if b > 65535 {
+            fail .BadValue
+        }
+        edits.push(Edit { x, y, z, block: i32(b) })
+        px = x
+        py = y
+        pz = z
+        k += 1
+    }
+    if pos != len(bytes) {
+        fail .TrailingBytes
+    }
+    return edits
+}

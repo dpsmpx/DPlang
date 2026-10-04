@@ -1,0 +1,21 @@
+// t02: заготовка — напишите тела функций по task.md.
+pub enum ParseError {
+    BadKey
+    MissingEquals
+    BadValue
+}
+
+pub enum Value {
+    Int(i64)
+    Bool(bool)
+    Str(str)
+}
+
+pub struct Entry {
+    key: str
+    value: Value
+}
+
+pub fn parse_line(line: str) !?Entry {
+    // ...
+}

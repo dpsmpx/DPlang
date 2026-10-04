@@ -1,0 +1,18 @@
+// t12: реализация с ошибками — исправить, не переписывая заново.
+pub fn moving_average(values []i32, window i32) List[i32] {
+    var out List[i32] = []
+    n := len(values)
+    if window > n {
+        return out
+    }
+    var sum i32 = 0
+    for i in 0..window {
+        sum += values[i]
+    }
+    out.push(sum / window)
+    for i in window..n - 1 {
+        sum += values[i] - values[i - window]
+        out.push(sum / window)
+    }
+    return out
+}
