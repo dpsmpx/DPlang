@@ -1,0 +1,153 @@
+// t02: заготовка — напишите тела функций по task.md.
+pub enum ParseError {
+    BadKey
+    MissingEquals
+    BadValue
+}
+
+pub enum Value {
+    Int(i64)
+    Bool(bool)
+    Str(str)
+}
+
+pub struct Entry {
+    key str
+    value Value
+}
+
+const TAB u8 = 9
+const QUOTE u8 = 34
+
+fn is_blank(c u8) bool {
+    return c == ' ' || c == TAB
+}
+
+fn is_key_start(c u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_key_char(c u8) bool {
+    return is_key_start(c) || is_digit(c)
+}
+
+fn valid_key(k str) bool {
+    if len(k) == 0 {
+        return false
+    }
+    if !is_key_start(k[0]) {
+        return false
+    }
+    for c in k {
+        if !is_key_char(c) {
+            return false
+        }
+    }
+    return true
+}
+
+// Целое: необязательный «-», затем цифры; вне i64 — нет значения.
+// Копим отрицательное число, чтобы уместить и наименьшее i64.
+fn parse_i64(s str) ?i64 {
+    n := len(s)
+    i := 0
+    neg := false
+    if i < n && s[i] == '-' {
+        neg = true
+        i += 1
+    }
+    if i == n {
+        return none
+    }
+    var v i64 = 0
+    while i < n {
+        c := s[i]
+        if !is_digit(c) {
+            return none
+        }
+        var d i64 = i64(c) - 48
+        if v < -922337203685477580 || (v == -922337203685477580 && d > 8) {
+            return none
+        }
+        v = v * 10 - d
+        i += 1
+    }
+    if !neg {
+        if v < -9223372036854775807 {
+            return none
+        }
+        v = -v
+    }
+    return v
+}
+
+pub fn parse_line(line str) !?Entry {
+    n := len(line)
+    i := 0
+    while i < n && is_blank(line[i]) {
+        i += 1
+    }
+    if i == n || line[i] == '#' {
+        return none
+    }
+    // Ключ — до пробела, «=» или «#».
+    ks := i
+    while i < n && !is_blank(line[i]) && line[i] != '=' && line[i] != '#' {
+        i += 1
+    }
+    key := line[ks..i]
+    if !valid_key(key) {
+        fail .BadKey
+    }
+    while i < n && is_blank(line[i]) {
+        i += 1
+    }
+    if i == n || line[i] != '=' {
+        fail .MissingEquals
+    }
+    i += 1
+    while i < n && is_blank(line[i]) {
+        i += 1
+    }
+    if i == n || line[i] == '#' {
+        fail .BadValue
+    }
+    var value Value = Value.Bool(false)
+    if line[i] == QUOTE {
+        qs := i + 1
+        i = qs
+        while i < n && line[i] != QUOTE {
+            i += 1
+        }
+        if i == n {
+            fail .BadValue
+        }
+        value = Value.Str(line[qs..i])
+        i += 1
+    } else {
+        vs := i
+        while i < n && !is_blank(line[i]) && line[i] != '#' {
+            i += 1
+        }
+        tok := line[vs..i]
+        if tok == "true" {
+            value = Value.Bool(true)
+        } else if tok == "false" {
+            value = Value.Bool(false)
+        } else {
+            if v := parse_i64(tok) {
+                value = Value.Int(v)
+            } else {
+                fail .BadValue
+            }
+        }
+    }
+    // После значения — только пробелы и комментарий.
+    while i < n && is_blank(line[i]) {
+        i += 1
+    }
+    if i < n && line[i] != '#' {
+        fail .BadValue
+    }
+    return Entry { key, value }
+}

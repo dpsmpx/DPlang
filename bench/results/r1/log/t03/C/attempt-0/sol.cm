@@ -1,0 +1,22 @@
+// t03: заготовка — напишите тела функций по task.md.
+pub enum State {
+    Idle
+    Patrol { waypoint i32 }
+    Chase { target i32 }
+    Flee { ticks i32 }
+}
+
+pub enum Event {
+    Tick
+    SeeEnemy { id i32 }
+    LoseEnemy
+    LowHealth
+}
+
+pub fn step(state State, event Event) State {
+    // ...
+}
+
+pub fn describe(state State) str {
+    // ...
+}

@@ -1,0 +1,46 @@
+// t01: кольцевой буфер целых фиксированной ёмкости, порядок FIFO.
+pub enum RingError {
+    Full,
+}
+
+pub struct Ring {
+    // Хранилище длиной в ёмкость; head — индекс первого элемента,
+    // count — число элементов в буфере.
+    data: List[i32],
+    head: int = 0,
+    count: int = 0,
+}
+
+pub fn ring_new(capacity: i32) -> Ring {
+    var data: List[i32] = [];
+    var i: i32 = 0;
+    while i < capacity {
+        data.push(i32(0));
+        i += 1;
+    }
+    return Ring { data, head: 0, count: 0 };
+}
+
+pub fn ring_push(r: &mut Ring, value: i32) -> RingError!void {
+    let cap = len(r.data);
+    if r.count >= cap {
+        fail RingError.Full;
+    }
+    let tail = (r.head + r.count) % cap;
+    r.data[tail] = value;
+    r.count += 1;
+}
+
+pub fn ring_pop(r: &mut Ring) -> ?i32 {
+    if r.count == 0 {
+        return none;
+    }
+    let v = r.data[r.head];
+    r.head = (r.head + 1) % len(r.data);
+    r.count -= 1;
+    return v;
+}
+
+pub fn ring_len(r: &Ring) -> i32 {
+    return i32(r.count);
+}

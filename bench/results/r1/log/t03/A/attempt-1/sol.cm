@@ -1,0 +1,88 @@
+// t03: заготовка — напишите тела функций по task.md.
+pub enum State {
+    Idle,
+    Patrol { waypoint: i32 },
+    Chase { target: i32 },
+    Flee { ticks: i32 },
+}
+
+pub enum Event {
+    Tick,
+    SeeEnemy { id: i32 },
+    LoseEnemy,
+    LowHealth,
+}
+
+const FLEE_TICKS: i32 = 3;
+const FIRST_WAYPOINT: i32 = 0;
+const WAYPOINT_COUNT: i32 = 4;
+
+// Переход по событию Tick.
+fn on_tick(state: State) -> State {
+    var next = state;
+    match state {
+        State.Idle => {
+            next = State.Patrol { waypoint: FIRST_WAYPOINT };
+        }
+        State.Patrol { waypoint } => {
+            next = State.Patrol { waypoint: i32((waypoint + 1) % WAYPOINT_COUNT) };
+        }
+        State.Chase => {}
+        State.Flee { ticks } => {
+            if ticks > 1 {
+                next = State.Flee { ticks: i32(ticks - 1) };
+            } else {
+                next = State.Idle;
+            }
+        }
+    }
+    return next;
+}
+
+pub fn step(state: State, event: Event) -> State {
+    var next = state;
+    match event {
+        Event.LowHealth => {
+            next = State.Flee { ticks: FLEE_TICKS };
+        }
+        Event.SeeEnemy { id } => {
+            match state {
+                State.Flee => {}
+                _ => {
+                    next = State.Chase { target: id };
+                }
+            }
+        }
+        Event.LoseEnemy => {
+            match state {
+                State.Chase => {
+                    next = State.Patrol { waypoint: FIRST_WAYPOINT };
+                }
+                _ => {}
+            }
+        }
+        Event.Tick => {
+            next = on_tick(state);
+        }
+    }
+    return next;
+}
+
+pub fn describe(state: State) -> str {
+    var out = "";
+    match state {
+        State.Idle => {
+            out = "idle";
+        }
+        State.Patrol { waypoint } => {
+            out = "patrol " + str(waypoint);
+        }
+        State.Chase { target } => {
+            out = "chase " + str(target);
+        }
+        State.Flee { ticks } => {
+            out = "flee " + str(ticks);
+        }
+    }
+    return out;
+}

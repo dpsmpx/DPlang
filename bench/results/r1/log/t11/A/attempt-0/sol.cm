@@ -1,0 +1,15 @@
+// t11: заготовка — напишите тела функций по task.md.
+pub struct Particle {
+    x: i32,
+    y: i32,
+    vx: i32,
+    vy: i32,
+}
+
+pub fn step(particles: &mut List[Particle]) {
+    // ...
+}
+
+pub fn checksum(particles: []Particle) -> u32 {
+    // ...
+}

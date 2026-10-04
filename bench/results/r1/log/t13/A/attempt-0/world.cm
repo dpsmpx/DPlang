@@ -1,0 +1,26 @@
+// Модуль world (до рефакторинга): юниты на плоскости.
+pub struct Unit {
+    x: i32,
+    y: i32,
+    hp: i32,
+    armor: i32,
+    alive: bool,
+}
+
+pub struct World {
+    units: List[Unit],
+}
+
+// Добавляет живого юнита (hp >= 1); возвращает его номер.
+pub fn spawn(w: &mut World, x: i32, y: i32, hp: i32, armor: i32) -> i32 {
+    w.units.push(Unit { x, y, hp, armor, alive: true });
+    return i32(len(w.units) - 1);
+}
+
+// Здоровье юнита; -1, если такого номера нет.
+pub fn unit_hp(w: &World, id: i32) -> i32 {
+    if id < 0 || id >= len(w.units) {
+        return -1;
+    }
+    return w.units[id].hp;
+}
