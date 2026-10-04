@@ -1,0 +1,78 @@
+// t14: параллельная свёртка с детерминированным итогом.
+const BLOCK int = 4096
+
+// Сумма блока b: слева направо, начиная с 0.0.
+fn block_sum(values []f64, b int) f64 {
+    lo := b * BLOCK
+    hi := min(lo + BLOCK, len(values))
+    var s f64 = 0.0
+    for j in lo..hi {
+        s += values[j]
+    }
+    return s
+}
+
+pub fn parallel_sum(values []f64, threads i32) f64 {
+    n := len(values)
+    if n == 0 {
+        return 0.0
+    }
+    nt := int(threads)
+    nb := (n + BLOCK - 1) / BLOCK
+    var part List[List[f64]] = []
+    for _ in 0..nt {
+        var e List[f64] = []
+        part.push(e)
+    }
+    // Поток t считает подряд идущие блоки [t*nb/nt, (t+1)*nb/nt).
+    parallel for t in 0..nt {
+        b0 := t * nb / nt
+        b1 := (t + 1) * nb / nt
+        var local List[f64] = []
+        for b in b0..b1 {
+            local.push(block_sum(values, b))
+        }
+        part[t] = local
+    }
+    // Слияние: суммы блоков по порядку блоков, начиная с 0.0.
+    var total f64 = 0.0
+    for t in 0..nt {
+        sums := part[t]
+        for s in sums {
+            total += s
+        }
+    }
+    return total
+}
+
+pub fn parallel_histogram(values []u32, buckets i32, threads i32) List[i64] {
+    n := len(values)
+    nt := int(threads)
+    nb := int(buckets)
+    ub := u32(buckets)
+    var part List[List[i64]] = []
+    for _ in 0..nt {
+        var e List[i64] = []
+        part.push(e)
+    }
+    // Поток t считает свою подряд идущую часть значений в локальные счётчики.
+    parallel for t in 0..nt {
+        lo := t * n / nt
+        hi := (t + 1) * n / nt
+        var local List[i64] = repeat(i64(0), nb)
+        for j in lo..hi {
+            k := int(values[j] % ub)
+            local[k] += 1
+        }
+        part[t] = local
+    }
+    // Слияние локальных счётчиков.
+    var result List[i64] = repeat(i64(0), nb)
+    for t in 0..nt {
+        counts := part[t]
+        for k in 0..nb {
+            result[k] += counts[k]
+        }
+    }
+    return result
+}

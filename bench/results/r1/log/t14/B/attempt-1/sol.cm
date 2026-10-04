@@ -1,0 +1,70 @@
+// t14: заготовка — напишите тела функций по task.md.
+const BLOCK: int = 4096
+
+// Сумма блока b: слева направо, начиная с 0.0.
+fn block_sum(values: []f64, b: int) f64 {
+    let lo = b * BLOCK
+    let hi = min(lo + BLOCK, len(values))
+    var s: f64 = 0.0
+    for i in lo..hi {
+        s += values[i]
+    }
+    return s
+}
+
+pub fn parallel_sum(values: []f64, threads: i32) f64 {
+    let n = len(values)
+    if n == 0 {
+        return 0.0
+    }
+    let nt = max(int(threads), 1)
+    let nblocks = (n + BLOCK - 1) / BLOCK
+    let empty: List[f64] = []
+    var part: List[List[f64]] = repeat(empty, nt)
+    // Поток t считает подряд идущие блоки [lo, hi) и пишет только part[t].
+    parallel for t in 0..nt {
+        let lo = t * nblocks / nt
+        let hi = (t + 1) * nblocks / nt
+        var local: List[f64] = []
+        for b in lo..hi {
+            local.push(block_sum(values, b))
+        }
+        part[t] = local
+    }
+    // Слияние: суммы блоков по порядку блоков, начиная с 0.0.
+    var total: f64 = 0.0
+    for t in 0..nt {
+        for k in 0..len(part[t]) {
+            total += part[t][k]
+        }
+    }
+    return total
+}
+
+pub fn parallel_histogram(values: []u32, buckets: i32, threads: i32) List[i64] {
+    let n = len(values)
+    let nb = int(buckets)
+    let ub = u32(buckets)
+    let nt = max(int(threads), 1)
+    let zeros: List[i64] = repeat(i64(0), nb)
+    var part: List[List[i64]] = repeat(zeros, nt)
+    // Поток t считает свой отрезок значений в локальные счётчики.
+    parallel for t in 0..nt {
+        let lo = t * n / nt
+        let hi = (t + 1) * n / nt
+        var local: List[i64] = repeat(i64(0), nb)
+        for i in lo..hi {
+            let k = int(values[i] % ub)
+            local[k] += 1
+        }
+        part[t] = local
+    }
+    // Слияние локальных счётчиков по порядку потоков.
+    var result: List[i64] = repeat(i64(0), nb)
+    for t in 0..nt {
+        for b in 0..nb {
+            result[b] += part[t][b]
+        }
+    }
+    return result
+}
