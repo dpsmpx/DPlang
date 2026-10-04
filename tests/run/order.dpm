@@ -1,4 +1,4 @@
-// spec: expr.ops expr.call expr.struct stmt.assign
+// spec: expr.order expr.ops expr.call expr.struct stmt.assign
 struct P {
     x: i32
     y: i32
