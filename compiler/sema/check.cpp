@@ -158,7 +158,13 @@ void Checker::stmt(Stmt* s) {
 
 void Checker::let_stmt(LetStmt* l) {
     const Type* t = nullptr;
-    if (l->type) t = r_.type(l->type);
+    if (l->type) {
+        t = r_.type(l->type);
+        if (contains_slice(t)) {
+            error(Code::E0510, l->type->span, "a slice cannot be stored in a variable; pass it to a function directly");
+            t = err();
+        }
+    }
     if (l->value) {
         if (t) {
             check(l->value, t);
@@ -170,6 +176,10 @@ void Checker::let_stmt(LetStmt* l) {
             } else if (t->kind == TK::Result) {
                 error(Code::E0506, l->value->span,
                       "the result of type '" + tn(t) + "' must be handled: use 'try', 'match' or '_ ='");
+            } else if (contains_slice(t)) {
+                error(Code::E0510, l->value->span,
+                      "a slice cannot be stored in a variable; pass it to a function directly");
+                t = err();
             }
         }
     }

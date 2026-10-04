@@ -125,6 +125,7 @@ private:
                 case ItemKind::Const:
                     if (s.cn && s.cn->node == it) {
                         s.cn->type = r.type(s.cn->node->type);
+                        no_slice(s.cn->node->type, s.cn->type, "a constant");
                         if (s.cn->pub) public_type(s.cn->node->type, s.cn->type, "constant");
                     }
                     break;
@@ -161,6 +162,13 @@ private:
         }
     }
 
+    // Срез — только тип параметра-значения (Р44).
+    void no_slice(const ast::Type* node, const sema::Type* t, const std::string& where) {
+        if (node && contains_slice(t)) {
+            diags_.error(Code::E0510, node->span, "a slice cannot be " + where + "; use List[T]");
+        }
+    }
+
     void fields(Resolver& r, const std::vector<FieldDecl>& decls, std::vector<FieldDef>& out, bool pub,
                 const std::string& what) {
         for (const FieldDecl& fd : decls) {
@@ -173,6 +181,7 @@ private:
             }
             const sema::Type* t = r.type(fd.type);
             if (pub) public_type(fd.type, t, what);
+            no_slice(fd.type, t, "a field");
             if (dup) continue;
             out.push_back(FieldDef{fd.name, fd.name_span, t, fd.value});
         }
@@ -197,6 +206,7 @@ private:
             for (ast::Type* t : vd.types) {
                 const sema::Type* rt = r.type(t);
                 if (d.pub) public_type(t, rt, "enum");
+                no_slice(t, rt, "a variant value");
                 v.types.push_back(rt);
             }
             fields(r, vd.fields, v.fields, d.pub, "enum");
@@ -218,11 +228,16 @@ private:
             }
             const sema::Type* t = r.type(p.type);
             if (f.pub) public_type(p.type, t, "function");
+            // Срез — сам параметр-значение; внутри других типов и за ссылкой его нет.
+            if (p.mode != ParamMode::Value || (t->kind == TK::Slice ? contains_slice(t->elem) : contains_slice(t))) {
+                no_slice(p.type, t, p.mode != ParamMode::Value ? "behind a reference" : "nested in another type");
+            }
             f.params.push_back(ParamDef{p.name, p.mode, t, p.name_span});
         }
         if (n->ret) {
             f.ret = r.type(n->ret, /*allow_void=*/false);
             if (f.pub) public_type(n->ret, f.ret, "function");
+            no_slice(n->ret, f.ret, "a result");
             auto* res = as<ResultType>(n->ret);
             f.infer_error = res && !res->error && !f.pub;
             if (f.pub && res && !res->error) {

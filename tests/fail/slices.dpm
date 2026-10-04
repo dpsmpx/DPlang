@@ -1,0 +1,31 @@
+// spec: ref.slices ref.alias
+struct Holder {
+    view: []i32
+}
+
+enum Wrap {
+    One([]i32)
+}
+
+const C: []i32 = [1]
+
+fn ret(xs: []i32) []i32 {
+    return xs
+}
+
+fn by_ref(xs: &[]i32) {
+}
+
+fn nested(xs: List[[]i32]) {
+}
+
+fn grow(a: &mut List[i32], view: []i32) {
+}
+
+fn uses(xs: List[i32]) {
+    let part = xs[1..]
+    let typed: []i32 = xs
+    var list: List[i32] = [1, 2]
+    grow(&mut list, list)
+    grow(&mut list, list[1..])
+}

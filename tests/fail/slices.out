@@ -1,0 +1,35 @@
+--- stderr ---
+slices.dpm:3:11: error[E0510]: a slice cannot be a field; use List[T]
+   3 |     view: []i32
+     |           ^~~~~
+slices.dpm:7:9: error[E0510]: a slice cannot be a variant value; use List[T]
+   7 |     One([]i32)
+     |         ^~~~~
+slices.dpm:10:10: error[E0421]: a constant must be a number, a bool, a str or a List of them, found '[]i32'
+  10 | const C: []i32 = [1]
+     |          ^~~~~
+slices.dpm:10:10: error[E0510]: a slice cannot be a constant; use List[T]
+  10 | const C: []i32 = [1]
+     |          ^~~~~
+slices.dpm:12:19: error[E0510]: a slice cannot be a result; use List[T]
+  12 | fn ret(xs: []i32) []i32 {
+     |                   ^~~~~
+slices.dpm:16:16: error[E0510]: a slice cannot be behind a reference; use List[T]
+  16 | fn by_ref(xs: &[]i32) {
+     |                ^~~~~
+slices.dpm:19:15: error[E0510]: a slice cannot be nested in another type; use List[T]
+  19 | fn nested(xs: List[[]i32]) {
+     |               ^~~~~~~~~~~
+slices.dpm:26:16: error[E0510]: a slice cannot be stored in a variable; pass it to a function directly
+  26 |     let part = xs[1..]
+     |                ^~~~~~~
+slices.dpm:27:16: error[E0510]: a slice cannot be stored in a variable; pass it to a function directly
+  27 |     let typed: []i32 = xs
+     |                ^~~~~
+slices.dpm:29:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  29 |     grow(&mut list, list)
+     |                     ^~~~
+slices.dpm:30:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  30 |     grow(&mut list, list[1..])
+     |                     ^~~~~~~~~
+[exit 1]

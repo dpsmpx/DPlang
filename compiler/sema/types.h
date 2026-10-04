@@ -63,6 +63,9 @@ struct ModuleInfo;
 // Тип из модуля, отличного от from, пишется с именем модуля; без from — без него.
 std::string type_name(const Type* t, const ModuleInfo* from = nullptr);
 
+// Тип содержит срез `[]T` где-либо внутри (Р44: срез — только тип параметра).
+bool contains_slice(const Type* t);
+
 bool is_integer(const Type* t);
 bool is_signed(const Type* t);
 int int_bits(const Type* t);  // ширина целого; int — 64

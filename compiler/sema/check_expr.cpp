@@ -1081,17 +1081,30 @@ Local* Checker::root_local(Expr* e) {
 // переменную: вызываемая функция могла бы изменить x и оставить вторую
 // ссылку висячей (Р44, Р11).
 void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
-    for (size_t i = 0; i < c->args.size(); i++) {
-        auto* a = as<RefExpr>(c->args[i]);
-        if (!a || i >= params.size() || params[i].mode == ParamMode::Value) continue;
-        Local* ra = root_local(a->operand);
-        if (!ra) continue;
-        for (size_t j = i + 1; j < c->args.size(); j++) {
-            auto* b = as<RefExpr>(c->args[j]);
-            if (!b || j >= params.size() || params[j].mode == ParamMode::Value) continue;
-            if (root_local(b->operand) != ra || !(a->mut || b->mut)) continue;
-            error(Code::E0502, b->span, "'" + ra->name + "' is passed as '&mut' together with another reference "
-                                            "into it; pass a copy of the value instead");
+    // Ссылка аргумента: корень и изменяемость; срез-аргумент — ссылка только
+    // для чтения в свою коллекцию.
+    struct Ref {
+        Local* root = nullptr;
+        bool mut = false;
+        Span span;
+    };
+    std::vector<Ref> refs;
+    for (size_t i = 0; i < c->args.size() && i < params.size(); i++) {
+        Expr* a = c->args[i];
+        if (auto* r = as<RefExpr>(a)) {
+            if (params[i].mode != ParamMode::Value) refs.push_back({root_local(r->operand), r->mut, a->span});
+        } else if (params[i].type && params[i].type->kind == TK::Slice) {
+            Expr* base = a;
+            while (auto* s = as<SliceExpr>(base)) base = s->object;
+            refs.push_back({root_local(base), false, a->span});
+        }
+    }
+    for (size_t i = 0; i < refs.size(); i++) {
+        for (size_t j = 0; j < refs.size(); j++) {
+            if (i == j || !refs[i].root || refs[i].root != refs[j].root || !refs[i].mut) continue;
+            if (j < i && refs[j].mut) continue;  // пара двух &mut — одно сообщение
+            error(Code::E0502, refs[j].span, "'" + refs[i].root->name + "' is passed as '&mut' together with "
+                                                 "another reference into it; pass a copy of the value instead");
         }
     }
 }

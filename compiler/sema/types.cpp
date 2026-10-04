@@ -57,6 +57,12 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
     return "?";
 }
 
+bool contains_slice(const Type* t) {
+    if (!t) return false;
+    if (t->kind == TK::Slice) return true;
+    return contains_slice(t->elem) || contains_slice(t->err);
+}
+
 bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }
 bool is_signed(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::Int; }
 bool is_float(const Type* t) { return t && (t->kind == TK::F32 || t->kind == TK::F64); }
