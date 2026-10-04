@@ -112,12 +112,12 @@ public:
         // Конец тела: у функции без результата и у `!void` — возврат, иначе
         // сюда не дойти (E0504).
         if (def.ret->kind == TK::Void) {
-            exit_scopes(0);
+            exit_scopes(0, end);
             ret_term(false, end);
         } else if (def.ret->kind == TK::Result && def.ret->elem->kind == TK::Void) {
             Rvalue rv = make(RvKind::MakeOk, def.ret);
             assign(local(ret_), rv, end);
-            exit_scopes(0);
+            exit_scopes(0, end);
             ret_term(true, end);
         } else {
             Term t;
@@ -619,7 +619,7 @@ private:
         Place err = proj(r, ProjKind::ResultError);
         e.ops.push_back(fresh ? move(err) : copy(err));
         assign(local(ret_), std::move(e), t->span);
-        exit_scopes(0);
+        exit_scopes(0, t->span);
         ret_term(true, t->span);
         cur_ = ok_b;
         const Type* rt = place_type(out_, f_, r);
@@ -800,7 +800,7 @@ private:
     }
 
     // Очистка областей глубже depth (выход из них: return, break, continue).
-    void exit_scopes(size_t depth, Span span = {}) {
+    void exit_scopes(size_t depth, Span span) {
         for (size_t d = scopes_.size(); d > depth; d--) cleanup(d - 1, span);
     }
 

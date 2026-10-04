@@ -1,0 +1,35 @@
+fn drops.greet(%0 name: str) str
+  tmp %1: str
+  var %2 s: str
+  tmp %3: str
+bb0:
+  %3 = concat "hi ", copy %0  @5:19
+  %2 = move %3  @5:5
+  drop %3  @5:5
+  %1 = copy %2  @6:5
+  drop %2  @6:5
+  drop %0  @6:5
+  return move %1  @6:5
+
+fn drops.main()
+  var %0 xs: List[str]
+  tmp %1: List[str]
+  tmp %2: str
+  var %3 first: str
+  tmp %4: i64
+  tmp %5: str
+bb0:
+  %1 = List[str] ["a"]  @10:25
+  %0 = move %1  @10:5
+  drop %1  @10:5
+  %2 = call drops.greet("b")  @11:13
+  eval push(&mut %0, move %2)  @11:5
+  drop %2  @11:5
+  %4 = 0:i64  @12:20
+  %3 = copy %0[%4]  @12:5
+  %5 = concat copy %3, "!"  @13:19
+  eval println(copy %5)  @13:5
+  drop %5  @13:5
+  drop %3  @14:1
+  drop %0  @14:1
+  return  @14:1

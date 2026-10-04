@@ -1,0 +1,14 @@
+--- stderr ---
+recursive.dpm:2:8: error[E0423]: struct 'Node' contains itself; keep the nested values in a List
+   2 | struct Node {
+     |        ^~~~
+recursive.dpm:7:8: error[E0423]: struct 'A' contains itself; keep the nested values in a List
+   7 | struct A {
+     |        ^
+recursive.dpm:11:8: error[E0423]: struct 'B' contains itself; keep the nested values in a List
+  11 | struct B {
+     |        ^
+recursive.dpm:15:6: error[E0423]: enum 'Expr' contains itself; keep the nested values in a List
+  15 | enum Expr {
+     |      ^~~~
+[exit 1]

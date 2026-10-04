@@ -1,0 +1,25 @@
+// spec: error.flow stmt.return expr.ops expr.order
+// try — проверка и возврат той же ошибки с очисткой областей; fail;
+// конец тела E!void — успех; правые части ?? и && — только по нужде.
+enum E {
+    Empty
+}
+
+fn first(xs: List[str]) E!str {
+    if len(xs) == 0 {
+        fail .Empty
+    }
+    return xs[0]
+}
+
+fn check(xs: List[str]) E!void {
+    let s = try first(xs)
+    let n = s.find(",") ?? len(s)
+    if n > 0 && s[0] == 'x' {
+        println(s)
+    }
+}
+
+fn main() {
+    _ = check(["x,y"])
+}

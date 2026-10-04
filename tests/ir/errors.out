@@ -1,0 +1,92 @@
+fn errors.first(%0 xs: List[str]) E!str
+  tmp %1: E!str
+  tmp %2: i64
+  tmp %3: bool
+  tmp %4: E
+  tmp %5: i64
+  tmp %6: E!str
+bb0:
+  %2 = len(copy %0)  @9:8
+  %3 = eq copy %2, 0:i64  @9:16
+  branch copy %3, bb1, bb2  @9:8
+bb1:
+  %4 = E.Empty  @10:14
+  %1 = err move %4 E!str  @10:9
+  drop %0  @10:9
+  return move %1  @10:9
+bb2:
+  jump bb3  @9:5
+bb3:
+  %5 = 0:i64  @12:15
+  %6 = ok copy %0[%5]  @12:12
+  %1 = move %6  @12:5
+  drop %6  @12:5
+  drop %0  @12:5
+  return move %1  @12:5
+
+fn errors.check(%0 xs: List[str]) E!void
+  tmp %1: E!void
+  var %2 s: str
+  tmp %3: E!str
+  tmp %4: bool
+  var %5 n: i64
+  tmp %6: ?i64
+  tmp %7: i64
+  tmp %8: bool
+  tmp %9: i64
+  tmp %10: bool
+  tmp %11: bool
+  tmp %12: i64
+  tmp %13: bool
+bb0:
+  %3 = call errors.first(copy %0)  @16:17
+  %4 = is_ok %3  @16:13
+  branch copy %4, bb1, bb2  @16:13
+bb1:
+  %2 = move %3.ok  @16:5
+  drop %3  @16:5
+  %6 = find(copy %2, ",")  @17:13
+  %8 = is_some %6  @17:25
+  branch copy %8, bb3, bb4  @17:25
+bb2:
+  %1 = err move %3.err E!void  @16:13
+  drop %3  @16:13
+  drop %0  @16:13
+  return move %1  @16:13
+bb3:
+  %7 = move %6.some  @17:13
+  jump bb5  @17:25
+bb4:
+  %9 = len(copy %2)  @17:28
+  %7 = move %9  @17:28
+  jump bb5  @17:25
+bb5:
+  %5 = move %7  @17:5
+  %11 = gt copy %5, 0:i64  @18:10
+  %10 = copy %11  @18:8
+  branch copy %10, bb9, bb10  @18:14
+bb6:
+  eval println(copy %2)  @19:9
+  jump bb8  @18:5
+bb7:
+  jump bb8  @18:5
+bb8:
+  drop %2  @21:1
+  %1 = ok E!void  @21:1
+  drop %0  @21:1
+  return move %1  @21:1
+bb9:
+  %12 = 0:i64  @18:19
+  %13 = eq copy %2[%12], 120:u8  @18:22
+  %10 = copy %13  @18:17
+  jump bb10  @18:14
+bb10:
+  branch copy %10, bb6, bb7  @18:8
+
+fn errors.main()
+  tmp %0: List[str]
+bb0:
+  %0 = List[str] ["x,y"]  @24:15
+  eval call errors.check(move %0)  @24:9
+  drop %0  @24:5
+  return  @25:1

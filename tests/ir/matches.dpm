@@ -1,0 +1,28 @@
+// spec: stmt.match pattern.types pattern.or
+// match — цепочка проверок по порядку ветвей: номер варианта, данные,
+// литералы; имена связываются копиями после совпадения образца.
+enum Shape {
+    Dot
+    Circle(i32)
+    Named { name: str, size: i32 }
+}
+
+fn size(s: Shape) i32 {
+    match s {
+        .Dot | .Circle(0) => return 0
+        .Circle(r) => return r
+        .Named { name: "big", size } => return size * 10
+        .Named { size } => return size
+    }
+}
+
+fn label(v: ?str) str {
+    match v {
+        some(s) => return s
+        none => return "-"
+    }
+}
+
+fn main() {
+    println(str(size(.Circle(2))) + label(none))
+}
