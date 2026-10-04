@@ -1,0 +1,38 @@
+Module err_chained
+  Fn f
+    Block
+      Let ok
+        Binary &&
+          Binary <
+            Name a
+            Name b
+          Binary <
+            Name b
+            Name c
+      Let bad
+        Binary <
+          Binary <
+            Name a
+            Name b
+          Name c
+      Let also_bad
+        Binary ==
+          Binary ==
+            Name a
+            Name b
+          Name c
+      Let fine
+        Binary ==
+          Paren
+            Binary ==
+              Name a
+              Name b
+          Name c
+--- stderr ---
+err_chained.dpm:4:21: error[E0203]: comparison operators cannot be chained; use '&&'
+   4 |     let bad = a < b < c
+     |                     ^
+err_chained.dpm:5:27: error[E0203]: comparison operators cannot be chained; use '&&'
+   5 |     let also_bad = a == b == c
+     |                           ^~
+[exit 1]

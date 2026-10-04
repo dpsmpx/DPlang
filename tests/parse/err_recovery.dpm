@@ -1,0 +1,27 @@
+// spec: syntax
+fn broken() {
+    let a = (1 + 
+    let b = 2
+    let c = f(1, , 2)
+    if {
+    }
+    let d = 4
+}
+
+struct Fine {
+    a: i32
+}
+
+fn bad_params(a i32, b: i32) {
+    return 1
+}
+
+enum E {
+    A
+    B(i32
+    C
+}
+
+fn after() i32 {
+    return 7
+}

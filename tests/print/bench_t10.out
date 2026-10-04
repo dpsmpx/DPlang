@@ -1,0 +1,93 @@
+pub struct Edit {
+    x: i32
+    y: i32
+    z: i32
+    block: i32
+}
+
+pub enum DecodeError {
+    Truncated
+    BadValue
+    TrailingBytes
+}
+
+fn put_varint(out: &mut List[u8], value: u64) {
+    var v = value
+    while v >= 0x80 {
+        out.push(u8(v & 0x7f | 0x80))
+        v = v >> 7
+    }
+    out.push(u8(v))
+}
+
+fn zigzag(n: i64) u64 {
+    return u64.wrap(n << 1) ^ u64.wrap(n >> 63)
+}
+
+fn unzigzag(u: u64) i64 {
+    return i64(u >> 1) ^ -i64(u & 1)
+}
+
+pub fn encode(edits: []Edit) List[u8] {
+    var out: List[u8] = []
+    put_varint(&mut out, u64(len(edits)))
+    var px: i64 = 0
+    var py: i64 = 0
+    var pz: i64 = 0
+    for e in &edits {
+        put_varint(&mut out, zigzag(i64(e.x) - px))
+        put_varint(&mut out, zigzag(i64(e.y) - py))
+        put_varint(&mut out, zigzag(i64(e.z) - pz))
+        put_varint(&mut out, u64(e.block))
+        px = i64(e.x)
+        py = i64(e.y)
+        pz = i64(e.z)
+    }
+    return out
+}
+
+fn get_varint(bytes: []u8, pos: &mut int) !u64 {
+    var v: u64 = 0
+    for i in 0..10 {
+        if pos >= len(bytes) {
+            fail .Truncated
+        }
+        let b = bytes[pos]
+        pos += 1
+        v = v | u64(b & 0x7f) << (7 * i)
+        if b & 0x80 == 0 {
+            return v
+        }
+    }
+    fail .BadValue
+}
+
+fn in_i32(v: i64) bool {
+    return v >= -2147483648 && v <= 2147483647
+}
+
+pub fn decode(bytes: []u8) !List[Edit] {
+    var pos = 0
+    let n = try get_varint(bytes, &mut pos)
+    var out: List[Edit] = []
+    var px: i64 = 0
+    var py: i64 = 0
+    var pz: i64 = 0
+    for _ in 0..n {
+        let x = px + unzigzag(try get_varint(bytes, &mut pos))
+        let y = py + unzigzag(try get_varint(bytes, &mut pos))
+        let z = pz + unzigzag(try get_varint(bytes, &mut pos))
+        let block = try get_varint(bytes, &mut pos)
+        if !in_i32(x) || !in_i32(y) || !in_i32(z) || block > 65535 {
+            fail .BadValue
+        }
+        out.push(Edit { x: i32(x), y: i32(y), z: i32(z), block: i32(block) })
+        px = x
+        py = y
+        pz = z
+    }
+    if pos != len(bytes) {
+        fail .TrailingBytes
+    }
+    return out
+}

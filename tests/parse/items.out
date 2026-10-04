@@ -1,0 +1,46 @@
+Module items
+  Import world
+  Import fmt
+  Struct Item pub
+    Field id: i32
+    Field count: i32
+      Int 1
+    Field name: str
+      Str ""
+  Struct Pair
+    Field a: List[i32]
+    Field b: ?world.Unit
+  Enum Event pub
+    Variant Tick
+    Variant Move(i32, i32)
+    Variant Hit {target: i32, damage: i32}
+  Const LIMIT: i32
+    Int 64
+  Const NAME pub: str
+    Str "x"
+  Fn add_count pub @det
+    Param items &mut List[Item]
+    Param key &Item
+    Param extra i32
+    Ret i32
+    Block
+      Return
+        Int 0
+  Fn none_result
+    Block
+  Fn read
+    Param s str
+    Ret ReadError!str
+    Block
+      Return
+        Name s
+  Fn infer
+    Param xs []u8
+    Ret !void
+    Block
+  Fn nested
+    Param m List[List[?i32]]
+    Ret ?[]world.Unit
+    Block
+      Return
+        None

@@ -1,0 +1,28 @@
+// spec: syntax.pattern
+fn pats(e: Event, o: ?i32, r: !i32) {
+    match e {
+        .Tick => x = 1
+        .Move(dx, _) => x = dx
+        .Hit { target, damage: d } => x = d
+        Event.Stop => x = 0
+        world.Event.Far => x = 0
+        .A | .B => x = 0
+        _ => x = 0
+    }
+    match o {
+        some(v) => x = v
+        none => x = 0
+    }
+    match r {
+        ok(v) => x = v
+        err(e) => x = 0
+    }
+    match n {
+        0 => x = 0
+        -1 => x = 1
+        'a' => x = 2
+        "s" => x = 3
+        true => x = 4
+        v => x = v
+    }
+}

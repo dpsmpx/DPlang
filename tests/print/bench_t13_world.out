@@ -1,0 +1,26 @@
+pub struct UnitId {
+    index: i32
+}
+
+pub struct Unit {
+    x: i32
+    y: i32
+    hp: i32
+    armor: i32
+}
+
+pub struct World {
+    units: List[Unit]
+}
+
+pub fn spawn(w: &mut World, x: i32, y: i32, hp: i32, armor: i32) UnitId {
+    w.units.push(Unit { x, y, hp, armor })
+    return UnitId { index: i32(len(w.units) - 1) }
+}
+
+pub fn unit_hp(w: &World, id: UnitId) ?i32 {
+    if id.index < 0 || id.index >= len(w.units) {
+        return none
+    }
+    return w.units[id.index].hp
+}

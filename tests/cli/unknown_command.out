@@ -1,13 +1,4 @@
 --- stderr ---
 error: unknown command 'frobnicate'
-
-usage: dplang <command> [arguments]
-
-commands:
-  explain <code>   explain a diagnostic code, e.g. E0101
-  help             show this help
-  --version        print the compiler version
-
-debugging commands (output format is not stable):
-  debug lex <file.dpm>   print the tokens of a file
+run 'dplang help' to list the commands
 [exit 2]

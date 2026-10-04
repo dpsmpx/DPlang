@@ -1,0 +1,11 @@
+// spec: syntax.item
+@det
+struct S {
+    a: i32
+}
+
+pub import world
+
+@det
+fn ok() {
+}

@@ -49,3 +49,23 @@ DP_CODE(E0109, "reserved word",
 DP_CODE(E0110, "float literal out of range",
         "The value of this floating point literal is too large to be represented as `f64` "
         "(spec: lex.float).")
+
+// --- E02xx: грамматика (docs/spec/core.md, раздел 2)
+
+DP_CODE(E0201, "syntax error",
+        "The parser expected a different token here; the message names what was expected (spec: syntax). "
+        "After a syntax error the rest of the line or declaration is skipped, so one mistake gives one "
+        "message.")
+DP_CODE(E0202, "unexpected semicolon",
+        "Statements end at the end of a line; `;` is not part of the language (spec: syntax.stmt). Remove "
+        "it, or put the second statement on its own line.")
+DP_CODE(E0203, "chained comparison",
+        "Comparison operators do not chain: `a < b < c` is an error (spec: expr.prec). Write `a < b && b < c`.")
+DP_CODE(E0204, "expected end of line",
+        "A statement or declaration ended, but more tokens follow on the same line (spec: syntax.stmt). "
+        "Each statement goes on its own line.")
+DP_CODE(E0205, "attribute not allowed here",
+        "Attributes such as `@det` are only allowed before a function declaration (spec: syntax.item).")
+DP_CODE(E0206, "`pub` not allowed here",
+        "`pub` makes a function, struct, enum or constant visible to other modules (spec: syntax.item). "
+        "It cannot be applied to `import`.")

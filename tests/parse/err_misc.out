@@ -1,0 +1,45 @@
+Module err_misc
+  Fn f
+    Block
+      Let 
+      Var x
+      Match
+        Name y
+        Arm 1
+          ExprStmt
+            ErrorExpr
+        Arm 2
+          Assign =
+            Name x
+            Int 2
+      For x in
+        -
+        -
+      ErrorStmt
+      Let s
+        ErrorExpr
+      Let t
+        Int 5
+--- stderr ---
+err_misc.dpm:2:1: error[E0201]: expected declaration (fn, struct, enum, const or import), found 'let'
+   2 | let top = 1
+     | ^~~
+err_misc.dpm:4:9: error[E0201]: expected identifier, found '='
+   4 |     let = 3
+     |         ^
+err_misc.dpm:5:10: error[E0201]: expected '=' and an initial value, found end of line
+   5 |     var x
+     |          ^
+err_misc.dpm:7:14: error[E0201]: expected expression, found end of line
+   7 |         1 => 
+     |              ^
+err_misc.dpm:10:11: error[E0201]: expected 'in', found identifier 'of'
+  10 |     for x of xs {
+     |           ^~
+err_misc.dpm:12:14: error[E0201]: expected 'for' after 'parallel', found 'while'
+  12 |     parallel while true {
+     |              ^~~~~
+err_misc.dpm:14:13: error[E0103]: unterminated string literal
+  14 |     let s = "unterminated
+     |             ^~~~~~~~~~~~~
+[exit 1]

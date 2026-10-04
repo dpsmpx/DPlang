@@ -19,8 +19,11 @@ endif()
 add_library(dpcore STATIC
     support/source.cpp
     support/diag.cpp
+    syntax/ast_dump.cpp
     syntax/lexer.cpp
     syntax/literal.cpp
+    syntax/parser.cpp
+    syntax/printer.cpp
 )
 target_include_directories(dpcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

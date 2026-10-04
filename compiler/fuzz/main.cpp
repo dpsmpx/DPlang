@@ -1,6 +1,6 @@
 // Фаззер «не падает» (docs/policy/TESTING.md, раздел 3).
 //
-//     dpfuzz lex --seed N --iters M <каталог>...
+//     dpfuzz lex|parse --seed N --iters M <каталог>...
 //
 // Берёт файлы .dpm из каталогов как корпус, портит их детерминированно
 // (зерно задано) и проверяет инварианты прохода на каждом входе. Сбой
@@ -17,7 +17,10 @@
 #include "support/diag.h"
 #include "support/source.h"
 #include "support/utf8.h"
+#include "syntax/ast_dump.h"
 #include "syntax/lexer.h"
+#include "syntax/parser.h"
+#include "syntax/printer.h"
 
 namespace {
 
@@ -114,6 +117,34 @@ bool check_lex(const std::string& input) {
     return true;
 }
 
+// Инварианты парсера: не падает; участки объявлений — внутри файла; у
+// входа без ошибок — круг: печать разбирается без ошибок в тот же дамп,
+// печать печати не меняется.
+bool check_parse(const std::string& input) {
+    dp::SourceMap sources;
+    dp::FileId id = sources.add("fuzz.dpm", input);
+    dp::Diagnostics diags;
+    auto m = dp::parse_module(sources.file(id), id, "fuzz", diags);
+    for (const dp::ast::Item* it : m->items) {
+        if (it->span.begin > it->span.end || it->span.end > input.size()) return fail("item span outside the file", input);
+    }
+    for (const dp::Diagnostic& d : diags.list()) {
+        if (d.has_span && (d.span.begin > d.span.end || d.span.end > input.size())) {
+            return fail("diagnostic span outside the file", input);
+        }
+    }
+    std::string dump = dp::dump_module(*m);
+    if (diags.has_errors()) return true;
+    std::string printed = dp::print_module(*m, input);
+    dp::FileId id2 = sources.add("printed.dpm", printed);
+    dp::Diagnostics diags2;
+    auto again = dp::parse_module(sources.file(id2), id2, "fuzz", diags2);
+    if (diags2.has_errors()) return fail("printed module does not parse:\n" + printed, input);
+    if (dp::dump_module(*again) != dump) return fail("printed module parses differently:\n" + printed, input);
+    if (dp::print_module(*again, printed) != printed) return fail("printing is not idempotent", input);
+    return true;
+}
+
 bool load_corpus(const std::vector<std::string>& dirs, std::vector<std::string>& out) {
     std::vector<std::string> paths;
     for (const std::string& d : dirs) {
@@ -144,20 +175,21 @@ bool load_corpus(const std::vector<std::string>& dirs, std::vector<std::string>&
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
-    if (args.size() < 6 || args[0] != "lex" || args[1] != "--seed" || args[3] != "--iters") {
-        std::fprintf(stderr, "usage: dpfuzz lex --seed N --iters M <dir>...\n");
+    if (args.size() < 6 || (args[0] != "lex" && args[0] != "parse") || args[1] != "--seed" || args[3] != "--iters") {
+        std::fprintf(stderr, "usage: dpfuzz lex|parse --seed N --iters M <dir>...\n");
         return 2;
     }
+    bool (*check)(const std::string&) = args[0] == "lex" ? check_lex : check_parse;
     Rng rng{std::strtoull(args[2].c_str(), nullptr, 10)};
     unsigned long long iters = std::strtoull(args[4].c_str(), nullptr, 10);
     std::vector<std::string> corpus;
     if (!load_corpus(std::vector<std::string>(args.begin() + 5, args.end()), corpus)) return 2;
     for (const std::string& c : corpus) {
-        if (!check_lex(c)) return 1;
+        if (!check(c)) return 1;
     }
     for (unsigned long long i = 0; i < iters; i++) {
-        if (!check_lex(mutate(rng, corpus))) return 1;
+        if (!check(mutate(rng, corpus))) return 1;
     }
-    std::printf("lex: corpus and %llu mutated inputs pass\n", iters);
+    std::printf("%s: corpus and %llu mutated inputs pass\n", args[0].c_str(), iters);
     return 0;
 }

@@ -1,0 +1,50 @@
+Module err_recovery
+  Fn broken
+    Block
+      Let a
+        Paren
+          Binary +
+            Int 1
+            ErrorExpr
+      Let b
+        Int 2
+      Let c
+        Call
+          Name f
+          Int 1
+          ErrorExpr
+      If
+        ErrorExpr
+        -
+      Let d
+        Int 4
+  Struct Fine
+    Field a: i32
+  Fn bad_params
+    Param a i32
+    -
+  Enum E
+    Variant A
+    Variant B(i32)
+  Fn after
+    Ret i32
+    Block
+      Return
+        Int 7
+--- stderr ---
+err_recovery.dpm:4:5: error[E0201]: expected expression, found 'let'
+   4 |     let b = 2
+     |     ^~~
+err_recovery.dpm:5:18: error[E0201]: expected expression, found ','
+   5 |     let c = f(1, , 2)
+     |                  ^
+err_recovery.dpm:6:8: error[E0201]: expected expression, found '{'
+   6 |     if {
+     |        ^
+err_recovery.dpm:15:17: error[E0201]: expected ':', found identifier 'i32'
+  15 | fn bad_params(a i32, b: i32) {
+     |                 ^~~
+err_recovery.dpm:22:5: error[E0201]: expected ')', found identifier 'C'
+  22 |     C
+     |     ^
+[exit 1]

@@ -1,0 +1,165 @@
+Module stmts
+  Fn all
+    Param xs &mut List[i32]
+    Param n int
+    Ret !i32
+    Block
+      Let a
+        Int 1
+      Var b: i32
+        Int 2
+      Var c: i64
+      Assign =
+        Name b
+        Int 3
+      Assign +=
+        Name b
+        Int 1
+      Assign -=
+        Name b
+        Int 1
+      Assign *=
+        Name b
+        Int 2
+      Assign /=
+        Name b
+        Int 2
+      Assign %=
+        Name b
+        Int 3
+      Assign &=
+        Name b
+        Int 1
+      Assign |=
+        Name b
+        Int 2
+      Assign ^=
+        Name b
+        Int 3
+      Assign <<=
+        Name b
+        Int 1
+      Assign >>=
+        Name b
+        Int 1
+      Assign =
+        Name _
+        Call
+          Name f
+      Assign =
+        Index
+          Name xs
+          Int 0
+        Name b
+      If
+        Binary >
+          Name a
+          Int 0
+        Block
+          Assign =
+            Name b
+            Int 1
+        Else
+          If
+            Binary <
+              Name a
+              Int 0
+            Block
+              Assign =
+                Name b
+                Int 2
+            Else
+              Block
+                Assign =
+                  Name b
+                  Int 3
+      IfLet v
+        Call
+          Field .pop
+            Name xs
+        Block
+          Assign =
+            Name b
+            Name v
+      While
+        Binary >
+          Name b
+          Int 0
+        Block
+          Assign -=
+            Name b
+            Int 1
+          If
+            Binary ==
+              Name b
+              Int 5
+            Block
+              Break
+          Continue
+      For i in range
+        Int 0
+        Name n
+        Block
+          Assign +=
+            Name b
+            Name i
+      For _ in range
+        Int 0
+        Call
+          Name len
+          Name xs
+        Block
+      For x in &
+        Name xs
+        Block
+          Assign +=
+            Name b
+            Name x
+      For x in &mut
+        Name xs
+        Block
+          Assign =
+            Name x
+            Int 0
+      ParallelFor i in range
+        Int 0
+        Name n
+        Block
+          Assign =
+            Index
+              Name xs
+              Name i
+            Name i
+      Match
+        Name b
+        Arm 0
+          Return
+            Int 0
+        Arm 1 | 2
+          Block
+            Assign =
+              Name b
+              Int 7
+        Arm _
+          Fail
+            VariantLit .Bad
+      Defer
+        ExprStmt
+          Call
+            Field .clear
+              Name xs
+      Defer
+        Block
+          Assign =
+            Name b
+            Int 0
+      Block
+        Let inner
+          Int 1
+      ExprStmt
+        Try
+          Call
+            Name check
+            Name b
+      Return
+        Name b

@@ -10,7 +10,10 @@
 
 #include "support/diag.h"
 #include "support/json.h"
+#include "syntax/ast_dump.h"
 #include "syntax/lexer.h"
+#include "syntax/parser.h"
+#include "syntax/printer.h"
 
 namespace {
 
@@ -25,15 +28,16 @@ constexpr std::string_view kUsage =
     "  --version        print the compiler version\n"
     "\n"
     "debugging commands (output format is not stable):\n"
-    "  debug lex <file.dpm>   print the tokens of a file\n";
+    "  debug lex <file.dpm>     print the tokens of a file\n"
+    "  debug parse <file.dpm>   print the syntax tree of a file\n"
+    "  debug print <file.dpm>   print a file in canonical form\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
 
 int usage_error(std::string_view message) {
     put("error: ", stderr);
     put(message, stderr);
-    put("\n\n", stderr);
-    put(kUsage, stderr);
+    put("\nrun 'dplang help' to list the commands\n", stderr);
     return 2;
 }
 
@@ -108,10 +112,51 @@ int cmd_debug_lex(const std::vector<std::string_view>& args) {
     return finish(diags, sources);
 }
 
+// Имя модуля — имя файла без каталога и расширения.
+std::string module_name(std::string_view path) {
+    size_t slash = path.find_last_of('/');
+    std::string_view base = slash == std::string_view::npos ? path : path.substr(slash + 1);
+    size_t dot = base.rfind('.');
+    return std::string(dot == std::string_view::npos ? base : base.substr(0, dot));
+}
+
+// debug parse: дамп AST. Если ошибок нет — ещё и проверка круга: печать,
+// повторный разбор, тот же дамп, и печать печати не меняется.
+int cmd_debug_parse(const std::vector<std::string_view>& args, bool print) {
+    if (args.size() != 1) return usage_error("debug parse and debug print take one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    dp::FileId id;
+    if (!load(args[0], sources, diags, id)) return finish(diags, sources);
+    std::string name = module_name(args[0]);
+    auto m = dp::parse_module(sources.file(id), id, name, diags);
+    std::string dump = dp::dump_module(*m);
+    if (!diags.has_errors()) {
+        std::string printed = dp::print_module(*m, sources.file(id).text());
+        dp::Diagnostics again_diags;
+        dp::FileId id2 = sources.add("<printed>", printed);
+        auto again = dp::parse_module(sources.file(id2), id2, name, again_diags);
+        if (again_diags.has_errors()) {
+            return internal_error("printed module does not parse:\n" + dp::render_text(again_diags.list(), sources) +
+                                  printed);
+        }
+        if (dp::dump_module(*again) != dump) return internal_error("printed module parses differently:\n" + printed);
+        if (dp::print_module(*again, printed) != printed) return internal_error("printing is not idempotent");
+        if (print) {
+            put(printed);
+            return 0;
+        }
+    }
+    if (!print) put(dump);
+    return finish(diags, sources);
+}
+
 int cmd_debug(const std::vector<std::string_view>& args) {
     if (args.empty()) return usage_error("debug needs a subcommand");
     std::vector<std::string_view> rest(args.begin() + 1, args.end());
     if (args[0] == "lex") return cmd_debug_lex(rest);
+    if (args[0] == "parse") return cmd_debug_parse(rest, false);
+    if (args[0] == "print") return cmd_debug_parse(rest, true);
     return usage_error("unknown debug subcommand '" + std::string(args[0]) + "'");
 }
 

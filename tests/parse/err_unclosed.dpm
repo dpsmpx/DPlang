@@ -1,0 +1,4 @@
+// spec: syntax.block
+fn f() {
+    if a {
+        x = 1

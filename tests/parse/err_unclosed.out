@@ -1,0 +1,14 @@
+Module err_unclosed
+  Fn f
+    Block
+      If
+        Name a
+        Block
+          Assign =
+            Name x
+            Int 1
+--- stderr ---
+err_unclosed.dpm:5:1: error[E0201]: expected '}', found end of file
+   5 | 
+     | ^
+[exit 1]

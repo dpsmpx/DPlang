@@ -47,6 +47,8 @@ def args_file(path):
 SUITES = {
     'cli': ('.args', DPLANG, lambda name, path: args_file(path)),
     'lex': ('.dpm', DPLANG, lambda name, path: ['debug', 'lex', name]),
+    'parse': ('.dpm', DPLANG, lambda name, path: ['debug', 'parse', name]),
+    'print': ('.dpm', DPLANG, lambda name, path: ['debug', 'print', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
 

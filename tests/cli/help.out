@@ -6,4 +6,6 @@ commands:
   --version        print the compiler version
 
 debugging commands (output format is not stable):
-  debug lex <file.dpm>   print the tokens of a file
+  debug lex <file.dpm>     print the tokens of a file
+  debug parse <file.dpm>   print the syntax tree of a file
+  debug print <file.dpm>   print a file in canonical form
