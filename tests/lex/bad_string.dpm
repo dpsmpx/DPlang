@@ -1,0 +1,4 @@
+// spec: lex.str lex.escape
+let a = "unterminated
+let b = "bad \q escape" "\x80" "\u{D800}" "\u{110000}" "\u{}"
+let c = "tab	is ok"

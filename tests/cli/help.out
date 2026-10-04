@@ -1,6 +1,9 @@
 usage: dplang <command> [arguments]
 
 commands:
-  explain <code>   explain a diagnostic code, e.g. E0001
+  explain <code>   explain a diagnostic code, e.g. E0101
   help             show this help
   --version        print the compiler version
+
+debugging commands (output format is not stable):
+  debug lex <file.dpm>   print the tokens of a file

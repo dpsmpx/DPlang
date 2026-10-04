@@ -12,3 +12,40 @@
 DP_CODE(E0001, "cannot read source file",
         "The compiler could not open or read a source file named on the command line or found by an "
         "`import`. Check that the path exists and is readable.")
+
+// --- E01xx: лексика (docs/spec/core.md, раздел 1)
+
+DP_CODE(E0101, "invalid UTF-8",
+        "Source files must be valid UTF-8 (spec: lex.source). The marked bytes do not form a valid UTF-8 "
+        "sequence. Re-save the file as UTF-8.")
+DP_CODE(E0102, "unexpected character",
+        "This character cannot start a token (spec: lex.punct, lex.ident). Outside string literals and "
+        "comments only ASCII letters, digits, `_`, operators and punctuation are allowed. Control characters "
+        "inside string literals must be written as escapes such as `\\t` or `\\x01`.")
+DP_CODE(E0103, "unterminated string literal",
+        "A string literal must end with `\"` on the same line (spec: lex.str). Multi-line string literals do "
+        "not exist; use `\\n` for a line break.")
+DP_CODE(E0104, "invalid escape sequence",
+        "Valid escapes are `\\n`, `\\t`, `\\r`, `\\0`, `\\\\`, `\\\"`, `\\'`, `\\xHH` and `\\u{H...}` "
+        "(spec: lex.escape). In string literals `\\xHH` must be at most `\\x7f`, because the string must stay "
+        "valid UTF-8; use `\\u{...}` for other characters. `\\u{...}` takes 1 to 6 hex digits naming a "
+        "Unicode scalar value.")
+DP_CODE(E0105, "invalid byte literal",
+        "A byte literal is exactly one ASCII character or one escape between single quotes, for example "
+        "`'a'`, `'\\n'` or `'\\xff'` (spec: lex.byte). Its type is `u8`.")
+DP_CODE(E0106, "integer literal out of range",
+        "Integer literals must fit in 64 bits unsigned, at most 18446744073709551615 (spec: lex.int). The "
+        "type check later requires the value to fit the type the literal gets.")
+DP_CODE(E0107, "malformed number literal",
+        "Number literals are decimal (`42`, `1_000`), hexadecimal (`0xFF`), binary (`0b1010`), octal (`0o17`) "
+        "or floating point (`1.5`, `2e10`, `1.5e-3`) (spec: lex.int, lex.float). `_` may only stand between "
+        "two digits. A letter or digit not valid for the base must not follow the literal.")
+DP_CODE(E0108, "stray carriage return",
+        "A carriage return (U+000D) is only allowed directly before a line feed, as part of a CRLF line "
+        "ending (spec: lex.newline).")
+DP_CODE(E0109, "reserved word",
+        "This word is reserved for a future version of the language and cannot be used as a name "
+        "(spec: lex.keyword). Pick another name.")
+DP_CODE(E0110, "float literal out of range",
+        "The value of this floating point literal is too large to be represented as `f64` "
+        "(spec: lex.float).")

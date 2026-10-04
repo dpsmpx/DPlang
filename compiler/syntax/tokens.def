@@ -1,0 +1,116 @@
+// Виды токенов (docs/spec/core.md, раздел 1).
+//
+// DP_TOKEN(имя, описание) — токены без постоянного написания;
+// DP_KEYWORD(имя, написание) — ключевые слова;
+// DP_RESERVED(имя, написание) — зарезервированные слова (ещё не в языке);
+// DP_PUNCT(имя, написание) — операторы и знаки. Порядок знаков не важен:
+// лексер выбирает самый длинный подходящий.
+
+#ifndef DP_TOKEN
+#define DP_TOKEN(name, desc)
+#endif
+#ifndef DP_KEYWORD
+#define DP_KEYWORD(name, text)
+#endif
+#ifndef DP_RESERVED
+#define DP_RESERVED(name, text)
+#endif
+#ifndef DP_PUNCT
+#define DP_PUNCT(name, text)
+#endif
+
+DP_TOKEN(Eof, "end of file")
+DP_TOKEN(Newline, "newline")
+DP_TOKEN(Whitespace, "whitespace")
+DP_TOKEN(Comment, "comment")
+DP_TOKEN(Error, "invalid token")
+DP_TOKEN(Ident, "identifier")
+DP_TOKEN(Int, "integer literal")
+DP_TOKEN(Float, "float literal")
+DP_TOKEN(Str, "string literal")
+DP_TOKEN(Byte, "byte literal")
+
+DP_KEYWORD(KwFn, "fn")
+DP_KEYWORD(KwStruct, "struct")
+DP_KEYWORD(KwEnum, "enum")
+DP_KEYWORD(KwConst, "const")
+DP_KEYWORD(KwImport, "import")
+DP_KEYWORD(KwPub, "pub")
+DP_KEYWORD(KwLet, "let")
+DP_KEYWORD(KwVar, "var")
+DP_KEYWORD(KwIf, "if")
+DP_KEYWORD(KwElse, "else")
+DP_KEYWORD(KwWhile, "while")
+DP_KEYWORD(KwFor, "for")
+DP_KEYWORD(KwIn, "in")
+DP_KEYWORD(KwMatch, "match")
+DP_KEYWORD(KwReturn, "return")
+DP_KEYWORD(KwBreak, "break")
+DP_KEYWORD(KwContinue, "continue")
+DP_KEYWORD(KwDefer, "defer")
+DP_KEYWORD(KwFail, "fail")
+DP_KEYWORD(KwTry, "try")
+DP_KEYWORD(KwParallel, "parallel")
+DP_KEYWORD(KwNone, "none")
+DP_KEYWORD(KwTrue, "true")
+DP_KEYWORD(KwFalse, "false")
+DP_KEYWORD(KwMut, "mut")
+
+DP_RESERVED(KwUnsafe, "unsafe")
+DP_RESERVED(KwExtern, "extern")
+DP_RESERVED(KwErrdefer, "errdefer")
+
+DP_PUNCT(ShlEq, "<<=")
+DP_PUNCT(ShrEq, ">>=")
+DP_PUNCT(EqEq, "==")
+DP_PUNCT(NotEq, "!=")
+DP_PUNCT(LtEq, "<=")
+DP_PUNCT(GtEq, ">=")
+DP_PUNCT(AndAnd, "&&")
+DP_PUNCT(OrOr, "||")
+DP_PUNCT(Shl, "<<")
+DP_PUNCT(Shr, ">>")
+DP_PUNCT(PlusEq, "+=")
+DP_PUNCT(MinusEq, "-=")
+DP_PUNCT(StarEq, "*=")
+DP_PUNCT(SlashEq, "/=")
+DP_PUNCT(PercentEq, "%=")
+DP_PUNCT(AmpEq, "&=")
+DP_PUNCT(PipeEq, "|=")
+DP_PUNCT(CaretEq, "^=")
+DP_PUNCT(PlusWrap, "+%")
+DP_PUNCT(MinusWrap, "-%")
+DP_PUNCT(StarWrap, "*%")
+DP_PUNCT(FatArrow, "=>")
+DP_PUNCT(QQ, "??")
+DP_PUNCT(DotDot, "..")
+DP_PUNCT(Plus, "+")
+DP_PUNCT(Minus, "-")
+DP_PUNCT(Star, "*")
+DP_PUNCT(Slash, "/")
+DP_PUNCT(Percent, "%")
+DP_PUNCT(Amp, "&")
+DP_PUNCT(Pipe, "|")
+DP_PUNCT(Caret, "^")
+DP_PUNCT(Tilde, "~")
+DP_PUNCT(Bang, "!")
+DP_PUNCT(Lt, "<")
+DP_PUNCT(Gt, ">")
+DP_PUNCT(Eq, "=")
+DP_PUNCT(Dot, ".")
+DP_PUNCT(Comma, ",")
+DP_PUNCT(Colon, ":")
+DP_PUNCT(Semicolon, ";")
+DP_PUNCT(LParen, "(")
+DP_PUNCT(RParen, ")")
+DP_PUNCT(LBracket, "[")
+DP_PUNCT(RBracket, "]")
+DP_PUNCT(LBrace, "{")
+DP_PUNCT(RBrace, "}")
+DP_PUNCT(Question, "?")
+DP_PUNCT(At, "@")
+
+#undef DP_TOKEN
+#undef DP_KEYWORD
+#undef DP_RESERVED
+#undef DP_PUNCT

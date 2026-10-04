@@ -6,11 +6,14 @@
 #include <string>
 #include <string_view>
 
+#include "support/utf8.h"
+
 namespace dp {
 
 inline void json_string(std::string& out, std::string_view s) {
     out += '"';
-    for (unsigned char c : s) {
+    std::string clean = sanitize_utf8(s);
+    for (unsigned char c : clean) {
         switch (c) {
             case '"': out += "\\\""; break;
             case '\\': out += "\\\\"; break;

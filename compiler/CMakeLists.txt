@@ -19,8 +19,14 @@ endif()
 add_library(dpcore STATIC
     support/source.cpp
     support/diag.cpp
+    syntax/lexer.cpp
+    syntax/literal.cpp
 )
 target_include_directories(dpcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(dplang driver/main.cpp)
 target_link_libraries(dplang PRIVATE dpcore)
+
+# Фаззер «не падает»: tests/fuzz (docs/compiler/README.md).
+add_executable(dpfuzz fuzz/main.cpp)
+target_link_libraries(dpfuzz PRIVATE dpcore)

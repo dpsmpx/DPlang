@@ -1,0 +1,42 @@
+1:1 Comment "// spec: lex.str lex.escape"
+1:28 Newline "\n"
+2:1 KwLet "let"
+2:5 Ident "a"
+2:7 Eq "="
+2:9 Error "\"unterminated"
+2:22 Newline "\n"
+3:1 KwLet "let"
+3:5 Ident "b"
+3:7 Eq "="
+3:9 Error "\"bad \\q escape\""
+3:25 Error "\"\\x80\""
+3:32 Error "\"\\u{D800}\""
+3:43 Error "\"\\u{110000}\""
+3:56 Error "\"\\u{}\""
+3:62 Newline "\n"
+4:1 KwLet "let"
+4:5 Ident "c"
+4:7 Eq "="
+4:9 Str "\"tab\tis ok\""
+4:20 Newline "\n"
+5:1 Eof ""
+--- stderr ---
+bad_string.dpm:2:9: error[E0103]: unterminated string literal
+   2 | let a = "unterminated
+     |         ^~~~~~~~~~~~~
+bad_string.dpm:3:14: error[E0104]: invalid escape sequence
+   3 | let b = "bad \q escape" "\x80" "\u{D800}" "\u{110000}" "\u{}"
+     |              ^~
+bad_string.dpm:3:26: error[E0104]: \x escape above \x7f in a string literal
+   3 | let b = "bad \q escape" "\x80" "\u{D800}" "\u{110000}" "\u{}"
+     |                          ^~~~
+bad_string.dpm:3:33: error[E0104]: invalid escape sequence
+   3 | let b = "bad \q escape" "\x80" "\u{D800}" "\u{110000}" "\u{}"
+     |                                 ^~~~~~~~
+bad_string.dpm:3:44: error[E0104]: invalid escape sequence
+   3 | let b = "bad \q escape" "\x80" "\u{D800}" "\u{110000}" "\u{}"
+     |                                            ^~~~~~~~~~
+bad_string.dpm:3:57: error[E0104]: invalid escape sequence
+   3 | let b = "bad \q escape" "\x80" "\u{D800}" "\u{110000}" "\u{}"
+     |                                                         ^~~~
+[exit 1]

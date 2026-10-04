@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "support/json.h"
+#include "support/utf8.h"
 
 namespace dp {
 
@@ -36,7 +37,12 @@ void render_snippet(std::string& out, const SourceFile& f, Span span) {
     std::string_view line = f.line_text(a.line);
     std::string num = std::to_string(a.line);
     out += std::string(num.size() < 4 ? 4 - num.size() : 0, ' ') + num + " | ";
-    out += line;
+    // Управляющие символы (кроме табуляции) в строке — U+FFFD: один символ
+    // на место одного, столбцы не сдвигаются.
+    for (char c : sanitize_utf8(line)) {
+        if (static_cast<unsigned char>(c) < 0x20 && c != '\t') out += "\xEF\xBF\xBD";
+        else out += c;
+    }
     out += '\n';
     out += "     | ";
     // Отступ до столбца: табуляции сохраняются, чтобы метка встала под текст.
@@ -125,11 +131,11 @@ std::string render_text(const std::vector<Diagnostic>& diags, const SourceMap& s
     std::string out;
     for (const Diagnostic& d : sorted(diags)) {
         if (d.has_span) render_place(out, sources, d.span);
-        out += std::string(severity_name(d.severity)) + "[" + std::string(code_name(d.code)) + "]: " + d.message + '\n';
+        out += std::string(severity_name(d.severity)) + "[" + std::string(code_name(d.code)) + "]: " + sanitize_utf8(d.message) + '\n';
         if (d.has_span) render_snippet(out, sources.file(d.span.file), d.span);
         for (const Note& n : d.notes) {
             if (n.has_span) render_place(out, sources, n.span);
-            out += "note: " + n.message + '\n';
+            out += "note: " + sanitize_utf8(n.message) + '\n';
             if (n.has_span) render_snippet(out, sources.file(n.span.file), n.span);
         }
     }

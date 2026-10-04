@@ -23,11 +23,13 @@ cmake --build build/compiler     # → build/compiler/dplang
 
 | каталог | что |
 |---|---|
-| `compiler/support/` | исходники и позиции (`source.h`), диагностика (`diag.h`), реестр кодов (`codes.def`), запись JSON |
+| `compiler/support/` | исходники и позиции (`source.h`), диагностика (`diag.h`), реестр кодов (`codes.def`), UTF-8 и запись JSON |
+| `compiler/syntax/` | токены (`tokens.def`), лексер (`lexer.h`), значения литералов (`literal.h`) |
 | `compiler/driver/` | CLI `dplang` (`main.cpp`) |
+| `compiler/fuzz/` | фаззер «не падает» `dpfuzz` |
 | `tests/` | наборы золотых тестов и их исполнитель `tests/run.py` |
 
-С шагами v0.1 появятся `compiler/syntax/`, `compiler/sema/`,
+С шагами v0.1 появятся `compiler/sema/`,
 `compiler/ir/`, `compiler/backend_c/`, `runtime/`, `stdlib/`
 (`docs/design/ARCHITECTURE.md`, раздел 10).
 
@@ -42,6 +44,16 @@ cmake --build build/compiler     # → build/compiler/dplang
 - Изменяемого глобального состояния нет. Каждый проход — функция с явными
   входами и выходами (Р43).
 - Комментарии — по-русски; имена и тексты сообщений — по-английски (Р47).
+
+## Лексер
+
+- Токены покрывают файл без пропусков: пробелы, комментарии и переводы
+  строк — тоже токены. На этом стоит дерево разбора без потерь (шаг 3).
+- Ошибка лексики не останавливает разбор: неверный участок становится
+  токеном `Error`, сообщение получает код E01xx.
+- Значения литералов вычисляет `syntax/literal.h`; лексер проверяет
+  литералы теми же функциями.
+- Правила — `docs/spec/core.md`, раздел 1.
 
 ## Диагностика
 
@@ -77,6 +89,8 @@ python3 tests/run.py -k cli       # отбор по подстроке пути
 | набор | вход | команда |
 |---|---|---|
 | `cli` | `X.args` — аргументы | `dplang <аргументы>` |
+| `lex` | `X.dpm` | `dplang debug lex X.dpm` — токены без пробелов |
+| `fuzz` | `X.args` — аргументы | `dpfuzz <аргументы>`: корпус — файлы `.dpm` наборов, зерно и число входов заданы |
 
 Наборы добавляются вместе с шагами (`docs/policy/TESTING.md`, раздел 4);
 их список — `SUITES` в `tests/run.py`.

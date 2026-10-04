@@ -1,0 +1,31 @@
+1:1 Comment "// spec: lex.byte"
+1:18 Newline "\n"
+2:1 Error "''"
+2:4 Error "'ab'"
+2:9 Error "'я'"
+2:13 Error "'\\u{41}'"
+2:22 Error "'x"
+2:24 Newline "\n"
+3:1 KwLet "let"
+3:5 Ident "ok"
+3:8 Eq "="
+3:10 Byte "'x'"
+3:13 Newline "\n"
+4:1 Eof ""
+--- stderr ---
+bad_byte.dpm:2:1: error[E0105]: invalid byte literal
+   2 | '' 'ab' 'я' '\u{41}' 'x
+     | ^~
+bad_byte.dpm:2:4: error[E0105]: invalid byte literal
+   2 | '' 'ab' 'я' '\u{41}' 'x
+     |    ^~~~
+bad_byte.dpm:2:9: error[E0105]: invalid byte literal
+   2 | '' 'ab' 'я' '\u{41}' 'x
+     |         ^~~
+bad_byte.dpm:2:13: error[E0105]: invalid byte literal
+   2 | '' 'ab' 'я' '\u{41}' 'x
+     |             ^~~~~~~~
+bad_byte.dpm:2:22: error[E0105]: invalid byte literal
+   2 | '' 'ab' 'я' '\u{41}' 'x
+     |                      ^~
+[exit 1]

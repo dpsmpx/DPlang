@@ -33,6 +33,7 @@ TESTS = os.path.join(ROOT, 'tests')
 SRC = os.path.join(ROOT, 'compiler')
 BUILD = os.path.join(ROOT, 'build', 'compiler')
 DPLANG = os.path.join(BUILD, 'dplang')
+DPFUZZ = os.path.join(BUILD, 'dpfuzz')
 TIMEOUT = 60
 
 
@@ -42,9 +43,11 @@ def args_file(path):
         return shlex.split(f.read())
 
 
-# Набор → (расширение входа, построитель аргументов dplang по имени входа).
+# Набор → (расширение входа, программа, построитель аргументов по имени входа).
 SUITES = {
-    'cli': ('.args', lambda name, path: args_file(path)),
+    'cli': ('.args', DPLANG, lambda name, path: args_file(path)),
+    'lex': ('.dpm', DPLANG, lambda name, path: ['debug', 'lex', name]),
+    'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
 
 
@@ -67,7 +70,7 @@ def build():
 
 def discover(pattern):
     tests = []
-    for suite, (ext, _) in SUITES.items():
+    for suite, (ext, _, _) in SUITES.items():
         d = os.path.join(TESTS, suite)
         if not os.path.isdir(d):
             continue
@@ -81,11 +84,12 @@ def discover(pattern):
 
 
 def actual_output(suite, path):
-    ext, make_args = SUITES[suite]
+    ext, program, make_args = SUITES[suite]
     name = os.path.basename(path)
-    argv = [DPLANG] + make_args(name, path)
+    argv = [program] + make_args(name, path)
     try:
-        r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT, cwd=os.path.dirname(path))
+        r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
+                           cwd=os.path.dirname(path))
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout
