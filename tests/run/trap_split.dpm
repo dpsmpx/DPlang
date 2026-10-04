@@ -1,0 +1,6 @@
+// spec: builtin.methods trap.builtin
+fn main() {
+    println(str(len("a b".split(" "))))
+    let parts = "abc".split("")
+    println(str(len(parts)))
+}

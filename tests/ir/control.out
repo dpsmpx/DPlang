@@ -1,0 +1,99 @@
+fn control.find(%0 xs: []i32, %1 want: i32) ?i64
+  tmp %2: ?i64
+  var %3 i: i64
+  tmp %4: i64
+  tmp %5: i64
+  tmp %6: bool
+  tmp %7: i64
+  tmp %8: bool
+  tmp %9: ?i64
+  tmp %10: ?i64
+bb0:
+  %3 = 0:i64  @5:14
+  %5 = len(copy %0)  @5:17
+  %4 = copy %5  @5:17
+  jump bb1  @5:5
+bb1:
+  %6 = lt copy %3, copy %4  @5:9
+  branch copy %6, bb2, bb4  @5:9
+bb2:
+  %7 = copy %3  @6:15
+  %8 = eq copy %0[%7], copy %1  @6:18
+  branch copy %8, bb5, bb6  @6:12
+bb3:
+  %3 = add.wrap copy %3, 1:i64  @5:9
+  jump bb1  @5:5
+bb4:
+  %10 = none ?i64  @10:12
+  %2 = move %10  @10:5
+  return move %2  @10:5
+bb5:
+  %9 = some copy %3  @7:20
+  %2 = move %9  @7:13
+  return move %2  @7:13
+bb6:
+  jump bb7  @6:9
+bb7:
+  jump bb3  @5:5
+
+fn control.total(%0 names: &List[str]) i64
+  tmp %1: i64
+  var %2 n: i64
+  tmp %3: i64
+  tmp %4: i64
+  tmp %5: bool
+  tmp %6: i64
+  tmp %7: bool
+  tmp %8: bool
+  tmp %9: i64
+bb0:
+  %2 = 0:i64  @14:5
+  %3 = 0:i64  @15:9
+  jump bb1  @15:5
+bb1:
+  %4 = len(copy %0)  @15:15
+  %5 = lt copy %3, copy %4  @15:9
+  branch copy %5, bb2, bb4  @15:9
+bb2:
+  %6 = len(copy %0[%3])  @17:12
+  %7 = eq copy %6, 0:i64  @17:19
+  branch copy %7, bb5, bb6  @17:12
+bb3:
+  %3 = add.wrap copy %3, 1:i64  @15:9
+  jump bb1  @15:5
+bb4:
+  %1 = copy %2  @25:5
+  return move %1  @25:5
+bb5:
+  eval println("seen")  @16:15
+  jump bb3  @18:13
+bb6:
+  jump bb7  @17:9
+bb7:
+  %8 = eq copy %0[%3], "stop"  @20:14
+  branch copy %8, bb8, bb9  @20:12
+bb8:
+  eval println("seen")  @16:15
+  jump bb4  @21:13
+bb9:
+  jump bb10  @20:9
+bb10:
+  %9 = len(copy %0[%3])  @23:14
+  %2 = add copy %2, copy %9  @23:9
+  eval println("seen")  @16:15
+  jump bb3  @15:5
+
+fn control.main()
+  var %0 k: i64
+  tmp %1: bool
+bb0:
+  %0 = 3:i64  @29:5
+  jump bb1  @30:5
+bb1:
+  %1 = gt copy %0, 0:i64  @30:13
+  branch copy %1, bb2, bb3  @30:11
+bb2:
+  %0 = sub copy %0, 1:i64  @31:9
+  jump bb1  @30:5
+bb3:
+  return  @33:1

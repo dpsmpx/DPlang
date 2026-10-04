@@ -1,0 +1,20 @@
+after push/insert [9, 5, 3, 8, 1, 7]
+removed 3
+after remove [9, 5, 8, 1, 7]
+popped 7
+pop of empty is none: true
+slice 1..3 [5, 8]
+slice ..2 [9, 5]
+slice 2.. [8, 1]
+slice of slice [8, 1]
+empty slice []
+sum = 23, contains 8: true, contains 4: false
+copy grew [9, 5, 8, 1, 100]
+original kept [9, 5, 8, 1]
+sorted [1, 5, 8, 9]
+bumped [10, 50, 80, 90]
+cleared len = 0
+grid = 100 005
+names sorted = aabc, contains c: true
+list compare: true true true true
+nested = xy zy

@@ -1,0 +1,4 @@
+5
+--- stderr ---
+trap_slice.dpm:14:21: trap: slice 2..1 is out of bounds for length 3
+[exit 101]

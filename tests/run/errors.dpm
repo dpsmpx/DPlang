@@ -1,0 +1,91 @@
+// spec: error.sig error.infer error.flow error.handle stmt.return stmt.match pattern.types
+enum ParseError {
+    Empty
+    BadDigit(u8)
+    TooBig
+}
+
+enum AppError {
+    Empty
+    Negative
+}
+
+fn digit(b: u8) ParseError!i64 {
+    if !is_digit(b) {
+        fail .BadDigit(b)
+    }
+    return i64(b - '0')
+}
+
+fn parse(s: str) !i64 {
+    if len(s) == 0 {
+        fail ParseError.Empty
+    }
+    var v: i64 = 0
+    for b in &s {
+        let d = try digit(b)
+        if v > 100000 {
+            fail .TooBig
+        }
+        v = v * 10 + d
+    }
+    return v
+}
+
+fn sum_pair(a: str, b: str) ParseError!i64 {
+    return try parse(a) + try parse(b)
+}
+
+fn check_positive(v: i64) AppError!void {
+    if v < 0 {
+        fail .Negative
+    }
+}
+
+fn first_word(s: str) AppError!str {
+    let parts = s.split(" ")
+    if len(parts[0]) == 0 {
+        fail .Empty
+    }
+    return parts[0]
+}
+
+fn show(name: str, r: ParseError!i64) {
+    match r {
+        ok(v) => println(name + ": ok " + str(v))
+        err(.BadDigit(b)) => println(name + ": bad digit " + str(b))
+        err(e) => {
+            if e == .TooBig {
+                println(name + ": too big")
+            } else {
+                println(name + ": empty")
+            }
+        }
+    }
+}
+
+fn main() {
+    show("123", parse("123"))
+    show("12a", parse("12a"))
+    show("empty", parse(""))
+    show("huge", parse("99999999"))
+    show("pair", sum_pair("20", "22"))
+    show("pair bad", sum_pair("20", "x"))
+    match check_positive(5) {
+        ok(_) => println("5 is positive")
+        err(_) => println("5 is not positive")
+    }
+    match check_positive(-5) {
+        ok(_) => println("-5 is positive")
+        err(e) => println("-5: negative = " + str(e == .Negative))
+    }
+    _ = check_positive(-1)
+    match first_word("hello world") {
+        ok(w) => println("first word: " + w)
+        err(_) => println("no word")
+    }
+    match first_word(" lead") {
+        ok(w) => println("first word: " + w)
+        err(e) => println("no word: empty = " + str(e == AppError.Empty))
+    }
+}

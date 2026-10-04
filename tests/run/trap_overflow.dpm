@@ -1,0 +1,9 @@
+// spec: trap.def trap.int
+fn main() {
+    var x: i32 = 2147483600
+    println("before")
+    for i in 0..10 {
+        x += 10
+        println(str(x))
+    }
+}

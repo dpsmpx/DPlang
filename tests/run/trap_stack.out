@@ -1,0 +1,4 @@
+start
+--- stderr ---
+trap_stack.dpm:3:12: trap: stack overflow: calls are nested too deeply
+[exit 101]

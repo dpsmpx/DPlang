@@ -1,0 +1,5 @@
+--- stderr ---
+main_params.dpm:2:4: error[E0322]: 'main' must take no parameters and return nothing or 'E!void'
+   2 | fn main(n: i32) i32 {
+     |    ^~~~
+[exit 1]

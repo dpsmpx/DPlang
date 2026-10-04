@@ -1,0 +1,6 @@
+// spec: trap.index
+fn main() {
+    let s = "мир"
+    println(s[0..2])
+    println(s[0..3])
+}

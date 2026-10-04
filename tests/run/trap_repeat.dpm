@@ -1,0 +1,6 @@
+// spec: builtin.functions trap.builtin
+fn main() {
+    let n = 0 - 2
+    let xs = repeat("x", n)
+    println(str(len(xs)))
+}

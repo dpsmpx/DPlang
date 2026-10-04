@@ -1,0 +1,5 @@
+250
+255
+--- stderr ---
+trap_convert.dpm:5:21: trap: value 260 does not fit 'u8'
+[exit 101]

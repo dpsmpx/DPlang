@@ -1,4 +1,4 @@
-// Целые, плавающие, преобразования, запись чисел (expr.ops, expr.convert).
+// spec: expr.ops expr.convert expr.compare builtin.functions trap.int trap.float trap.convert
 fn show(name: str, v: i64) {
     println(name + " = " + str(v))
 }

@@ -1,0 +1,3 @@
+--- stderr ---
+trap_compound.dpm:4:5: trap: integer overflow in '*' on 'u8'
+[exit 101]

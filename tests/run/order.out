@@ -1,0 +1,27 @@
+  eval first -> 1
+  eval second -> 2
+args: 1,2
+  eval right operand -> 1
+place read before the call: 1
+  eval compound -> 11
+compound: 21
+  eval left
+and: false
+  eval left
+or: true
+  eval left
+  eval right
+and both: false
+coalesce some: 5
+  eval fallback -> 1
+coalesce none: 1
+  eval field y -> 2
+  eval field x -> 3
+struct: x = 3, y = 2
+  eval item 0 -> 4
+  eval item 1 -> 5
+list: 4 5
+index before pop: 8
+  eval index -> 0
+  eval value -> 1
+zs = 1 20 30

@@ -1,0 +1,30 @@
+// spec: type.recursive
+struct Node {
+    value: i32
+    next: ?Node
+}
+
+struct A {
+    b: B
+}
+
+struct B {
+    a: A
+}
+
+enum Expr {
+    Num(i64)
+    Neg(Expr)
+    Add { left: Expr, right: Expr }
+}
+
+struct Tree {
+    value: i32
+    children: List[Tree]
+}
+
+enum Json {
+    Null
+    Items(List[Json])
+    Wrapped(?Tree)
+}

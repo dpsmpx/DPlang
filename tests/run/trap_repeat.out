@@ -1,0 +1,3 @@
+--- stderr ---
+trap_repeat.dpm:4:14: trap: repeat count -2 is negative
+[exit 101]

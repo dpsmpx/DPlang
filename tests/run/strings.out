@@ -1,0 +1,33 @@
+héllo, мир / len = 14
+s[0] = 104, s[1] = 195
+s[0..6] = héllo, s[8..] = мир, s[..1] = h
+t = abcabc, len = 6
+trim = [a b], empty trim = []
+find lo = 3
+find мир = 8
+find x = none
+find empty = 0
+starts_with: true false false true
+split: 5 parts
+  [a]
+  [b]
+  []
+  [c]
+  []
+split no sep: 1 [abc]
+parse 42 = 42
+parse -17 = -17
+parse +5 = 5
+parse min = -9223372036854775808
+parse max+1 = none
+parse empty = none
+parse sign = none
+parse space = none
+parse 1x = none
+digits = 6
+classes: true false true false
+compare: true true true true true
+escapes: [tab	here] 4 2
+no newline, then newline
+--- stderr ---
+to stderr

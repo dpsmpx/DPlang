@@ -1,0 +1,6 @@
+// spec: trap.index
+fn main() {
+    let s = "abc"
+    let i = 0 - 1
+    println(str(s[i]))
+}

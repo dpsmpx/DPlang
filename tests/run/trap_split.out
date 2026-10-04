@@ -1,0 +1,4 @@
+2
+--- stderr ---
+trap_split.dpm:4:17: trap: split separator is empty
+[exit 101]

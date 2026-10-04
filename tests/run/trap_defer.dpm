@@ -1,0 +1,12 @@
+// spec: trap.def stmt.defer
+fn inner() {
+    defer println("inner defer is not run")
+    let xs: List[i32] = []
+    println(str(xs[0]))
+}
+
+fn main() {
+    defer println("main defer is not run")
+    println("calling")
+    inner()
+}

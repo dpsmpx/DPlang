@@ -1,0 +1,9 @@
+// spec: trap.memory
+fn depth(n: i64) i64 {
+    return depth(n + 1) + 1
+}
+
+fn main() {
+    println("start")
+    println(str(depth(0)))
+}

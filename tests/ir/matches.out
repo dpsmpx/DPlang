@@ -1,0 +1,118 @@
+fn matches.size(%0 s: Shape) i32
+  tmp %1: i32
+  tmp %2: u32
+  tmp %3: bool
+  tmp %4: u32
+  tmp %5: bool
+  tmp %6: bool
+  tmp %7: u32
+  tmp %8: bool
+  var %9 r: i32
+  tmp %10: u32
+  tmp %11: bool
+  tmp %12: bool
+  var %13 size: i32
+  tmp %14: i32
+  tmp %15: u32
+  tmp %16: bool
+  var %17 size: i32
+bb0:
+  %2 = tag %0  @12:9
+  %3 = eq copy %2, 0:u32  @12:9
+  branch copy %3, bb4, bb3  @12:9
+bb1:
+  %7 = tag %0  @13:9
+  %8 = eq copy %7, 1:u32  @13:9
+  branch copy %8, bb9, bb8  @13:9
+bb2:
+  %1 = 0:i32  @12:30
+  drop %0  @12:30
+  return move %1  @12:30
+bb3:
+  %4 = tag %0  @12:16
+  %5 = eq copy %4, 1:u32  @12:16
+  branch copy %5, bb6, bb5  @12:16
+bb4:
+  jump bb2  @12:9
+bb5:
+  jump bb1  @12:9
+bb6:
+  %6 = eq copy %0.Circle.0, 0:i32  @12:24
+  branch copy %6, bb7, bb5  @12:24
+bb7:
+  jump bb2  @12:16
+bb8:
+  %10 = tag %0  @14:9
+  %11 = eq copy %10, 2:u32  @14:9
+  branch copy %11, bb11, bb10  @14:9
+bb9:
+  %9 = copy %0.Circle.0  @13:17
+  %1 = copy %9  @13:23
+  drop %0  @13:23
+  return move %1  @13:23
+bb10:
+  %15 = tag %0  @15:9
+  %16 = eq copy %15, 2:u32  @15:9
+  branch copy %16, bb14, bb13  @15:9
+bb11:
+  %12 = eq copy %0.Named.name, "big"  @14:24
+  branch copy %12, bb12, bb10  @14:24
+bb12:
+  %13 = copy %0.Named.size  @14:31
+  %14 = mul copy %13, 10:i32  @14:53
+  %1 = move %14  @14:41
+  drop %0  @14:41
+  return move %1  @14:41
+bb13:
+  unreachable  @11:5
+bb14:
+  %17 = copy %0.Named.size  @15:18
+  %1 = copy %17  @15:28
+  drop %0  @15:28
+  return move %1  @15:28
+
+fn matches.label(%0 v: ?str) str
+  tmp %1: str
+  tmp %2: bool
+  var %3 s: str
+  tmp %4: bool
+bb0:
+  %2 = is_some %0  @21:9
+  branch copy %2, bb2, bb1  @21:9
+bb1:
+  %4 = is_some %0  @22:9
+  branch copy %4, bb3, bb4  @22:9
+bb2:
+  %3 = copy %0.some  @21:14
+  %1 = copy %3  @21:20
+  drop %3  @21:20
+  drop %0  @21:20
+  return move %1  @21:20
+bb3:
+  unreachable  @20:5
+bb4:
+  %1 = "-"  @22:17
+  drop %0  @22:17
+  return move %1  @22:17
+
+fn matches.main()
+  tmp %0: Shape
+  tmp %1: i32
+  tmp %2: str
+  tmp %3: ?str
+  tmp %4: str
+  tmp %5: str
+bb0:
+  %0 = Shape.Circle(2:i32)  @27:22
+  %1 = call matches.size(move %0)  @27:17
+  %2 = str copy %1 to str  @27:13
+  %3 = none ?str  @27:43
+  %4 = call matches.label(move %3)  @27:37
+  %5 = concat copy %2, copy %4  @27:35
+  eval println(copy %5)  @27:5
+  drop %5  @27:5
+  drop %4  @27:5
+  drop %3  @27:5
+  drop %2  @27:5
+  drop %0  @27:5
+  return  @28:1

@@ -1,0 +1,8 @@
+// spec: trap.convert expr.convert
+fn main() {
+    var v: i32 = 250
+    while true {
+        println(str(u8(v)))
+        v += 5
+    }
+}

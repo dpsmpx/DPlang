@@ -1,0 +1,4 @@
+2147483647
+--- stderr ---
+trap_abs_min.dpm:5:17: trap: integer overflow in 'abs' on 'i32'
+[exit 101]

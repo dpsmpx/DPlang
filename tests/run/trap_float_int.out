@@ -1,0 +1,4 @@
+-9200000000000000000
+--- stderr ---
+trap_float_int.dpm:4:17: trap: value 3e+09 does not fit 'i32'
+[exit 101]

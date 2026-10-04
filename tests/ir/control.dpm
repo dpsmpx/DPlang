@@ -1,0 +1,33 @@
+// spec: stmt.if stmt.loop stmt.for stmt.defer
+// Ветвления и циклы: for по диапазону и по индексу с проверкой длины на
+// каждом шаге; defer и drop на выходах break, continue и return.
+fn find(xs: []i32, want: i32) ?int {
+    for i in 0..len(xs) {
+        if xs[i] == want {
+            return i
+        }
+    }
+    return none
+}
+
+fn total(names: &List[str]) int {
+    var n = 0
+    for s in &names {
+        defer println("seen")
+        if len(s) == 0 {
+            continue
+        }
+        if s == "stop" {
+            break
+        }
+        n += len(s)
+    }
+    return n
+}
+
+fn main() {
+    var k = 3
+    while k > 0 {
+        k -= 1
+    }
+}

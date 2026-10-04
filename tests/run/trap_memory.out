@@ -1,0 +1,3 @@
+--- stderr ---
+trap_memory.dpm:3:14: trap: out of memory
+[exit 101]

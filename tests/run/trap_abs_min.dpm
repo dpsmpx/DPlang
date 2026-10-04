@@ -1,0 +1,6 @@
+// spec: trap.int builtin.functions
+fn main() {
+    let n: i32 = -2147483647 - 1
+    println(str(abs(n + 1)))
+    println(str(abs(n)))
+}

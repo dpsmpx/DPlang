@@ -1,0 +1,5 @@
+origin(0,0), limit 30, origin
+walked to origin+++(6,6)
+walk failed: out of range = true
+total cost = 154
+custom(5,6) == origin: false

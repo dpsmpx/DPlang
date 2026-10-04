@@ -1,0 +1,14 @@
+// spec: memory.values stmt.return
+// Память значений: копия места, move временного, drop в конце инструкции
+// и блока, параметр-значение освобождается при возврате.
+fn greet(name: str) str {
+    let s = "hi " + name
+    return s
+}
+
+fn main() {
+    var xs: List[str] = ["a"]
+    xs.push(greet("b"))
+    let first = xs[0]
+    println(first + "!")
+}

@@ -1,0 +1,6 @@
+1
+2
+3
+--- stderr ---
+trap_index.dpm:6:17: trap: index 3 is out of bounds for length 3
+[exit 101]

@@ -1,0 +1,23 @@
+// spec: expr.call expr.order ref.marks ref.slices type.conv
+// Аргументы по значению, &, &mut; срез из List на месте передачи;
+// место левее вызова с действием читается заранее (слева направо).
+fn bump(n: &mut i32) i32 {
+    n += 1
+    return n
+}
+
+fn sum(xs: []i32, base: i64) i64 {
+    var t = base
+    for x in &xs {
+        t += x
+    }
+    return t
+}
+
+fn main() {
+    var c: i32 = 1
+    let r = c + bump(&mut c)
+    var xs: List[i32] = [r]
+    xs.push(c)
+    println(str(sum(xs[1..], c)))
+}

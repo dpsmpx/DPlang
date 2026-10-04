@@ -1,0 +1,58 @@
+// spec: type.names expr.ops expr.compare ref.slices stmt.for builtin.functions builtin.methods trap.index
+fn show_opt(name: str, v: ?int) {
+    if let x = v {
+        println(name + " = " + str(x))
+    } else {
+        println(name + " = none")
+    }
+}
+
+fn count_digits(s: str) int {
+    var n = 0
+    for b in &s {
+        if is_digit(b) {
+            n += 1
+        }
+    }
+    return n
+}
+
+fn main() {
+    let s = "héllo, мир"
+    println(s + " / len = " + str(len(s)))
+    println("s[0] = " + str(s[0]) + ", s[1] = " + str(s[1]))
+    println("s[0..6] = " + s[0..6] + ", s[8..] = " + s[8..] + ", s[..1] = " + s[..1])
+    var t = "ab"
+    t += "c"
+    t = t + t
+    println("t = " + t + ", len = " + str(len(t)))
+    println("trim = [" + "  \t a b \n".trim() + "], empty trim = [" + "   ".trim() + "]")
+    show_opt("find lo", s.find("llo"))
+    show_opt("find мир", s.find("мир"))
+    show_opt("find x", s.find("x"))
+    show_opt("find empty", s.find(""))
+    println("starts_with: " + str(s.starts_with("hé")) + " " + str(s.starts_with("hello")) + " " + str("a".starts_with("ab")) + " " + str("a".starts_with("")))
+    let parts = "a,b,,c,".split(",")
+    println("split: " + str(len(parts)) + " parts")
+    for p in &parts {
+        println("  [" + p + "]")
+    }
+    let one = "abc".split("::")
+    println("split no sep: " + str(len(one)) + " [" + one[0] + "]")
+    show_opt("parse 42", parse_int("42"))
+    show_opt("parse -17", parse_int("-17"))
+    show_opt("parse +5", parse_int("+5"))
+    show_opt("parse min", parse_int("-9223372036854775808"))
+    show_opt("parse max+1", parse_int("9223372036854775808"))
+    show_opt("parse empty", parse_int(""))
+    show_opt("parse sign", parse_int("-"))
+    show_opt("parse space", parse_int(" 1"))
+    show_opt("parse 1x", parse_int("1x"))
+    println("digits = " + str(count_digits("a1b22c333")))
+    println("classes: " + str(is_alpha('Z')) + " " + str(is_alnum('_')) + " " + str(is_space('\t')) + " " + str(is_digit('/')))
+    println("compare: " + str("abc" < "abd") + " " + str("ab" < "abc") + " " + str("b" > "abc") + " " + str("é" > "z") + " " + str("x" == "x"))
+    println("escapes: [" + "tab\there" + "] " + str(len("\u{1F600}")) + " " + str(len("\x41\0")))
+    print("no newline, ")
+    print("then newline\n")
+    eprintln("to stderr")
+}

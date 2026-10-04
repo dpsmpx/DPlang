@@ -1,0 +1,7 @@
+1
+256
+65536
+16777216
+--- stderr ---
+trap_shift.dpm:6:23: trap: shift count 32 is out of range for 'u32'
+[exit 101]

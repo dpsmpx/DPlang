@@ -1,0 +1,4 @@
+a
+--- stderr ---
+trap_remove.dpm:5:13: trap: index 0 is out of bounds for length 0
+[exit 101]

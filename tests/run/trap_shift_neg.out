@@ -1,0 +1,3 @@
+--- stderr ---
+trap_shift_neg.dpm:5:19: trap: shift count -1 is out of range for 'i64'
+[exit 101]

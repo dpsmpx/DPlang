@@ -26,12 +26,12 @@ cmake --build build/compiler     # → build/compiler/dplang
 | `compiler/support/` | исходники и позиции (`source.h`), диагностика (`diag.h`), реестр кодов (`codes.def`), UTF-8 и запись JSON |
 | `compiler/syntax/` | токены (`tokens.def`), лексер (`lexer.h`), значения литералов (`literal.h`), AST (`ast.h`), парсер (`parser.h`), каноническая печать (`printer.h`), дамп AST (`ast_dump.h`) |
 | `compiler/sema/` | проверка программы (`sema.h`): загрузка модулей (`loader.cpp`), объявления и сводки (`collect.cpp`, `summary.cpp`), разрешение типов в записи (`resolve.h`), вывод типа ошибки `!T` (`errinfer.cpp`), тела (`checker.h`: `check.cpp` — инструкции и поток, `check_expr.cpp` — выражения и константы, `check_pat.cpp` — образцы и полнота `match`); типы (`types.h`), объявления (`defs.h`), встроенное (`builtins.h`) |
+| `compiler/ir/` | Core IR (`ir.h`), понижение AST → IR (`lower.h`), верификатор (`verify.h`), эталонный интерпретатор (`interp.h`), текстовая запись (`dump.h`); устройство — `docs/ir/README.md` |
 | `compiler/driver/` | CLI `dplang` (`main.cpp`) |
 | `compiler/fuzz/` | фаззер «не падает» `dpfuzz` |
 | `tests/` | наборы золотых тестов и их исполнитель `tests/run.py` |
 
-С шагами v0.1 появятся
-`compiler/ir/`, `compiler/backend_c/`, `runtime/`, `stdlib/`
+С шагами v0.1 появятся `compiler/backend_c/`, `runtime/`, `stdlib/`
 (`docs/design/ARCHITECTURE.md`, раздел 10).
 
 ## Правила кода
@@ -99,7 +99,11 @@ cmake --build build/compiler     # → build/compiler/dplang
    определённая инициализация, возврат, циклы, `defer` — и полнота
    `match`. Константы вычисляются при первом обращении (`const_value`).
    Результаты пишутся в поля AST (`Res`, `Local`, `type`, `conv`, `call`,
-   `field`) — этим AST и пользуется понижение в Core IR (шаг 6).
+   `field`) — этим AST и пользуется понижение в Core IR.
+5. **Понижение и верификатор** (`ir::lower`, `ir::verify`). Программа без
+   ошибок понижается в Core IR, верификатор проверяет его инварианты;
+   нарушение — внутренняя ошибка (код 3). Для запуска нужна `main`
+   (`check_main`, E0322). Устройство — `docs/ir/README.md`.
 
 Кэш по модулю (Р43) в v0.1 — в памяти одного запуска; на диске — с
 инкрементальной сборкой в v0.4.
@@ -146,7 +150,14 @@ python3 tests/run.py -k cli       # отбор по подстроке пути
 | `types` | то же | `dplang debug types` — AST главного модуля с типами и неявными преобразованиями |
 | `fail` | то же | `dplang check` — отказ компиляции: у каждого кода E04xx и E05xx — хотя бы один случай |
 | `diag` | `X.dpm` | `dplang check --format=json` — снимки машиночитаемой диагностики |
-| `fuzz` | `X.args` — аргументы | `dpfuzz lex\|parse\|check <аргументы>`: корпус — файлы `.dpm` наборов, зерно и число входов заданы; `check` — разбор и проверка без падений |
+| `ir` | `X.dpm` или каталог `X/` с `main.dpm` | `dplang debug ir` — золотые дампы Core IR после верификатора |
+| `run` | то же | `dplang debug run` — исполнение эталонным интерпретатором: вывод, ловушки, код выхода |
+| `fuzz` | `X.args` — аргументы | `dpfuzz lex\|parse\|check <аргументы>`: корпус — файлы `.dpm` наборов, зерно и число входов заданы; `check` — разбор и проверка без падений, программы без ошибок ещё понижаются и проходят верификатор |
+
+Проход `verify` — не набор, а проверка всех программ `.dpm` наборов:
+`dplang debug ir` на каждой. Программа с ошибками даёт код 1, без них — 0;
+внутренняя ошибка или падение — сбой. Так верификатор Core IR проходит
+по всем тестам (`docs/policy/TESTING.md`, раздел 2).
 
 Наборы добавляются вместе с шагами (`docs/policy/TESTING.md`, раздел 4);
 их список — `SUITES` в `tests/run.py`.
