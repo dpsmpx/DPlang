@@ -1,0 +1,36 @@
+pub struct Particle {
+    x: i32
+    y: i32
+    vx: i32
+    vy: i32
+}
+
+const G: i32 = -6554
+
+pub fn step(particles: &mut List[Particle]) {
+    for p in &mut particles {
+        p.vy = p.vy + G
+        p.x = p.x + p.vx
+        p.y = p.y + p.vy
+        if p.y < 0 {
+            p.y = 0
+            p.vy = i32(-(i64(p.vy) * 3) / 4)
+            p.vx = i32(i64(p.vx) * 7 / 8)
+        }
+    }
+}
+
+fn mix(h: u32, field: i32) u32 {
+    return h *% 31 +% u32.wrap(field)
+}
+
+pub fn checksum(particles: []Particle) u32 {
+    var h: u32 = 17
+    for p in &particles {
+        h = mix(h, p.x)
+        h = mix(h, p.y)
+        h = mix(h, p.vx)
+        h = mix(h, p.vy)
+    }
+    return h
+}

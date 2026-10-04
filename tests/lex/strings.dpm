@@ -1,0 +1,4 @@
+// spec: lex.str lex.escape lex.byte
+"" "text" "tab\tnew\nline" "quote \" backslash \\ nul \0 cr \r"
+"\x41\x7f" "\u{41}\u{430}\u{1F600}" "кириллица и 😀"
+'a' '\n' '\'' '\\' '\x00' '\xff' ' '

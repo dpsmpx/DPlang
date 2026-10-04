@@ -1,0 +1,32 @@
+// spec: error.sig module.pub
+struct Private {
+    v: i32
+}
+
+enum Err {
+    Bad
+}
+
+pub fn infer() !i32 {
+    return 1
+}
+
+pub fn leaks(p: Private) i32 {
+    return 0
+}
+
+pub struct Wrapper {
+    inner: List[Private]
+}
+
+pub enum Holder {
+    One(Private)
+}
+
+fn not_enum() Private!i32 {
+    return 1
+}
+
+fn fine() Err!i32 {
+    return 1
+}

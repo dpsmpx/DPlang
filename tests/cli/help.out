@@ -1,0 +1,17 @@
+usage: dplang <command> [arguments]
+
+commands:
+  check [--format=json] <file.dpm>
+                   check a program and the modules it imports
+  explain <code>   explain a diagnostic code, e.g. E0101
+  help             show this help
+  --version        print the compiler version
+
+debugging commands (output format is not stable):
+  debug lex <file.dpm>     print the tokens of a file
+  debug parse <file.dpm>   print the syntax tree of a file
+  debug print <file.dpm>   print a file in canonical form
+  debug summary <file.dpm> print the interface summaries of a program
+  debug types <file.dpm>   print the syntax tree of the main module with types
+  debug ir <file.dpm>      print the Core IR of a program
+  debug run <file.dpm>     run a program in the reference interpreter

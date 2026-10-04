@@ -1,0 +1,7 @@
+// spec: expr.prec
+fn f() {
+    let ok = a < b && b < c
+    let bad = a < b < c
+    let also_bad = a == b == c
+    let fine = (a == b) == c
+}

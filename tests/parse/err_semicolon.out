@@ -1,0 +1,17 @@
+Module err_semicolon
+  Fn f
+    Block
+      Let a
+        Int 1
+      Let b
+        Int 2
+      Let d
+        Int 4
+--- stderr ---
+err_semicolon.dpm:3:14: error[E0202]: unexpected ';': statements end at the end of a line
+   3 |     let a = 1;
+     |              ^
+err_semicolon.dpm:4:14: error[E0202]: unexpected ';': statements end at the end of a line
+   4 |     let b = 2; let c = 3
+     |              ^
+[exit 1]

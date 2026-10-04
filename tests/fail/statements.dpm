@@ -1,0 +1,57 @@
+// spec: stmt.expr expr.struct type.enum stmt.for stmt.loop stmt.init stmt.return
+struct P {
+    x: i32
+    y: i32 = 0
+}
+
+enum E {
+    Unit
+    Tup(i32)
+    Rec { a: i32 }
+}
+
+fn no_result() {
+    return 1
+}
+
+fn needs_value() i32 {
+    if true {
+        return
+    }
+}
+
+fn stmts(xs: List[i32], view: []i32, n: i32) i32 {
+    n == 1
+    let p = P { y: 1 }
+    let q = P { x: 1, z: 2, x: 3 }
+    let e1 = E.Tup
+    let e2 = E.Unit(1)
+    let e3 = E.Rec(1)
+    let e4: E = .Tup { a: 1 }
+    for x in xs {
+    }
+    for x in &n {
+    }
+    for x in &mut view {
+    }
+    if n > 0 {
+        return 1
+    }
+}
+
+fn uninit(n: i32) i32 {
+    var later: i32
+    if n > 0 {
+        later = 1
+    }
+    let use = later + 1
+    var never: i32
+    while n > 0 {
+        never = 1
+    }
+    return use + never
+}
+
+fn outside() {
+    break
+}

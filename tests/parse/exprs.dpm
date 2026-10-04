@@ -1,0 +1,33 @@
+// spec: expr.prec expr.unary expr.postfix expr.literal
+fn exprs() {
+    let a = x || y && z
+    let b = a == b || c != d
+    let c = x + y * z - w / v % u
+    let d = x << 7 * i
+    let e = v & 0x7f | 0x80
+    let f = a +% b -% c *% d
+    let g = opt ?? 0
+    let h = -x + !y + ~z
+    let i = try read(s)
+    let j = f(&x, &mut y, z)
+    let k = obj.field.inner
+    let l = xs.push(1)
+    let m = xs[i][j]
+    let n = s[1..3] + s[..2] + s[2..]
+    let o = Item { id: 3, name }
+    let p = world.Item { id: 1 }
+    let q = Item {}
+    let r = .Tick
+    let s = .Move(1, 2)
+    let t = .Hit { target: 3, damage: 9 }
+    let u = Event.Tick
+    let v = [1, 2, 3]
+    let w = []
+    let y = (a + b) * c
+    let z = 42 + 0xFF + 1_000 + 1.5 + 2e10
+    let s2 = "text\n" + 'a'
+    let bools = true && false
+    let nothing = none
+    let conv = i32(x) + u32.wrap(-1)
+    let cmp = (a < b) == (c < d)
+}

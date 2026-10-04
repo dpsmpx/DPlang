@@ -1,0 +1,5 @@
+--- stderr ---
+err_missing_module.dpm:2:8: error[E0302]: cannot find module 'nowhere' (looked in nowhere.dpm and the standard library)
+   2 | import nowhere
+     |        ^~~~~~~
+[exit 1]

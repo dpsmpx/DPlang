@@ -1,0 +1,249 @@
+// Реестр кодов диагностики (Р15, Р47; docs/compiler/diagnostics.md).
+//
+// DP_CODE(код, краткое название, объяснение для `dplang explain`).
+// Тексты — по-английски (Р47). Код, однажды выпущенный, не меняет
+// смысла; удалённый код не переиспользуется. У каждого кода — хотя бы
+// один тест отказа (docs/policy/TESTING.md, правило 4).
+//
+// Диапазоны: E00xx — файлы и запуск; E01xx — лексика; E02xx — грамматика;
+// E03xx — модули и имена; E04xx — типы; E05xx — поток: инициализация,
+// ссылки, обработка ошибок.
+
+DP_CODE(E0001, "cannot read source file",
+        "The compiler could not open or read a source file named on the command line or found by an "
+        "`import`. Check that the path exists and is readable.")
+
+// --- E01xx: лексика (docs/spec/core.md, раздел 1)
+
+DP_CODE(E0101, "invalid UTF-8",
+        "Source files must be valid UTF-8 (spec: lex.source). The marked bytes do not form a valid UTF-8 "
+        "sequence. Re-save the file as UTF-8.")
+DP_CODE(E0102, "unexpected character",
+        "This character cannot start a token (spec: lex.punct, lex.ident). Outside string literals and "
+        "comments only ASCII letters, digits, `_`, operators and punctuation are allowed. Control characters "
+        "inside string literals must be written as escapes such as `\\t` or `\\x01`.")
+DP_CODE(E0103, "unterminated string literal",
+        "A string literal must end with `\"` on the same line (spec: lex.str). Multi-line string literals do "
+        "not exist; use `\\n` for a line break.")
+DP_CODE(E0104, "invalid escape sequence",
+        "Valid escapes are `\\n`, `\\t`, `\\r`, `\\0`, `\\\\`, `\\\"`, `\\'`, `\\xHH` and `\\u{H...}` "
+        "(spec: lex.escape). In string literals `\\xHH` must be at most `\\x7f`, because the string must stay "
+        "valid UTF-8; use `\\u{...}` for other characters. `\\u{...}` takes 1 to 6 hex digits naming a "
+        "Unicode scalar value.")
+DP_CODE(E0105, "invalid byte literal",
+        "A byte literal is exactly one ASCII character or one escape between single quotes, for example "
+        "`'a'`, `'\\n'` or `'\\xff'` (spec: lex.byte). Its type is `u8`.")
+DP_CODE(E0106, "integer literal out of range",
+        "Integer literals must fit in 64 bits unsigned, at most 18446744073709551615 (spec: lex.int). The "
+        "type check later requires the value to fit the type the literal gets.")
+DP_CODE(E0107, "malformed number literal",
+        "Number literals are decimal (`42`, `1_000`), hexadecimal (`0xFF`), binary (`0b1010`), octal (`0o17`) "
+        "or floating point (`1.5`, `2e10`, `1.5e-3`) (spec: lex.int, lex.float). `_` may only stand between "
+        "two digits. A letter or digit not valid for the base must not follow the literal.")
+DP_CODE(E0108, "stray carriage return",
+        "A carriage return (U+000D) is only allowed directly before a line feed, as part of a CRLF line "
+        "ending (spec: lex.newline).")
+DP_CODE(E0109, "reserved word",
+        "This word is reserved for a future version of the language and cannot be used as a name "
+        "(spec: lex.keyword). Pick another name.")
+DP_CODE(E0110, "float literal out of range",
+        "The value of this floating point literal is too large to be represented as `f64` "
+        "(spec: lex.float).")
+
+// --- E02xx: грамматика (docs/spec/core.md, раздел 2)
+
+DP_CODE(E0201, "syntax error",
+        "The parser expected a different token here; the message names what was expected (spec: syntax). "
+        "After a syntax error the rest of the line or declaration is skipped, so one mistake gives one "
+        "message.")
+DP_CODE(E0202, "unexpected semicolon",
+        "Statements end at the end of a line; `;` is not part of the language (spec: syntax.stmt). Remove "
+        "it, or put the second statement on its own line.")
+DP_CODE(E0203, "chained comparison",
+        "Comparison operators do not chain: `a < b < c` is an error (spec: expr.prec). Write `a < b && b < c`.")
+DP_CODE(E0204, "expected end of line",
+        "A statement or declaration ended, but more tokens follow on the same line (spec: syntax.stmt). "
+        "Each statement goes on its own line.")
+DP_CODE(E0205, "attribute not allowed here",
+        "Attributes such as `@det` are only allowed before a function declaration (spec: syntax.item).")
+DP_CODE(E0206, "`pub` not allowed here",
+        "`pub` makes a function, struct, enum or constant visible to other modules (spec: syntax.item). "
+        "It cannot be applied to `import`.")
+
+// --- E03xx: модули и имена (docs/spec/core.md, раздел 3)
+
+DP_CODE(E0301, "import cycle",
+        "Modules must not import each other in a cycle (spec: module.graph). The message lists the cycle. "
+        "Move the shared declarations into a third module that both import.")
+DP_CODE(E0302, "cannot find module",
+        "`import name` looks for `name.dpm` next to the main module of the program, then in the standard "
+        "library (spec: module.import). The message lists the places searched.")
+DP_CODE(E0303, "duplicate import",
+        "The same module is imported twice in one file (spec: module.import). Remove the second `import`.")
+DP_CODE(E0304, "duplicate definition",
+        "Two top-level declarations of one module have the same name (spec: module.scope). Rename one of them.")
+DP_CODE(E0305, "name conflicts with a module",
+        "A top-level declaration has the same name as an imported module (spec: module.scope). Rename the "
+        "declaration.")
+DP_CODE(E0306, "private item",
+        "The item exists in the module but is not marked `pub`, so other modules cannot use it "
+        "(spec: module.pub). Mark it `pub` in its module or use another item.")
+DP_CODE(E0307, "cannot find name",
+        "No local variable, declaration of this module, imported module or built-in function has this name "
+        "(spec: module.lookup). Check the spelling, or declare or import it.")
+DP_CODE(E0308, "public function without an error type",
+        "A public function that can fail names its error type in the signature: `pub fn read(s: str) "
+        "ReadError!str` (spec: error.sig, decision R41). `!T` without a type is only allowed in functions "
+        "that are not `pub`.")
+DP_CODE(E0309, "private type in a public signature",
+        "A public function, struct, enum or constant mentions a type that is not `pub` (spec: module.pub). "
+        "Other modules could not name that type. Mark the type `pub` or keep the declaration private.")
+DP_CODE(E0310, "name already defined",
+        "A local variable, parameter, loop variable or pattern binding reuses a name that is already defined "
+        "in this function's enclosing scopes (spec: module.local). DPlang has no shadowing of local names; pick "
+        "another name.")
+DP_CODE(E0311, "module has no such item",
+        "The module named before the dot has no declaration with this name (spec: module.lookup).")
+DP_CODE(E0312, "enum has no such variant",
+        "The enum named before the dot has no variant with this name (spec: type.enum).")
+DP_CODE(E0313, "cannot find type",
+        "No struct, enum or built-in type has this name (spec: type.names). Built-in types are `bool`, `i8` "
+        "to `i64`, `u8` to `u64`, `int`, `f32`, `f64`, `str` and `List[T]`.")
+DP_CODE(E0314, "wrong number of type arguments",
+        "`List` takes exactly one type argument, `List[T]`; other types take none (spec: type.names).")
+DP_CODE(E0315, "`void` not allowed here",
+        "`void` is only the value part of a result type, `!void` or `E!void` (spec: type.names). A function "
+        "without a result has no return type at all.")
+DP_CODE(E0316, "error type is not an enum",
+        "In `E!T` the error type `E` must be an enum: an error is a variant of that enum (spec: error.sig).")
+DP_CODE(E0317, "invalid module name",
+        "A module's name is its file name without `.dpm` and must be an identifier that is not a keyword "
+        "(spec: module.file).")
+DP_CODE(E0318, "duplicate member",
+        "A struct has two fields, an enum two variants, a variant two fields or a function two parameters "
+        "with the same name (spec: module.scope).")
+DP_CODE(E0319, "unknown attribute",
+        "The only attribute of DPlang v0.1 is `@det` before a function (spec: syntax.item).")
+DP_CODE(E0320, "not a struct",
+        "A struct literal `S { ... }` needs a struct or a record enum variant before the `{` "
+        "(spec: expr.struct).")
+DP_CODE(E0321, "binding in an alternative pattern",
+        "Patterns joined by `|` must not bind names, because each alternative would bind different values "
+        "(spec: pattern.or). Split the arm or use `_`.")
+DP_CODE(E0322, "missing or invalid `main`",
+        "A program starts at the function `main` of its root module. It takes no parameters and returns "
+        "nothing, or `E!void` (`!void`) if it can fail (spec: module.main). A module that is only imported "
+        "needs no `main`.")
+
+// --- E04xx: типы (docs/spec/core.md, разделы 4–6 и 9)
+
+DP_CODE(E0401, "mismatched types",
+        "The value has a different type than the place it goes to (spec: type.conv). Only lossless "
+        "conversions are implicit: a narrower integer to a wider one that holds all its values, `f32` to "
+        "`f64`, `List[T]` to `[]T`, `T` to `?T` and `T` to `E!T`. Everything else needs an explicit "
+        "conversion such as `i32(x)` or `u8.wrap(x)`.")
+DP_CODE(E0402, "literal out of range",
+        "The literal does not fit the type it gets from its context (spec: expr.literal): for example `300` "
+        "as `u8`. Use a wider type or `T.wrap(...)`.")
+DP_CODE(E0403, "operator not defined for this type",
+        "The operator does not apply to operands of this type (spec: expr.ops). Arithmetic needs numbers "
+        "(`+` also joins strings), `%`, the wrapping and the bit operators need integers, `&&` `||` `!` need "
+        "`bool`, `-` needs a signed integer or a float.")
+DP_CODE(E0404, "cannot infer the type",
+        "The expression needs a type from its context (spec: expr.literal): `none`, an empty list `[]` or a "
+        "short variant `.V` whose name is in several enums. Add a type annotation, e.g. `let xs: List[i32] = "
+        "[]`, or write the enum: `Event.Tick`.")
+DP_CODE(E0405, "not a value",
+        "A function, type or module name is used where a value is expected (spec: expr.names). Functions "
+        "are called, types are used in annotations, conversions `T(x)` and literals, modules before a dot.")
+DP_CODE(E0406, "no such field",
+        "The struct has no field with this name, or the value is not a struct (spec: expr.field).")
+DP_CODE(E0407, "wrong number of arguments",
+        "The call passes a different number of arguments than the function, variant or built-in takes "
+        "(spec: expr.call).")
+DP_CODE(E0408, "argument mark does not match the parameter",
+        "The mark at the argument must match the parameter mode (spec: expr.call): `&x` for `&T`, `&mut x` "
+        "for `&mut T`, and no mark for a value parameter.")
+DP_CODE(E0409, "cannot call this",
+        "Only functions, built-in functions, methods of `List` and `str`, conversions `T(x)`, `T.wrap(x)` "
+        "and tuple variants can be called (spec: expr.call).")
+DP_CODE(E0410, "no such method",
+        "`List` has the methods push, pop, insert, remove, clear, sort and contains; `str` has trim, find, "
+        "starts_with and split (spec: builtin.methods). Other types have no methods.")
+DP_CODE(E0411, "expression has no effect",
+        "A statement that is only an expression must be a call or `try` of a call (spec: stmt.expr). "
+        "Did you mean `=` instead of `==`?")
+DP_CODE(E0412, "cannot assign or mutate",
+        "Only a place can be assigned or mutated: a `var` variable, a `&mut` parameter, a `for ... in &mut` "
+        "variable, or a field or `List` element of one (spec: stmt.assign). `let` variables, value "
+        "parameters, `&` parameters, slices and strings are read-only.")
+DP_CODE(E0413, "wrong fields in a literal",
+        "A struct or record-variant literal must give each field once, and only fields that exist; struct "
+        "fields with a default value may be left out (spec: expr.struct).")
+DP_CODE(E0414, "wrong variant form",
+        "A variant is written the way it is declared (spec: type.enum): `.Tick` without data, `.Move(1, 2)` "
+        "with positional data, `.Hit { target: 3, damage: 9 }` with fields.")
+DP_CODE(E0415, "non-exhaustive match",
+        "The arms of `match` do not cover every value of the subject (spec: stmt.match). Add the missing "
+        "variants, or an arm `_ => ...`.")
+DP_CODE(E0416, "unreachable pattern",
+        "Earlier arms already cover every value this arm could match (spec: stmt.match). Remove the arm or "
+        "move it up.")
+DP_CODE(E0417, "pattern does not fit the subject",
+        "The pattern has a different type than the value being matched (spec: pattern.types): for example "
+        "`some(x)` on a value that is not optional.")
+DP_CODE(E0418, "invalid conversion",
+        "`T(x)` converts between numeric types and from numbers and `bool` to `str`; `T.wrap(x)` converts "
+        "integers to an integer type modulo 2^N (spec: expr.convert).")
+DP_CODE(E0419, "cannot iterate",
+        "`for x in &xs` and `for x in &mut xs` iterate a `List`, `for x in &xs` also a slice or a `str` "
+        "(bytes); `for i in a..b` counts over integers (spec: stmt.for). A collection is iterated through a "
+        "mark: `&xs`.")
+DP_CODE(E0420, "break or continue outside a loop",
+        "`break` and `continue` are only allowed inside `while` or `for` (spec: stmt.loop).")
+DP_CODE(E0421, "not a constant expression",
+        "A constant is computed when the program is compiled, so its value may only use literals, other "
+        "constants, operators and conversions `T(x)` (spec: decl.const, decision R42). Constants must not "
+        "depend on each other in a cycle.")
+DP_CODE(E0422, "values of this type cannot be compared",
+        "`==` and `!=` work on all values except results `E!T`; `<`, `<=`, `>`, `>=` and `sort` need numbers, "
+        "`bool`, `str`, or structs, enums and lists of such values (spec: expr.compare).")
+DP_CODE(E0423, "type contains itself",
+        "A struct or an enum cannot hold a value of its own type directly, also through `?T` or another "
+        "struct: such a value would have no end (spec: type.recursive). Keep the nested values in a `List`.")
+
+// --- E05xx: поток, ошибки, ссылки (docs/spec/core.md, разделы 6–8)
+
+DP_CODE(E0501, "reference mark not allowed here",
+        "`&x` and `&mut x` only mark an argument for a `&` or `&mut` parameter, and follow `for ... in` "
+        "(spec: ref.marks, decision R44). References cannot be stored or returned; to keep a value, copy it.")
+DP_CODE(E0502, "conflicting references in one call",
+        "One call passes `&mut x` together with another reference into the same variable `x` (spec: "
+        "ref.alias). The callee could change `x` and leave the other reference dangling. Pass a copy of the "
+        "value instead of the second reference.")
+DP_CODE(E0503, "use before initialization",
+        "A `var` declared without a value is read before it is assigned on every path to this place "
+        "(spec: stmt.init).")
+DP_CODE(E0504, "missing return",
+        "A function with a result type can reach its end without `return` (spec: stmt.return). Return a "
+        "value on every path, or `fail` with an error.")
+DP_CODE(E0505, "error not allowed here",
+        "`fail` and `try` are only allowed in a function whose result is `E!T` or `!T`, and the error must "
+        "be of the function's error type (spec: error.flow).")
+DP_CODE(E0506, "unhandled error",
+        "A result `E!T` must not be dropped silently (spec: error.handle, decision R10): pass it on with "
+        "`try`, handle it with `match`, or discard it explicitly with `_ = f()`.")
+DP_CODE(E0507, "cannot infer the error type",
+        "A function written `!T` infers its error type from its `fail` and `try` (spec: error.infer, "
+        "decision R41). All of them must give errors of one enum, and there must be at least one; `try` on "
+        "something other than a call needs the error type written: `E!T`.")
+DP_CODE(E0508, "control flow out of defer",
+        "The body of `defer` runs when the block exits; it cannot `return`, `break`, `continue`, `fail` or "
+        "`try` (spec: stmt.defer).")
+DP_CODE(E0509, "wrong return",
+        "`return` without a value is for functions without a result or with `!void`; a function with a "
+        "result returns a value of that type (spec: stmt.return).")
+DP_CODE(E0510, "slice cannot be stored",
+        "A slice `[]T` is a view into a List owned by someone else, so it only exists as a parameter type "
+        "(spec: ref.slices, decision R44). It cannot be a field, a variant value, a List element, a result, "
+        "a variable or a constant. Pass the slice straight to a function, or keep a `List[T]`.")

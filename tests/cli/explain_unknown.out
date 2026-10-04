@@ -1,0 +1,3 @@
+--- stderr ---
+error: unknown diagnostic code 'E9999'
+[exit 2]

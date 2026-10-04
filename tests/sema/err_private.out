@@ -1,0 +1,26 @@
+--- stderr ---
+err_private/main.dpm:5:18: error[E0306]: 'Secret' is private to module 'util'
+   5 |     let s = util.Secret { v: 1 }
+     |                  ^~~~~~
+err_private/util.dpm:1:8: note: declared here without 'pub'
+   1 | struct Secret {
+     |        ^~~~~~
+err_private/main.dpm:6:18: error[E0306]: 'KIND' is private to module 'util'
+   6 |     let k = util.KIND
+     |                  ^~~~
+err_private/util.dpm:9:7: note: declared here without 'pub'
+   9 | const KIND: i32 = 1
+     |       ^~~~
+err_private/main.dpm:7:17: error[E0306]: 'hidden' is private to module 'util'
+   7 |     return util.hidden() + util.shown() + util.missing()
+     |                 ^~~~~~
+err_private/util.dpm:11:4: note: declared here without 'pub'
+  11 | fn hidden() i32 {
+     |    ^~~~~~
+err_private/main.dpm:7:48: error[E0311]: module 'util' has no item 'missing'
+   7 |     return util.hidden() + util.shown() + util.missing()
+     |                                                ^~~~~~~
+err_private/main.dpm:10:11: error[E0311]: module 'util' has no item 'Hidden'
+  10 | fn sig(h: util.Hidden) {
+     |           ^~~~~~~~~~~
+[exit 1]

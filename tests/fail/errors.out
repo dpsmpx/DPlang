@@ -1,0 +1,41 @@
+--- stderr ---
+errors.dpm:20:5: error[E0505]: 'fail' needs a function whose result is 'E!T'
+  20 |     fail E1.Bad
+     |     ^~~~~~~~~~~
+errors.dpm:24:13: error[E0505]: 'try' passes the error on, so the function's result must be 'E!T'
+  24 |     let v = try one()
+     |             ^~~~~~~~~
+errors.dpm:29:13: error[E0505]: the error type 'E1' differs from the function's error type 'E2'
+  29 |     let v = try one()
+     |             ^~~~~~~~~
+errors.dpm:34:13: error[E0505]: 'try' needs a result 'E!T', found 'i32'
+  34 |     let v = try plain()
+     |             ^~~~~~~~~~~
+errors.dpm:39:5: error[E0506]: the error of this call is ignored; handle it with 'try', 'match' or '_ = ...'
+  39 |     one()
+     |     ^~~~~
+errors.dpm:40:13: error[E0506]: the result of type 'E1!i32' must be handled: use 'try', 'match' or '_ ='
+  40 |     let r = one()
+     |             ^~~~~
+errors.dpm:43:12: error[E0507]: cannot infer the error type of 'never': it has no 'fail' or 'try'; remove '!' if it cannot fail
+  43 | fn never() !i32 {
+     |            ^~~~
+errors.dpm:47:16: error[E0507]: cannot infer the error type of 'ambiguous': its 'fail' and 'try' give different or ambiguous error enums; write 'MyError!T'
+  47 | fn ambiguous() !i32 {
+     |                ^~~~
+errors.dpm:51:18: error[E0507]: cannot infer the error type of 'conflicting': its 'fail' and 'try' give different or ambiguous error enums; write 'MyError!T'
+  51 | fn conflicting() !i32 {
+     |                  ^~~~
+errors.dpm:57:23: error[E0507]: cannot infer the error type of 'rethrow': a 'fail' or 'try' here needs the type written; write 'MyError!T'
+  57 | fn rethrow(r: E1!i32) !i32 {
+     |                       ^~~~
+errors.dpm:66:9: error[E0508]: 'return' cannot leave a 'defer'
+  66 |         return
+     |         ^~~~~~
+errors.dpm:70:13: error[E0508]: 'break' cannot leave a 'defer'
+  70 |             break
+     |             ^~~~~
+errors.dpm:73:11: error[E0508]: 'fail' cannot leave a 'defer'
+  73 |     defer fail .Bad
+     |           ^~~~~~~~~
+[exit 1]

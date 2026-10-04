@@ -1,0 +1,66 @@
+// spec: syntax.stmt syntax.block
+fn all(xs: &mut List[i32], n: int) !i32 {
+    let a = 1
+    var b: i32 = 2
+    var c: i64
+    b = 3
+    b += 1
+    b -= 1
+    b *= 2
+    b /= 2
+    b %= 3
+    b &= 1
+    b |= 2
+    b ^= 3
+    b <<= 1
+    b >>= 1
+    _ = f()
+    xs[0] = b
+    if a > 0 {
+        b = 1
+    } else if a < 0 {
+        b = 2
+    } else {
+        b = 3
+    }
+    if let v = xs.pop() {
+        b = v
+    }
+    while b > 0 {
+        b -= 1
+        if b == 5 {
+            break
+        }
+        continue
+    }
+    for i in 0..n {
+        b += i
+    }
+    for _ in 0..len(xs) {
+    }
+    for x in &xs {
+        b += x
+    }
+    for x in &mut xs {
+        x = 0
+    }
+    parallel for i in 0..n {
+        xs[i] = i
+    }
+    match b {
+        0 => return 0
+        1 | 2 => {
+            b = 7
+        }
+        _ => fail .Bad
+    }
+    defer xs.clear()
+    defer {
+        b = 0
+    }
+    {
+        let inner = 1
+    }
+    try check(b)
+    return b
+}

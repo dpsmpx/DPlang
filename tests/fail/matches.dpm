@@ -1,0 +1,39 @@
+// spec: stmt.match pattern.types
+enum Color {
+    Red
+    Green
+    Blue
+}
+
+fn matches(c: Color, o: ?i32, n: i32, s: str) {
+    match c {
+        .Red => return
+        .Green => return
+    }
+    match o {
+        some(v) => return
+    }
+    match n {
+        0 => return
+        1 => return
+    }
+    match c {
+        _ => return
+        .Red => return
+    }
+    match c {
+        .Red => return
+        .Red => return
+        _ => return
+    }
+    match n {
+        some(v) => return
+        "x" => return
+        .Red => return
+        _ => return
+    }
+    match c {
+        .Purple => return
+        _ => return
+    }
+}

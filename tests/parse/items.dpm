@@ -1,0 +1,41 @@
+// spec: syntax.item syntax.type
+import world
+import fmt
+
+pub struct Item {
+    id: i32
+    count: i32 = 1
+    name: str = ""
+}
+
+struct Pair {
+    a: List[i32], b: ?world.Unit
+}
+
+pub enum Event {
+    Tick
+    Move(i32, i32)
+    Hit { target: i32, damage: i32 }
+}
+
+const LIMIT: i32 = 64
+pub const NAME: str = "x"
+
+@det
+pub fn add_count(items: &mut List[Item], key: &Item, extra: i32) i32 {
+    return 0
+}
+
+fn none_result() {
+}
+
+fn read(s: str) ReadError!str {
+    return s
+}
+
+fn infer(xs: []u8) !void {
+}
+
+fn nested(m: List[List[?i32]]) ?[]world.Unit {
+    return none
+}

@@ -1,0 +1,70 @@
+// spec: stmt.if stmt.loop stmt.for stmt.match stmt.init stmt.defer
+enum Event {
+    Tick
+    Move(i32, i32)
+    Hit { target: i32, damage: i32 }
+}
+
+fn walk(path: []Event, text: str) i32 {
+    var x: i32 = 0
+    var hits: List[i32] = []
+    for e in &path {
+        match e {
+            .Tick => continue
+            .Move(dx, _) => x += dx
+            .Hit { target, damage } => {
+                if damage > 0 {
+                    hits.push(target)
+                }
+            }
+        }
+    }
+    if let last = hits.pop() {
+        x += last
+    } else if x < 0 {
+        x = 0
+    }
+    for _ in 0..len(hits) {
+        x -= 1
+    }
+    for b in &text {
+        if b == 'a' {
+            x += 1
+        }
+    }
+    for h in &mut hits {
+        h = 0
+    }
+    var later: i32
+    if x > 10 {
+        later = 1
+    } else {
+        later = 2
+    }
+    x += later
+    var i = 0
+    while true {
+        i += 1
+        if i > 3 {
+            break
+        }
+    }
+    defer println("done")
+    match x {
+        0 => return 0
+        1 | 2 => return 1
+        _ => return x
+    }
+}
+
+fn opt(v: ?i32, ok: bool) i32 {
+    match v {
+        some(n) => return n
+        none => {
+        }
+    }
+    match ok {
+        true => return 1
+        false => return 0
+    }
+}

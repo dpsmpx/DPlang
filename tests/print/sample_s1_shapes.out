@@ -1,0 +1,44 @@
+pub enum Shape {
+    Circle { r: f64 }
+    Rect { w: f64, h: f64 }
+    Square(f64)
+}
+
+const PI: f64 = 3.141592653589793
+
+pub fn area(s: Shape) f64 {
+    match s {
+        .Circle { r } => return PI * r * r
+        .Rect { w, h } => return w * h
+        .Square(a) => return a * a
+    }
+}
+
+pub fn name(s: Shape) str {
+    match s {
+        .Circle => return "circle"
+        .Rect => return "rect"
+        .Square => return "square"
+    }
+}
+
+pub fn largest(shapes: []Shape) ?Shape {
+    if len(shapes) == 0 {
+        return none
+    }
+    var best = shapes[0]
+    for s in &shapes {
+        if area(s) > area(best) {
+            best = s
+        }
+    }
+    return best
+}
+
+pub fn scale(s: Shape, k: f64) Shape {
+    match s {
+        .Circle { r } => return .Circle { r: r * k }
+        .Rect { w, h } => return .Rect { w: w * k, h: h * k }
+        .Square(a) => return .Square(a * k)
+    }
+}

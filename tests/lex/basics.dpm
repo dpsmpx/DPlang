@@ -1,0 +1,16 @@
+// spec: lex.ident lex.keyword lex.punct lex.comment lex.newline
+pub fn add_count(items: &mut List[Item], key: &Item, extra: i32) i32 {
+    for it in &mut items {
+        if it.id == key.id && extra >= 0 || !ok {
+            it.count = min(it.count + extra, LIMIT) // в конце строки
+            return it.count
+        }
+    }
+    return 0
+}
+
+const LIMIT: i32 = 64
+let x = a +% b -% c *% d ?? 0
+x <<= 1; x >>= 2; x += 1; x -= 1; x *= 2; x /= 2; x %= 3; x &= 1; x |= 2; x ^= 3
+m => @det .. ~ ^ | < > <= >= != == ?
+_unused _ x1 X_Y

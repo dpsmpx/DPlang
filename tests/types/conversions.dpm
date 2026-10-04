@@ -1,0 +1,32 @@
+// spec: type.conv expr.convert
+fn wide(v: i64) i64 {
+    return v
+}
+
+fn total(xs: []i32) i64 {
+    var s: i64 = 0
+    for x in &xs {
+        s += x
+    }
+    return s
+}
+
+fn maybe(v: i32) ?i32 {
+    if v < 0 {
+        return none
+    }
+    return v
+}
+
+fn conv(a: i32, b: u8, f: f32, list: List[i32]) {
+    let w = wide(a)
+    let w2 = wide(b)
+    let d: f64 = f
+    let t = total(list)
+    let n = i32(w)
+    let u = u32.wrap(-1)
+    let fl = f64(a) / 2.0
+    let back = i64(fl)
+    let text = str(a) + str(true) + str(fl)
+    let m = maybe(n) ?? 0
+}

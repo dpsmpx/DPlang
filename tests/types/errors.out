@@ -1,0 +1,103 @@
+Module errors
+  Enum ParseError pub
+    Variant Empty
+    Variant TooLong {limit: i32}
+  Fn check_len
+    Param s str
+    Ret !void
+    Block
+      If
+        Binary > : bool
+          Call : i64
+            Name len
+            Name s : str
+          Int 8 : i64
+        Block
+          Fail
+            VariantLit .TooLong {..} : ParseError
+              FieldInit limit
+                Int 8 : i32
+  Fn read_name pub
+    Param s str
+    Ret ParseError!str
+    Block
+      Let t
+        Call : str
+          Field .trim
+            Name s : str
+      If
+        Binary == : bool
+          Call : i64
+            Name len
+            Name t : str
+          Int 0 : i64
+        Block
+          Fail
+            VariantLit .Empty : ParseError
+      ExprStmt
+        Try : void
+          Call : ParseError!void
+            Name check_len
+            Name t : str
+      Return
+        Name t : str -> ParseError!str
+  Fn greet
+    Param s str
+    Ret !str
+    Block
+      Let name
+        Try : str
+          Call : ParseError!str
+            Name read_name
+            Name s : str
+      Return
+        Binary + : str -> ParseError!str
+          Str "hi " : str
+          Name name : str
+  Fn count_valid pub
+    Param names []str
+    Ret i32
+    Block
+      Var n: i32
+        Int 0 : i32
+      For s in &
+        Name names : []str
+        Block
+          Match
+            Call : ParseError!str
+              Name read_name
+              Name s : str
+            Arm ok(_)
+              Assign +=
+                Name n : i32
+                Int 1 : i32
+            Arm err(e)
+              Block
+                If
+                  Binary == : bool
+                    Name e : ParseError
+                    VariantLit .Empty : ParseError
+                  Block
+                    Assign -=
+                      Name n : i32
+                      Int 1 : i32
+      Assign =
+        Name _
+        Call : ParseError!str
+          Name greet
+          Str "x" : str
+      Return
+        Name n : i32
+  Fn all_ok pub
+    Param names []str
+    Ret ParseError!void
+    Block
+      For s in &
+        Name names : []str
+        Block
+          Assign =
+            Name _
+            Try : str
+              Call : ParseError!str
+                Name read_name
+                Name s : str

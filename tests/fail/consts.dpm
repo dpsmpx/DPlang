@@ -1,0 +1,19 @@
+// spec: decl.const
+struct S {
+    v: i32
+}
+
+fn f() i32 {
+    return 1
+}
+
+const A: i32 = f()
+const B: i32 = C + 1
+const C: i32 = B + 1
+const D: u8 = 200 + 100
+const E: S = S { v: 1 }
+const F: i32 = 1 / 0
+const G: List[i32] = [1, 2, 3]
+const H: i8 = -128
+const I: u32 = u32.wrap(-1)
+const J: str = "a" + str(42)

@@ -1,0 +1,9 @@
+// spec: module.summary
+import shapes
+
+pub fn total(xs: []shapes.Shape) f64 {
+    return 0.0
+}
+
+fn private_helper() {
+}

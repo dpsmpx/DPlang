@@ -1,0 +1,38 @@
+1:1 Comment "// spec: lex.punct lex.keyword lex.newline"
+1:43 Newline "\n"
+2:1 KwLet "let"
+2:5 Ident "a"
+2:7 Eq "="
+2:9 Int "1"
+2:11 Error "$"
+2:13 Error "#"
+2:15 Error "`"
+2:16 Newline "\n"
+3:1 KwLet "let"
+3:5 Error "λ"
+3:7 Eq "="
+3:9 Int "2"
+3:10 Newline "\n"
+4:1 KwLet "let"
+4:5 KwUnsafe "unsafe"
+4:12 Eq "="
+4:14 Int "3"
+4:15 Newline "\n"
+5:1 Eof ""
+--- stderr ---
+bad_chars.dpm:2:11: error[E0102]: unexpected character '$'
+   2 | let a = 1 $ # `
+     |           ^
+bad_chars.dpm:2:13: error[E0102]: unexpected character '#'
+   2 | let a = 1 $ # `
+     |             ^
+bad_chars.dpm:2:15: error[E0102]: unexpected character '`'
+   2 | let a = 1 $ # `
+     |               ^
+bad_chars.dpm:3:5: error[E0102]: unexpected character 'λ'
+   3 | let λ = 2
+     |     ^
+bad_chars.dpm:4:5: error[E0109]: 'unsafe' is a reserved word
+   4 | let unsafe = 3
+     |     ^~~~~~
+[exit 1]

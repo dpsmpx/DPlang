@@ -1,0 +1,42 @@
+1:1 Comment "// spec: lex.int lex.float"
+1:27 Newline "\n"
+2:1 Error "0x"
+2:4 Error "1__0"
+2:9 Error "10_"
+2:13 Error "0b102"
+2:19 Error "123abc"
+2:26 Error "0xG1"
+2:31 Error "18446744073709551616"
+2:52 Error "1e400"
+2:58 Error "1.5e"
+2:62 Newline "\n"
+3:1 Eof ""
+--- stderr ---
+bad_number.dpm:2:1: error[E0107]: malformed number literal
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     | ^~
+bad_number.dpm:2:4: error[E0107]: malformed number literal
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |    ^~~~
+bad_number.dpm:2:9: error[E0107]: malformed number literal
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |         ^~~
+bad_number.dpm:2:13: error[E0107]: malformed number literal
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |             ^~~~~
+bad_number.dpm:2:19: error[E0107]: malformed number literal
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |                   ^~~~~~
+bad_number.dpm:2:26: error[E0107]: malformed number literal
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |                          ^~~~
+bad_number.dpm:2:31: error[E0106]: integer literal does not fit in 64 bits
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |                               ^~~~~~~~~~~~~~~~~~~~
+bad_number.dpm:2:52: error[E0110]: float literal is out of range for f64
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |                                                    ^~~~~
+bad_number.dpm:2:58: error[E0107]: malformed number literal
+   2 | 0x 1__0 10_ 0b102 123abc 0xG1 18446744073709551616 1e400 1.5e
+     |                                                          ^~~~
+[exit 1]

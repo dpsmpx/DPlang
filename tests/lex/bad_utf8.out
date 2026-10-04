@@ -1,0 +1,21 @@
+1:1 Comment "// spec: lex.source"
+1:20 Newline "\n"
+2:1 KwLet "let"
+2:5 Ident "s"
+2:7 Eq "="
+2:9 Error "\"��\""
+2:13 Newline "\n"
+3:1 Comment "// �( bad"
+3:10 Newline "\n"
+4:1 Eof ""
+--- stderr ---
+bad_utf8.dpm:2:10: error[E0101]: invalid UTF-8 sequence
+   2 | let s = "��"
+     |          ^
+bad_utf8.dpm:2:11: error[E0101]: invalid UTF-8 sequence
+   2 | let s = "��"
+     |           ^
+bad_utf8.dpm:3:4: error[E0101]: invalid UTF-8 sequence
+   3 | // �( bad
+     |    ^
+[exit 1]

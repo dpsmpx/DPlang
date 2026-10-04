@@ -1,0 +1,11 @@
+// spec: module.pub
+import util
+
+fn use_it() i32 {
+    let s = util.Secret { v: 1 }
+    let k = util.KIND
+    return util.hidden() + util.shown() + util.missing()
+}
+
+fn sig(h: util.Hidden) {
+}

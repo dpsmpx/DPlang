@@ -1,0 +1,26 @@
+// spec: expr.literal type.conv
+enum Dir {
+    Up
+    Down
+}
+
+fn lits(x: u16, f: f32) {
+    let a: u8 = 255
+    let b: i8 = -128
+    let c = x + 1
+    let d = 1 + x
+    let e: f64 = 2
+    let g = f * 2.0
+    let h: ?i32 = none
+    let i: ?i32 = 5
+    var xs: List[i64] = []
+    xs.push(7)
+    let ys = [1, 2, 3]
+    let zs = [u8(1), 2]
+    let dir: Dir = .Up
+    let same = dir == .Down
+    let s = "a" + "b"
+    let big = u64(18446744073709551615)
+    let byte = 'a'
+    let shifted = x << 2
+}

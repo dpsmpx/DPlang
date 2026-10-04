@@ -1,0 +1,42 @@
+// spec: expr.call builtin.functions builtin.methods ref.marks
+struct Counter {
+    hits: i32
+    name: str = "c"
+}
+
+fn bump(c: &mut Counter, by: i32) {
+    c.hits += by
+}
+
+fn hits(c: &Counter) i32 {
+    return c.hits
+}
+
+fn calls(text: str) bool {
+    var c = Counter { hits: 0 }
+    bump(&mut c, 2)
+    let h = hits(&c)
+    var xs: List[i32] = repeat(0, 3)
+    xs.push(h)
+    xs.insert(0, 9)
+    let first = xs.remove(0)
+    xs.sort()
+    let has = xs.contains(9)
+    let last = xs.pop() ?? -1
+    xs.clear()
+    let n = len(xs) + len(text)
+    let lo = min(first, last)
+    let hi = max(2, lo)
+    let a = abs(-5)
+    let parsed = parse_int("42") ?? 0
+    let digit = is_digit(text[0]) || is_alpha('x') || is_space(' ') || is_alnum('9')
+    let parts = text.split(",")
+    let trimmed = text.trim()
+    let at = text.find("b")
+    let starts = text.starts_with("a")
+    assert(n >= 0)
+    println("hits " + str(h))
+    print(trimmed)
+    eprintln(parts[0])
+    return has && starts && digit
+}

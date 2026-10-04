@@ -1,0 +1,31 @@
+// spec: module.lookup type.names module.local pattern.or
+enum E {
+    A
+    B(i32)
+}
+
+struct P {
+    x: i32
+}
+
+fn f(a: Missing, b: List, c: i32[i32], d: void, e: ?nomod.T) {
+    let x = undefined_name + 1
+    let y = _
+    let z = E.C
+    let s = notastruct { x: 1 }
+    let v = 1
+    let v = 2
+    match x {
+        E.Q => return
+        .B(n) | .A => return
+        _ => return
+    }
+}
+
+fn notastruct() {
+}
+
+fn g(q: i32) {
+    for q in 0..3 {
+    }
+}

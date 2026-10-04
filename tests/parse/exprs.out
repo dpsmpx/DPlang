@@ -1,0 +1,189 @@
+Module exprs
+  Fn exprs
+    Block
+      Let a
+        Binary ||
+          Name x
+          Binary &&
+            Name y
+            Name z
+      Let b
+        Binary ||
+          Binary ==
+            Name a
+            Name b
+          Binary !=
+            Name c
+            Name d
+      Let c
+        Binary -
+          Binary +
+            Name x
+            Binary *
+              Name y
+              Name z
+          Binary %
+            Binary /
+              Name w
+              Name v
+            Name u
+      Let d
+        Binary *
+          Binary <<
+            Name x
+            Int 7
+          Name i
+      Let e
+        Binary |
+          Binary &
+            Name v
+            Int 127
+          Int 128
+      Let f
+        Binary -%
+          Binary +%
+            Name a
+            Name b
+          Binary *%
+            Name c
+            Name d
+      Let g
+        Binary ??
+          Name opt
+          Int 0
+      Let h
+        Binary +
+          Binary +
+            Unary -
+              Name x
+            Unary !
+              Name y
+          Unary ~
+            Name z
+      Let i
+        Try
+          Call
+            Name read
+            Name s
+      Let j
+        Call
+          Name f
+          Ref
+            Name x
+          Ref mut
+            Name y
+          Name z
+      Let k
+        Field .inner
+          Field .field
+            Name obj
+      Let l
+        Call
+          Field .push
+            Name xs
+          Int 1
+      Let m
+        Index
+          Index
+            Name xs
+            Name i
+          Name j
+      Let n
+        Binary +
+          Binary +
+            Slice
+              Name s
+              Int 1
+              Int 3
+            Slice
+              Name s
+              -
+              Int 2
+          Slice
+            Name s
+            Int 2
+            -
+      Let o
+        StructLit
+          Name Item
+          FieldInit id
+            Int 3
+          FieldInit name (short)
+      Let p
+        StructLit
+          Field .Item
+            Name world
+          FieldInit id
+            Int 1
+      Let q
+        StructLit
+          Name Item
+      Let r
+        VariantLit .Tick
+      Let s
+        VariantLit .Move(..)
+          Int 1
+          Int 2
+      Let t
+        VariantLit .Hit {..}
+          FieldInit target
+            Int 3
+          FieldInit damage
+            Int 9
+      Let u
+        Field .Tick
+          Name Event
+      Let v
+        List
+          Int 1
+          Int 2
+          Int 3
+      Let w
+        List
+      Let y
+        Binary *
+          Paren
+            Binary +
+              Name a
+              Name b
+          Name c
+      Let z
+        Binary +
+          Binary +
+            Binary +
+              Binary +
+                Int 42
+                Int 255
+              Int 1000
+            Float 1.5
+          Float 20000000000
+      Let s2
+        Binary +
+          Str "text\n"
+          Byte 97
+      Let bools
+        Binary &&
+          Bool true
+          Bool false
+      Let nothing
+        None
+      Let conv
+        Binary +
+          Call
+            Name i32
+            Name x
+          Call
+            Field .wrap
+              Name u32
+            Unary -
+              Int 1
+      Let cmp
+        Binary ==
+          Paren
+            Binary <
+              Name a
+              Name b
+          Paren
+            Binary <
+              Name c
+              Name d

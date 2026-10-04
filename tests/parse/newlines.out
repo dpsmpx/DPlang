@@ -1,0 +1,39 @@
+Module newlines
+  Fn lines
+    Block
+      Let call
+        Call
+          Name f
+          Name a
+          Name b
+      Let list
+        List
+          Int 1
+          Int 2
+      Let item
+        StructLit
+          Name Item
+          FieldInit id
+            Int 1
+          FieldInit name (short)
+      Let sum
+        Binary +
+          Binary +
+            Name a
+            Name b
+          Name c
+      If
+        Name a
+        Block
+          Assign =
+            Name x
+            Int 1
+        Else
+          Block
+            Assign =
+              Name x
+              Int 2
+      Let cond
+        Binary &&
+          Name a
+          Name b

@@ -1,0 +1,6 @@
+// spec: type.conv stmt.init
+fn f(s: str) i32 {
+    var later: i32
+    let a: i32 = "x"
+    return later + a
+}

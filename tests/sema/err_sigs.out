@@ -1,0 +1,17 @@
+--- stderr ---
+err_sigs.dpm:10:16: error[E0308]: public function 'infer' must name its error type, for example 'MyError!i32'
+  10 | pub fn infer() !i32 {
+     |                ^~~~
+err_sigs.dpm:14:17: error[E0309]: public function uses private type 'Private'
+  14 | pub fn leaks(p: Private) i32 {
+     |                 ^~~~~~~
+err_sigs.dpm:19:12: error[E0309]: public struct uses private type 'Private'
+  19 |     inner: List[Private]
+     |            ^~~~~~~~~~~~~
+err_sigs.dpm:23:9: error[E0309]: public enum uses private type 'Private'
+  23 |     One(Private)
+     |         ^~~~~~~
+err_sigs.dpm:26:15: error[E0316]: error type 'Private' is not an enum
+  26 | fn not_enum() Private!i32 {
+     |               ^~~~~~~
+[exit 1]

@@ -1,0 +1,56 @@
+--- stderr ---
+statements.dpm:14:12: error[E0509]: function 'no_result' has no result; 'return' takes no value
+  14 |     return 1
+     |            ^
+statements.dpm:19:9: error[E0509]: 'return' needs a value of type 'i32'
+  19 |         return
+     |         ^~~~~~
+statements.dpm:21:1: error[E0504]: function 'needs_value' can reach its end without returning a value
+  21 | }
+     | ^
+statements.dpm:24:5: error[E0411]: this expression has no effect; a statement must be a call or an assignment
+  24 |     n == 1
+     |     ^~~~~~
+statements.dpm:25:13: error[E0413]: struct 'P' is missing field 'x'
+  25 |     let p = P { y: 1 }
+     |             ^~~~~~~~~~
+statements.dpm:26:23: error[E0413]: struct 'P' has no field 'z'
+  26 |     let q = P { x: 1, z: 2, x: 3 }
+     |                       ^
+statements.dpm:26:29: error[E0413]: field 'x' is given twice
+  26 |     let q = P { x: 1, z: 2, x: 3 }
+     |                             ^
+statements.dpm:27:14: error[E0414]: variant 'Tup' carries data: E.Tup(...)
+  27 |     let e1 = E.Tup
+     |              ^~~~~
+statements.dpm:28:14: error[E0414]: variant 'Unit' is written E.Unit
+  28 |     let e2 = E.Unit(1)
+     |              ^~~~~~~~~
+statements.dpm:29:14: error[E0414]: variant 'Rec' is written E.Rec { ... }
+  29 |     let e3 = E.Rec(1)
+     |              ^~~~~~~~
+statements.dpm:30:17: error[E0414]: variant 'Tup' is written E.Tup(...)
+  30 |     let e4: E = .Tup { a: 1 }
+     |                 ^~~~~~~~~~~~~
+statements.dpm:31:14: error[E0419]: iterate a collection through a mark: 'for x in &xs'
+  31 |     for x in xs {
+     |              ^~
+statements.dpm:33:15: error[E0419]: cannot iterate over 'i32'
+  33 |     for x in &n {
+     |               ^
+statements.dpm:35:19: error[E0412]: '[]i32' is read-only; 'for ... in &mut' needs a List
+  35 |     for x in &mut view {
+     |                   ^~~~
+statements.dpm:40:1: error[E0504]: function 'stmts' can reach its end without returning a value
+  40 | }
+     | ^
+statements.dpm:47:15: error[E0503]: 'later' is used before it has a value
+  47 |     let use = later + 1
+     |               ^~~~~
+statements.dpm:52:18: error[E0503]: 'never' is used before it has a value
+  52 |     return use + never
+     |                  ^~~~~
+statements.dpm:56:5: error[E0420]: 'break' outside of a loop
+  56 |     break
+     |     ^~~~~
+[exit 1]

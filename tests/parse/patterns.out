@@ -1,0 +1,82 @@
+Module patterns
+  Fn pats
+    Param e Event
+    Param o ?i32
+    Param r !i32
+    Block
+      Match
+        Name e
+        Arm .Tick
+          Assign =
+            Name x
+            Int 1
+        Arm .Move(dx, _)
+          Assign =
+            Name x
+            Name dx
+        Arm .Hit {target, damage: d}
+          Assign =
+            Name x
+            Name d
+        Arm Event.Stop
+          Assign =
+            Name x
+            Int 0
+        Arm world.Event.Far
+          Assign =
+            Name x
+            Int 0
+        Arm .A | .B
+          Assign =
+            Name x
+            Int 0
+        Arm _
+          Assign =
+            Name x
+            Int 0
+      Match
+        Name o
+        Arm some(v)
+          Assign =
+            Name x
+            Name v
+        Arm none
+          Assign =
+            Name x
+            Int 0
+      Match
+        Name r
+        Arm ok(v)
+          Assign =
+            Name x
+            Name v
+        Arm err(e)
+          Assign =
+            Name x
+            Int 0
+      Match
+        Name n
+        Arm 0
+          Assign =
+            Name x
+            Int 0
+        Arm -1
+          Assign =
+            Name x
+            Int 1
+        Arm byte 97
+          Assign =
+            Name x
+            Int 2
+        Arm "s"
+          Assign =
+            Name x
+            Int 3
+        Arm true
+          Assign =
+            Name x
+            Int 4
+        Arm v
+          Assign =
+            Name x
+            Name v

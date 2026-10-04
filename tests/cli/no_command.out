@@ -1,0 +1,4 @@
+--- stderr ---
+error: no command given
+run 'dplang help' to list the commands
+[exit 2]

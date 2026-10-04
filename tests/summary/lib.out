@@ -1,0 +1,10 @@
+module shapes
+  pub enum ShapeError { Negative, TooBig { limit: f64 } }
+  pub enum Shape { Circle(f64), Rect { w: f64, h: f64 } }
+  pub struct Canvas { shapes: List[Shape], name: str = ... }
+  pub const MAX: i32
+  @det pub fn area(s: &Shape) f64
+  pub fn add(c: &mut Canvas, s: Shape) ShapeError!void
+  pub fn parse(text: str) ShapeError!?Shape
+module main
+  pub fn total(xs: []shapes.Shape) f64

@@ -1,0 +1,44 @@
+--- stderr ---
+err_duplicate.dpm:3:8: error[E0303]: module 'ok_scopes' is imported twice
+   3 | import ok_scopes
+     |        ^~~~~~~~~
+err_duplicate.dpm:8:4: error[E0304]: 'twice' is defined twice
+   8 | fn twice() {
+     |    ^~~~~
+err_duplicate.dpm:5:4: note: first defined here
+   5 | fn twice() {
+     |    ^~~~~
+err_duplicate.dpm:11:8: error[E0305]: 'ok_scopes' is also the name of an imported module
+  11 | struct ok_scopes {
+     |        ^~~~~~~~~
+err_duplicate.dpm:3:8: note: first defined here
+   3 | import ok_scopes
+     |        ^~~~~~~~~
+err_duplicate.dpm:16:5: error[E0318]: field 'a' is defined twice
+  16 |     a: i64
+     |     ^
+err_duplicate.dpm:15:5: note: first defined here
+  15 |     a: i32
+     |     ^
+err_duplicate.dpm:21:5: error[E0318]: variant 'A' is defined twice
+  21 |     A
+     |     ^
+err_duplicate.dpm:20:5: note: first defined here
+  20 |     A
+     |     ^
+err_duplicate.dpm:22:17: error[E0318]: field 'x' is defined twice
+  22 |     B { x: i32, x: i32 }
+     |                 ^
+err_duplicate.dpm:22:9: note: first defined here
+  22 |     B { x: i32, x: i32 }
+     |         ^
+err_duplicate.dpm:25:19: error[E0318]: parameter 'p' is defined twice
+  25 | fn params(p: i32, p: i32) {
+     |                   ^
+err_duplicate.dpm:25:11: note: first defined here
+  25 | fn params(p: i32, p: i32) {
+     |           ^
+err_duplicate.dpm:28:1: error[E0319]: unknown attribute '@fast'
+  28 | @fast
+     | ^~~~~
+[exit 1]

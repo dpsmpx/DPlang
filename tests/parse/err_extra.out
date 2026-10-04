@@ -1,0 +1,23 @@
+Module err_extra
+  Fn f
+    Block
+      Let a
+        Int 1
+      Return
+        Name a
+      Assign =
+        Name x
+        Int 1
+  Struct S
+    Field a: i32
+--- stderr ---
+err_extra.dpm:3:15: error[E0204]: expected end of line, found integer literal 2
+   3 |     let a = 1 2
+     |               ^
+err_extra.dpm:4:14: error[E0204]: expected end of line, found identifier 'b'
+   4 |     return a b
+     |              ^
+err_extra.dpm:7:21: error[E0204]: expected end of line, found 'struct'
+   7 | struct S { a: i32 } struct T { b: i32 }
+     |                     ^~~~~~
+[exit 1]

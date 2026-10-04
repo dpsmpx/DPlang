@@ -1,0 +1,7 @@
+// spec: syntax.stmt syntax.item
+fn f() {
+    let a = 1 2
+    return a b
+    x = 1
+}
+struct S { a: i32 } struct T { b: i32 }

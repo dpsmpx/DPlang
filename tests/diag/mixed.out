@@ -1,0 +1,2 @@
+{"diagnostics":[{"severity":"error","code":"E0401","message":"expected 'i32', found 'str'","file":"mixed.dpm","line":4,"col":18,"end_line":4,"end_col":21,"notes":[]},{"severity":"error","code":"E0503","message":"'later' is used before it has a value","file":"mixed.dpm","line":5,"col":12,"end_line":5,"end_col":17,"notes":[]}]}
+[exit 1]

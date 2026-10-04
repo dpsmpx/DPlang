@@ -1,0 +1,4 @@
+// spec: lex.punct lex.keyword lex.newline
+let a = 1 $ # `
+let λ = 2
+let unsafe = 3

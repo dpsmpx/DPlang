@@ -1,0 +1,2 @@
+// spec: module.graph
+import err_self_import

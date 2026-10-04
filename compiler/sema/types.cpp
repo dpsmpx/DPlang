@@ -1,0 +1,80 @@
+#include "sema/types.h"
+
+#include "sema/defs.h"
+
+namespace dp::sema {
+
+TypeTable::TypeTable() {
+    for (size_t i = 0; i <= static_cast<size_t>(TK::Str); i++) {
+        Type& t = store_.emplace_back();
+        t.kind = static_cast<TK>(i);
+        prims_[i] = &t;
+    }
+}
+
+const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e) {
+    auto key = std::make_tuple(static_cast<int>(k), static_cast<const void*>(elem), static_cast<const void*>(err),
+                               static_cast<const void*>(s), static_cast<const void*>(e));
+    auto it = interned_.find(key);
+    if (it != interned_.end()) return it->second;
+    Type& t = store_.emplace_back();
+    t.kind = k;
+    t.elem = elem;
+    t.err = err;
+    t.sdef = s;
+    t.edef = e;
+    interned_.emplace(key, &t);
+    return &t;
+}
+
+std::string type_name(const Type* t, const ModuleInfo* from) {
+    if (!t) return "?";
+    switch (t->kind) {
+        case TK::Error: return "<error>";
+        case TK::Void: return "void";
+        case TK::Bool: return "bool";
+        case TK::I8: return "i8";
+        case TK::I16: return "i16";
+        case TK::I32: return "i32";
+        case TK::I64: return "i64";
+        case TK::Int: return "int";
+        case TK::U8: return "u8";
+        case TK::U16: return "u16";
+        case TK::U32: return "u32";
+        case TK::U64: return "u64";
+        case TK::F32: return "f32";
+        case TK::F64: return "f64";
+        case TK::Str: return "str";
+        case TK::List: return "List[" + type_name(t->elem, from) + "]";
+        case TK::Slice: return "[]" + type_name(t->elem, from);
+        case TK::Optional: return "?" + type_name(t->elem, from);
+        case TK::Result: return (t->err ? type_name(t->err, from) : "") + "!" + type_name(t->elem, from);
+        case TK::Struct:
+            return from && t->sdef->module != from ? t->sdef->module->name + "." + t->sdef->name : t->sdef->name;
+        case TK::Enum:
+            return from && t->edef->module != from ? t->edef->module->name + "." + t->edef->name : t->edef->name;
+    }
+    return "?";
+}
+
+bool contains_slice(const Type* t) {
+    if (!t) return false;
+    if (t->kind == TK::Slice) return true;
+    return contains_slice(t->elem) || contains_slice(t->err);
+}
+
+bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }
+bool is_signed(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::Int; }
+bool is_float(const Type* t) { return t && (t->kind == TK::F32 || t->kind == TK::F64); }
+bool is_numeric(const Type* t) { return is_integer(t) || is_float(t); }
+
+int int_bits(const Type* t) {
+    switch (t->kind) {
+        case TK::I8: case TK::U8: return 8;
+        case TK::I16: case TK::U16: return 16;
+        case TK::I32: case TK::U32: return 32;
+        default: return 64;
+    }
+}
+
+}  // namespace dp::sema

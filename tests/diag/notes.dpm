@@ -1,0 +1,11 @@
+// spec: module.scope module.local
+fn twice() {
+}
+
+fn twice() {
+}
+
+fn shadow(n: i32) {
+    let v = 1
+    let v = 2
+}
