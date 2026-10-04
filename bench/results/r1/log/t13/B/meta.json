@@ -20,5 +20,10 @@
  "id": "t13",
  "lang": "B",
  "kind": "refactor",
- "created": "2026-10-04T04:39:39"
+ "created": "2026-10-04T04:39:39",
+ "session": {
+  "total_tokens": 61711,
+  "tool_uses": 5,
+  "seconds": 37.7
+ }
 }

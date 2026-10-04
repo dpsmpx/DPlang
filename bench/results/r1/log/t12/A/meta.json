@@ -20,5 +20,10 @@
  "id": "t12",
  "lang": "A",
  "kind": "fix",
- "created": "2026-10-04T04:39:39"
+ "created": "2026-10-04T04:39:39",
+ "session": {
+  "total_tokens": 56992,
+  "tool_uses": 5,
+  "seconds": 17.4
+ }
 }

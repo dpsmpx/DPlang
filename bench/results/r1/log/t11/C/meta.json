@@ -20,5 +20,10 @@
  "id": "t11",
  "lang": "C",
  "kind": "write",
- "created": "2026-10-04T04:39:39"
+ "created": "2026-10-04T04:39:39",
+ "session": {
+  "total_tokens": 56843,
+  "tool_uses": 5,
+  "seconds": 18.7
+ }
 }
