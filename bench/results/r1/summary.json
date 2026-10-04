@@ -1156,20 +1156,26 @@
    "task": "t10",
    "lang": "cpp",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 2584,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 3118,
+    "final": 3544
    },
    "tokens": null,
    "token_model": null,
-   "session": null,
+   "session": {
+    "total_tokens": 53180,
+    "tool_uses": 5,
+    "seconds": 46.6
+   },
    "meta": {
     "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
     "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
@@ -1182,20 +1188,26 @@
    "task": "t10",
    "lang": "A",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 16227,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 2965,
+    "final": 3227
    },
    "tokens": null,
    "token_model": null,
-   "session": null,
+   "session": {
+    "total_tokens": 64706,
+    "tool_uses": 5,
+    "seconds": 81.7
+   },
    "meta": {
     "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
     "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
@@ -1208,20 +1220,26 @@
    "task": "t10",
    "lang": "B",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 15992,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 2539,
+    "final": 2831
    },
    "tokens": null,
    "token_model": null,
-   "session": null,
+   "session": {
+    "total_tokens": 63019,
+    "tool_uses": 5,
+    "seconds": 72.9
+   },
    "meta": {
     "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
     "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
@@ -1234,20 +1252,26 @@
    "task": "t10",
    "lang": "C",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 15748,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 2601,
+    "final": 2833
    },
    "tokens": null,
    "token_model": null,
-   "session": null,
+   "session": {
+    "total_tokens": 64334,
+    "tool_uses": 5,
+    "seconds": 87.3
+   },
    "meta": {
     "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
     "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
@@ -1260,20 +1284,26 @@
    "task": "t11",
    "lang": "cpp",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 2310,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 729,
+    "final": 1021
    },
    "tokens": null,
    "token_model": null,
-   "session": null,
+   "session": {
+    "total_tokens": 49078,
+    "tool_uses": 5,
+    "seconds": 12.4
+   },
    "meta": {
     "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
     "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
@@ -1286,20 +1316,26 @@
    "task": "t11",
    "lang": "A",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 16011,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 710,
+    "final": 950
    },
    "tokens": null,
    "token_model": null,
-   "session": null,
+   "session": {
+    "total_tokens": 57687,
+    "tool_uses": 5,
+    "seconds": 23.7
+   },
    "meta": {
     "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
     "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
@@ -1312,20 +1348,26 @@
    "task": "t11",
    "lang": "B",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 15793,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 617,
+    "final": 850
    },
    "tokens": null,
    "token_model": null,
-   "session": null,
+   "session": {
+    "total_tokens": 57204,
+    "tool_uses": 5,
+    "seconds": 20.4
+   },
    "meta": {
     "commit": "6ec6710b22ba31f473aa950bcbf05b2ea6daba40",
     "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
@@ -1338,16 +1380,18 @@
    "task": "t11",
    "lang": "C",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 15548,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 631,
+    "final": 857
    },
    "tokens": null,
    "token_model": null,
@@ -1364,16 +1408,18 @@
    "task": "t12",
    "lang": "cpp",
    "kind": "fix",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 2199,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 266,
+    "final": 644
    },
    "tokens": null,
    "token_model": null,
@@ -1705,14 +1751,16 @@
    "t06",
    "t07",
    "t08",
-   "t09"
+   "t09",
+   "t10",
+   "t11"
   ],
   "unit": "chars",
   "by_lang": {
    "cpp": {
     "cells": 14,
-    "accepted": 9,
-    "first_try": 9,
+    "accepted": 12,
+    "first_try": 12,
     "mean_attempts": 1.0,
     "classes": {
      "разбор": 0,
@@ -1725,17 +1773,17 @@
      "прототип": 0
     },
     "common": {
-     "prompt": 21035,
-     "diagnostics": 207,
-     "written": 14622,
-     "final": 18007
+     "prompt": 25929,
+     "diagnostics": 253,
+     "written": 18469,
+     "final": 22572
     },
-    "session": 450688
+    "session": 552946
    },
    "A": {
     "cells": 14,
-    "accepted": 9,
-    "first_try": 9,
+    "accepted": 11,
+    "first_try": 11,
     "mean_attempts": 1.0,
     "classes": {
      "разбор": 0,
@@ -1748,17 +1796,17 @@
      "прототип": 0
     },
     "common": {
-     "prompt": 144204,
-     "diagnostics": 207,
-     "written": 13408,
-     "final": 15888
+     "prompt": 176442,
+     "diagnostics": 253,
+     "written": 17083,
+     "final": 20065
     },
-    "session": 529992
+    "session": 652385
    },
    "B": {
     "cells": 14,
-    "accepted": 9,
-    "first_try": 9,
+    "accepted": 11,
+    "first_try": 11,
     "mean_attempts": 1.0,
     "classes": {
      "разбор": 0,
@@ -1771,17 +1819,17 @@
      "прототип": 0
     },
     "common": {
-     "prompt": 142159,
-     "diagnostics": 207,
-     "written": 11623,
-     "final": 14092
+     "prompt": 173944,
+     "diagnostics": 253,
+     "written": 14779,
+     "final": 17773
     },
-    "session": 525754
+    "session": 645977
    },
    "C": {
     "cells": 14,
-    "accepted": 9,
-    "first_try": 9,
+    "accepted": 11,
+    "first_try": 11,
     "mean_attempts": 1.0,
     "classes": {
      "разбор": 0,
@@ -1794,12 +1842,12 @@
      "прототип": 0
     },
     "common": {
-     "prompt": 139945,
-     "diagnostics": 207,
-     "written": 11508,
-     "final": 13851
+     "prompt": 171241,
+     "diagnostics": 253,
+     "written": 14740,
+     "final": 17541
     },
-    "session": 521329
+    "session": null
    }
   }
  }
