@@ -1,0 +1,30 @@
+// spec: module.scope syntax.item
+import ok_scopes
+import ok_scopes
+
+fn twice() {
+}
+
+fn twice() {
+}
+
+struct ok_scopes {
+}
+
+struct S {
+    a: i32
+    a: i64
+}
+
+enum E {
+    A
+    A
+    B { x: i32, x: i32 }
+}
+
+fn params(p: i32, p: i32) {
+}
+
+@fast
+fn attr() {
+}

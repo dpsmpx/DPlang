@@ -1,0 +1,27 @@
+// spec: module.import module.pub module.lookup
+import geo
+
+pub fn area_sum(shapes: []geo.Shape) f64 {
+    var total = 0.0
+    for s in &shapes {
+        match s {
+            geo.Shape.Circle(r) => total += geo.PI * r * r
+            .Rect { w, h } => total += w * h
+            .Empty => continue
+        }
+    }
+    return total
+}
+
+fn origin() geo.Point {
+    return geo.Point { x: 0.0, y: 0.0 }
+}
+
+fn far(p: &geo.Point) bool {
+    let o = origin()
+    return geo.dist(&o, p) > geo.LIMIT
+}
+
+fn pick() geo.Shape {
+    return geo.Shape.Empty
+}

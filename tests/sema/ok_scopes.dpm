@@ -1,0 +1,46 @@
+// spec: module.local module.scope
+struct Item {
+    id: i32
+    name: str = ""
+}
+
+enum Ev {
+    Tick
+    Hit { target: i32, damage: i32 }
+}
+
+fn scopes(items: &mut List[Item], n: int) i32 {
+    var total = 0
+    for i in 0..n {
+        let x = i
+        total += x
+    }
+    for i in 0..n {
+        let x = i * 2
+        total += x
+    }
+    if let last = items.pop() {
+        total += last.id
+    }
+    for it in &mut items {
+        it.id = 0
+    }
+    let id = 3
+    let name = "a"
+    items.push(Item { id, name })
+    _ = helper()
+    return total
+}
+
+fn events(e: Ev) i32 {
+    match e {
+        .Hit { target, damage: d } => return target + d
+        Ev.Tick => return 0
+    }
+}
+
+fn helper() i32 {
+    return LIMIT
+}
+
+const LIMIT: i32 = 64

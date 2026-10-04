@@ -49,8 +49,13 @@ SUITES = {
     'lex': ('.dpm', DPLANG, lambda name, path: ['debug', 'lex', name]),
     'parse': ('.dpm', DPLANG, lambda name, path: ['debug', 'parse', name]),
     'print': ('.dpm', DPLANG, lambda name, path: ['debug', 'print', name]),
+    'sema': ('.dpm', DPLANG, lambda name, path: ['check', name]),
+    'summary': ('.dpm', DPLANG, lambda name, path: ['debug', 'summary', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
+# Наборы, где тест может быть каталогом из нескольких модулей: вход —
+# X/main.dpm, ожидаемое — X.out рядом с каталогом.
+DIR_SUITES = {'sema', 'summary'}
 
 
 def build():
@@ -78,20 +83,27 @@ def discover(pattern):
             continue
         for name in sorted(os.listdir(d)):
             path = os.path.join(d, name)
-            if os.path.isfile(path) and name.endswith(ext):
-                rel = os.path.relpath(path, TESTS)
-                if pattern in rel:
-                    tests.append((suite, path))
+            if suite in DIR_SUITES and os.path.isdir(path) and os.path.exists(os.path.join(path, 'main.dpm')):
+                path = os.path.join(path, 'main.dpm')
+            elif not (os.path.isfile(path) and name.endswith(ext)):
+                continue
+            if pattern in os.path.relpath(path, TESTS):
+                tests.append((suite, path))
     return tests
+
+
+def suite_dir_of(suite, path):
+    return os.path.join(TESTS, suite)
 
 
 def actual_output(suite, path):
     ext, program, make_args = SUITES[suite]
-    name = os.path.basename(path)
+    cwd = suite_dir_of(suite, path)
+    name = os.path.relpath(path, cwd)
     argv = [program] + make_args(name, path)
     try:
         r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
-                           cwd=os.path.dirname(path))
+                           cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout
@@ -104,6 +116,8 @@ def actual_output(suite, path):
 
 def expected_path(suite, path):
     ext = SUITES[suite][0]
+    if os.path.basename(path) == 'main.dpm' and os.path.dirname(path) != suite_dir_of(suite, path):
+        return os.path.dirname(path) + '.out'
     return path[:-len(ext)] + '.out'
 
 

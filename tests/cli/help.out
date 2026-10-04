@@ -1,6 +1,7 @@
 usage: dplang <command> [arguments]
 
 commands:
+  check <file.dpm> check a program and the modules it imports
   explain <code>   explain a diagnostic code, e.g. E0101
   help             show this help
   --version        print the compiler version
@@ -9,3 +10,4 @@ debugging commands (output format is not stable):
   debug lex <file.dpm>     print the tokens of a file
   debug parse <file.dpm>   print the syntax tree of a file
   debug print <file.dpm>   print a file in canonical form
+  debug summary <file.dpm> print the interface summaries of a program

@@ -69,3 +69,64 @@ DP_CODE(E0205, "attribute not allowed here",
 DP_CODE(E0206, "`pub` not allowed here",
         "`pub` makes a function, struct, enum or constant visible to other modules (spec: syntax.item). "
         "It cannot be applied to `import`.")
+
+// --- E03xx: модули и имена (docs/spec/core.md, раздел 3)
+
+DP_CODE(E0301, "import cycle",
+        "Modules must not import each other in a cycle (spec: module.graph). The message lists the cycle. "
+        "Move the shared declarations into a third module that both import.")
+DP_CODE(E0302, "cannot find module",
+        "`import name` looks for `name.dpm` next to the main module of the program, then in the standard "
+        "library (spec: module.import). The message lists the places searched.")
+DP_CODE(E0303, "duplicate import",
+        "The same module is imported twice in one file (spec: module.import). Remove the second `import`.")
+DP_CODE(E0304, "duplicate definition",
+        "Two top-level declarations of one module have the same name (spec: module.scope). Rename one of them.")
+DP_CODE(E0305, "name conflicts with a module",
+        "A top-level declaration has the same name as an imported module (spec: module.scope). Rename the "
+        "declaration.")
+DP_CODE(E0306, "private item",
+        "The item exists in the module but is not marked `pub`, so other modules cannot use it "
+        "(spec: module.pub). Mark it `pub` in its module or use another item.")
+DP_CODE(E0307, "cannot find name",
+        "No local variable, declaration of this module, imported module or built-in function has this name "
+        "(spec: module.lookup). Check the spelling, or declare or import it.")
+DP_CODE(E0308, "public function without an error type",
+        "A public function that can fail names its error type in the signature: `pub fn read(s: str) "
+        "ReadError!str` (spec: error.sig, decision R41). `!T` without a type is only allowed in functions "
+        "that are not `pub`.")
+DP_CODE(E0309, "private type in a public signature",
+        "A public function, struct, enum or constant mentions a type that is not `pub` (spec: module.pub). "
+        "Other modules could not name that type. Mark the type `pub` or keep the declaration private.")
+DP_CODE(E0310, "name already defined",
+        "A local variable, parameter, loop variable or pattern binding reuses a name that is already defined "
+        "in this function's enclosing scopes (spec: module.local). DPlang has no shadowing of local names; pick "
+        "another name.")
+DP_CODE(E0311, "module has no such item",
+        "The module named before the dot has no declaration with this name (spec: module.lookup).")
+DP_CODE(E0312, "enum has no such variant",
+        "The enum named before the dot has no variant with this name (spec: type.enum).")
+DP_CODE(E0313, "cannot find type",
+        "No struct, enum or built-in type has this name (spec: type.names). Built-in types are `bool`, `i8` "
+        "to `i64`, `u8` to `u64`, `int`, `f32`, `f64`, `str` and `List[T]`.")
+DP_CODE(E0314, "wrong number of type arguments",
+        "`List` takes exactly one type argument, `List[T]`; other types take none (spec: type.names).")
+DP_CODE(E0315, "`void` not allowed here",
+        "`void` is only the value part of a result type, `!void` or `E!void` (spec: type.names). A function "
+        "without a result has no return type at all.")
+DP_CODE(E0316, "error type is not an enum",
+        "In `E!T` the error type `E` must be an enum: an error is a variant of that enum (spec: error.sig).")
+DP_CODE(E0317, "invalid module name",
+        "A module's name is its file name without `.dpm` and must be an identifier that is not a keyword "
+        "(spec: module.file).")
+DP_CODE(E0318, "duplicate member",
+        "A struct has two fields, an enum two variants, a variant two fields or a function two parameters "
+        "with the same name (spec: module.scope).")
+DP_CODE(E0319, "unknown attribute",
+        "The only attribute of DPlang v0.1 is `@det` before a function (spec: syntax.item).")
+DP_CODE(E0320, "not a struct",
+        "A struct literal `S { ... }` needs a struct or a record enum variant before the `{` "
+        "(spec: expr.struct).")
+DP_CODE(E0321, "binding in an alternative pattern",
+        "Patterns joined by `|` must not bind names, because each alternative would bind different values "
+        "(spec: pattern.or). Split the arm or use `_`.")

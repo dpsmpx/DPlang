@@ -14,7 +14,33 @@
 #include "support/source.h"
 #include "syntax/lexer.h"
 
+// Результаты проверки имён и типов (sema) хранятся прямо в узлах AST —
+// AST и его поля sema внутренние (S2).
+namespace dp::sema {
+struct Type;
+struct Local;
+struct FnDef;
+struct ConstDef;
+struct StructDef;
+struct EnumDef;
+struct ModuleInfo;
+}  // namespace dp::sema
+
 namespace dp::ast {
+
+// На что указывает имя или путь (заполняет проверка имён).
+enum class ResKind : uint8_t { None, Local, Fn, Const, Struct, Enum, Module, Variant, BuiltinFn, BuiltinType };
+
+struct Res {
+    ResKind kind = ResKind::None;
+    sema::Local* local = nullptr;
+    const sema::FnDef* fn = nullptr;
+    const sema::ConstDef* cn = nullptr;
+    const sema::StructDef* st = nullptr;
+    const sema::EnumDef* en = nullptr;  // Enum, Variant
+    const sema::ModuleInfo* mod = nullptr;
+    uint32_t index = 0;  // Variant — номер варианта; BuiltinFn и BuiltinType — номер встроенного
+};
 
 struct Node {
     Span span;
@@ -27,6 +53,7 @@ enum class TypeKind : uint8_t { Name, Slice, Optional, Result, Error };
 
 struct Type : Node {
     TypeKind kind;
+    const sema::Type* resolved = nullptr;  // тип после проверки имён
     explicit Type(TypeKind k) : kind(k) {}
 };
 
@@ -72,6 +99,7 @@ enum class ExprKind : uint8_t {
 
 struct Expr : Node {
     ExprKind kind;
+    const sema::Type* type = nullptr;  // тип после проверки типов
     explicit Expr(ExprKind k) : kind(k) {}
 };
 
@@ -114,6 +142,7 @@ struct NameExpr : Expr {
     static constexpr ExprKind Kind = ExprKind::Name;
     NameExpr() : Expr(Kind) {}
     std::string name;
+    Res res;
 };
 
 struct FieldExpr : Expr {  // `a.b`
@@ -122,6 +151,7 @@ struct FieldExpr : Expr {  // `a.b`
     Expr* object = nullptr;
     std::string name;
     Span name_span;
+    Res res;  // член модуля, вариант перечисления; None — поле значения
 };
 
 struct IndexExpr : Expr {  // `a[i]`
@@ -188,10 +218,13 @@ struct RefExpr : Expr {  // пометка аргумента `&x`, `&mut x`
     Expr* operand = nullptr;
 };
 
+struct NameExpr;
+
 struct FieldInit {
     std::string name;
     Span name_span;
     Expr* value = nullptr;  // nullptr — краткая запись `name` вместо `name: name`
+    NameExpr* shorthand = nullptr;  // краткая запись: имя-значение (создаёт проверка имён)
 };
 
 // `S { ... }`, `m.S { ... }`, `E.V { ... }` — что именно, решает проверка имён.
@@ -200,6 +233,7 @@ struct StructLitExpr : Expr {
     StructLitExpr() : Expr(Kind) {}
     Expr* path = nullptr;  // NameExpr или цепочка FieldExpr
     std::vector<FieldInit> fields;
+    Res res;  // Struct или Variant
 };
 
 enum class VariantForm : uint8_t { Unit, Tuple, Record };
@@ -251,6 +285,7 @@ struct BindPat : Pat {
     static constexpr PatKind Kind = PatKind::Bind;
     BindPat() : Pat(Kind) {}
     std::string name;
+    sema::Local* local = nullptr;
 };
 
 struct NonePat : Pat {
@@ -271,6 +306,7 @@ struct FieldPat {
     std::string name;
     Span name_span;
     Pat* pat = nullptr;  // nullptr — краткая запись: связать поле с именем поля
+    sema::Local* local = nullptr;  // краткая запись: переменная поля
 };
 
 // `.V`, `.V(p, q)`, `.V { f, g: p }`; с типом — `E.V`, `m.E.V`.
@@ -283,6 +319,7 @@ struct VariantPat : Pat {
     VariantForm form = VariantForm::Unit;
     std::vector<Pat*> args;
     std::vector<FieldPat> fields;
+    Res res;  // Variant
 };
 
 struct OrPat : Pat {
@@ -319,6 +356,7 @@ struct LetStmt : Stmt {  // `let x = e`, `var x: T = e`
     Span name_span;
     Type* type = nullptr;
     Expr* value = nullptr;
+    sema::Local* local = nullptr;
 };
 
 enum class AssignOp : uint8_t { Set, Add, Sub, Mul, Div, Rem, BitAnd, BitOr, BitXor, Shl, Shr };
@@ -344,6 +382,7 @@ struct IfStmt : Stmt {
     std::string let_name;  // `if let v = e`
     Span let_span;
     Expr* let_value = nullptr;
+    sema::Local* let_local = nullptr;
     Block* then = nullptr;
     Stmt* els = nullptr;  // BlockStmt, IfStmt или nullptr
 };
@@ -367,6 +406,7 @@ struct ForStmt : Stmt {
     Expr* iter = nullptr;  // коллекция или начало диапазона
     Expr* hi = nullptr;    // конец диапазона
     Block* body = nullptr;
+    sema::Local* local = nullptr;
 };
 
 struct MatchArm {
@@ -446,6 +486,7 @@ struct Param {
     ParamMode mode = ParamMode::Value;
     Type* type = nullptr;
     Span span;
+    sema::Local* local = nullptr;
 };
 
 struct FnItem : Item {

@@ -19,6 +19,12 @@ endif()
 add_library(dpcore STATIC
     support/source.cpp
     support/diag.cpp
+    sema/check.cpp
+    sema/collect.cpp
+    sema/loader.cpp
+    sema/resolve.cpp
+    sema/summary.cpp
+    sema/types.cpp
     syntax/ast_dump.cpp
     syntax/lexer.cpp
     syntax/literal.cpp

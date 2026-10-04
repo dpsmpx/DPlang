@@ -1,0 +1,47 @@
+--- stderr ---
+err_unknown.dpm:11:9: error[E0313]: cannot find type 'Missing'
+  11 | fn f(a: Missing, b: List, c: i32[i32], d: void, e: ?nomod.T) {
+     |         ^~~~~~~
+err_unknown.dpm:11:21: error[E0314]: 'List' takes exactly one type argument: List[T]
+  11 | fn f(a: Missing, b: List, c: i32[i32], d: void, e: ?nomod.T) {
+     |                     ^~~~
+err_unknown.dpm:11:30: error[E0314]: type 'i32' takes no type arguments
+  11 | fn f(a: Missing, b: List, c: i32[i32], d: void, e: ?nomod.T) {
+     |                              ^~~~~~~~
+err_unknown.dpm:11:43: error[E0315]: 'void' is only allowed as the value of a result: '!void'
+  11 | fn f(a: Missing, b: List, c: i32[i32], d: void, e: ?nomod.T) {
+     |                                           ^~~~
+err_unknown.dpm:11:53: error[E0313]: cannot find type 'nomod.T': 'nomod' is not an imported module
+  11 | fn f(a: Missing, b: List, c: i32[i32], d: void, e: ?nomod.T) {
+     |                                                     ^~~~~~~
+err_unknown.dpm:12:13: error[E0307]: cannot find 'undefined_name' in this scope
+  12 |     let x = undefined_name + 1
+     |             ^~~~~~~~~~~~~~
+err_unknown.dpm:13:13: error[E0307]: '_' is not a value; it can only discard one: '_ = e'
+  13 |     let y = _
+     |             ^
+err_unknown.dpm:14:15: error[E0312]: enum 'E' has no variant 'C'
+  14 |     let z = E.C
+     |               ^
+err_unknown.dpm:15:13: error[E0320]: struct literal needs a struct or an enum variant
+  15 |     let s = notastruct { x: 1 }
+     |             ^~~~~~~~~~
+err_unknown.dpm:17:9: error[E0310]: 'v' is already defined in this function
+  17 |     let v = 2
+     |         ^
+err_unknown.dpm:16:9: note: previous definition here
+  16 |     let v = 1
+     |         ^
+err_unknown.dpm:19:11: error[E0312]: enum 'E' has no variant 'Q'
+  19 |         E.Q => return
+     |           ^
+err_unknown.dpm:20:12: error[E0321]: patterns joined by '|' cannot bind names
+  20 |         .B(n) | .A => return
+     |            ^
+err_unknown.dpm:29:9: error[E0310]: 'q' is already defined in this function
+  29 |     for q in 0..3 {
+     |         ^
+err_unknown.dpm:28:6: note: previous definition here
+  28 | fn g(q: i32) {
+     |      ^
+[exit 1]

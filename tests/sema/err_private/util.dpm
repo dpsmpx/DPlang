@@ -1,0 +1,17 @@
+struct Secret {
+    v: i32
+}
+
+pub struct Hidden2 {
+    v: i32
+}
+
+const KIND: i32 = 1
+
+fn hidden() i32 {
+    return 1
+}
+
+pub fn shown() i32 {
+    return 2
+}

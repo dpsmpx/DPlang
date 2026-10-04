@@ -1,0 +1,5 @@
+--- stderr ---
+err_self_import.dpm:2:8: error[E0301]: import cycle: err_self_import -> err_self_import
+   2 | import err_self_import
+     |        ^~~~~~~~~~~~~~~
+[exit 1]

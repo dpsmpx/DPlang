@@ -1,0 +1,35 @@
+pub enum ShapeError {
+    Negative
+    TooBig { limit: f64 }
+}
+
+pub enum Shape {
+    Circle(f64)
+    Rect { w: f64, h: f64 }
+}
+
+pub struct Canvas {
+    shapes: List[Shape]
+    name: str = "canvas"
+}
+
+pub const MAX: i32 = 100
+
+@det
+pub fn area(s: &Shape) f64 {
+    return 0.0
+}
+
+pub fn add(c: &mut Canvas, s: Shape) ShapeError!void {
+}
+
+pub fn parse(text: str) ShapeError!?Shape {
+    return none
+}
+
+fn hidden() {
+}
+
+struct Internal {
+    v: i32
+}

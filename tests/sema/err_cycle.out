@@ -1,0 +1,5 @@
+--- stderr ---
+err_cycle/b.dpm:2:8: error[E0301]: import cycle: a -> b -> a
+   2 | import a
+     |        ^
+[exit 1]

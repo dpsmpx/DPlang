@@ -4,10 +4,13 @@
 // Коды выхода: 0 — успех; 1 — в программе есть ошибки (диагностика);
 // 2 — неверный вызов CLI; 3 — внутренняя ошибка компилятора.
 #include <cstdio>
+#include <cstdlib>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "sema/sema.h"
 #include "support/diag.h"
 #include "support/json.h"
 #include "syntax/ast_dump.h"
@@ -23,6 +26,7 @@ constexpr std::string_view kUsage =
     "usage: dplang <command> [arguments]\n"
     "\n"
     "commands:\n"
+    "  check <file.dpm> check a program and the modules it imports\n"
     "  explain <code>   explain a diagnostic code, e.g. E0101\n"
     "  help             show this help\n"
     "  --version        print the compiler version\n"
@@ -30,7 +34,8 @@ constexpr std::string_view kUsage =
     "debugging commands (output format is not stable):\n"
     "  debug lex <file.dpm>     print the tokens of a file\n"
     "  debug parse <file.dpm>   print the syntax tree of a file\n"
-    "  debug print <file.dpm>   print a file in canonical form\n";
+    "  debug print <file.dpm>   print a file in canonical form\n"
+    "  debug summary <file.dpm> print the interface summaries of a program\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
 
@@ -151,18 +156,69 @@ int cmd_debug_parse(const std::vector<std::string_view>& args, bool print) {
     return finish(diags, sources);
 }
 
-int cmd_debug(const std::vector<std::string_view>& args) {
+// Каталог стандартной библиотеки: $DPLANG_STDLIB или stdlib/ репозитория
+// рядом с каталогом сборки (build/compiler/dplang → stdlib).
+std::string stdlib_dir(const char* argv0) {
+    if (const char* env = std::getenv("DPLANG_STDLIB")) return env;
+    std::string exe = argv0 ? argv0 : "";
+    size_t slash = exe.find_last_of('/');
+    std::string dir = slash == std::string::npos ? "." : exe.substr(0, slash);
+    return dir + "/../../stdlib";
+}
+
+// Окружение запуска, общее для команд.
+struct Cli {
+    std::string stdlib;
+};
+
+// Загрузка и проверка программы. nullptr — главный модуль не прочитан
+// или в программе ошибки разбора (дальше не проверяем: сообщения были бы
+// следствием).
+std::unique_ptr<dp::sema::Program> check_program(const Cli& cli, std::string_view path, dp::SourceMap& sources,
+                                                 dp::Diagnostics& diags) {
+    dp::sema::LoadOptions opt;
+    opt.stdlib_dir = cli.stdlib;
+    auto prog = dp::sema::load_program(std::string(path), opt, sources, diags);
+    if (!prog || !prog->load_ok) return prog;
+    dp::sema::collect(*prog, diags);
+    dp::sema::check(*prog, diags);
+    return prog;
+}
+
+int cmd_check(const Cli& cli, const std::vector<std::string_view>& args) {
+    if (args.size() != 1) return usage_error("check takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    check_program(cli, args[0], sources, diags);
+    return finish(diags, sources);
+}
+
+int cmd_debug_summary(const Cli& cli, const std::vector<std::string_view>& args) {
+    if (args.size() != 1) return usage_error("debug summary takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, args[0], sources, diags);
+    if (prog && !diags.has_errors()) {
+        for (auto& m : prog->modules) put(dp::sema::summary_text(*m));
+    }
+    return finish(diags, sources);
+}
+
+int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args.empty()) return usage_error("debug needs a subcommand");
     std::vector<std::string_view> rest(args.begin() + 1, args.end());
     if (args[0] == "lex") return cmd_debug_lex(rest);
     if (args[0] == "parse") return cmd_debug_parse(rest, false);
     if (args[0] == "print") return cmd_debug_parse(rest, true);
+    if (args[0] == "summary") return cmd_debug_summary(cli, rest);
     return usage_error("unknown debug subcommand '" + std::string(args[0]) + "'");
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
+    Cli cli;
+    cli.stdlib = stdlib_dir(argv[0]);
     std::vector<std::string_view> args(argv + 1, argv + argc);
     if (args.empty()) return usage_error("no command given");
     std::string_view cmd = args[0];
@@ -177,6 +233,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (cmd == "explain") return cmd_explain(rest);
-    if (cmd == "debug") return cmd_debug(rest);
+    if (cmd == "check") return cmd_check(cli, rest);
+    if (cmd == "debug") return cmd_debug(cli, rest);
     return usage_error("unknown command '" + std::string(cmd) + "'");
 }
