@@ -1,0 +1,54 @@
+// t06: заготовка — напишите тела функций по task.md.
+pub struct Quad {
+    x: i32
+    y: i32
+    w: i32
+    h: i32
+    block: i32
+}
+
+pub fn greedy_mesh(w: i32, h: i32, cells: []i32) List[Quad] {
+    var out: List[Quad] = []
+    let cw = int(w)
+    let ch = int(h)
+    if cw <= 0 || ch <= 0 {
+        return out
+    }
+    var seen: List[bool] = repeat(false, cw * ch)
+    for y in 0..ch {
+        for x in 0..cw {
+            let i = y * cw + x
+            let b = cells[i]
+            if b == 0 || seen[i] {
+                continue
+            }
+            var wd = 1
+            while x + wd < cw && !seen[i + wd] && cells[i + wd] == b {
+                wd += 1
+            }
+            let x_end = x + wd
+            var ht = 1
+            var going = true
+            while going && y + ht < ch {
+                let row = (y + ht) * cw
+                for k in x..x_end {
+                    if seen[row + k] || cells[row + k] != b {
+                        going = false
+                        break
+                    }
+                }
+                if going {
+                    ht += 1
+                }
+            }
+            let y_end = y + ht
+            for yy in y..y_end {
+                for xx in x..x_end {
+                    seen[yy * cw + xx] = true
+                }
+            }
+            out.push(Quad { x: i32(x), y: i32(y), w: i32(wd), h: i32(ht), block: b })
+        }
+    }
+    return out
+}

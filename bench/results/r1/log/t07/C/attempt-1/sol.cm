@@ -1,0 +1,63 @@
+// t07: кратчайший путь на сетке — поиск в ширину от S до G.
+pub fn shortest_path(rows []str) ?i32 {
+    h := len(rows)
+    if h == 0 {
+        return none
+    }
+    w := len(rows[0])
+    if w == 0 {
+        return none
+    }
+    start := -1
+    goal := -1
+    for r in 0..h {
+        row := rows[r]
+        for c in 0..len(row) {
+            if c < w {
+                if row[c] == 'S' {
+                    start = r * w + c
+                } else if row[c] == 'G' {
+                    goal = r * w + c
+                }
+            }
+        }
+    }
+    if start < 0 || goal < 0 {
+        return none
+    }
+    var dist List[int] = repeat(-1, h * w)
+    var queue List[int] = []
+    queue.push(start)
+    dist[start] = 0
+    head := 0
+    while head < len(queue) {
+        cur := queue[head]
+        head += 1
+        if cur == goal {
+            return i32(dist[cur])
+        }
+        r := cur / w
+        c := cur % w
+        for d in 0..4 {
+            nr := r
+            nc := c
+            match d {
+                0 => nr -= 1
+                1 => nr += 1
+                2 => nc -= 1
+                _ => nc += 1
+            }
+            if nr >= 0 && nr < h && nc >= 0 && nc < w {
+                row := rows[nr]
+                if nc < len(row) {
+                    idx := nr * w + nc
+                    if row[nc] != '#' && dist[idx] < 0 {
+                        dist[idx] = dist[cur] + 1
+                        queue.push(idx)
+                    }
+                }
+            }
+        }
+    }
+    return none
+}
