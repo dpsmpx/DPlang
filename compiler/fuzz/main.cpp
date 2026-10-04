@@ -1,6 +1,6 @@
 // Фаззер «не падает» (docs/policy/TESTING.md, раздел 3).
 //
-//     dpfuzz lex|parse --seed N --iters M <каталог>...
+//     dpfuzz lex|parse|check --seed N --iters M <каталог>...
 //
 // Берёт файлы .dpm из каталогов как корпус, портит их детерминированно
 // (зерно задано) и проверяет инварианты прохода на каждом входе. Сбой
@@ -14,6 +14,7 @@
 #include <string_view>
 #include <vector>
 
+#include "sema/sema.h"
 #include "support/diag.h"
 #include "support/source.h"
 #include "support/utf8.h"
@@ -145,6 +146,33 @@ bool check_parse(const std::string& input) {
     return true;
 }
 
+// Инварианты проверки: модуль без ошибок разбора проходит сбор
+// объявлений и проверку тел без падения; места сообщений — внутри файла.
+// Модули с import пропускаются: фаззер проверяет один файл.
+bool check_sema(const std::string& input) {
+    if (input.find("import") != std::string::npos) return true;
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = std::make_unique<dp::sema::Program>();
+    auto m = std::make_unique<dp::sema::ModuleInfo>();
+    m->name = "fuzz";
+    m->path = "fuzz.dpm";
+    m->file = sources.add("fuzz.dpm", input);
+    m->ast = dp::parse_module(sources.file(m->file), m->file, "fuzz", diags);
+    if (diags.has_errors()) return true;
+    prog->root = m.get();
+    prog->modules.push_back(std::move(m));
+    dp::sema::collect(*prog, diags);
+    dp::sema::check(*prog, diags);
+    for (const dp::Diagnostic& d : diags.list()) {
+        if (d.has_span && (d.span.begin > d.span.end || d.span.end > input.size())) {
+            return fail("diagnostic span outside the file", input);
+        }
+    }
+    dp::render_text(diags.list(), sources);
+    return true;
+}
+
 bool load_corpus(const std::vector<std::string>& dirs, std::vector<std::string>& out) {
     std::vector<std::string> paths;
     for (const std::string& d : dirs) {
@@ -175,11 +203,12 @@ bool load_corpus(const std::vector<std::string>& dirs, std::vector<std::string>&
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
-    if (args.size() < 6 || (args[0] != "lex" && args[0] != "parse") || args[1] != "--seed" || args[3] != "--iters") {
-        std::fprintf(stderr, "usage: dpfuzz lex|parse --seed N --iters M <dir>...\n");
+    if (args.size() < 6 || (args[0] != "lex" && args[0] != "parse" && args[0] != "check") || args[1] != "--seed" ||
+        args[3] != "--iters") {
+        std::fprintf(stderr, "usage: dpfuzz lex|parse|check --seed N --iters M <dir>...\n");
         return 2;
     }
-    bool (*check)(const std::string&) = args[0] == "lex" ? check_lex : check_parse;
+    bool (*check)(const std::string&) = args[0] == "lex" ? check_lex : args[0] == "parse" ? check_parse : check_sema;
     Rng rng{std::strtoull(args[2].c_str(), nullptr, 10)};
     unsigned long long iters = std::strtoull(args[4].c_str(), nullptr, 10);
     std::vector<std::string> corpus;

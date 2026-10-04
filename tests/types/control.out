@@ -1,0 +1,147 @@
+Module control
+  Enum Event
+    Variant Tick
+    Variant Move(i32, i32)
+    Variant Hit {target: i32, damage: i32}
+  Fn walk
+    Param path []Event
+    Param text str
+    Ret i32
+    Block
+      Var x: i32
+        Int 0 : i32
+      Var hits: List[i32]
+        List : List[i32]
+      For e in &
+        Name path : []Event
+        Block
+          Match
+            Name e : Event
+            Arm .Tick
+              Continue
+            Arm .Move(dx, _)
+              Assign +=
+                Name x : i32
+                Name dx : i32
+            Arm .Hit {target, damage}
+              Block
+                If
+                  Binary > : bool
+                    Name damage : i32
+                    Int 0 : i32
+                  Block
+                    ExprStmt
+                      Call : void
+                        Field .push
+                          Name hits : List[i32]
+                        Name target : i32
+      IfLet last
+        Call : ?i32
+          Field .pop
+            Name hits : List[i32]
+        Block
+          Assign +=
+            Name x : i32
+            Name last : i32
+        Else
+          If
+            Binary < : bool
+              Name x : i32
+              Int 0 : i32
+            Block
+              Assign =
+                Name x : i32
+                Int 0 : i32
+      For _ in range
+        Int 0 : i64
+        Call : i64
+          Name len
+          Name hits : List[i32]
+        Block
+          Assign -=
+            Name x : i32
+            Int 1 : i32
+      For b in &
+        Name text : str
+        Block
+          If
+            Binary == : bool
+              Name b : u8
+              Byte 97 : u8
+            Block
+              Assign +=
+                Name x : i32
+                Int 1 : i32
+      For h in &mut
+        Name hits : List[i32]
+        Block
+          Assign =
+            Name h : i32
+            Int 0 : i32
+      Var later: i32
+      If
+        Binary > : bool
+          Name x : i32
+          Int 10 : i32
+        Block
+          Assign =
+            Name later : i32
+            Int 1 : i32
+        Else
+          Block
+            Assign =
+              Name later : i32
+              Int 2 : i32
+      Assign +=
+        Name x : i32
+        Name later : i32
+      Var i
+        Int 0 : i64
+      While
+        Bool true : bool
+        Block
+          Assign +=
+            Name i : i64
+            Int 1 : i64
+          If
+            Binary > : bool
+              Name i : i64
+              Int 3 : i64
+            Block
+              Break
+      Defer
+        ExprStmt
+          Call : void
+            Name println
+            Str "done" : str
+      Match
+        Name x : i32
+        Arm 0
+          Return
+            Int 0 : i32
+        Arm 1 | 2
+          Return
+            Int 1 : i32
+        Arm _
+          Return
+            Name x : i32
+  Fn opt
+    Param v ?i32
+    Param ok bool
+    Ret i32
+    Block
+      Match
+        Name v : ?i32
+        Arm some(n)
+          Return
+            Name n : i32
+        Arm none
+          Block
+      Match
+        Name ok : bool
+        Arm true
+          Return
+            Int 1 : i32
+        Arm false
+          Return
+            Int 0 : i32

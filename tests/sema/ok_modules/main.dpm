@@ -19,7 +19,7 @@ fn origin() geo.Point {
 
 fn far(p: &geo.Point) bool {
     let o = origin()
-    return geo.dist(&o, p) > geo.LIMIT
+    return geo.dist(&o, &p) > geo.LIMIT
 }
 
 fn pick() geo.Shape {

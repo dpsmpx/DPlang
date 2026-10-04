@@ -9,8 +9,8 @@ enum Ev {
     Hit { target: i32, damage: i32 }
 }
 
-fn scopes(items: &mut List[Item], n: int) i32 {
-    var total = 0
+fn scopes(items: &mut List[Item], n: int) i64 {
+    var total: i64 = 0
     for i in 0..n {
         let x = i
         total += x
@@ -25,7 +25,7 @@ fn scopes(items: &mut List[Item], n: int) i32 {
     for it in &mut items {
         it.id = 0
     }
-    let id = 3
+    let id: i32 = 3
     let name = "a"
     items.push(Item { id, name })
     _ = helper()

@@ -82,6 +82,18 @@ struct FnDef {
     std::vector<ParamDef> params;
     const Type* ret = nullptr;  // Void — без результата
     const ast::FnItem* node = nullptr;
+    bool infer_error = false;   // `!T` без типа ошибки: тип выводится из тела (Р41)
+    uint32_t local_count = 0;   // локальных переменных в теле (после проверки)
+};
+
+// Значение константы, вычисленное при проверке (Р42: константные выражения).
+struct ConstValue {
+    enum class Kind : uint8_t { None, Int, Float, Bool, Str, List } kind = Kind::None;
+    uint64_t i = 0;  // целое: биты значения (знаковое — в дополнительном коде)
+    double f = 0;
+    bool b = false;
+    std::string s;
+    std::vector<ConstValue> items;  // List
 };
 
 struct ConstDef {
@@ -91,6 +103,8 @@ struct ConstDef {
     Span span;
     const Type* type = nullptr;
     const ast::ConstItem* node = nullptr;
+    ConstValue value;
+    uint8_t state = 0;  // 0 — не вычислена, 1 — вычисляется, 2 — готова
 };
 
 // Локальная переменная функции: параметр, let/var, переменная цикла,
@@ -101,6 +115,8 @@ struct Local {
     const Type* type = nullptr;
     bool mutable_ = false;   // var, &mut-параметр, переменная `for … in &mut`
     bool is_ref = false;     // ссылка (Р44): параметр &T/&mut T, переменная `for … in &`
+    bool is_param = false;
+    Local* alias_of = nullptr;  // переменная `for x in &xs` — элемент xs: корень xs (Р44)
     uint32_t id = 0;         // номер в функции
 };
 

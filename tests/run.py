@@ -51,11 +51,14 @@ SUITES = {
     'print': ('.dpm', DPLANG, lambda name, path: ['debug', 'print', name]),
     'sema': ('.dpm', DPLANG, lambda name, path: ['check', name]),
     'summary': ('.dpm', DPLANG, lambda name, path: ['debug', 'summary', name]),
+    'types': ('.dpm', DPLANG, lambda name, path: ['debug', 'types', name]),
+    'fail': ('.dpm', DPLANG, lambda name, path: ['check', name]),
+    'diag': ('.dpm', DPLANG, lambda name, path: ['check', '--format=json', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
 # Наборы, где тест может быть каталогом из нескольких модулей: вход —
 # X/main.dpm, ожидаемое — X.out рядом с каталогом.
-DIR_SUITES = {'sema', 'summary'}
+DIR_SUITES = {'sema', 'summary', 'types', 'fail'}
 
 
 def build():

@@ -1,0 +1,44 @@
+// spec: expr.call ref.marks ref.alias stmt.assign builtin.methods
+struct S {
+    v: i32
+}
+
+const K: i32 = 1
+
+fn two(a: i32, b: i32) {
+}
+
+fn by_ref(s: &S) {
+}
+
+fn by_mut(s: &mut S) {
+}
+
+fn both(a: &mut List[i32], b: &i32) {
+}
+
+fn calls(view: []i32, r: &S, val: S) {
+    two(1)
+    two(1, 2, 3)
+    let n = len()
+    by_ref(val)
+    by_ref(&mut val)
+    two(&val.v, 1)
+    let s = S(1)
+    let local = 1
+    local(2)
+    K()
+    val.frobnicate()
+    let x = &local
+    var list: List[i32] = [1]
+    both(&mut list, &list[0])
+    let fixed = 1
+    fixed = 2
+    r.v = 3
+    view[0] = 1
+    let ro: List[i32] = []
+    ro.push(1)
+    view.push(1)
+    by_mut(&mut val)
+    by_mut(&mut S { v: 1 })
+}

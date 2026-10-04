@@ -99,7 +99,8 @@ enum class ExprKind : uint8_t {
 
 struct Expr : Node {
     ExprKind kind;
-    const sema::Type* type = nullptr;  // тип после проверки типов
+    const sema::Type* type = nullptr;  // собственный тип после проверки типов
+    const sema::Type* conv = nullptr;  // неявное преобразование значения к этому типу; nullptr — нет
     explicit Expr(ExprKind k) : kind(k) {}
 };
 
@@ -151,7 +152,8 @@ struct FieldExpr : Expr {  // `a.b`
     Expr* object = nullptr;
     std::string name;
     Span name_span;
-    Res res;  // член модуля, вариант перечисления; None — поле значения
+    Res res;         // член модуля, вариант перечисления; None — поле значения
+    int field = -1;  // номер поля структуры
 };
 
 struct IndexExpr : Expr {  // `a[i]`
@@ -169,11 +171,24 @@ struct SliceExpr : Expr {  // `a[lo..hi]`, концы необязательны
     Expr* hi = nullptr;
 };
 
+// Что вызывает вызов (заполняет проверка типов).
+enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Variant };
+
+// Методы встроенных типов: List и str.
+enum class Method : uint8_t { Push, Pop, Insert, Remove, Clear, Sort, Contains, Trim, Find, StartsWith, Split };
+
 struct CallExpr : Expr {
     static constexpr ExprKind Kind = ExprKind::Call;
     CallExpr() : Expr(Kind) {}
     Expr* callee = nullptr;
     std::vector<Expr*> args;
+    CallKind call = CallKind::None;
+    const sema::FnDef* fn = nullptr;      // Fn
+    uint32_t builtin = 0;                 // Builtin — номер BuiltinFn
+    Method method = Method::Push;         // Method; получатель — объект FieldExpr вызываемого
+    const sema::Type* target = nullptr;   // Convert и Wrap — тип результата
+    const sema::EnumDef* en = nullptr;    // Variant
+    uint32_t variant = 0;                 // Variant
 };
 
 enum class UnOp : uint8_t { Neg, Not, BitNot };
@@ -197,6 +212,7 @@ struct BinaryExpr : Expr {
     Expr* lhs = nullptr;
     Expr* rhs = nullptr;
     Span op_span;
+    const sema::Type* operand = nullptr;  // общий тип операндов
 };
 
 struct TryExpr : Expr {  // `try e`
@@ -247,6 +263,7 @@ struct VariantLitExpr : Expr {
     VariantForm form = VariantForm::Unit;
     std::vector<Expr*> args;
     std::vector<FieldInit> fields;
+    Res res;  // Variant
 };
 
 struct ListLitExpr : Expr {
@@ -407,6 +424,7 @@ struct ForStmt : Stmt {
     Expr* hi = nullptr;    // конец диапазона
     Block* body = nullptr;
     sema::Local* local = nullptr;
+    const sema::Type* elem = nullptr;  // тип переменной цикла
 };
 
 struct MatchArm {

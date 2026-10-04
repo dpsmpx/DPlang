@@ -1,0 +1,22 @@
+// spec: module.import type.names
+import geo
+
+fn area(s: geo.Shape) f64 {
+    match s {
+        .Circle(r) => return geo.PI * r * r
+        geo.Shape.Rect { w, h } => return w * h
+    }
+}
+
+fn origin() geo.Point {
+    return geo.Point { x: 0.0, y: 0.0 }
+}
+
+fn far(p: geo.Point) bool {
+    let o = origin()
+    return geo.dist(&o, &p) > geo.LIMIT
+}
+
+fn make() geo.Shape {
+    return geo.Shape.Circle(1.0)
+}

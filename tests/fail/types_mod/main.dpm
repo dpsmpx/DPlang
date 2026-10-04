@@ -1,0 +1,42 @@
+// spec: type.conv expr.literal expr.ops expr.names expr.field expr.convert expr.compare
+import helper
+
+struct P {
+    x: i32
+}
+
+enum A {
+    One
+}
+
+enum B {
+    One
+}
+
+fn f(v: i32) i64 {
+    return v
+}
+
+fn bad(u: u32, flag: bool, fl: f64, r: A!i32) i32 {
+    let a: i32 = "text"
+    let b: u8 = 300
+    let c = -u
+    let d = flag + 1
+    let e = fl % 2.0
+    let g = ~fl
+    let h = u ?? 1
+    let i = none
+    let j = []
+    let k = .One
+    let l = f
+    let m = P
+    let n = helper
+    let o = len
+    let p = P { x: 1 }
+    let q = p.y
+    let s = i32("12")
+    let t = r == r
+    let w = u + flag
+    let z = 18446744073709551615
+    return f(1)
+}

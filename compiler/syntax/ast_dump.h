@@ -4,6 +4,7 @@
 // «разбор → печать → разбор».
 #pragma once
 
+#include <functional>
 #include <string>
 
 #include "syntax/ast.h"
@@ -11,6 +12,9 @@
 namespace dp {
 
 std::string dump_module(const ast::Module& m);
+// Дамп с пометками выражений: строка, которую annotate добавит к узлу
+// (`debug types` пишет так тип и неявное преобразование).
+std::string dump_module(const ast::Module& m, const std::function<std::string(const ast::Expr*)>& annotate);
 // Тип и образец — в одну строку, в записи языка.
 std::string type_text(const ast::Type* t);
 std::string pat_text(const ast::Pat* p);

@@ -1,0 +1,74 @@
+// spec: error.flow error.handle error.infer stmt.defer
+pub enum E1 {
+    Bad
+}
+
+pub enum E2 {
+    Bad
+    Worse
+}
+
+pub fn one() E1!i32 {
+    return 1
+}
+
+pub fn two() E2!i32 {
+    return 2
+}
+
+fn plain() i32 {
+    fail E1.Bad
+}
+
+fn plain_try() i32 {
+    let v = try one()
+    return v
+}
+
+fn mismatch() E2!i32 {
+    let v = try one()
+    return v
+}
+
+fn not_result() E1!i32 {
+    let v = try plain()
+    return v
+}
+
+fn ignored() {
+    one()
+    let r = one()
+}
+
+fn never() !i32 {
+    return 1
+}
+
+fn ambiguous() !i32 {
+    fail .Bad
+}
+
+fn conflicting() !i32 {
+    let a = try one()
+    let b = try two()
+    return a + b
+}
+
+fn rethrow(r: E1!i32) !i32 {
+    match r {
+        ok(v) => return v
+        err(e) => fail e
+    }
+}
+
+fn in_defer() E1!void {
+    defer {
+        return
+    }
+    while true {
+        defer {
+            break
+        }
+    }
+    defer fail .Bad
+}

@@ -130,3 +130,109 @@ DP_CODE(E0320, "not a struct",
 DP_CODE(E0321, "binding in an alternative pattern",
         "Patterns joined by `|` must not bind names, because each alternative would bind different values "
         "(spec: pattern.or). Split the arm or use `_`.")
+
+// --- E04xx: типы (docs/spec/core.md, разделы 4–6 и 9)
+
+DP_CODE(E0401, "mismatched types",
+        "The value has a different type than the place it goes to (spec: type.conv). Only lossless "
+        "conversions are implicit: a narrower integer to a wider one that holds all its values, `f32` to "
+        "`f64`, `List[T]` to `[]T`, `T` to `?T` and `T` to `E!T`. Everything else needs an explicit "
+        "conversion such as `i32(x)` or `u8.wrap(x)`.")
+DP_CODE(E0402, "literal out of range",
+        "The literal does not fit the type it gets from its context (spec: expr.literal): for example `300` "
+        "as `u8`. Use a wider type or `T.wrap(...)`.")
+DP_CODE(E0403, "operator not defined for this type",
+        "The operator does not apply to operands of this type (spec: expr.ops). Arithmetic needs numbers "
+        "(`+` also joins strings), `%`, the wrapping and the bit operators need integers, `&&` `||` `!` need "
+        "`bool`, `-` needs a signed integer or a float.")
+DP_CODE(E0404, "cannot infer the type",
+        "The expression needs a type from its context (spec: expr.literal): `none`, an empty list `[]` or a "
+        "short variant `.V` whose name is in several enums. Add a type annotation, e.g. `let xs: List[i32] = "
+        "[]`, or write the enum: `Event.Tick`.")
+DP_CODE(E0405, "not a value",
+        "A function, type or module name is used where a value is expected (spec: expr.names). Functions "
+        "are called, types are used in annotations, conversions `T(x)` and literals, modules before a dot.")
+DP_CODE(E0406, "no such field",
+        "The struct has no field with this name, or the value is not a struct (spec: expr.field).")
+DP_CODE(E0407, "wrong number of arguments",
+        "The call passes a different number of arguments than the function, variant or built-in takes "
+        "(spec: expr.call).")
+DP_CODE(E0408, "argument mark does not match the parameter",
+        "The mark at the argument must match the parameter mode (spec: expr.call): `&x` for `&T`, `&mut x` "
+        "for `&mut T`, and no mark for a value parameter.")
+DP_CODE(E0409, "cannot call this",
+        "Only functions, built-in functions, methods of `List` and `str`, conversions `T(x)`, `T.wrap(x)` "
+        "and tuple variants can be called (spec: expr.call).")
+DP_CODE(E0410, "no such method",
+        "`List` has the methods push, pop, insert, remove, clear, sort and contains; `str` has trim, find, "
+        "starts_with and split (spec: builtin.methods). Other types have no methods.")
+DP_CODE(E0411, "expression has no effect",
+        "A statement that is only an expression must be a call or `try` of a call (spec: stmt.expr). "
+        "Did you mean `=` instead of `==`?")
+DP_CODE(E0412, "cannot assign or mutate",
+        "Only a place can be assigned or mutated: a `var` variable, a `&mut` parameter, a `for ... in &mut` "
+        "variable, or a field or `List` element of one (spec: stmt.assign). `let` variables, value "
+        "parameters, `&` parameters, slices and strings are read-only.")
+DP_CODE(E0413, "wrong fields in a literal",
+        "A struct or record-variant literal must give each field once, and only fields that exist; struct "
+        "fields with a default value may be left out (spec: expr.struct).")
+DP_CODE(E0414, "wrong variant form",
+        "A variant is written the way it is declared (spec: type.enum): `.Tick` without data, `.Move(1, 2)` "
+        "with positional data, `.Hit { target: 3, damage: 9 }` with fields.")
+DP_CODE(E0415, "non-exhaustive match",
+        "The arms of `match` do not cover every value of the subject (spec: stmt.match). Add the missing "
+        "variants, or an arm `_ => ...`.")
+DP_CODE(E0416, "unreachable pattern",
+        "Earlier arms already cover every value this arm could match (spec: stmt.match). Remove the arm or "
+        "move it up.")
+DP_CODE(E0417, "pattern does not fit the subject",
+        "The pattern has a different type than the value being matched (spec: pattern.types): for example "
+        "`some(x)` on a value that is not optional.")
+DP_CODE(E0418, "invalid conversion",
+        "`T(x)` converts between numeric types and from numbers and `bool` to `str`; `T.wrap(x)` converts "
+        "integers to an integer type modulo 2^N (spec: expr.convert).")
+DP_CODE(E0419, "cannot iterate",
+        "`for x in &xs` and `for x in &mut xs` iterate a `List`, `for x in &xs` also a slice or a `str` "
+        "(bytes); `for i in a..b` counts over integers (spec: stmt.for). A collection is iterated through a "
+        "mark: `&xs`.")
+DP_CODE(E0420, "break or continue outside a loop",
+        "`break` and `continue` are only allowed inside `while` or `for` (spec: stmt.loop).")
+DP_CODE(E0421, "not a constant expression",
+        "A constant is computed when the program is compiled, so its value may only use literals, other "
+        "constants, operators and conversions `T(x)` (spec: decl.const, decision R42). Constants must not "
+        "depend on each other in a cycle.")
+DP_CODE(E0422, "values of this type cannot be compared",
+        "`==` and `!=` work on all values except results `E!T`; `<`, `<=`, `>`, `>=` and `sort` need numbers, "
+        "`bool`, `str`, or structs, enums and lists of such values (spec: expr.compare).")
+
+// --- E05xx: поток, ошибки, ссылки (docs/spec/core.md, разделы 6–8)
+
+DP_CODE(E0501, "reference mark not allowed here",
+        "`&x` and `&mut x` only mark an argument for a `&` or `&mut` parameter, and follow `for ... in` "
+        "(spec: ref.marks, decision R44). References cannot be stored or returned; to keep a value, copy it.")
+DP_CODE(E0502, "conflicting references in one call",
+        "One call passes `&mut x` together with another reference into the same variable `x` (spec: "
+        "ref.alias). The callee could change `x` and leave the other reference dangling. Pass a copy of the "
+        "value instead of the second reference.")
+DP_CODE(E0503, "use before initialization",
+        "A `var` declared without a value is read before it is assigned on every path to this place "
+        "(spec: stmt.init).")
+DP_CODE(E0504, "missing return",
+        "A function with a result type can reach its end without `return` (spec: stmt.return). Return a "
+        "value on every path, or `fail` with an error.")
+DP_CODE(E0505, "error not allowed here",
+        "`fail` and `try` are only allowed in a function whose result is `E!T` or `!T`, and the error must "
+        "be of the function's error type (spec: error.flow).")
+DP_CODE(E0506, "unhandled error",
+        "A result `E!T` must not be dropped silently (spec: error.handle, decision R10): pass it on with "
+        "`try`, handle it with `match`, or discard it explicitly with `_ = f()`.")
+DP_CODE(E0507, "cannot infer the error type",
+        "A function written `!T` infers its error type from its `fail` and `try` (spec: error.infer, "
+        "decision R41). All of them must give errors of one enum, and there must be at least one; `try` on "
+        "something other than a call needs the error type written: `E!T`.")
+DP_CODE(E0508, "control flow out of defer",
+        "The body of `defer` runs when the block exits; it cannot `return`, `break`, `continue`, `fail` or "
+        "`try` (spec: stmt.defer).")
+DP_CODE(E0509, "wrong return",
+        "`return` without a value is for functions without a result or with `!void`; a function with a "
+        "result returns a value of that type (spec: stmt.return).")

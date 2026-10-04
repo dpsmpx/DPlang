@@ -1,0 +1,92 @@
+Module conversions
+  Fn wide
+    Param v i64
+    Ret i64
+    Block
+      Return
+        Name v : i64
+  Fn total
+    Param xs []i32
+    Ret i64
+    Block
+      Var s: i64
+        Int 0 : i64
+      For x in &
+        Name xs : []i32
+        Block
+          Assign +=
+            Name s : i64
+            Name x : i32 -> i64
+      Return
+        Name s : i64
+  Fn maybe
+    Param v i32
+    Ret ?i32
+    Block
+      If
+        Binary < : bool
+          Name v : i32
+          Int 0 : i32
+        Block
+          Return
+            None : ?i32
+      Return
+        Name v : i32 -> ?i32
+  Fn conv
+    Param a i32
+    Param b u8
+    Param f f32
+    Param list List[i32]
+    Block
+      Let w
+        Call : i64
+          Name wide
+          Name a : i32 -> i64
+      Let w2
+        Call : i64
+          Name wide
+          Name b : u8 -> i64
+      Let d: f64
+        Name f : f32 -> f64
+      Let t
+        Call : i64
+          Name total
+          Name list : List[i32] -> []i32
+      Let n
+        Call : i32
+          Name i32
+          Name w : i64
+      Let u
+        Call : u32
+          Field .wrap
+            Name u32
+          Unary - : i64
+            Int 1 : i64
+      Let fl
+        Binary / : f64
+          Call : f64
+            Name f64
+            Name a : i32
+          Float 2 : f64
+      Let back
+        Call : i64
+          Name i64
+          Name fl : f64
+      Let text
+        Binary + : str
+          Binary + : str
+            Call : str
+              Name str
+              Name a : i32
+            Call : str
+              Name str
+              Bool true : bool
+          Call : str
+            Name str
+            Name fl : f64
+      Let m
+        Binary ?? : i32
+          Call : ?i32
+            Name maybe
+            Name n : i32
+          Int 0 : i32

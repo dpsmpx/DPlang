@@ -1,0 +1,47 @@
+// spec: error.sig error.infer error.flow error.handle
+pub enum ParseError {
+    Empty
+    TooLong { limit: i32 }
+}
+
+fn check_len(s: str) !void {
+    if len(s) > 8 {
+        fail .TooLong { limit: 8 }
+    }
+}
+
+pub fn read_name(s: str) ParseError!str {
+    let t = s.trim()
+    if len(t) == 0 {
+        fail .Empty
+    }
+    try check_len(t)
+    return t
+}
+
+fn greet(s: str) !str {
+    let name = try read_name(s)
+    return "hi " + name
+}
+
+pub fn count_valid(names: []str) i32 {
+    var n: i32 = 0
+    for s in &names {
+        match read_name(s) {
+            ok(_) => n += 1
+            err(e) => {
+                if e == .Empty {
+                    n -= 1
+                }
+            }
+        }
+    }
+    _ = greet("x")
+    return n
+}
+
+pub fn all_ok(names: []str) ParseError!void {
+    for s in &names {
+        _ = try read_name(s)
+    }
+}

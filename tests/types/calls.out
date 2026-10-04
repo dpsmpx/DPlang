@@ -1,0 +1,177 @@
+Module calls
+  Struct Counter
+    Field hits: i32
+    Field name: str
+      Str "c" : str
+  Fn bump
+    Param c &mut Counter
+    Param by i32
+    Block
+      Assign +=
+        Field .hits : i32
+          Name c : Counter
+        Name by : i32
+  Fn hits
+    Param c &Counter
+    Ret i32
+    Block
+      Return
+        Field .hits : i32
+          Name c : Counter
+  Fn calls
+    Param text str
+    Ret bool
+    Block
+      Var c
+        StructLit : Counter
+          Name Counter
+          FieldInit hits
+            Int 0 : i32
+      ExprStmt
+        Call : void
+          Name bump
+          Ref mut : Counter
+            Name c : Counter
+          Int 2 : i32
+      Let h
+        Call : i32
+          Name hits
+          Ref : Counter
+            Name c : Counter
+      Var xs: List[i32]
+        Call : List[i32]
+          Name repeat
+          Int 0 : i32
+          Int 3 : i64
+      ExprStmt
+        Call : void
+          Field .push
+            Name xs : List[i32]
+          Name h : i32
+      ExprStmt
+        Call : void
+          Field .insert
+            Name xs : List[i32]
+          Int 0 : i64
+          Int 9 : i32
+      Let first
+        Call : i32
+          Field .remove
+            Name xs : List[i32]
+          Int 0 : i64
+      ExprStmt
+        Call : void
+          Field .sort
+            Name xs : List[i32]
+      Let has
+        Call : bool
+          Field .contains
+            Name xs : List[i32]
+          Int 9 : i32
+      Let last
+        Binary ?? : i32
+          Call : ?i32
+            Field .pop
+              Name xs : List[i32]
+          Unary - : i32
+            Int 1 : i32
+      ExprStmt
+        Call : void
+          Field .clear
+            Name xs : List[i32]
+      Let n
+        Binary + : i64
+          Call : i64
+            Name len
+            Name xs : List[i32]
+          Call : i64
+            Name len
+            Name text : str
+      Let lo
+        Call : i32
+          Name min
+          Name first : i32
+          Name last : i32
+      Let hi
+        Call : i32
+          Name max
+          Int 2 : i32
+          Name lo : i32
+      Let a
+        Call : i64
+          Name abs
+          Unary - : i64
+            Int 5 : i64
+      Let parsed
+        Binary ?? : i64
+          Call : ?i64
+            Name parse_int
+            Str "42" : str
+          Int 0 : i64
+      Let digit
+        Binary || : bool
+          Binary || : bool
+            Binary || : bool
+              Call : bool
+                Name is_digit
+                Index : u8
+                  Name text : str
+                  Int 0 : i64
+              Call : bool
+                Name is_alpha
+                Byte 120 : u8
+            Call : bool
+              Name is_space
+              Byte 32 : u8
+          Call : bool
+            Name is_alnum
+            Byte 57 : u8
+      Let parts
+        Call : List[str]
+          Field .split
+            Name text : str
+          Str "," : str
+      Let trimmed
+        Call : str
+          Field .trim
+            Name text : str
+      Let at
+        Call : ?i64
+          Field .find
+            Name text : str
+          Str "b" : str
+      Let starts
+        Call : bool
+          Field .starts_with
+            Name text : str
+          Str "a" : str
+      ExprStmt
+        Call : void
+          Name assert
+          Binary >= : bool
+            Name n : i64
+            Int 0 : i64
+      ExprStmt
+        Call : void
+          Name println
+          Binary + : str
+            Str "hits " : str
+            Call : str
+              Name str
+              Name h : i32
+      ExprStmt
+        Call : void
+          Name print
+          Name trimmed : str
+      ExprStmt
+        Call : void
+          Name eprintln
+          Index : str
+            Name parts : List[str]
+            Int 0 : i64
+      Return
+        Binary && : bool
+          Binary && : bool
+            Name has : bool
+            Name starts : bool
+          Name digit : bool

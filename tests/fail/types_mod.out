@@ -1,0 +1,62 @@
+--- stderr ---
+types_mod/main.dpm:21:18: error[E0401]: expected 'i32', found 'str'
+  21 |     let a: i32 = "text"
+     |                  ^~~~~~
+types_mod/main.dpm:22:17: error[E0402]: literal 300 does not fit type 'u8'
+  22 |     let b: u8 = 300
+     |                 ^~~
+types_mod/main.dpm:23:13: error[E0403]: unary '-' needs a signed integer or a float, found 'u32'
+  23 |     let c = -u
+     |             ^~
+types_mod/main.dpm:24:18: error[E0401]: mismatched types 'bool' and 'i64' in '+'; convert one side explicitly
+  24 |     let d = flag + 1
+     |                  ^
+types_mod/main.dpm:25:16: error[E0403]: '%' does not apply to 'f64'
+  25 |     let e = fl % 2.0
+     |                ^
+types_mod/main.dpm:26:13: error[E0403]: '~' needs an integer, found 'f64'
+  26 |     let g = ~fl
+     |             ^~~
+types_mod/main.dpm:27:15: error[E0403]: '??' needs an optional value '?T' on the left, found 'u32'
+  27 |     let h = u ?? 1
+     |               ^~
+types_mod/main.dpm:28:13: error[E0404]: cannot infer the type of 'none'; it needs an optional type '?T'
+  28 |     let i = none
+     |             ^~~~
+types_mod/main.dpm:29:13: error[E0404]: cannot infer the element type of '[]'; annotate it: let xs: List[i32] = []
+  29 |     let j = []
+     |             ^~
+types_mod/main.dpm:30:14: error[E0404]: cannot tell which enum '.One' belongs to (A, B); write it: A.One
+  30 |     let k = .One
+     |              ^~~
+types_mod/main.dpm:31:13: error[E0405]: function 'f' is not a value; call it: f(...)
+  31 |     let l = f
+     |             ^
+types_mod/main.dpm:32:13: error[E0405]: type 'P' is not a value
+  32 |     let m = P
+     |             ^
+types_mod/main.dpm:33:13: error[E0405]: module 'helper' is not a value
+  33 |     let n = helper
+     |             ^~~~~~
+types_mod/main.dpm:34:13: error[E0405]: built-in 'len' is not a value; call it: len(...)
+  34 |     let o = len
+     |             ^~~
+types_mod/main.dpm:36:15: error[E0406]: struct 'P' has no field 'y'
+  36 |     let q = p.y
+     |               ^
+types_mod/main.dpm:37:13: error[E0418]: cannot convert 'str' with 'i32(...)'
+  37 |     let s = i32("12")
+     |             ^~~~~~~~~
+types_mod/main.dpm:38:15: error[E0422]: values of type 'A!i32' cannot be compared with '=='
+  38 |     let t = r == r
+     |               ^~
+types_mod/main.dpm:39:15: error[E0401]: mismatched types 'u32' and 'bool' in '+'; convert one side explicitly
+  39 |     let w = u + flag
+     |               ^
+types_mod/main.dpm:40:13: error[E0402]: literal 18446744073709551615 does not fit 'i64'; give it a type, e.g. u64(18446744073709551615)
+  40 |     let z = 18446744073709551615
+     |             ^~~~~~~~~~~~~~~~~~~~
+types_mod/main.dpm:41:12: error[E0401]: expected 'i32', found 'i64'
+  41 |     return f(1)
+     |            ^~~~
+[exit 1]

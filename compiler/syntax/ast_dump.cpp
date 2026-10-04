@@ -79,10 +79,14 @@ std::string lit_text(const Expr* e) {
 class Dumper {
 public:
     std::string out;
+    std::function<std::string(const Expr*)> annotate;
+    const Expr* cur_ = nullptr;  // выражение, строку которого пишем
 
     void line(int depth, const std::string& text) {
         out.append(static_cast<size_t>(depth) * 2, ' ');
         out += text;
+        if (cur_ && annotate) out += annotate(cur_);
+        cur_ = nullptr;
         out += '\n';
     }
 
@@ -242,6 +246,7 @@ public:
             line(d, "-");
             return;
         }
+        cur_ = e;
         switch (e->kind) {
             case ExprKind::Int: line(d, "Int " + lit_text(e)); break;
             case ExprKind::Float: line(d, "Float " + lit_text(e)); break;
@@ -397,6 +402,14 @@ std::string pat_text(const Pat* p) {
 
 std::string dump_module(const Module& m) {
     Dumper d;
+    d.line(0, "Module " + m.name);
+    for (const Item* it : m.items) d.item(it, 1);
+    return d.out;
+}
+
+std::string dump_module(const Module& m, const std::function<std::string(const Expr*)>& annotate) {
+    Dumper d;
+    d.annotate = annotate;
     d.line(0, "Module " + m.name);
     for (const Item* it : m.items) d.item(it, 1);
     return d.out;

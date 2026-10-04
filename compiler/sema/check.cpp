@@ -1,379 +1,386 @@
-// Проверка тел: имена (docs/spec/core.md, раздел 3). Типы — шаг 5,
-// в этом же обходе.
-#include <vector>
+// Проверка тел: инструкции и поток (docs/spec/core.md, разделы 6–8).
+// Выражения — check_expr.cpp, образцы — check_pat.cpp.
+#include <algorithm>
 
 #include "sema/builtins.h"
-#include "sema/resolve.h"
-#include "sema/sema.h"
+#include "sema/checker.h"
 
 namespace dp::sema {
 
-namespace {
-
 using namespace ast;
 
-Res* res_of(Expr* e) {
-    if (auto* n = as<NameExpr>(e)) return &n->res;
-    if (auto* f = as<FieldExpr>(e)) return &f->res;
+Checker::Checker(Program& prog, ModuleInfo& m, Diagnostics& diags)
+    : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags), tt_(prog.types) {}
+
+void Checker::run() {
+    // Константы — сначала: их значения нужны в телах.
+    for (Item* it : m_.ast->items) {
+        if (auto* c = as<ConstItem>(it)) {
+            const Symbol* s = r_.lookup(c->name);
+            if (s && s->kind == SymKind::Const && s->cn->node == c) const_value(*s->cn);
+        }
+    }
+    for (Item* it : m_.ast->items) {
+        const Symbol* s = r_.lookup(it->name);
+        if (!s) continue;
+        if (it->kind == ItemKind::Struct && s->kind == SymKind::Struct && s->st->node == it) struct_defaults(*s->st);
+        if (it->kind == ItemKind::Fn && s->kind == SymKind::Fn && s->fn->node == it) fn(*s->fn);
+    }
+}
+
+// --- области
+
+Local* Checker::find_local(const std::string& name) const {
+    for (auto s = scopes_.rbegin(); s != scopes_.rend(); ++s) {
+        for (auto l = s->rbegin(); l != s->rend(); ++l) {
+            if ((*l)->name == name) return *l;
+        }
+    }
     return nullptr;
 }
 
-class BodyChecker {
-public:
-    BodyChecker(Program& prog, ModuleInfo& m, Diagnostics& diags)
-        : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags) {}
-
-    void run() {
-        for (Item* it : m_.ast->items) {
-            switch (it->kind) {
-                case ItemKind::Fn: fn(static_cast<FnItem*>(it)); break;
-                case ItemKind::Const: expr(static_cast<ConstItem*>(it)->value); break;
-                case ItemKind::Struct:
-                    for (FieldDecl& f : static_cast<StructItem*>(it)->fields) expr(f.value);
-                    break;
-                default: break;
-            }
-        }
-    }
-
-private:
-    Program& prog_;
-    ModuleInfo& m_;
-    Diagnostics& diags_;
-    Resolver r_;
-    std::vector<std::vector<Local*>> scopes_;
-    uint32_t next_local_ = 0;
-    int or_depth_ = 0;  // внутри `p | q` имена связывать нельзя
-
-    // --- области
-
-    Local* find_local(const std::string& name) const {
-        for (auto s = scopes_.rbegin(); s != scopes_.rend(); ++s) {
-            for (auto l = s->rbegin(); l != s->rend(); ++l) {
-                if ((*l)->name == name) return *l;
-            }
-        }
+Local* Checker::declare(const std::string& name, Span span, const Type* type, bool mutable_, bool is_ref, bool init) {
+    if (name == "_" || name.empty()) return nullptr;
+    if (or_depth_ > 0) {
+        error(Code::E0321, span, "patterns joined by '|' cannot bind names");
         return nullptr;
     }
-
-    Local* declare(const std::string& name, Span span, bool mutable_, bool is_ref) {
-        if (name == "_" || name.empty()) return nullptr;
-        if (or_depth_ > 0) {
-            diags_.error(Code::E0321, span, "patterns joined by '|' cannot bind names");
-            return nullptr;
-        }
-        if (Local* prev = find_local(name)) {
-            Diagnostic& d = diags_.error(Code::E0310, span, "'" + name + "' is already defined in this function");
-            d.notes.push_back(Note{prev->span, true, "previous definition here"});
-            return nullptr;
-        }
-        Local& l = prog_.locals.emplace_back();
-        l.name = name;
-        l.span = span;
-        l.mutable_ = mutable_;
-        l.is_ref = is_ref;
-        l.id = next_local_++;
-        scopes_.back().push_back(&l);
-        return &l;
+    if (Local* prev = find_local(name)) {
+        Diagnostic& d = error(Code::E0310, span, "'" + name + "' is already defined in this function");
+        d.notes.push_back(Note{prev->span, true, "previous definition here"});
+        return nullptr;
     }
+    Local& l = prog_.locals.emplace_back();
+    l.name = name;
+    l.span = span;
+    l.type = type ? type : err();
+    l.mutable_ = mutable_;
+    l.is_ref = is_ref;
+    l.id = next_local_++;
+    scopes_.back().push_back(&l);
+    if (flow_.init.size() <= l.id) flow_.init.resize(l.id + 1, 0);
+    flow_.init[l.id] = init ? 1 : 0;
+    return &l;
+}
 
-    struct Scope {
-        BodyChecker& c;
-        explicit Scope(BodyChecker& checker) : c(checker) { c.scopes_.emplace_back(); }
-        ~Scope() { c.scopes_.pop_back(); }
-    };
+// --- объявления
 
-    // --- объявления
-
-    void fn(FnItem* f) {
-        next_local_ = 0;
-        Scope s(*this);
-        for (Param& p : f->params) {
-            if (find_local(p.name)) continue;  // повтор параметра — уже E0318 при сборе объявлений
-            p.local = declare(p.name, p.name_span, p.mode == ParamMode::Mut, p.mode != ParamMode::Value);
-        }
-        block(f->body);
+void Checker::struct_defaults(StructDef& s) {
+    for (FieldDef& f : s.fields) {
+        if (f.default_value) check(const_cast<Expr*>(f.default_value), f.type);
     }
+}
 
-    void block(Block* b) {
-        if (!b) return;
-        Scope s(*this);
-        for (Stmt* st : b->stmts) stmt(st);
+void Checker::fn(FnDef& f) {
+    fn_ = &f;
+    next_local_ = 0;
+    flow_ = Flow{};
+    loops_.clear();
+    push_scope();
+    FnItem* node = const_cast<FnItem*>(f.node);
+    for (size_t i = 0; i < node->params.size() && i < f.params.size(); i++) {
+        Param& p = node->params[i];
+        if (find_local(p.name)) continue;  // повтор параметра — уже E0318 при сборе объявлений
+        p.local = declare(p.name, p.name_span, f.params[i].type, p.mode == ParamMode::Mut,
+                          p.mode != ParamMode::Value, true);
+        if (p.local) p.local->is_param = true;
     }
-
-    // --- инструкции
-
-    void stmt(Stmt* s) {
-        if (!s) return;
-        switch (s->kind) {
-            case StmtKind::Let: {
-                auto* l = static_cast<LetStmt*>(s);
-                if (l->type) r_.type(l->type);
-                expr(l->value);
-                l->local = declare(l->name, l->name_span, l->is_var, false);
-                break;
-            }
-            case StmtKind::Assign: {
-                auto* a = static_cast<AssignStmt*>(s);
-                auto* n = as<NameExpr>(a->target);
-                if (!(n && n->name == "_" && a->op == AssignOp::Set)) expr(a->target);
-                expr(a->value);
-                break;
-            }
-            case StmtKind::Expr: expr(static_cast<ExprStmt*>(s)->expr); break;
-            case StmtKind::If: {
-                auto* i = static_cast<IfStmt*>(s);
-                {
-                    Scope sc(*this);
-                    if (i->cond) {
-                        expr(i->cond);
-                    } else {
-                        expr(i->let_value);
-                        i->let_local = declare(i->let_name, i->let_span, false, false);
-                    }
-                    block(i->then);
-                }
-                stmt(i->els);
-                break;
-            }
-            case StmtKind::While: {
-                auto* w = static_cast<WhileStmt*>(s);
-                expr(w->cond);
-                block(w->body);
-                break;
-            }
-            case StmtKind::For: {
-                auto* f = static_cast<ForStmt*>(s);
-                expr(f->iter);
-                expr(f->hi);
-                Scope sc(*this);
-                f->local = declare(f->var, f->var_span, f->mode == ForMode::Mut,
-                                   f->mode == ForMode::Ref || f->mode == ForMode::Mut);
-                block(f->body);
-                break;
-            }
-            case StmtKind::Match: {
-                auto* m = static_cast<MatchStmt*>(s);
-                expr(m->subject);
-                for (MatchArm& a : m->arms) {
-                    Scope sc(*this);
-                    pat(a.pat);
-                    stmt(a.body);
-                }
-                break;
-            }
-            case StmtKind::Return: expr(static_cast<ReturnStmt*>(s)->value); break;
-            case StmtKind::Defer: stmt(static_cast<DeferStmt*>(s)->body); break;
-            case StmtKind::Fail: expr(static_cast<FailStmt*>(s)->value); break;
-            case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
-            case StmtKind::Break: case StmtKind::Continue: case StmtKind::Error: break;
+    block(node->body);
+    // Конец тела достижим: функция с результатом (кроме `!void`) обязана вернуть значение.
+    if (flow_.live && f.ret && f.ret->kind != TK::Void && f.ret->kind != TK::Error) {
+        bool void_result = f.ret->kind == TK::Result && f.ret->elem->kind == TK::Void;
+        if (!void_result) {
+            Span end{m_.file, node->body ? node->body->span.end - 1 : node->span.end, node->body ? node->body->span.end : node->span.end};
+            error(Code::E0504, end, "function '" + f.name + "' can reach its end without returning a value");
         }
     }
+    pop_scope();
+    f.local_count = next_local_;
+    fn_ = nullptr;
+}
 
-    // --- выражения
+// --- поток
 
-    void name(NameExpr* n) {
-        if (n->name == "_") {
-            diags_.error(Code::E0307, n->span, "'_' is not a value; it can only discard one: '_ = e'");
+Checker::Flow Checker::merge(const Flow& a, const Flow& b) {
+    if (!a.live) return b;
+    if (!b.live) return a;
+    Flow out;
+    out.live = true;
+    size_t n = std::max(a.init.size(), b.init.size());
+    out.init.assign(n, 0);
+    for (size_t i = 0; i < n; i++) {
+        char x = i < a.init.size() ? a.init[i] : 0;
+        char y = i < b.init.size() ? b.init[i] : 0;
+        out.init[i] = x && y;
+    }
+    return out;
+}
+
+// --- инструкции
+
+void Checker::block(Block* b) {
+    if (!b) return;
+    push_scope();
+    for (Stmt* s : b->stmts) stmt(s);
+    pop_scope();
+}
+
+void Checker::stmt(Stmt* s) {
+    if (!s) return;
+    switch (s->kind) {
+        case StmtKind::Let: let_stmt(static_cast<LetStmt*>(s)); break;
+        case StmtKind::Assign: assign_stmt(static_cast<AssignStmt*>(s)); break;
+        case StmtKind::Expr: expr_stmt(static_cast<ExprStmt*>(s)); break;
+        case StmtKind::If: if_stmt(static_cast<IfStmt*>(s)); break;
+        case StmtKind::While: while_stmt(static_cast<WhileStmt*>(s)); break;
+        case StmtKind::For: for_stmt(static_cast<ForStmt*>(s)); break;
+        case StmtKind::Match: match_stmt(static_cast<MatchStmt*>(s)); break;
+        case StmtKind::Return: return_stmt(static_cast<ReturnStmt*>(s)); break;
+        case StmtKind::Fail: fail_stmt(static_cast<FailStmt*>(s)); break;
+        case StmtKind::Break: loop_jump(s, true); break;
+        case StmtKind::Continue: loop_jump(s, false); break;
+        case StmtKind::Defer: {
+            auto* d = static_cast<DeferStmt*>(s);
+            Flow saved = flow_;
+            defer_depth_++;
+            std::vector<Loop> saved_loops;
+            saved_loops.swap(loops_);  // break и continue из defer не выходят
+            stmt(d->body);
+            loops_.swap(saved_loops);
+            defer_depth_--;
+            flow_ = saved;
+            break;
+        }
+        case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
+        case StmtKind::Error: break;
+    }
+}
+
+void Checker::let_stmt(LetStmt* l) {
+    const Type* t = nullptr;
+    if (l->type) t = r_.type(l->type);
+    if (l->value) {
+        if (t) {
+            check(l->value, t);
+        } else {
+            t = infer(l->value, nullptr);
+            if (t->kind == TK::Void) {
+                error(Code::E0401, l->value->span, "expression has no value to store in '" + l->name + "'");
+                t = err();
+            } else if (t->kind == TK::Result) {
+                error(Code::E0506, l->value->span,
+                      "the result of type '" + tn(t) + "' must be handled: use 'try', 'match' or '_ ='");
+            }
+        }
+    }
+    l->local = declare(l->name, l->name_span, t, l->is_var, false, l->value != nullptr);
+}
+
+void Checker::assign_stmt(AssignStmt* a) {
+    auto* n = as<NameExpr>(a->target);
+    if (n && n->name == "_" && a->op == AssignOp::Set) {  // `_ = e` — явный отброс (Р10)
+        const Type* t = infer(a->value, nullptr);
+        if (t->kind == TK::Void) error(Code::E0401, a->value->span, "expression has no value to discard");
+        return;
+    }
+    // Простое присваивание переменной инициализирует её; остальное читает цель.
+    if (n && a->op == AssignOp::Set) {
+        resolve_name(n);
+        if (n->res.kind == ResKind::Local) {
+            Local* l = n->res.local;
+            n->type = l->type;
+            check(a->value, l->type);
+            if (!l->mutable_) {
+                error(Code::E0412, n->span, "cannot assign to '" + l->name + "': it is not declared with 'var'");
+            }
+            if (flow_.init.size() > l->id) flow_.init[l->id] = 1;
             return;
         }
-        if (Local* l = find_local(n->name)) {
-            n->res.kind = ResKind::Local;
-            n->res.local = l;
-            return;
-        }
-        if (const Symbol* s = r_.lookup(n->name)) {
-            switch (s->kind) {
-                case SymKind::Fn: n->res.kind = ResKind::Fn; n->res.fn = s->fn; break;
-                case SymKind::Const: n->res.kind = ResKind::Const; n->res.cn = s->cn; break;
-                case SymKind::Struct: n->res.kind = ResKind::Struct; n->res.st = s->st; break;
-                case SymKind::Enum: n->res.kind = ResKind::Enum; n->res.en = s->en; break;
-                case SymKind::Module: n->res.kind = ResKind::Module; n->res.mod = s->mod; break;
-            }
-            return;
-        }
-        int b = find_builtin_fn(n->name);
-        if (b >= 0) {
-            n->res.kind = ResKind::BuiltinFn;
-            n->res.index = static_cast<uint32_t>(b);
-            return;
-        }
-        b = find_builtin_type(n->name);
-        if (b >= 0) {
-            n->res.kind = ResKind::BuiltinType;
-            n->res.index = static_cast<uint32_t>(b);
-            return;
-        }
-        diags_.error(Code::E0307, n->span, "cannot find '" + n->name + "' in this scope");
     }
-
-    void set_symbol(Res& res, const Symbol& s) {
-        switch (s.kind) {
-            case SymKind::Fn: res.kind = ResKind::Fn; res.fn = s.fn; break;
-            case SymKind::Const: res.kind = ResKind::Const; res.cn = s.cn; break;
-            case SymKind::Struct: res.kind = ResKind::Struct; res.st = s.st; break;
-            case SymKind::Enum: res.kind = ResKind::Enum; res.en = s.en; break;
-            case SymKind::Module: res.kind = ResKind::Module; res.mod = s.mod; break;
-        }
+    const Type* t = infer(a->target, nullptr);
+    mutable_place(a->target, "assign to");
+    if (a->op == AssignOp::Set) {
+        check(a->value, t);
+        return;
     }
-
-    void field(FieldExpr* f) {
-        expr(f->object);
-        Res* obj = res_of(f->object);
-        if (!obj) return;
-        if (obj->kind == ResKind::Module) {
-            if (const Symbol* s = r_.member(*obj->mod, f->name, f->name_span)) set_symbol(f->res, *s);
-        } else if (obj->kind == ResKind::Enum) {
-            int v = obj->en->find(f->name);
-            if (v < 0) {
-                diags_.error(Code::E0312, f->name_span, "enum '" + obj->en->name + "' has no variant '" + f->name + "'");
-                return;
-            }
-            f->res.kind = ResKind::Variant;
-            f->res.en = obj->en;
-            f->res.index = static_cast<uint32_t>(v);
-        }
+    // Составное присваивание `x op= e` — как `x = x op e` с типом x.
+    if (t->kind == TK::Error) {
+        infer(a->value, nullptr);
+        return;
     }
-
-    void field_inits(std::vector<FieldInit>& fields) {
-        for (FieldInit& fi : fields) {
-            if (fi.value) {
-                expr(fi.value);
-            } else {
-                // Краткая запись `name` — значение имени `name`.
-                fi.shorthand = m_.ast->make<NameExpr>();
-                fi.shorthand->name = fi.name;
-                fi.shorthand->span = fi.name_span;
-                name(fi.shorthand);
-            }
-        }
+    bool shift = a->op == AssignOp::Shl || a->op == AssignOp::Shr;
+    bool int_only = shift || a->op == AssignOp::Rem || a->op == AssignOp::BitAnd || a->op == AssignOp::BitOr ||
+                    a->op == AssignOp::BitXor;
+    if (shift) {
+        const Type* c = infer(a->value, nullptr);
+        if (!is_integer(c) && c->kind != TK::Error) error(Code::E0403, a->value->span, "shift count must be an integer");
+    } else {
+        check(a->value, t);
     }
+    bool ok = int_only ? is_integer(t) : (is_numeric(t) || (a->op == AssignOp::Add && t->kind == TK::Str));
+    if (!ok) error(Code::E0403, a->target->span, "this compound assignment does not apply to '" + tn(t) + "'");
+}
 
-    void expr(Expr* e) {
-        if (!e) return;
-        switch (e->kind) {
-            case ExprKind::Name: name(static_cast<NameExpr*>(e)); break;
-            case ExprKind::Field: field(static_cast<FieldExpr*>(e)); break;
-            case ExprKind::Index: {
-                auto* i = static_cast<IndexExpr*>(e);
-                expr(i->object);
-                expr(i->index);
-                break;
+void Checker::expr_stmt(ExprStmt* s) {
+    Expr* e = s->expr;
+    const Type* t = infer(e, nullptr);
+    Expr* inner = e;
+    if (auto* tr = as<TryExpr>(inner)) inner = tr->operand;
+    if (!as<CallExpr>(inner)) {
+        if (e->kind != ExprKind::Error && t->kind != TK::Error) {
+            error(Code::E0411, e->span, "this expression has no effect; a statement must be a call or an assignment");
+        }
+        return;
+    }
+    if (t->kind == TK::Result) {
+        error(Code::E0506, e->span, "the error of this call is ignored; handle it with 'try', 'match' or '_ = ...'");
+    }
+}
+
+void Checker::if_stmt(IfStmt* s) {
+    push_scope();
+    if (s->cond) {
+        check(s->cond, prim(TK::Bool));
+    } else {
+        const Type* t = infer(s->let_value, nullptr);
+        const Type* inner = err();
+        if (t->kind == TK::Optional) inner = t->elem;
+        else if (t->kind != TK::Error) {
+            error(Code::E0417, s->let_value->span, "'if let' needs an optional value '?T', found '" + tn(t) + "'");
+        }
+        s->let_local = declare(s->let_name, s->let_span, inner, false, false, true);
+    }
+    Flow before = flow_;
+    block(s->then);
+    pop_scope();
+    Flow after_then = flow_;
+    flow_ = before;
+    if (s->els) stmt(s->els);
+    flow_ = merge(after_then, flow_);
+}
+
+void Checker::while_stmt(WhileStmt* s) {
+    check(s->cond, prim(TK::Bool));
+    auto* lit = as<BoolExpr>(s->cond);
+    bool forever = lit && lit->value;
+    Flow before = flow_;
+    loops_.emplace_back();
+    block(s->body);
+    Loop loop = std::move(loops_.back());
+    loops_.pop_back();
+    // После цикла — состояние до него (тело могло не выполниться) и состояния у break.
+    Flow after = before;
+    if (forever) after.live = false;
+    for (const Flow& b : loop.breaks) after = merge(after, b);
+    flow_ = after;
+}
+
+void Checker::for_stmt(ForStmt* s) {
+    const Type* elem = err();
+    bool is_ref = s->mode == ForMode::Ref || s->mode == ForMode::Mut;
+    if (s->mode == ForMode::Range) {
+        elem = common(s->iter, s->hi, nullptr, s->var_span, "..");
+        if (!is_integer(elem) && elem->kind != TK::Error) {
+            error(Code::E0419, s->iter->span, "a range 'a..b' needs integers, found '" + tn(elem) + "'");
+            elem = err();
+        }
+    } else {
+        const Type* t = infer(s->iter, nullptr);
+        if (s->mode == ForMode::Value) {
+            if (t->kind != TK::Error) {
+                error(Code::E0419, s->iter->span, "iterate a collection through a mark: 'for x in &xs'");
             }
-            case ExprKind::Slice: {
-                auto* s = static_cast<SliceExpr*>(e);
-                expr(s->object);
-                expr(s->lo);
-                expr(s->hi);
-                break;
+        } else if (t->kind == TK::List) {
+            elem = t->elem;
+            if (s->mode == ForMode::Mut) mutable_place(s->iter, "mutate");
+        } else if (t->kind == TK::Slice || t->kind == TK::Str) {
+            elem = t->kind == TK::Str ? prim(TK::U8) : t->elem;
+            if (s->mode == ForMode::Mut) {
+                error(Code::E0412, s->iter->span, "'" + tn(t) + "' is read-only; 'for ... in &mut' needs a List");
             }
-            case ExprKind::Call: {
-                auto* c = static_cast<CallExpr*>(e);
-                expr(c->callee);
-                for (Expr* a : c->args) expr(a);
-                break;
-            }
-            case ExprKind::Unary: expr(static_cast<UnaryExpr*>(e)->operand); break;
-            case ExprKind::Binary: {
-                auto* b = static_cast<BinaryExpr*>(e);
-                expr(b->lhs);
-                expr(b->rhs);
-                break;
-            }
-            case ExprKind::Try: expr(static_cast<TryExpr*>(e)->operand); break;
-            case ExprKind::Paren: expr(static_cast<ParenExpr*>(e)->inner); break;
-            case ExprKind::Ref: expr(static_cast<RefExpr*>(e)->operand); break;
-            case ExprKind::StructLit: {
-                auto* s = static_cast<StructLitExpr*>(e);
-                expr(s->path);
-                if (Res* p = res_of(s->path)) {
-                    if (p->kind == ResKind::Struct || p->kind == ResKind::Variant) {
-                        s->res = *p;
-                    } else if (p->kind != ResKind::None) {
-                        diags_.error(Code::E0320, s->path->span, "struct literal needs a struct or an enum variant");
-                    }
-                }
-                field_inits(s->fields);
-                break;
-            }
-            case ExprKind::VariantLit: {
-                auto* v = static_cast<VariantLitExpr*>(e);
-                for (Expr* a : v->args) expr(a);
-                field_inits(v->fields);
-                break;
-            }
-            case ExprKind::ListLit:
-                for (Expr* i : static_cast<ListLitExpr*>(e)->items) expr(i);
-                break;
-            case ExprKind::Int: case ExprKind::Float: case ExprKind::Str: case ExprKind::Byte: case ExprKind::Bool:
-            case ExprKind::None: case ExprKind::Error:
-                break;
+        } else if (t->kind != TK::Error) {
+            error(Code::E0419, s->iter->span, "cannot iterate over '" + tn(t) + "'");
         }
     }
+    s->elem = elem;
+    Flow before = flow_;
+    push_scope();
+    s->local = declare(s->var, s->var_span, elem, s->mode == ForMode::Mut, is_ref, true);
+    if (s->local && is_ref) s->local->alias_of = root_local(s->iter);  // элемент xs — корень xs (Р44)
+    loops_.emplace_back();
+    block(s->body);
+    loops_.pop_back();
+    pop_scope();
+    // Тело могло не выполниться ни разу.
+    flow_ = before;
+}
 
-    // --- образцы
-
-    void pat(Pat* p) {
-        if (!p) return;
-        switch (p->kind) {
-            case PatKind::Bind: {
-                auto* b = static_cast<BindPat*>(p);
-                b->local = declare(b->name, b->span, false, false);
-                break;
-            }
-            case PatKind::Wrap: pat(static_cast<WrapPat*>(p)->inner); break;
-            case PatKind::Variant: {
-                auto* v = static_cast<VariantPat*>(p);
-                if (!v->path.empty()) variant_path(v);
-                for (Pat* a : v->args) pat(a);
-                for (FieldPat& fp : v->fields) {
-                    if (fp.pat) pat(fp.pat);
-                    else fp.local = declare(fp.name, fp.name_span, false, false);
-                }
-                break;
-            }
-            case PatKind::Or: {
-                or_depth_++;
-                for (Pat* a : static_cast<OrPat*>(p)->alts) pat(a);
-                or_depth_--;
-                break;
-            }
-            case PatKind::Wild: case PatKind::Lit: case PatKind::None: case PatKind::Error: break;
-        }
+void Checker::match_stmt(MatchStmt* s) {
+    const Type* t = infer(s->subject, nullptr);
+    Flow before = flow_;
+    Flow after;
+    after.live = false;
+    for (MatchArm& a : s->arms) {
+        flow_ = before;
+        push_scope();
+        pat(a.pat, t);
+        stmt(a.body);
+        pop_scope();
+        after = merge(after, flow_);
     }
+    exhaustive(s, t);
+    flow_ = s->arms.empty() ? before : after;
+}
 
-    // `E.V` или `m.E.V` в образце.
-    void variant_path(VariantPat* v) {
-        const EnumDef* en = nullptr;
-        const Symbol* head = r_.lookup(v->path[0]);
-        if (v->path.size() == 1 && head && head->kind == SymKind::Enum) {
-            en = head->en;
-        } else if (v->path.size() == 2 && head && head->kind == SymKind::Module) {
-            const Symbol* s = r_.member(*head->mod, v->path[1], v->span);
-            if (!s) return;
-            if (s->kind == SymKind::Enum) en = s->en;
+void Checker::loop_jump(Stmt* s, bool is_break) {
+    if (loops_.empty()) {
+        if (defer_depth_ > 0) {
+            error(Code::E0508, s->span, std::string("'") + (is_break ? "break" : "continue") + "' cannot leave a 'defer'");
+        } else {
+            error(Code::E0420, s->span, std::string("'") + (is_break ? "break" : "continue") + "' outside of a loop");
         }
-        if (!en) {
-            std::string path;
-            for (const std::string& part : v->path) path += (path.empty() ? "" : ".") + part;
-            diags_.error(Code::E0307, v->span, "cannot find enum '" + path + "'");
-            return;
-        }
-        int idx = en->find(v->name);
-        if (idx < 0) {
-            diags_.error(Code::E0312, v->name_span, "enum '" + en->name + "' has no variant '" + v->name + "'");
-            return;
-        }
-        v->res.kind = ResKind::Variant;
-        v->res.en = en;
-        v->res.index = static_cast<uint32_t>(idx);
+    } else if (is_break) {
+        loops_.back().breaks.push_back(flow_);
     }
-};
+    flow_.live = false;
+}
 
-}  // namespace
+void Checker::return_stmt(ReturnStmt* s) {
+    if (defer_depth_ > 0) error(Code::E0508, s->span, "'return' cannot leave a 'defer'");
+    const Type* ret = fn_ ? fn_->ret : prim(TK::Void);
+    bool void_ret = ret->kind == TK::Void || (ret->kind == TK::Result && ret->elem->kind == TK::Void);
+    if (!s->value) {
+        if (!void_ret && ret->kind != TK::Error) {
+            error(Code::E0509, s->span, "'return' needs a value of type '" + tn(ret) + "'");
+        }
+    } else if (ret->kind == TK::Void) {
+        infer(s->value, nullptr);
+        error(Code::E0509, s->value->span, "function '" + fn_->name + "' has no result; 'return' takes no value");
+    } else {
+        check(s->value, ret);
+    }
+    flow_.live = false;
+}
+
+void Checker::fail_stmt(FailStmt* s) {
+    if (defer_depth_ > 0) error(Code::E0508, s->span, "'fail' cannot leave a 'defer'");
+    const Type* ret = fn_ ? fn_->ret : prim(TK::Void);
+    if (ret->kind != TK::Result) {
+        infer(s->value, nullptr);
+        if (ret->kind != TK::Error) {
+            error(Code::E0505, s->span, "'fail' needs a function whose result is 'E!T'");
+        }
+    } else if (!ret->err) {
+        // Тип ошибки не выведен — сообщение уже есть (E0507); значение не проверяем.
+    } else {
+        check(s->value, ret->err);
+    }
+    flow_.live = false;
+}
 
 void check(Program& prog, Diagnostics& diags) {
-    for (auto& m : prog.modules) BodyChecker(prog, *m, diags).run();
+    for (auto& m : prog.modules) infer_errors(prog, *m, diags);
+    for (auto& m : prog.modules) Checker(prog, *m, diags).run();
 }
 
 }  // namespace dp::sema

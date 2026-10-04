@@ -224,6 +224,7 @@ private:
             f.ret = r.type(n->ret, /*allow_void=*/false);
             if (f.pub) public_type(n->ret, f.ret, "function");
             auto* res = as<ResultType>(n->ret);
+            f.infer_error = res && !res->error && !f.pub;
             if (f.pub && res && !res->error) {
                 diags_.error(Code::E0308, n->ret->span,
                              "public function '" + f.name + "' must name its error type, for example 'MyError" +

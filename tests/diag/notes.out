@@ -1,0 +1,2 @@
+{"diagnostics":[{"severity":"error","code":"E0304","message":"'twice' is defined twice","file":"notes.dpm","line":5,"col":4,"end_line":5,"end_col":9,"notes":[{"message":"first defined here","file":"notes.dpm","line":2,"col":4,"end_line":2,"end_col":9}]},{"severity":"error","code":"E0310","message":"'v' is already defined in this function","file":"notes.dpm","line":10,"col":9,"end_line":10,"end_col":10,"notes":[{"message":"previous definition here","file":"notes.dpm","line":9,"col":9,"end_line":9,"end_col":10}]}]}
+[exit 1]

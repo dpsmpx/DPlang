@@ -1,0 +1,62 @@
+--- stderr ---
+calls.dpm:21:5: error[E0407]: 'two' takes 2 arguments, found 1
+  21 |     two(1)
+     |     ^~~~~~
+calls.dpm:22:5: error[E0407]: 'two' takes 2 arguments, found 3
+  22 |     two(1, 2, 3)
+     |     ^~~~~~~~~~~~
+calls.dpm:23:13: error[E0407]: 'len' takes 1 argument, found 0
+  23 |     let n = len()
+     |             ^~~~~
+calls.dpm:24:12: error[E0408]: parameter 's' is '&': pass & val
+  24 |     by_ref(val)
+     |            ^~~
+calls.dpm:25:12: error[E0408]: parameter 's' is '&', found '&mut'
+  25 |     by_ref(&mut val)
+     |            ^~~~~~~~
+calls.dpm:25:17: error[E0412]: cannot mutate 'val': it is a value parameter; take it as '&mut' to change it
+  25 |     by_ref(&mut val)
+     |                 ^~~
+calls.dpm:26:9: error[E0408]: parameter 'a' takes a value; remove '&'
+  26 |     two(&val.v, 1)
+     |         ^~~~~~
+calls.dpm:27:13: error[E0409]: a struct is built with a literal: S { ... }
+  27 |     let s = S(1)
+     |             ^
+calls.dpm:29:5: error[E0409]: 'local' is not a function
+  29 |     local(2)
+     |     ^~~~~
+calls.dpm:30:5: error[E0409]: 'K' is not a function
+  30 |     K()
+     |     ^
+calls.dpm:31:9: error[E0410]: 'S' has no method 'frobnicate'
+  31 |     val.frobnicate()
+     |         ^~~~~~~~~~
+calls.dpm:32:13: error[E0501]: '&' marks only call arguments for '&' and '&mut' parameters, and 'for ... in'
+  32 |     let x = &local
+     |             ^~~~~~
+calls.dpm:34:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  34 |     both(&mut list, &list[0])
+     |                     ^~~~~~~~
+calls.dpm:36:5: error[E0412]: cannot assign to 'fixed': it is not declared with 'var'
+  36 |     fixed = 2
+     |     ^~~~~
+calls.dpm:37:5: error[E0412]: cannot assign to 'r': it is a '&' parameter; make it '&mut'
+  37 |     r.v = 3
+     |     ^
+calls.dpm:38:5: error[E0412]: cannot assign to an element of '[]i32': it is read-only
+  38 |     view[0] = 1
+     |     ^~~~~~~
+calls.dpm:40:5: error[E0412]: cannot call 'push' on 'ro': it is not declared with 'var'
+  40 |     ro.push(1)
+     |     ^~
+calls.dpm:41:10: error[E0412]: slices are read-only; 'push' needs a List
+  41 |     view.push(1)
+     |          ^~~~
+calls.dpm:42:17: error[E0412]: cannot mutate 'val': it is a value parameter; take it as '&mut' to change it
+  42 |     by_mut(&mut val)
+     |                 ^~~
+calls.dpm:43:17: error[E0501]: a reference needs a variable, a field or an element
+  43 |     by_mut(&mut S { v: 1 })
+     |                 ^~~~~~~~~~
+[exit 1]

@@ -1,0 +1,17 @@
+--- stderr ---
+consts.dpm:10:16: error[E0421]: a constant may only call conversions T(x)
+  10 | const A: i32 = f()
+     |                ^~~
+consts.dpm:11:7: error[E0421]: constant 'B' depends on itself
+  11 | const B: i32 = C + 1
+     |       ^
+consts.dpm:13:15: error[E0421]: constant arithmetic overflows 'u8'
+  13 | const D: u8 = 200 + 100
+     |               ^~~~~~~~~
+consts.dpm:14:10: error[E0421]: a constant must be a number, a bool, a str or a List of them, found 'S'
+  14 | const E: S = S { v: 1 }
+     |          ^
+consts.dpm:15:16: error[E0421]: constant division by zero
+  15 | const F: i32 = 1 / 0
+     |                ^~~~~
+[exit 1]

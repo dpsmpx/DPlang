@@ -1,0 +1,59 @@
+Module main
+  Import geo
+  Fn area
+    Param s geo.Shape
+    Ret f64
+    Block
+      Match
+        Name s : geo.Shape
+        Arm .Circle(r)
+          Return
+            Binary * : f64
+              Binary * : f64
+                Field .PI : f64
+                  Name geo
+                Name r : f64
+              Name r : f64
+        Arm geo.Shape.Rect {w, h}
+          Return
+            Binary * : f64
+              Name w : f64
+              Name h : f64
+  Fn origin
+    Ret geo.Point
+    Block
+      Return
+        StructLit : geo.Point
+          Field .Point
+            Name geo
+          FieldInit x
+            Float 0 : f64
+          FieldInit y
+            Float 0 : f64
+  Fn far
+    Param p geo.Point
+    Ret bool
+    Block
+      Let o
+        Call : geo.Point
+          Name origin
+      Return
+        Binary > : bool
+          Call : f64
+            Field .dist
+              Name geo
+            Ref : geo.Point
+              Name o : geo.Point
+            Ref : geo.Point
+              Name p : geo.Point
+          Field .LIMIT : f64
+            Name geo
+  Fn make
+    Ret geo.Shape
+    Block
+      Return
+        Call : geo.Shape
+          Field .Circle
+            Field .Shape
+              Name geo
+          Float 1 : f64

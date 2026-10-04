@@ -23,8 +23,6 @@ pub enum Holder {
     One(Private)
 }
 
-pub const C: ?Private = none
-
 fn not_enum() Private!i32 {
     return 1
 }

@@ -26,7 +26,8 @@ constexpr std::string_view kUsage =
     "usage: dplang <command> [arguments]\n"
     "\n"
     "commands:\n"
-    "  check <file.dpm> check a program and the modules it imports\n"
+    "  check [--format=json] <file.dpm>\n"
+    "                   check a program and the modules it imports\n"
     "  explain <code>   explain a diagnostic code, e.g. E0101\n"
     "  help             show this help\n"
     "  --version        print the compiler version\n"
@@ -35,7 +36,8 @@ constexpr std::string_view kUsage =
     "  debug lex <file.dpm>     print the tokens of a file\n"
     "  debug parse <file.dpm>   print the syntax tree of a file\n"
     "  debug print <file.dpm>   print a file in canonical form\n"
-    "  debug summary <file.dpm> print the interface summaries of a program\n";
+    "  debug summary <file.dpm> print the interface summaries of a program\n"
+    "  debug types <file.dpm>   print the syntax tree of the main module with types\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
 
@@ -185,11 +187,24 @@ std::unique_ptr<dp::sema::Program> check_program(const Cli& cli, std::string_vie
     return prog;
 }
 
+// check: диагностика текстом в stderr или (--format=json) документом JSON в stdout.
 int cmd_check(const Cli& cli, const std::vector<std::string_view>& args) {
-    if (args.size() != 1) return usage_error("check takes one file");
+    bool json = false;
+    std::vector<std::string_view> files;
+    for (std::string_view a : args) {
+        if (a == "--format=json") json = true;
+        else if (a == "--format=text") json = false;
+        else if (a.substr(0, 2) == "--") return usage_error("unknown option '" + std::string(a) + "'");
+        else files.push_back(a);
+    }
+    if (files.size() != 1) return usage_error("check takes one file");
     dp::SourceMap sources;
     dp::Diagnostics diags;
-    check_program(cli, args[0], sources, diags);
+    check_program(cli, files[0], sources, diags);
+    if (json) {
+        put(dp::render_json(diags.list(), sources));
+        return diags.has_errors() ? 1 : 0;
+    }
     return finish(diags, sources);
 }
 
@@ -204,6 +219,24 @@ int cmd_debug_summary(const Cli& cli, const std::vector<std::string_view>& args)
     return finish(diags, sources);
 }
 
+// debug types: дамп AST главного модуля, у выражений — тип и неявное преобразование.
+int cmd_debug_types(const Cli& cli, const std::vector<std::string_view>& args) {
+    if (args.size() != 1) return usage_error("debug types takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, args[0], sources, diags);
+    if (prog && prog->load_ok) {
+        const dp::sema::ModuleInfo* root = prog->root;
+        put(dp::dump_module(*root->ast, [root](const dp::ast::Expr* e) {
+            if (!e->type) return std::string();  // вызываемое имя: не значение
+            std::string s = " : " + dp::sema::type_name(e->type, root);
+            if (e->conv) s += " -> " + dp::sema::type_name(e->conv, root);
+            return s;
+        }));
+    }
+    return finish(diags, sources);
+}
+
 int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args.empty()) return usage_error("debug needs a subcommand");
     std::vector<std::string_view> rest(args.begin() + 1, args.end());
@@ -211,6 +244,7 @@ int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args[0] == "parse") return cmd_debug_parse(rest, false);
     if (args[0] == "print") return cmd_debug_parse(rest, true);
     if (args[0] == "summary") return cmd_debug_summary(cli, rest);
+    if (args[0] == "types") return cmd_debug_types(cli, rest);
     return usage_error("unknown debug subcommand '" + std::string(args[0]) + "'");
 }
 

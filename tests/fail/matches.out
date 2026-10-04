@@ -1,0 +1,29 @@
+--- stderr ---
+matches.dpm:9:11: error[E0415]: 'match' does not cover .Blue
+   9 |     match c {
+     |           ^
+matches.dpm:13:11: error[E0415]: 'match' does not cover none
+  13 |     match o {
+     |           ^
+matches.dpm:16:11: error[E0415]: 'match' on 'i32' needs an arm '_ => ...' for other values
+  16 |     match n {
+     |           ^
+matches.dpm:22:9: error[E0416]: this arm is unreachable: earlier arms cover every value
+  22 |         .Red => return
+     |         ^~~~
+matches.dpm:26:9: error[E0416]: this arm is unreachable: earlier arms cover these values
+  26 |         .Red => return
+     |         ^~~~
+matches.dpm:30:9: error[E0417]: 'some(...)' does not fit a value of type 'i32'
+  30 |         some(v) => return
+     |         ^~~~~~~
+matches.dpm:31:9: error[E0417]: a 'str' pattern does not fit a value of type 'i32'
+  31 |         "x" => return
+     |         ^~~
+matches.dpm:32:9: error[E0417]: a variant pattern does not fit a value of type 'i32'
+  32 |         .Red => return
+     |         ^~~~
+matches.dpm:36:10: error[E0312]: enum 'Color' has no variant 'Purple'
+  36 |         .Purple => return
+     |          ^~~~~~
+[exit 1]
