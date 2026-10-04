@@ -35,6 +35,8 @@ fn main() {
     println("f32 0.1 + 0.2 = " + str(a + c))
     println("f64(f32 0.1) = " + str(f64(a)))
     println("1e20 = " + str(1e20) + ", 1.5e-7 = " + str(1.5e-7) + ", -0.0 = " + str(-0.0))
+    println("100.0 = " + str(100.0) + ", 2.5 = " + str(2.5) + ", 1e15 = " + str(1e15) + ", 1e16 = " + str(1e16))
+    println("0.0001 = " + str(0.0001) + ", 1e-5 = " + str(1e-5) + ", f32 1e10 = " + str(f32(1e10)))
     println("1.0 / 0.0 = " + str(1.0 / 0.0) + ", -1.0 / 0.0 = " + str(-1.0 / 0.0))
     let zero = 0.0
     println("0.0 / 0.0 = " + str(zero / zero) + ", nan == nan: " + str(zero / zero == zero / zero))
