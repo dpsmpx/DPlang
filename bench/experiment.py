@@ -16,7 +16,10 @@ C++ или на варианте синтаксиса DPlang (A, B, C), зная
 - tokens — точный счёт токенов API Claude (count_tokens, ключ
   ANTHROPIC_API_KEY): прочитано на входе, прочитано диагностик, написано,
   итоговое решение;
-- report — таблица прогона и сводка по языкам; --save — в bench/results/;
+- report — таблица прогона и сводка по языкам; --save — в bench/results/
+  (журналы и задания ячеек);
+- restore — вернуть сохранённый прогон из bench/results/ в рабочий каталог,
+  чтобы досчитать токены или отчёт в другой сессии;
 - selftest — проверка самой обвязки (шаг «обвязка» в tools/check/run.sh).
 
     python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A]
@@ -24,6 +27,7 @@ C++ или на варианте синтаксиса DPlang (A, B, C), зная
     python3 bench/experiment.py session RUN TASK LANG --tokens N [--tool-uses K] [--seconds S]
     python3 bench/experiment.py tokens RUN [--model M]
     python3 bench/experiment.py report RUN [--save]
+    python3 bench/experiment.py restore RUN [--force]
     python3 bench/experiment.py selftest
 
 Прогоны лежат в $DPLANG_EXP_WORK или build/experiment/. Подробно —
@@ -749,10 +753,36 @@ def report(run, save=False):
         if os.path.exists(dest):
             shutil.rmtree(dest)
         shutil.copytree(os.path.join(run_dir, '_log'), os.path.join(dest, 'log'))
+        for task_id, lang in cells(run_dir):
+            sandbox, _ = cell_paths(run_dir, task_id, lang)
+            shutil.copy(os.path.join(sandbox, 'PROMPT.md'), os.path.join(dest, 'log', task_id, lang, 'PROMPT.md'))
         write(os.path.join(dest, 'summary.md'), text)
         write(os.path.join(dest, 'summary.json'),
               json.dumps({'rows': rows, 'summary': s}, ensure_ascii=False, indent=1) + '\n')
         print(f'\nзаписано: {os.path.relpath(dest, ROOT)}')
+    return 0
+
+
+def restore(run, force=False):
+    """Сохранённый прогон bench/results/RUN → рабочий каталог (журналы, задания, итоговый код)."""
+    src = os.path.join(RESULTS, run, 'log')
+    if not os.path.isdir(src):
+        raise HarnessError(f'нет сохранённого прогона {src}')
+    run_dir = os.path.join(work_dir(), run)
+    if os.path.exists(run_dir):
+        if not force:
+            raise HarnessError(f'{run_dir} уже есть (--force — заменить)')
+        shutil.rmtree(run_dir)
+    shutil.copytree(src, os.path.join(run_dir, '_log'))
+    n = 0
+    for task_id, lang in cells(run_dir):
+        sandbox, log = cell_paths(run_dir, task_id, lang)
+        os.makedirs(sandbox, exist_ok=True)
+        shutil.move(os.path.join(log, 'PROMPT.md'), os.path.join(sandbox, 'PROMPT.md'))
+        last = len(read_attempts(log))
+        snapshot(read_files(os.path.join(log, f'attempt-{last}')), os.path.join(sandbox, 'src'))
+        n += 1
+    print(f'восстановлено: {n} ячеек прогона {run} в {run_dir}')
     return 0
 
 
@@ -836,7 +866,30 @@ def selftest_log(tmp):
     texts = cell_texts(os.path.join(work_dir(), 'log'), task.id, 'cpp')
     if not texts['written'] or not texts['diagnostics'] or 'ring_push' not in texts['final']:
         fails.append('журнал: тексты для счёта токенов пусты')
+    fails += selftest_restore(tmp, task, texts)
     return fails
+
+
+def selftest_restore(tmp, task, texts):
+    """Сохранение в results и восстановление дают те же тексты для счёта."""
+    global RESULTS
+    saved = RESULTS
+    RESULTS = os.path.join(tmp, 'results')
+    quiet = open(os.devnull, 'w')
+    old = sys.stdout
+    sys.stdout = quiet
+    try:
+        report('log', save=True)
+        shutil.rmtree(os.path.join(work_dir(), 'log'))
+        restore('log')
+    except HarnessError as e:
+        return [f'сохранение и восстановление: {e}']
+    finally:
+        sys.stdout = old
+        quiet.close()
+        RESULTS = saved
+    back = cell_texts(os.path.join(work_dir(), 'log'), task.id, 'cpp')
+    return [] if back == texts else ['восстановленный прогон даёт другие тексты для счёта']
 
 
 def selftest():
@@ -862,7 +915,7 @@ def selftest():
             print('  ' + f)
         return 1
     print(f'обвязка: {len(tasks)} задач × {len(LANGS)} языка — задания собираются, начальный код не проходит, '
-          f'эталоны принимаются ({"/".join(FULL)} — со сборкой), журнал и отчёт работают')
+          f'эталоны принимаются ({"/".join(FULL)} — со сборкой), журнал, отчёт и восстановление работают')
     return 0
 
 
@@ -894,6 +947,9 @@ def main(argv):
     p = sub.add_parser('report')
     p.add_argument('run')
     p.add_argument('--save', action='store_true')
+    p = sub.add_parser('restore')
+    p.add_argument('run')
+    p.add_argument('--force', action='store_true')
     sub.add_parser('selftest')
     a = ap.parse_args(argv)
     try:
@@ -914,6 +970,8 @@ def main(argv):
             return tokens(a.run, a.model)
         if a.cmd == 'report':
             return report(a.run, a.save)
+        if a.cmd == 'restore':
+            return restore(a.run, a.force)
         return selftest()
     except HarnessError as e:
         print(f'ошибка: {e}', file=sys.stderr)

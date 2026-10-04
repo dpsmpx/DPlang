@@ -26,6 +26,7 @@ python3 bench/experiment.py check DIR          # единственная про
 python3 bench/experiment.py session RUN TASK LANG --tokens N [--tool-uses K] [--seconds S]
 python3 bench/experiment.py tokens RUN [--model M]   # нужен ANTHROPIC_API_KEY
 python3 bench/experiment.py report RUN [--save]      # --save — в bench/results/RUN/
+python3 bench/experiment.py restore RUN [--force]    # из bench/results/RUN/ обратно в рабочий каталог
 python3 bench/experiment.py selftest           # шаг «обвязка» в tools/check/run.sh
 ```
 
@@ -119,9 +120,14 @@ python3 bench/experiment.py selftest           # шаг «обвязка» в to
    ячейки) с единственным сообщением «Прочитай `<песочница>/PROMPT.md` и
    выполни задание оттуда.»; одновременно — не больше 2–3.
 3. По итогу субагента — `session RUN tNN LANG --tokens …` из его расхода.
-4. `tokens RUN`, затем `report RUN --save` — в `bench/results/RUN/`
-   (сводка `summary.md`, данные `summary.json`, журналы).
-5. Отчёт — `docs/audits/<дата>-syntax-experiment.md`, решение — О1.
+4. После каждой партии ячеек — `report RUN --save` и коммит с пушем:
+   рабочий каталог не в git, а сессию может оборвать лимит. В
+   `bench/results/RUN/` — сводка `summary.md`, данные `summary.json`,
+   журналы и задания ячеек (`log/tNN/LANG/PROMPT.md`).
+5. `tokens RUN`, затем `report RUN --save`. В новой сессии прогон
+   сначала возвращается из `bench/results/` командой `restore RUN`; так
+   же досчитываются токены, когда появится ключ.
+6. Отчёт — `docs/audits/<дата>-syntax-experiment.md`, решение — О1.
 
 ### Ограничения
 
@@ -146,4 +152,5 @@ python3 bench/experiment.py selftest           # шаг «обвязка» в to
 `интерфейс`), а эталон принимается; на `B` и `C` начальный код и эталон
 переводятся; `stub.cpp` собирается с драйвером и называет те же функции,
 что `cm/stub.cm`; путь модели — проверка, повтор, предел попыток, журнал,
-отчёт, `tokens` без ключа.
+отчёт, `tokens` без ключа; сохранение в `bench/results/` и `restore` дают
+те же тексты для счёта.
