@@ -1,0 +1,18 @@
+// spec: module.file module.import module.scope lex.ident
+// Имена, которые склеились бы в C без длин: функция __x модуля main и
+// функция x модуля main__, структура S__T и структура T модуля main__.
+import main__
+
+struct S__T {
+    v: i32
+}
+
+fn __x() i32 {
+    return 1
+}
+
+fn main() {
+    let s = S__T{v: 10}
+    let t = main__.make()
+    println(str(__x()) + " " + str(main__.x()) + " " + str(s.v) + " " + str(t.v))
+}

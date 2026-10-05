@@ -12,7 +12,11 @@ build/compiler/ и прогоняет золотые тесты наборов t
 
 Команда запускается из каталога набора, пути в выводе — относительные.
 Наборы и их команды — SUITES ниже; проход verify — верификатор Core IR на
-каждой программе наборов. Устройство — docs/compiler/README.md.
+каждой программе наборов; проход native — различающие тесты C-бэкенда:
+программа набора run собирается в нативную (debug c, runtime, компилятор
+C — $CC или cc, с ASan и UBSan, если они есть), и её вывод сверяется с тем
+же ожидаемым, что у эталонного интерпретатора. Устройство —
+docs/compiler/README.md, docs/compiler/backend_c.md.
 
     python3 tests/run.py              — собрать и прогнать
     python3 tests/run.py --bless      — переписать ожидаемое (дифф — на ревью)
@@ -36,6 +40,15 @@ BUILD = os.path.join(ROOT, 'build', 'compiler')
 DPLANG = os.path.join(BUILD, 'dplang')
 DPFUZZ = os.path.join(BUILD, 'dpfuzz')
 TIMEOUT = 60
+RUNTIME = os.path.join(ROOT, 'runtime')
+NATIVE = os.path.join(BUILD, 'native')
+CC = os.environ.get('CC', 'cc')
+# Флаги сгенерированного C (docs/compiler/backend_c.md).
+C_FLAGS = ['-std=c11', '-O1', '-ffp-contract=off', '-fno-strict-aliasing', '-Wall', '-Wextra', '-Wpedantic',
+           '-Werror', '-Wno-infinite-recursion']
+C_SAN = ['-fsanitize=address,undefined', '-fno-sanitize-recover=all']
+RUNTIME_SOURCES = [os.path.join(RUNTIME, 'core', 'dp_rt.c'), os.path.join(RUNTIME, 'linux', 'dp_entry.c')]
+native_flags = []
 
 
 def args_file(path):
@@ -100,7 +113,65 @@ def discover(pattern):
             if pattern in os.path.relpath(path, TESTS):
                 tests.append((suite, path))
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
-    return tests + verify
+    native = [('native', path) for suite, path in tests if suite == 'run']
+    return tests + verify + native
+
+
+def prepare_native():
+    """Флаги и объекты runtime для прохода native; None — успех, иначе текст ошибки."""
+    os.makedirs(NATIVE, exist_ok=True)
+    probe = os.path.join(NATIVE, 'probe.c')
+    with open(probe, 'w', encoding='utf-8') as f:
+        f.write('int main(void) { return 0; }\n')
+    r = subprocess.run([CC] + C_FLAGS + C_SAN + [probe, '-o', probe + '.bin'], capture_output=True, text=True)
+    native_flags[:] = C_FLAGS + (C_SAN if r.returncode == 0 else [])
+    for src in RUNTIME_SOURCES:
+        obj = os.path.join(NATIVE, os.path.basename(src) + '.o')
+        r = subprocess.run([CC] + native_flags + ['-I', os.path.join(RUNTIME, 'core'), '-c', src, '-o', obj],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return f'runtime {os.path.relpath(src, ROOT)}: ' + (r.stderr.strip().splitlines() or ['?'])[0]
+    return None
+
+
+def native_one(path):
+    """Различающий тест: нативная программа против ожидаемого вывода интерпретатора."""
+    cwd = os.path.join(TESTS, 'run')
+    name = os.path.relpath(path, cwd)
+    flat = name.replace(os.sep, '_')[:-len('.dpm')]
+    try:
+        r = subprocess.run([DPLANG, 'debug', 'c', name], capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'debug c: [timeout {TIMEOUT} s]'
+    if r.returncode == 1:
+        return None  # программа не проходит проверку: её диагностику сверяет набор run
+    if r.returncode != 0:
+        return f'debug c: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+    c_path = os.path.join(NATIVE, flat + '.c')
+    exe = os.path.join(NATIVE, flat + '.bin')
+    with open(c_path, 'w', encoding='utf-8') as f:
+        f.write(r.stdout)
+    objs = [os.path.join(NATIVE, os.path.basename(s) + '.o') for s in RUNTIME_SOURCES]
+    r = subprocess.run([CC] + native_flags + ['-I', os.path.join(RUNTIME, 'core'), c_path] + objs +
+                       ['-lm', '-pthread', '-o', exe], capture_output=True, text=True)
+    if r.returncode != 0:
+        errs = [ln for ln in r.stderr.splitlines() if 'error' in ln][:5] or r.stderr.splitlines()[:5]
+        return 'сборка C:\n' + '\n'.join(errs)
+    try:
+        p = subprocess.run([exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'[timeout {TIMEOUT} s]'
+    got = p.stdout
+    if p.stderr:
+        got += '--- stderr ---\n' + p.stderr
+    if p.returncode != 0:
+        got += f'[exit {p.returncode}]\n'
+    with open(expected_path('run', path), encoding='utf-8') as f:
+        want = f.read()
+    if got == want:
+        return None
+    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор', 'нативная', lineterm='', n=1)
+    return 'вывод расходится с интерпретатором:\n' + '\n'.join(list(diff)[:20])
 
 
 def suite_dir_of(suite, path):
@@ -147,6 +218,8 @@ def verify_one(path):
 def run_one(suite, path, bless):
     if suite == 'verify':
         return verify_one(path)
+    if suite == 'native':
+        return native_one(path)
     got = actual_output(suite, path)
     exp_path = expected_path(suite, path)
     if bless:
@@ -176,8 +249,18 @@ def main():
             print(err)
             return 1
     tests = discover(a.k)
+    if any(suite == 'native' for suite, _ in tests):
+        err = prepare_native()
+        if err:
+            print('компилятор: runtime не собирается')
+            print(err)
+            return 1
+    # Проход native сверяет с ожидаемым набора run — после того, как --bless его перепишет.
+    tests = [t for t in tests if t[0] != 'native'] + [t for t in tests if t[0] == 'native']
+    split = sum(1 for t in tests if t[0] != 'native')
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
-        results = list(pool.map(lambda t: run_one(t[0], t[1], a.bless), tests))
+        results = list(pool.map(lambda t: run_one(t[0], t[1], a.bless), tests[:split]))
+        results += list(pool.map(lambda t: run_one(t[0], t[1], a.bless), tests[split:]))
     fails = [(t, r) for t, r in zip(tests, results) if r]
     counts = {}
     for suite, _ in tests:

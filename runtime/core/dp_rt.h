@@ -12,9 +12,28 @@
 #ifndef DP_RT_H
 #define DP_RT_H
 
+#include <float.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+/* Плавающие (trap.float, docs/policy/DETERMINISM.md): каждая операция
+ * округляется до своего типа. Промежуточная точность сверх типа (x87)
+ * дала бы другие биты — такая цель не поддерживается. */
+#if !defined(FLT_EVAL_METHOD) || FLT_EVAL_METHOD != 0
+#error "DPlang runtime requires FLT_EVAL_METHOD == 0"
+#endif
+
+/* Вспомогательные функции сгенерированного кода: на тип и на список их
+ * много, и не все нужны программе — без предупреждений о неиспользуемых.
+ * DP_FN — функция программы: DPlang не запрещает функцию без вызовов. */
+#if defined(__GNUC__) || defined(__clang__)
+#define DP_INLINE static inline __attribute__((unused))
+#define DP_FN static __attribute__((unused))
+#else
+#define DP_INLINE static inline
+#define DP_FN static
+#endif
 
 /* --- ловушки и память */
 
@@ -24,13 +43,18 @@ _Noreturn void dp_trapf(const char* loc, const char* fmt, ...);
  * прийти не может. Не ловушка программы — код выхода 3. */
 _Noreturn void dp_unreachable(const char* where);
 
+/* Предел одного буфера List или str (trap.memory). */
+#define DP_MAX_BYTES (INT64_C(1) << 31)
+
 /* Буфер count элементов по elem байт; больше предела или нет памяти —
  * ловушка «out of memory». count = 0 — NULL. */
 void* dp_alloc(int64_t count, size_t elem, const char* loc);
 void* dp_realloc(void* p, int64_t count, size_t elem, const char* loc);
 void dp_free(void* p);
 
-/* Глубина вложенности вызовов (trap.memory): кадр main — 1. */
+/* Глубина вложенности вызовов (trap.memory): число активных кадров;
+ * функция увеличивает её на входе и уменьшает на выходе, вызов
+ * проверяет предел до входа в вызываемую. */
 #define DP_MAX_DEPTH 32768
 extern int64_t dp_depth;
 #define DP_CALL_CHECK(loc) \

@@ -27,12 +27,14 @@ cmake --build build/compiler     # → build/compiler/dplang
 | `compiler/syntax/` | токены (`tokens.def`), лексер (`lexer.h`), значения литералов (`literal.h`), AST (`ast.h`), парсер (`parser.h`), каноническая печать (`printer.h`), дамп AST (`ast_dump.h`) |
 | `compiler/sema/` | проверка программы (`sema.h`): загрузка модулей (`loader.cpp`), объявления и сводки (`collect.cpp`, `summary.cpp`), разрешение типов в записи (`resolve.h`), вывод типа ошибки `!T` (`errinfer.cpp`), тела (`checker.h`: `check.cpp` — инструкции и поток, `check_expr.cpp` — выражения и константы, `check_pat.cpp` — образцы и полнота `match`); типы (`types.h`), объявления (`defs.h`), встроенное (`builtins.h`) |
 | `compiler/ir/` | Core IR (`ir.h`), понижение AST → IR (`lower.h`), верификатор (`verify.h`), эталонный интерпретатор (`interp.h`), текстовая запись (`dump.h`); устройство — `docs/ir/README.md` |
+| `compiler/backend_c/` | C-бэкенд: Core IR → C11 (`emit_c.h`); устройство — `docs/compiler/backend_c.md` |
 | `compiler/driver/` | CLI `dplang` (`main.cpp`) |
 | `compiler/fuzz/` | фаззер «не падает» `dpfuzz` |
+| `runtime/` | runtime на C11 для сгенерированного C: ядро `core/`, вход под Linux `linux/`; устройство — `docs/runtime/README.md` |
 | `tests/` | наборы золотых тестов и их исполнитель `tests/run.py` |
 
-С шагами v0.1 появятся `compiler/backend_c/`, `runtime/`, `stdlib/`
-(`docs/design/ARCHITECTURE.md`, раздел 10).
+С шагом 11 появится `stdlib/` (`docs/design/ARCHITECTURE.md`,
+раздел 10).
 
 ## Правила кода
 
@@ -158,6 +160,12 @@ python3 tests/run.py -k cli       # отбор по подстроке пути
 `dplang debug ir` на каждой. Программа с ошибками даёт код 1, без них — 0;
 внутренняя ошибка или падение — сбой. Так верификатор Core IR проходит
 по всем тестам (`docs/policy/TESTING.md`, раздел 2).
+
+Проход `native` — различающие тесты C-бэкенда: каждая программа набора
+`run` переводится `dplang debug c`, собирается с runtime компилятором C
+(`$CC` или `cc`, с ASan и UBSan, если они есть) и запускается. Вывод
+сверяется с тем же ожидаемым, что у интерпретатора. Подробно —
+`docs/compiler/backend_c.md`, раздел 7.
 
 Наборы добавляются вместе с шагами (`docs/policy/TESTING.md`, раздел 4);
 их список — `SUITES` в `tests/run.py`.
