@@ -11,10 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int64_t dp_depth = 1;
-
-/* Предел одного буфера List или str: 2^31 байт (trap.memory). */
-#define DP_MAX_BYTES (INT64_C(1) << 31)
+int64_t dp_depth = 0;
 
 /* --- ловушки */
 

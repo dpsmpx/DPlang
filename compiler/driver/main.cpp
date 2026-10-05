@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "backend_c/emit_c.h"
 #include "ir/dump.h"
 #include "ir/interp.h"
 #include "ir/lower.h"
@@ -43,7 +44,8 @@ constexpr std::string_view kUsage =
     "  debug summary <file.dpm> print the interface summaries of a program\n"
     "  debug types <file.dpm>   print the syntax tree of the main module with types\n"
     "  debug ir <file.dpm>      print the Core IR of a program\n"
-    "  debug run <file.dpm>     run a program in the reference interpreter\n";
+    "  debug run <file.dpm>     run a program in the reference interpreter\n"
+    "  debug c <file.dpm>       print the C code of a program (C backend)\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
 
@@ -287,6 +289,22 @@ int cmd_debug_run(const Cli& cli, const std::vector<std::string_view>& args) {
     return r.exit_code;
 }
 
+// debug c: C-код программы от C-бэкенда (docs/compiler/backend_c.md).
+int cmd_debug_c(const Cli& cli, const std::vector<std::string_view>& args) {
+    if (args.size() != 1) return usage_error("debug c takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, args[0], sources, diags);
+    if (prog && !diags.has_errors() && !dp::sema::check_main(*prog, diags)) return finish(diags, sources);
+    if (!prog || diags.has_errors()) return finish(diags, sources);
+    auto ir = lower_program(*prog, sources);
+    if (!ir) return 3;
+    dp::backend_c::CResult c = dp::backend_c::emit_c(*ir, sources);
+    if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
+    put(c.code);
+    return 0;
+}
+
 int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args.empty()) return usage_error("debug needs a subcommand");
     std::vector<std::string_view> rest(args.begin() + 1, args.end());
@@ -297,6 +315,7 @@ int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args[0] == "types") return cmd_debug_types(cli, rest);
     if (args[0] == "ir") return cmd_debug_ir(cli, rest);
     if (args[0] == "run") return cmd_debug_run(cli, rest);
+    if (args[0] == "c") return cmd_debug_c(cli, rest);
     return usage_error("unknown debug subcommand '" + std::string(args[0]) + "'");
 }
 

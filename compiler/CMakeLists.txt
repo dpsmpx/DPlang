@@ -17,6 +17,7 @@ if(DPLANG_SANITIZE)
 endif()
 
 add_library(dpcore STATIC
+    backend_c/emit_c.cpp
     ir/dump.cpp
     ir/interp.cpp
     ir/ir.cpp

@@ -20,7 +20,7 @@ static void* dp_thread(void* arg) {
 
 int dp_run(dp_entry_fn entry) {
     dp_entry_main = entry;
-    dp_depth = 1;
+    dp_depth = 0;
     pthread_attr_t attr;
     pthread_t th;
     int ok = pthread_attr_init(&attr) == 0 && pthread_attr_setstacksize(&attr, DP_STACK_BYTES) == 0 &&
