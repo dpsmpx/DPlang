@@ -14,6 +14,7 @@
 #include <string_view>
 #include <vector>
 
+#include "api/compile.h"
 #include "ir/lower.h"
 #include "ir/verify.h"
 #include "sema/sema.h"
@@ -151,22 +152,17 @@ bool check_parse(const std::string& input) {
 // Инварианты проверки: модуль без ошибок разбора проходит сбор
 // объявлений и проверку тел без падения; места сообщений — внутри файла;
 // модуль без ошибок понижается в Core IR, и верификатор его принимает.
-// Модули с import пропускаются: фаззер проверяет один файл.
+// Проверка — через общий вход компиляции (compiler/api), модуль — из
+// памяти: import другого модуля не находится, и проверка не идёт дальше.
 bool check_sema(const std::string& input) {
-    if (input.find("import") != std::string::npos) return true;
     dp::SourceMap sources;
     dp::Diagnostics diags;
-    auto prog = std::make_unique<dp::sema::Program>();
-    auto m = std::make_unique<dp::sema::ModuleInfo>();
-    m->name = "fuzz";
-    m->path = "fuzz.dpm";
-    m->file = sources.add("fuzz.dpm", input);
-    m->ast = dp::parse_module(sources.file(m->file), m->file, "fuzz", diags);
-    if (diags.has_errors()) return true;
-    prog->root = m.get();
-    prog->modules.push_back(std::move(m));
-    dp::sema::collect(*prog, diags);
-    dp::sema::check(*prog, diags);
+    dp::api::MemorySources files;
+    files.add("fuzz.dpm", input);
+    dp::api::CompileOptions opt;
+    opt.reader = &files;
+    auto prog = dp::api::check("fuzz.dpm", opt, sources, diags);
+    if (!prog || !prog->load_ok) return true;
     for (const dp::Diagnostic& d : diags.list()) {
         if (d.has_span && (d.span.begin > d.span.end || d.span.end > input.size())) {
             return fail("diagnostic span outside the file", input);

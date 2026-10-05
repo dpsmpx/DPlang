@@ -12,6 +12,11 @@
 DP_CODE(E0001, "cannot read source file",
         "The compiler could not open or read a source file named on the command line or found by an "
         "`import`. Check that the path exists and is readable.")
+DP_CODE(E0002, "nesting is too deep",
+        "The program nests constructs more deeply than this compiler supports: brackets, blocks, chains "
+        "of operators, calls or field accesses, patterns or types inside each other. The limit protects "
+        "the compiler from running out of stack; the message names it. Split the code into smaller parts "
+        "with local variables or functions.")
 
 // --- E01xx: лексика (docs/spec/core.md, раздел 1)
 

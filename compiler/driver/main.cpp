@@ -10,7 +10,9 @@
 #include <string_view>
 #include <vector>
 
+#include "api/compile.h"
 #include "backend_c/emit_c.h"
+#include "driver/big_stack.h"
 #include "ir/dump.h"
 #include "ir/interp.h"
 #include "ir/lower.h"
@@ -18,6 +20,7 @@
 #include "sema/sema.h"
 #include "support/diag.h"
 #include "support/json.h"
+#include "support/version.h"
 #include "syntax/ast_dump.h"
 #include "syntax/lexer.h"
 #include "syntax/parser.h"
@@ -25,7 +28,6 @@
 
 namespace {
 
-constexpr std::string_view kVersion = "dplang 0.1.0-dev";
 
 constexpr std::string_view kUsage =
     "usage: dplang <command> [arguments]\n"
@@ -144,7 +146,7 @@ int cmd_debug_parse(const std::vector<std::string_view>& args, bool print) {
     dp::FileId id;
     if (!load(args[0], sources, diags, id)) return finish(diags, sources);
     std::string name = module_name(args[0]);
-    auto m = dp::parse_module(sources.file(id), id, name, diags);
+    auto m = dp::parse_module(sources.file(id), id, name, diags);  // предел вложенности — по умолчанию
     std::string dump = dp::dump_module(*m);
     if (!diags.has_errors()) {
         std::string printed = dp::print_module(*m, sources.file(id).text());
@@ -184,15 +186,12 @@ struct Cli {
 // Загрузка и проверка программы. nullptr — главный модуль не прочитан
 // или в программе ошибки разбора (дальше не проверяем: сообщения были бы
 // следствием).
+// Общий вход компиляции (compiler/api) — тот же, что у worker онлайн-сервиса.
 std::unique_ptr<dp::sema::Program> check_program(const Cli& cli, std::string_view path, dp::SourceMap& sources,
                                                  dp::Diagnostics& diags) {
-    dp::sema::LoadOptions opt;
+    dp::api::CompileOptions opt;
     opt.stdlib_dir = cli.stdlib;
-    auto prog = dp::sema::load_program(std::string(path), opt, sources, diags);
-    if (!prog || !prog->load_ok) return prog;
-    dp::sema::collect(*prog, diags);
-    dp::sema::check(*prog, diags);
-    return prog;
+    return dp::api::check(std::string(path), opt, sources, diags);
 }
 
 // check: диагностика текстом в stderr или (--format=json) документом JSON в stdout.
@@ -321,7 +320,7 @@ int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+static int run_cli(int argc, char** argv) {
     Cli cli;
     cli.stdlib = stdlib_dir(argv[0]);
     std::vector<std::string_view> args(argv + 1, argv + argc);
@@ -333,7 +332,8 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (cmd == "--version") {
-        put(kVersion);
+        put("dplang ");
+        put(dp::kCompilerVersion);
         put("\n");
         return 0;
     }
@@ -341,4 +341,20 @@ int main(int argc, char** argv) {
     if (cmd == "check") return cmd_check(cli, rest);
     if (cmd == "debug") return cmd_debug(cli, rest);
     return usage_error("unknown command '" + std::string(cmd) + "'");
+}
+
+// Команда исполняется в потоке с большим стеком: проходы компилятора
+// рекурсивны, а глубину дерева ограничивает только предел вложенности
+// (docs/compiler/README.md, «Предел вложенности»).
+int main(int argc, char** argv) {
+    struct Args {
+        int argc;
+        char** argv;
+        int code;
+    } a{argc, argv, 0};
+    dp::run_with_stack(dp::kCompilerStackBytes, [](void* p) {
+        auto* x = static_cast<Args*>(p);
+        x->code = run_cli(x->argc, x->argv);
+    }, &a);
+    return a.code;
 }

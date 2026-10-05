@@ -43,7 +43,7 @@ public:
     ModuleInfo* load_root(const std::string& path) {
         root_dir_ = dir_of(path);
         std::string text;
-        if (!read_file(path, text)) {
+        if (!read(path, text)) {
             diags_.error(Code::E0001, "cannot read source file '" + path + "'");
             return nullptr;
         }
@@ -60,6 +60,10 @@ private:
     std::map<std::string, bool> done_;     // false — модуль ещё загружается (на стеке)
     std::vector<std::string> stack_;
 
+    bool read(const std::string& path, std::string& out) const {
+        return opt_.reader ? opt_.reader->read(path, out) : read_file(path, out);
+    }
+
     ModuleInfo* load(const std::string& name, const std::string& path, std::string text) {
         auto owned = std::make_unique<ModuleInfo>();
         ModuleInfo* m = owned.get();
@@ -67,7 +71,9 @@ private:
         m->path = path;
         m->file = sources_.add(path, std::move(text));
         size_t errors_before = diags_.error_count();
-        m->ast = parse_module(sources_.file(m->file), m->file, name, diags_);
+        ParseOptions po;
+        po.max_nesting = opt_.max_nesting;
+        m->ast = parse_module(sources_.file(m->file), m->file, name, diags_, po);
         m->ok = diags_.error_count() == errors_before;
         if (!m->ok) prog_.load_ok = false;
         if (!valid_module_name(name)) {
@@ -114,7 +120,7 @@ private:
         if (!opt_.stdlib_dir.empty()) places.push_back(opt_.stdlib_dir + "/" + name + ".dpm");
         for (const std::string& p : places) {
             std::string text;
-            if (read_file(p, text)) return load(name, p, std::move(text));
+            if (read(p, text)) return load(name, p, std::move(text));
         }
         // Путь библиотеки зависит от установки — в сообщении только её название.
         std::string looked = places[0] + (opt_.stdlib_dir.empty() ? "" : " and the standard library");

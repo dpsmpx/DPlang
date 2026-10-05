@@ -17,6 +17,7 @@ if(DPLANG_SANITIZE)
 endif()
 
 add_library(dpcore STATIC
+    api/compile.cpp
     backend_c/emit_c.cpp
     ir/dump.cpp
     ir/interp.cpp
@@ -35,6 +36,7 @@ add_library(dpcore STATIC
     sema/summary.cpp
     sema/types.cpp
     syntax/ast_dump.cpp
+    syntax/depth.cpp
     syntax/lexer.cpp
     syntax/literal.cpp
     syntax/parser.cpp
@@ -42,8 +44,10 @@ add_library(dpcore STATIC
 )
 target_include_directories(dpcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(dplang driver/main.cpp)
-target_link_libraries(dplang PRIVATE dpcore)
+find_package(Threads REQUIRED)
+
+add_executable(dplang driver/main.cpp driver/big_stack.cpp)
+target_link_libraries(dplang PRIVATE dpcore Threads::Threads)
 
 # Фаззер «не падает»: tests/fuzz (docs/compiler/README.md).
 add_executable(dpfuzz fuzz/main.cpp)

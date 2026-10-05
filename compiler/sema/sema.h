@@ -8,11 +8,25 @@
 #include "sema/defs.h"
 #include "support/diag.h"
 #include "support/source.h"
+#include "syntax/parser.h"
 
 namespace dp::sema {
 
+// Откуда загрузчик берёт текст модулей: файловая система (CLI) или память
+// (worker онлайн-сервиса, compiler/api). Путь — как его строит загрузчик:
+// главный модуль; каталог главного модуля + имя + ".dpm"; каталог
+// стандартной библиотеки + имя + ".dpm".
+class SourceReader {
+public:
+    virtual ~SourceReader() = default;
+    // false — модуля по этому пути нет.
+    virtual bool read(const std::string& path, std::string& out) const = 0;
+};
+
 struct LoadOptions {
-    std::string stdlib_dir;  // каталог стандартной библиотеки; пусто — без неё
+    std::string stdlib_dir;                // каталог стандартной библиотеки; пусто — без неё
+    const SourceReader* reader = nullptr;  // nullptr — файловая система
+    uint32_t max_nesting = kDefaultMaxNesting;  // предел вложенности разбора (ParseOptions)
 };
 
 // Загружает главный модуль и всё, что он импортирует (Р46): разбор, граф
