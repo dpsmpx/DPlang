@@ -55,7 +55,12 @@ bool is_composite(const Type* t) {
     }
 }
 
-// Запись типа в именах C: i32, str, L_i32, O_str, R_E_m__Err_void, T_m__S.
+// Имя DPlang в имени C — с длиной впереди: «a» и «__x» дают 1a3__x, а
+// «a__» и «x» — 3a__1x; без длины оба дали бы одно имя.
+std::string lp(const std::string& s) { return std::to_string(s.size()) + s; }
+
+// Запись типа в именах C: i32, str, L_i32, O_str, R_E_1m3Err_void, T_1m1S.
+// Записи однозначны: по записи восстанавливается тип.
 std::string mangle(const Type* t) {
     switch (t->kind) {
         case TK::Void: return "void";
@@ -76,8 +81,8 @@ std::string mangle(const Type* t) {
         case TK::Slice: return "S_" + mangle(t->elem);
         case TK::Optional: return "O_" + mangle(t->elem);
         case TK::Result: return "R_" + (t->err ? mangle(t->err) : std::string("x")) + "_" + mangle(t->elem);
-        case TK::Struct: return "T_" + t->sdef->module->name + "__" + t->sdef->name;
-        case TK::Enum: return "E_" + t->edef->module->name + "__" + t->edef->name;
+        case TK::Struct: return "T_" + lp(t->sdef->module->name) + lp(t->sdef->name);
+        case TK::Enum: return "E_" + lp(t->edef->module->name) + lp(t->edef->name);
         default: return "error";
     }
 }
@@ -184,10 +189,11 @@ public:
     }
 
     // Для FnEmitter.
+    // Имя функции в IR — «модуль.функция»; в C — dpf_<модуль><функция> с длинами.
     static std::string fn_name(const Function& f) {
-        std::string n = "dpf_";
-        for (char c : f.name) n += c == '.' ? std::string("__") : std::string(1, c);
-        return n;
+        size_t dot = f.name.find('.');
+        if (dot == std::string::npos) return "dpf_" + lp(f.name);
+        return "dpf_" + lp(f.name.substr(0, dot)) + lp(f.name.substr(dot + 1));
     }
 
     std::string fn_head(const Function& f) {

@@ -1,0 +1,11 @@
+pub struct T {
+    v: i32
+}
+
+pub fn x() i32 {
+    return 2
+}
+
+pub fn make() T {
+    return T{v: 20}
+}
