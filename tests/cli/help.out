@@ -15,3 +15,4 @@ debugging commands (output format is not stable):
   debug types <file.dpm>   print the syntax tree of the main module with types
   debug ir <file.dpm>      print the Core IR of a program
   debug run <file.dpm>     run a program in the reference interpreter
+  debug c <file.dpm>       print the C code of a program (C backend)
