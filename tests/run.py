@@ -33,6 +33,8 @@ import shlex
 import subprocess
 import sys
 
+import limits
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.join(ROOT, 'tests')
 SRC = os.path.join(ROOT, 'compiler')
@@ -114,7 +116,8 @@ def discover(pattern):
                 tests.append((suite, path))
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
     native = [('native', path) for suite, path in tests if suite == 'run']
-    return tests + verify + native
+    deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
+    return tests + verify + native + deep
 
 
 def prepare_native():
@@ -220,6 +223,8 @@ def run_one(suite, path, bless):
         return verify_one(path)
     if suite == 'native':
         return native_one(path)
+    if suite == 'limits':
+        return limits.check_case(path, DPLANG)
     got = actual_output(suite, path)
     exp_path = expected_path(suite, path)
     if bless:
@@ -269,7 +274,8 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            print(f'  {os.path.relpath(path, TESTS)}: {r}')
+            name = 'limits/' + path if suite == 'limits' else os.path.relpath(path, TESTS)
+            print(f'  {name}: {r}')
         return 1
     verb = 'записано ожидаемое' if a.bless else 'прошли'
     print(f'компилятор: собран, тестов {len(tests)} {verb} ({summary})')

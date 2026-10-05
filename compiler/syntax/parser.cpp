@@ -96,8 +96,8 @@ bool is_path(Expr* e) {
 
 class Parser {
 public:
-    Parser(const SourceFile& file, FileId id, Diagnostics& diags, Module& m)
-        : text_(file.text()), id_(id), diags_(diags), m_(m), toks_(m.tokens) {}
+    Parser(const SourceFile& file, FileId id, Diagnostics& diags, Module& m, uint32_t max_nesting)
+        : text_(file.text()), id_(id), diags_(diags), m_(m), toks_(m.tokens), max_nesting_(max_nesting) {}
 
     void run() {
         nl_.push_back(false);
@@ -114,6 +114,9 @@ public:
         }
     }
 
+    // Разбор остановлен пределом вложенности (E0002).
+    bool stopped() const { return stopped_; }
+
 private:
     std::string_view text_;
     FileId id_;
@@ -127,6 +130,33 @@ private:
     size_t start_ = 0;         // первый токен текущей инструкции — для восстановления
     uint32_t last_error_ = UINT32_MAX;
     Code last_code_ = Code::E0001;
+    uint32_t max_nesting_;
+    uint32_t depth_ = 0;       // глубина рекурсии разбора
+    bool stopped_ = false;     // предел вложенности: разбор модуля остановлен
+
+    // Уровень вложенности разбора (parser.h, ParseOptions). Сверх предела —
+    // E0002 и остановка: дальше модуль не разбирается, остальные сообщения
+    // были бы следствием.
+    struct Nest {
+        Parser& p;
+        bool ok;
+        explicit Nest(Parser& parser) : p(parser), ok(!parser.stopped_ && parser.depth_ < parser.max_nesting_) {
+            if (ok) p.depth_++;
+            else p.stop(p.tok_span(p.toks_[p.idx()]));
+        }
+        ~Nest() {
+            if (ok) p.depth_--;
+        }
+    };
+
+    void stop(Span at) {
+        if (stopped_) return;
+        failed_ = false;
+        error_at(Code::E0002, at, "nesting is too deep: more than " + std::to_string(max_nesting_) + " levels");
+        stopped_ = true;
+        failed_ = true;
+        pos_ = toks_.size() - 1;  // Eof: циклы разбора кончаются
+    }
 
     struct NlScope {
         Parser& p;
@@ -193,6 +223,7 @@ private:
     // Ошибка «ожидалось …» у следующего токена. Одна на инструкцию; у
     // токена ошибки лексики не сообщаем — лексер уже сообщил.
     void expected(std::string what) {
+        if (stopped_) failed_ = true;
         if (failed_) return;
         failed_ = true;
         const Token& t = toks_[idx()];
@@ -202,6 +233,7 @@ private:
     }
 
     void error_at(Code code, Span span, std::string msg) {
+        if (stopped_) failed_ = true;
         if (failed_) return;
         failed_ = true;
         if (span.begin == last_error_ && code == last_code_) return;  // та же ошибка из внешнего узла
@@ -480,6 +512,12 @@ private:
 
     Type* type() {
         uint32_t begin = start();
+        Nest nest(*this);
+        if (!nest.ok) {
+            auto* t = m_.make<ErrorType>();
+            t->span = span_from(begin);
+            return t;
+        }
         if (eat(TokKind::Question)) {
             auto* t = m_.make<OptionalType>();
             t->inner = type();
@@ -539,7 +577,8 @@ private:
     Block* block() {
         auto* b = m_.make<Block>();
         uint32_t begin = start();
-        if (!expect(TokKind::LBrace)) {
+        Nest nest(*this);
+        if (!nest.ok || !expect(TokKind::LBrace)) {
             b->span = span_from(begin);
             return b;
         }
@@ -577,6 +616,12 @@ private:
 
     Stmt* stmt() {
         uint32_t begin = start();
+        Nest nest(*this);
+        if (!nest.ok) {
+            Stmt* e = m_.make<ErrorStmt>();
+            e->span = span_from(begin);
+            return e;
+        }
         Stmt* s = nullptr;
         switch (peek()) {
             case TokKind::KwLet: case TokKind::KwVar: s = let_stmt(); break;
@@ -646,9 +691,12 @@ private:
         return l;
     }
 
+    // `else if` — рекурсия без stmt(): уровень вложенности считается здесь.
     Stmt* if_stmt() {
         auto* s = m_.make<IfStmt>();
         uint32_t begin = start();
+        Nest nest(*this);
+        if (!nest.ok) return s;
         bump();  // if
         if (eat(TokKind::KwLet)) {
             s->let_name = expect_ident(s->let_span);
@@ -743,6 +791,12 @@ private:
 
     Expr* binary(int min, bool ns) {
         uint32_t begin = start();
+        Nest nest(*this);
+        if (!nest.ok) {
+            auto* e = m_.make<ErrorExpr>();
+            e->span = span_from(begin);
+            return e;
+        }
         Expr* lhs = unary(ns);
         bool lhs_cmp = false;
         while (!failed_) {
@@ -767,9 +821,19 @@ private:
         return lhs;
     }
 
+    // Префиксные операторы вложены друг в друга: уровень на каждый.
     Expr* unary(bool ns) {
         uint32_t begin = start();
         TokKind k = peek();
+        bool prefix = k == TokKind::Minus || k == TokKind::Bang || k == TokKind::Tilde || k == TokKind::KwTry ||
+                      k == TokKind::Amp;
+        if (!prefix) return postfix(primary(ns), ns, begin);
+        Nest nest(*this);
+        if (!nest.ok) {
+            auto* e = m_.make<ErrorExpr>();
+            e->span = span_from(begin);
+            return e;
+        }
         if (k == TokKind::Minus || k == TokKind::Bang || k == TokKind::Tilde) {
             bump();
             auto* u = m_.make<UnaryExpr>();
@@ -963,6 +1027,12 @@ private:
 
     Pat* pattern() {
         uint32_t begin = start();
+        Nest nest(*this);
+        if (!nest.ok) {
+            auto* e = m_.make<ErrorPat>();
+            e->span = span_from(begin);
+            return e;
+        }
         Pat* first = pattern_one();
         if (!at(TokKind::Pipe)) return first;
         auto* o = m_.make<OrPat>();
@@ -1082,12 +1152,26 @@ private:
 
 }  // namespace
 
-std::unique_ptr<ast::Module> parse_module(const SourceFile& file, FileId id, std::string name, Diagnostics& diags) {
+std::unique_ptr<ast::Module> parse_module(const SourceFile& file, FileId id, std::string name, Diagnostics& diags,
+                                          const ParseOptions& opt) {
     auto m = std::make_unique<ast::Module>();
     m->file = id;
     m->name = std::move(name);
     m->tokens = lex(file, id, diags);
-    Parser(file, id, diags, *m).run();
+    Parser p(file, id, diags, *m, opt.max_nesting);
+    p.run();
+    // Цепочки операторов парсер строит циклом: глубину дерева проверяет
+    // обход без рекурсии. Слишком глубокое дерево не отдаётся проходам
+    // дальше — они рекурсивны.
+    bool too_deep = p.stopped();
+    if (!too_deep) {
+        if (const ast::Node* n = deeper_than(*m, opt.max_nesting)) {
+            diags.error(Code::E0002, n->span,
+                        "nesting is too deep: more than " + std::to_string(opt.max_nesting) + " levels");
+            too_deep = true;
+        }
+    }
+    if (too_deep) m->items.clear();
     return m;
 }
 
