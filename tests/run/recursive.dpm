@@ -1,0 +1,44 @@
+// spec: type.recursive memory.values ref.marks stmt.match
+struct Node {
+    name: str
+    kids: List[Node]
+}
+
+enum Tree {
+    Leaf(i32)
+    Branch(List[Tree])
+}
+
+fn count(n: &Node) i32 {
+    var c: i32 = 1
+    for k in &n.kids {
+        c += count(&k)
+    }
+    return c
+}
+
+fn sum(t: &Tree) i32 {
+    match t {
+        .Leaf(v) => return v
+        .Branch(ts) => {
+            var s: i32 = 0
+            for x in &ts {
+                s += sum(&x)
+            }
+            return s
+        }
+    }
+}
+
+fn main() {
+    var root = Node{name: "a", kids: []}
+    root.kids.push(Node{name: "b", kids: []})
+    root.kids[0].kids.push(Node{name: "c", kids: []})
+    let copy = root
+    println(str(count(&root)) + " " + str(count(&copy)))
+    let t = Tree.Branch([Tree.Leaf(1), Tree.Branch([Tree.Leaf(2), Tree.Leaf(3)])])
+    println(str(sum(&t)))
+    var ys = copy.kids
+
+    println(str(len(ys)))
+}
