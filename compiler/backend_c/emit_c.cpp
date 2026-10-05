@@ -191,7 +191,7 @@ public:
     }
 
     std::string fn_head(const Function& f) {
-        std::string h = "static " + ctype(f.ret) + " " + fn_name(f) + "(";
+        std::string h = "DP_FN " + ctype(f.ret) + " " + fn_name(f) + "(";
         for (uint32_t i = 0; i < f.param_count; i++) {
             if (i) h += ", ";
             const ir::Local& l = f.locals[i];

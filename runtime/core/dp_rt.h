@@ -25,11 +25,14 @@
 #endif
 
 /* Вспомогательные функции сгенерированного кода: на тип и на список их
- * много, и не все нужны программе — без предупреждений о неиспользуемых. */
+ * много, и не все нужны программе — без предупреждений о неиспользуемых.
+ * DP_FN — функция программы: DPlang не запрещает функцию без вызовов. */
 #if defined(__GNUC__) || defined(__clang__)
 #define DP_INLINE static inline __attribute__((unused))
+#define DP_FN static __attribute__((unused))
 #else
 #define DP_INLINE static inline
+#define DP_FN static
 #endif
 
 /* --- ловушки и память */
