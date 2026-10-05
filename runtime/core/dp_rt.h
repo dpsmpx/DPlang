@@ -12,9 +12,17 @@
 #ifndef DP_RT_H
 #define DP_RT_H
 
+#include <float.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+/* Плавающие (trap.float, docs/policy/DETERMINISM.md): каждая операция
+ * округляется до своего типа. Промежуточная точность сверх типа (x87)
+ * дала бы другие биты — такая цель не поддерживается. */
+#if !defined(FLT_EVAL_METHOD) || FLT_EVAL_METHOD != 0
+#error "DPlang runtime requires FLT_EVAL_METHOD == 0"
+#endif
 
 /* Вспомогательные функции сгенерированного кода: на тип и на список их
  * много, и не все нужны программе — без предупреждений о неиспользуемых. */
