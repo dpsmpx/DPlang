@@ -17,8 +17,9 @@ build/compiler/ и прогоняет золотые тесты наборов t
 C — $CC или cc, с ASan и UBSan, если они есть), и её вывод сверяется с тем
 же ожидаемым, что у эталонного интерпретатора. Устройство —
 docs/compiler/README.md, docs/compiler/backend_c.md. Проходы limits,
-worker и sandbox — tests/limits.py и tests/worker.py; worker и sandbox
-идут на второй сборке, Release без санитайзеров (build/release/).
+worker, sandbox и service — tests/limits.py, tests/worker.py и
+tests/service.py; worker, sandbox и service идут на второй сборке,
+Release без санитайзеров (build/release/).
 
     python3 tests/run.py              — собрать и прогнать
     python3 tests/run.py --bless      — переписать ожидаемое (дифф — на ревью)
@@ -36,6 +37,7 @@ import subprocess
 import sys
 
 import limits
+import service
 import worker
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -135,10 +137,11 @@ def discover(pattern):
     native = [('native', path) for suite, path in tests if suite == 'run']
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
     wdir = os.path.join(TESTS, 'worker')
-    service = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
-               if name.endswith('.json') and pattern in 'worker/' + name]
-    service += [('sandbox', a) for a in ['ok'] + worker.PROBE_FORBIDDEN if pattern in 'sandbox/' + a]
-    return tests + verify + native + deep + service
+    online = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
+              if name.endswith('.json') and pattern in 'worker/' + name]
+    online += [('sandbox', a) for a in ['ok'] + worker.PROBE_FORBIDDEN if pattern in 'sandbox/' + a]
+    online += [('service', name) for name in service.CASES if pattern in 'service/' + name]
+    return tests + verify + native + deep + online
 
 
 def prepare_native():
@@ -250,6 +253,8 @@ def run_one(suite, path, bless):
         return worker.worker_case(path, DPLANG_RELEASE, bless)
     if suite == 'sandbox':
         return worker.sandbox_case(path, PROBE)
+    if suite == 'service':
+        return service.check_case(path, DPLANG_RELEASE)
     got = actual_output(suite, path)
     exp_path = expected_path(suite, path)
     if bless:
@@ -299,7 +304,7 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            name = suite + '/' + path if suite in ('limits', 'sandbox') else os.path.relpath(path, TESTS)
+            name = suite + '/' + path if suite in ('limits', 'sandbox', 'service') else os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1
     verb = 'записано ожидаемое' if a.bless else 'прошли'

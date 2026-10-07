@@ -99,29 +99,49 @@ class QueueTimeout(Exception):
 
 
 class Admission:
-    """Допуск к worker-ам: не больше concurrency сразу, length ждущих."""
+    """Допуск к worker-ам: не больше concurrency сразу, length ждущих.
+
+    Ждущие — очередь FIFO. Освободившееся место передаётся первому ждущему
+    сразу, без окна, в котором его занял бы опоздавший."""
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.sem = asyncio.Semaphore(cfg['concurrency'])
         self.active = 0
-        self.waiting = 0
+        self.queue = collections.deque()
+
+    @property
+    def waiting(self):
+        return len(self.queue)
 
     async def __aenter__(self):
-        if self.active >= self.cfg['concurrency'] or self.waiting > 0:
-            if self.waiting >= self.cfg['length']:
-                raise QueueFull()
-        self.waiting += 1
+        if self.active < self.cfg['concurrency'] and not self.queue:
+            self.active += 1
+            return self
+        if len(self.queue) >= self.cfg['length']:
+            raise QueueFull()
+        turn = asyncio.get_running_loop().create_future()
+        self.queue.append(turn)
         try:
-            await asyncio.wait_for(self.sem.acquire(), self.cfg['wait_ms'] / 1000)
-        except asyncio.TimeoutError:
+            await asyncio.wait_for(asyncio.shield(turn), self.cfg['wait_ms'] / 1000)
+        except (asyncio.TimeoutError, asyncio.CancelledError) as e:
+            if turn.done():  # место передано в тот же миг — вернуть его
+                self._release()
+            else:
+                self.queue.remove(turn)
+                turn.cancel()
+            if isinstance(e, asyncio.CancelledError):
+                raise
             raise QueueTimeout() from None
-        finally:
-            self.waiting -= 1
-        self.active += 1
         return self
 
     async def __aexit__(self, *exc):
-        self.active -= 1
-        self.sem.release()
+        self._release()
         return False
+
+    def _release(self):
+        while self.queue:
+            turn = self.queue.popleft()
+            if not turn.done():
+                turn.set_result(None)  # место переходит ждущему, active не меняется
+                return
+        self.active -= 1
