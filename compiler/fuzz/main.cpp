@@ -1,8 +1,9 @@
 // Фаззер «не падает» (docs/policy/TESTING.md, раздел 3).
 //
-//     dpfuzz lex|parse|check --seed N --iters M <каталог>...
+//     dpfuzz lex|parse|check|contract --seed N --iters M <каталог>...
 //
-// Берёт файлы .dpm из каталогов как корпус, портит их детерминированно
+// Берёт файлы .dpm из каталогов как корпус (у contract — тела запросов
+// .json онлайн-сервиса), портит их детерминированно
 // (зерно задано) и проверяет инварианты прохода на каждом входе. Сбой
 // инварианта — сообщение и код 1; падение ловят санитайзеры сборки.
 // Вывод при успехе — одна строка без чисел, зависящих от времени.
@@ -15,10 +16,12 @@
 #include <vector>
 
 #include "api/compile.h"
+#include "api/contract.h"
 #include "ir/lower.h"
 #include "ir/verify.h"
 #include "sema/sema.h"
 #include "support/diag.h"
+#include "support/json_read.h"
 #include "support/source.h"
 #include "support/utf8.h"
 #include "syntax/ast_dump.h"
@@ -46,6 +49,9 @@ const char* const kPieces[] = {
     "(", ")", "[", "]", "fn ", "struct ", "enum ", "let ", "var ", "if ", "else ", "match ", "=>", "&mut ",
     "\xff", "\xc3", "\xe2\x82", "\xf0\x9f\x98\x80", "\xd0\xb6", "\\u{", "\\x", "+%", "<<=", "??", "@", "#",
     "unsafe", "none", "true", "18446744073709551616", "9223372036854775808", "1.5e", "\\u{D800}", "\0",
+    // JSON запросов онлайн-сервиса (contract)
+    "\":\"", ",", "\\u0000", "\\ud83d\\ude00", "\\udc00", "\\\"", "null", "-0", "1e999", "{\"a\":", "[[[[",
+    "\"source\":\"\"", "\"mode\":\"check\"",
 };
 
 std::string mutate(Rng& rng, const std::vector<std::string>& corpus) {
@@ -176,7 +182,41 @@ bool check_sema(const std::string& input) {
     return true;
 }
 
-bool load_corpus(const std::vector<std::string>& dirs, std::vector<std::string>& out) {
+// Пределы как у тестового профиля tests/worker.py: маленькие, чтобы
+// мутации доставали до каждой границы.
+dp::api::OnlineLimits contract_limits() {
+    dp::api::OnlineLimits l;
+    l.request_bytes = 4096;
+    l.source_bytes = 2048;
+    l.lines = 60;
+    l.identifier_bytes = 32;
+    l.nesting = 64;
+    l.diagnostics = 5;
+    l.output_bytes = 8192;
+    return l;
+}
+
+// Инварианты контракта v1: ответ — JSON-объект с api, compiler и ровно
+// одним из result и error; результат не больше предела ответа; тот же
+// запрос — те же байты.
+bool check_contract(const std::string& input) {
+    dp::api::OnlineLimits lim = contract_limits();
+    std::string reply = dp::api::compile_v1(input, lim);
+    if (dp::api::compile_v1(input, lim) != reply) return fail("reply is not deterministic", input);
+    if (reply.empty() || reply.back() != '\n') return fail("reply does not end with a newline", input);
+    dp::json::Value v;
+    std::string err;
+    if (!dp::json::parse(reply, 8, v, err)) return fail("reply is not valid JSON: " + err + "\n" + reply, input);
+    if (v.kind != dp::json::Kind::Object || !v.get("api") || !v.get("compiler")) {
+        return fail("reply has no api or compiler:\n" + reply, input);
+    }
+    bool result = v.get("result") != nullptr, error = v.get("error") != nullptr;
+    if (result == error || v.keys.size() != 3) return fail("reply needs exactly one of result and error:\n" + reply, input);
+    if (result && reply.size() > lim.output_bytes) return fail("result is larger than output_bytes", input);
+    return true;
+}
+
+bool load_corpus(const std::vector<std::string>& dirs, const std::string& ext, std::vector<std::string>& out) {
     std::vector<std::string> paths;
     for (const std::string& d : dirs) {
         DIR* dir = opendir(d.c_str());
@@ -186,7 +226,13 @@ bool load_corpus(const std::vector<std::string>& dirs, std::vector<std::string>&
         }
         while (dirent* e = readdir(dir)) {
             std::string name = e->d_name;
-            if (name.size() > 4 && name.compare(name.size() - 4, 4, ".dpm") == 0) paths.push_back(d + "/" + name);
+            // limit_memory — запрос, которому нужна память сверх RLIMIT_AS
+            // worker-а: у вычисления констант нет бюджета (TODO.md), а у
+            // фаззера под ASan нет предела памяти.
+            if (name.rfind("limit_memory", 0) == 0) continue;
+            if (name.size() > ext.size() && name.compare(name.size() - ext.size(), ext.size(), ext) == 0) {
+                paths.push_back(d + "/" + name);
+            }
         }
         closedir(dir);
     }
@@ -206,16 +252,22 @@ bool load_corpus(const std::vector<std::string>& dirs, std::vector<std::string>&
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
-    if (args.size() < 6 || (args[0] != "lex" && args[0] != "parse" && args[0] != "check") || args[1] != "--seed" ||
-        args[3] != "--iters") {
-        std::fprintf(stderr, "usage: dpfuzz lex|parse|check --seed N --iters M <dir>...\n");
+    bool (*check)(const std::string&) = nullptr;
+    if (!args.empty()) {
+        if (args[0] == "lex") check = check_lex;
+        else if (args[0] == "parse") check = check_parse;
+        else if (args[0] == "check") check = check_sema;
+        else if (args[0] == "contract") check = check_contract;
+    }
+    if (args.size() < 6 || !check || args[1] != "--seed" || args[3] != "--iters") {
+        std::fprintf(stderr, "usage: dpfuzz lex|parse|check|contract --seed N --iters M <dir>...\n");
         return 2;
     }
-    bool (*check)(const std::string&) = args[0] == "lex" ? check_lex : args[0] == "parse" ? check_parse : check_sema;
     Rng rng{std::strtoull(args[2].c_str(), nullptr, 10)};
     unsigned long long iters = std::strtoull(args[4].c_str(), nullptr, 10);
     std::vector<std::string> corpus;
-    if (!load_corpus(std::vector<std::string>(args.begin() + 5, args.end()), corpus)) return 2;
+    std::string ext = check == check_contract ? ".json" : ".dpm";
+    if (!load_corpus(std::vector<std::string>(args.begin() + 5, args.end()), ext, corpus)) return 2;
     for (const std::string& c : corpus) {
         if (!check(c)) return 1;
     }

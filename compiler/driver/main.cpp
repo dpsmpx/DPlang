@@ -2,7 +2,8 @@
 // (ROADMAP/IMPLEMENTATION.md); устройство — docs/compiler/cli.md.
 //
 // Коды выхода: 0 — успех; 1 — в программе есть ошибки (диагностика);
-// 2 — неверный вызов CLI; 3 — внутренняя ошибка компилятора.
+// 2 — неверный вызов CLI; 3 — внутренняя ошибка компилятора; у worker —
+// ещё 4 (driver/worker.h).
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -13,6 +14,7 @@
 #include "api/compile.h"
 #include "backend_c/emit_c.h"
 #include "driver/big_stack.h"
+#include "driver/worker.h"
 #include "ir/dump.h"
 #include "ir/interp.h"
 #include "ir/lower.h"
@@ -38,6 +40,7 @@ constexpr std::string_view kUsage =
     "  explain <code>   explain a diagnostic code, e.g. E0101\n"
     "  help             show this help\n"
     "  --version        print the compiler version\n"
+    "  worker ...       serve one request of the online service (see docs/service)\n"
     "\n"
     "debugging commands (output format is not stable):\n"
     "  debug lex <file.dpm>     print the tokens of a file\n"
@@ -347,6 +350,8 @@ static int run_cli(int argc, char** argv) {
 // рекурсивны, а глубину дерева ограничивает только предел вложенности
 // (docs/compiler/README.md, «Предел вложенности»).
 int main(int argc, char** argv) {
+    // worker сам задаёт себе пределы, стек и песочницу (driver/worker.h).
+    if (argc >= 2 && std::string_view(argv[1]) == "worker") return dp::run_worker(argc, argv);
     struct Args {
         int argc;
         char** argv;

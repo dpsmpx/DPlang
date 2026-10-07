@@ -1,0 +1,2 @@
+{"api":"v1","compiler":{"version":"0.1.0-dev","language":"0.1"},"error":{"code":"limit_exceeded","message":"compilation needs more memory than the limit of 268435456 bytes","limit":{"name":"memory_bytes","max":268435456}}}
+[exit 4]

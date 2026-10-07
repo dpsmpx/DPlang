@@ -1,0 +1,1 @@
+{"api":"v1","compiler":{"version":"0.1.0-dev","language":"0.1"},"result":{"success":false,"diagnostics":[{"severity":"error","code":"E0302","message":"cannot find module 'geo' (looked in geo.dpm)","file":"main.dpm","line":1,"col":8,"end_line":1,"end_col":11,"notes":[]}],"truncated":false,"total":1}}

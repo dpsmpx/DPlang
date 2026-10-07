@@ -1,0 +1,1 @@
+{"api":"v1","compiler":{"version":"0.1.0-dev","language":"0.1"},"error":{"code":"limit_exceeded","message":"source size in bytes exceeds the limit of 2048","limit":{"name":"source_bytes","max":2048}}}

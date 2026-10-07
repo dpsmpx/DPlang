@@ -6,6 +6,7 @@ commands:
   explain <code>   explain a diagnostic code, e.g. E0101
   help             show this help
   --version        print the compiler version
+  worker ...       serve one request of the online service (see docs/service)
 
 debugging commands (output format is not stable):
   debug lex <file.dpm>     print the tokens of a file

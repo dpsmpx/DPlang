@@ -1,0 +1,47 @@
+{
+  "profile": "online-v1",
+  "available": false,
+  "limits": {
+    "request_bytes": 409600,
+    "source_bytes": 65536,
+    "lines": 2000,
+    "identifier_bytes": 128,
+    "nesting": 256,
+    "diagnostics": 100,
+    "output_bytes": 262144
+  },
+  "worker": {
+    "memory_bytes": 268435456,
+    "cpu_seconds": 2,
+    "stack_bytes": 16777216
+  },
+  "run": {
+    "timeout_ms": 4000,
+    "stdout_bytes": 524288,
+    "stderr_bytes": 4096
+  },
+  "queue": {
+    "concurrency": 2,
+    "length": 16,
+    "wait_ms": 3000
+  },
+  "rate_limit": {
+    "per_ip_per_minute": 30,
+    "per_ip_burst": 10,
+    "global_per_minute": 600,
+    "global_burst": 60,
+    "ipv6_prefix": 64,
+    "table_size": 10000
+  },
+  "http": {
+    "header_bytes": 8192,
+    "headers": 64,
+    "read_timeout_ms": 5000,
+    "connections": 256
+  },
+  "cors": {
+    "origins": ["https://dpsmpx.com"],
+    "max_age_s": 600
+  },
+  "trusted_proxies": []
+}
