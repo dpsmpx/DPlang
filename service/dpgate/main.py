@@ -12,6 +12,7 @@
 import argparse
 import asyncio
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -79,6 +80,9 @@ def main(argv=None):
     except config.ConfigError as e:
         print(f'error: {e}', file=sys.stderr)
         return 2
+    # Worker запускается из временного каталога запроса: путь к нему —
+    # абсолютный, иначе относительный путь из командной строки не найдётся.
+    args.worker = os.path.abspath(args.worker)
     info = describe(args.worker)
     asyncio.run(serve(args, cfg, info))
     return 0

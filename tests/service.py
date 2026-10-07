@@ -77,7 +77,7 @@ sys.stdin.read()
 class Gateway:
     """Шлюз с тестовым профилем; worker — путь или имя подделки."""
 
-    def __init__(self, tmp, release_dplang, worker='real', **overrides):
+    def __init__(self, tmp, release_dplang, worker='real', cwd=None, **overrides):
         self.tmp = tmp
         self.marks = os.path.join(tmp, 'marks')
         os.makedirs(self.marks, exist_ok=True)
@@ -96,11 +96,13 @@ class Gateway:
         with open(cfg_path, 'w', encoding='utf-8') as f:
             json.dump(cfg, f)
         worker_path = release_dplang if worker == 'real' else self.fake(worker)
+        if cwd:  # путь к worker-у — относительный, от cwd шлюза
+            worker_path = os.path.relpath(worker_path, cwd)
         self.log_path = os.path.join(tmp, 'gateway.log')
         self.log_file = open(self.log_path, 'w+', encoding='utf-8')
         self.proc = subprocess.Popen([sys.executable, '-I', GATEWAY, '--config', cfg_path, '--worker', worker_path,
                                       '--listen', '127.0.0.1:0', '--metrics-listen', '127.0.0.1:0'],
-                                     stdout=subprocess.DEVNULL, stderr=self.log_file)
+                                     stdout=subprocess.DEVNULL, stderr=self.log_file, cwd=cwd)
         self.port = self.metrics_port = None
         deadline = time.monotonic() + START_TIMEOUT
         while time.monotonic() < deadline and self.port is None:
@@ -682,6 +684,16 @@ def t_config_strict(tmp, release_dplang):
     return None if r.returncode == 2 else f'повторный ключ: код {r.returncode}'
 
 
+def t_worker_relative_path(tmp, release_dplang):
+    """Относительный --worker, как в docs/service/README.md: worker
+    запускается из временного каталога, и путь должен остаться верным."""
+    gw = Gateway(tmp, release_dplang, cwd=ROOT)
+    try:
+        return expect(gw.post(request('fn main() {\n}\n')), 200)
+    finally:
+        gw.stop()
+
+
 def t_profile_shipped(tmp, release_dplang):
     """Поставляемый профиль: запуск выключен (Р49), шлюз с ним стартует."""
     with open(PROFILE, encoding='utf-8') as f:
@@ -750,6 +762,7 @@ GATEWAY_CASES = {
 PLAIN_CASES = {
     'config_strict': t_config_strict,
     'profile_shipped': t_profile_shipped,
+    'worker_relative_path': t_worker_relative_path,
 }
 CASES = sorted(GATEWAY_CASES) + sorted(PLAIN_CASES)
 
