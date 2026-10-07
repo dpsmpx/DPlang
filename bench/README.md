@@ -8,6 +8,7 @@
 | проверка эталонов | `run_refs.py` (шаг «эталоны» в `tools/check/run.sh`) |
 | варианты синтаксиса: переводчик, образцы, генератор спецификаций | `syntax/` — `docs/research/syntax/README.md` |
 | обвязка опыта (шаг 0.2) | `experiment.py` — этот файл |
+| замеры онлайн-компилятора (Р49): worker, пределы, шлюз | `service/measure.py` — `docs/service/README.md`, раздел 11 |
 | результаты прогонов | `results/<прогон>/` |
 
 Политика замеров — `docs/policy/BENCHMARKS.md`; как меряется работа ИИ

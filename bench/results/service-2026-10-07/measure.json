@@ -1,0 +1,249 @@
+{
+ "machine": {
+  "cpus": 4,
+  "uname": "6.18.44-fc-v77 #1 SMP PREEMPT_DYNAMIC @0 x86_64"
+ },
+ "profile": {
+  "limits": {
+   "request_bytes": 409600,
+   "source_bytes": 65536,
+   "lines": 2000,
+   "identifier_bytes": 128,
+   "nesting": 256,
+   "diagnostics": 100,
+   "output_bytes": 262144
+  },
+  "worker": {
+   "memory_bytes": 268435456,
+   "cpu_seconds": 2,
+   "stack_bytes": 16777216
+  },
+  "run": {
+   "timeout_ms": 4000,
+   "stdout_bytes": 524288,
+   "stderr_bytes": 4096
+  },
+  "queue": {
+   "concurrency": 2,
+   "length": 16,
+   "wait_ms": 3000
+  }
+ },
+ "inputs": {
+  "describe": {
+   "outcome": "ok",
+   "lines": 0,
+   "bytes": 0,
+   "wall_ms_median": 2.1,
+   "wall_ms_max": 2.6,
+   "cpu_ms_median": 1.9,
+   "maxrss_mb": 14.9
+  },
+  "small": {
+   "outcome": "ok",
+   "lines": 3,
+   "bytes": 35,
+   "wall_ms_median": 2.6,
+   "wall_ms_max": 3.2,
+   "cpu_ms_median": 2.5,
+   "maxrss_mb": 14.9
+  },
+  "realistic_at_limit": {
+   "outcome": "ok",
+   "lines": 1981,
+   "bytes": 31866,
+   "wall_ms_median": 7.5,
+   "wall_ms_max": 8.6,
+   "cpu_ms_median": 6.9,
+   "maxrss_mb": 14.9
+  },
+  "realistic_with_errors": {
+   "outcome": "errors 46",
+   "lines": 1981,
+   "bytes": 31866,
+   "wall_ms_median": 7.6,
+   "wall_ms_max": 11.4,
+   "cpu_ms_median": 7.1,
+   "maxrss_mb": 14.9
+  },
+  "struct_chain": {
+   "outcome": "ok",
+   "lines": 1997,
+   "bytes": 49703,
+   "wall_ms_median": 500.7,
+   "wall_ms_max": 542.9,
+   "cpu_ms_median": 495.8,
+   "maxrss_mb": 14.9
+  },
+  "const_chain": {
+   "outcome": "ok",
+   "lines": 1997,
+   "bytes": 55688,
+   "wall_ms_median": 14.0,
+   "wall_ms_max": 15.4,
+   "cpu_ms_median": 13.6,
+   "maxrss_mb": 14.9
+  },
+  "try_chain": {
+   "outcome": "ok",
+   "lines": 1995,
+   "bytes": 27016,
+   "wall_ms_median": 20.8,
+   "wall_ms_max": 21.2,
+   "cpu_ms_median": 20.5,
+   "maxrss_mb": 14.9
+  },
+  "nesting_parens": {
+   "outcome": "ok",
+   "lines": 4,
+   "bytes": 554,
+   "wall_ms_median": 3.3,
+   "wall_ms_max": 3.5,
+   "cpu_ms_median": 3.1,
+   "maxrss_mb": 14.9
+  },
+  "nesting_unary": {
+   "outcome": "ok",
+   "lines": 4,
+   "bytes": 554,
+   "wall_ms_median": 3.2,
+   "wall_ms_max": 3.3,
+   "cpu_ms_median": 3.0,
+   "maxrss_mb": 14.9
+  },
+  "nesting_binary": {
+   "outcome": "ok",
+   "lines": 4,
+   "bytes": 1060,
+   "wall_ms_median": 3.7,
+   "wall_ms_max": 4.2,
+   "cpu_ms_median": 3.4,
+   "maxrss_mb": 14.9
+  },
+  "nesting_postfix": {
+   "outcome": "ok",
+   "lines": 4,
+   "bytes": 927,
+   "wall_ms_median": 3.4,
+   "wall_ms_max": 3.7,
+   "cpu_ms_median": 3.2,
+   "maxrss_mb": 14.9
+  },
+  "nesting_calls": {
+   "outcome": "ok",
+   "lines": 7,
+   "bytes": 822,
+   "wall_ms_median": 3.5,
+   "wall_ms_max": 4.2,
+   "cpu_ms_median": 3.3,
+   "maxrss_mb": 14.9
+  },
+  "nesting_blocks": {
+   "outcome": "ok",
+   "lines": 171,
+   "bytes": 1711,
+   "wall_ms_median": 3.5,
+   "wall_ms_max": 4.3,
+   "cpu_ms_median": 3.3,
+   "maxrss_mb": 14.9
+  },
+  "nesting_else_if": {
+   "outcome": "ok",
+   "lines": 504,
+   "bytes": 11807,
+   "wall_ms_median": 4.1,
+   "wall_ms_max": 5.7,
+   "cpu_ms_median": 3.9,
+   "maxrss_mb": 14.9
+  },
+  "nesting_lists": {
+   "outcome": "ok",
+   "lines": 4,
+   "bytes": 559,
+   "wall_ms_median": 3.9,
+   "wall_ms_max": 4.1,
+   "cpu_ms_median": 3.5,
+   "maxrss_mb": 14.9
+  },
+  "nesting_types": {
+   "outcome": "ok",
+   "lines": 3,
+   "bytes": 1552,
+   "wall_ms_median": 3.8,
+   "wall_ms_max": 4.9,
+   "cpu_ms_median": 3.6,
+   "maxrss_mb": 14.9
+  },
+  "nesting_patterns": {
+   "outcome": "errors 2",
+   "lines": 7,
+   "bytes": 1630,
+   "wall_ms_median": 3.6,
+   "wall_ms_max": 4.1,
+   "cpu_ms_median": 3.4,
+   "maxrss_mb": 14.9
+  }
+ },
+ "minimums": {
+  "min_stack_bytes": 3133696,
+  "min_memory_bytes": 27180558
+ },
+ "gateway": [
+  {
+   "concurrency": 1,
+   "clients": 8,
+   "requests": 48,
+   "errors": 0,
+   "rps": 98.4,
+   "p50_ms": 77.0,
+   "p95_ms": 95.0
+  },
+  {
+   "concurrency": 2,
+   "clients": 8,
+   "requests": 48,
+   "errors": 0,
+   "rps": 208.7,
+   "p50_ms": 36.8,
+   "p95_ms": 41.9
+  },
+  {
+   "concurrency": 4,
+   "clients": 8,
+   "requests": 48,
+   "errors": 0,
+   "rps": 306.2,
+   "p50_ms": 24.9,
+   "p95_ms": 27.8
+  }
+ ],
+ "gateway_small": [
+  {
+   "concurrency": 1,
+   "clients": 8,
+   "requests": 96,
+   "errors": 0,
+   "rps": 220.3,
+   "p50_ms": 34.6,
+   "p95_ms": 43.0
+  },
+  {
+   "concurrency": 2,
+   "clients": 8,
+   "requests": 96,
+   "errors": 0,
+   "rps": 440.6,
+   "p50_ms": 16.0,
+   "p95_ms": 31.4
+  },
+  {
+   "concurrency": 4,
+   "clients": 8,
+   "requests": 96,
+   "errors": 0,
+   "rps": 532.9,
+   "p50_ms": 14.5,
+   "p95_ms": 18.3
+  }
+ ]
+}

@@ -2,7 +2,7 @@
   "profile": "online-v1",
   "available": false,
   "limits": {
-    "request_bytes": 262144,
+    "request_bytes": 409600,
     "source_bytes": 65536,
     "lines": 2000,
     "identifier_bytes": 128,
@@ -11,9 +11,9 @@
     "output_bytes": 262144
   },
   "worker": {
-    "memory_bytes": 536870912,
+    "memory_bytes": 268435456,
     "cpu_seconds": 2,
-    "stack_bytes": 67108864
+    "stack_bytes": 16777216
   },
   "run": {
     "timeout_ms": 4000,
