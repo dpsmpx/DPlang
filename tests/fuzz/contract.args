@@ -1,0 +1,1 @@
+contract --seed 1 --iters 10000 ../worker

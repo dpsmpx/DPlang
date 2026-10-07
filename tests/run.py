@@ -16,7 +16,9 @@ build/compiler/ и прогоняет золотые тесты наборов t
 программа набора run собирается в нативную (debug c, runtime, компилятор
 C — $CC или cc, с ASan и UBSan, если они есть), и её вывод сверяется с тем
 же ожидаемым, что у эталонного интерпретатора. Устройство —
-docs/compiler/README.md, docs/compiler/backend_c.md.
+docs/compiler/README.md, docs/compiler/backend_c.md. Проходы limits,
+worker и sandbox — tests/limits.py и tests/worker.py; worker и sandbox
+идут на второй сборке, Release без санитайзеров (build/release/).
 
     python3 tests/run.py              — собрать и прогнать
     python3 tests/run.py --bless      — переписать ожидаемое (дифф — на ревью)
@@ -34,6 +36,7 @@ import subprocess
 import sys
 
 import limits
+import worker
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.join(ROOT, 'tests')
@@ -41,6 +44,11 @@ SRC = os.path.join(ROOT, 'compiler')
 BUILD = os.path.join(ROOT, 'build', 'compiler')
 DPLANG = os.path.join(BUILD, 'dplang')
 DPFUZZ = os.path.join(BUILD, 'dpfuzz')
+# Сборка Release без санитайзеров — для worker-а онлайн-сервиса и пробника
+# песочницы (tests/worker.py).
+BUILD_RELEASE = os.path.join(ROOT, 'build', 'release')
+DPLANG_RELEASE = os.path.join(BUILD_RELEASE, 'dplang')
+PROBE = os.path.join(BUILD_RELEASE, 'dpsandbox_probe')
 TIMEOUT = 60
 RUNTIME = os.path.join(ROOT, 'runtime')
 NATIVE = os.path.join(BUILD, 'native')
@@ -83,21 +91,30 @@ DIR_SUITES = {'sema', 'summary', 'types', 'fail', 'ir', 'run'}
 VERIFY_FROM = ('.dpm',)
 
 
-def build():
-    """Собирает компилятор; None — успех, иначе текст ошибки."""
-    if not os.path.exists(os.path.join(BUILD, 'build.ninja')):
+def build_one(build_dir, build_type, sanitize):
+    """Собирает компилятор в build_dir; None — успех, иначе текст ошибки."""
+    if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         cxx = os.environ.get('CXX', 'g++')
-        r = subprocess.run(['cmake', '-S', SRC, '-B', BUILD, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Debug',
-                            '-DDPLANG_SANITIZE=ON', f'-DCMAKE_CXX_COMPILER={cxx}'],
+        r = subprocess.run(['cmake', '-S', SRC, '-B', build_dir, '-G', 'Ninja', f'-DCMAKE_BUILD_TYPE={build_type}',
+                            f'-DDPLANG_SANITIZE={"ON" if sanitize else "OFF"}', f'-DCMAKE_CXX_COMPILER={cxx}'],
                            capture_output=True, text=True)
         if r.returncode != 0:
             return 'cmake: ' + (r.stderr or r.stdout).strip()[-2000:]
-    r = subprocess.run(['cmake', '--build', BUILD], capture_output=True, text=True)
+    r = subprocess.run(['cmake', '--build', build_dir], capture_output=True, text=True)
     if r.returncode != 0:
         lines = (r.stdout + r.stderr).splitlines()
         errs = [ln for ln in lines if 'error' in ln][:10] or lines[-20:]
         return 'сборка:\n' + '\n'.join(errs)
     return None
+
+
+def build():
+    """Отладочная сборка с ASan и UBSan (наборы) и Release (worker)."""
+    err = build_one(BUILD, 'Debug', True)
+    if err:
+        return err
+    err = build_one(BUILD_RELEASE, 'Release', False)
+    return 'Release: ' + err if err else None
 
 
 def discover(pattern):
@@ -117,7 +134,11 @@ def discover(pattern):
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
     native = [('native', path) for suite, path in tests if suite == 'run']
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
-    return tests + verify + native + deep
+    wdir = os.path.join(TESTS, 'worker')
+    service = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
+               if name.endswith('.json') and pattern in 'worker/' + name]
+    service += [('sandbox', a) for a in ['ok'] + worker.PROBE_FORBIDDEN if pattern in 'sandbox/' + a]
+    return tests + verify + native + deep + service
 
 
 def prepare_native():
@@ -225,6 +246,10 @@ def run_one(suite, path, bless):
         return native_one(path)
     if suite == 'limits':
         return limits.check_case(path, DPLANG)
+    if suite == 'worker':
+        return worker.worker_case(path, DPLANG_RELEASE, bless)
+    if suite == 'sandbox':
+        return worker.sandbox_case(path, PROBE)
     got = actual_output(suite, path)
     exp_path = expected_path(suite, path)
     if bless:
@@ -274,7 +299,7 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            name = 'limits/' + path if suite == 'limits' else os.path.relpath(path, TESTS)
+            name = suite + '/' + path if suite in ('limits', 'sandbox') else os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1
     verb = 'записано ожидаемое' if a.bless else 'прошли'

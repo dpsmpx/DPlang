@@ -1,0 +1,3 @@
+--- stderr ---
+error: worker: option '--request-bytes' is given twice
+[exit 2]

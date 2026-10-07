@@ -13,7 +13,10 @@ namespace dp {
 inline constexpr size_t kCompilerStackBytes = size_t(512) << 20;
 
 // fn(arg) в новом потоке со стеком stack_bytes; вызывающий ждёт его конца.
-// Если поток не создать — вызов прямо, в текущем потоке.
+// false — поток не создан, fn не вызвана.
+bool run_on_stack(size_t stack_bytes, void (*fn)(void*), void* arg);
+
+// То же, но если поток не создать — вызов прямо, в текущем потоке (CLI).
 void run_with_stack(size_t stack_bytes, void (*fn)(void*), void* arg);
 
 }  // namespace dp

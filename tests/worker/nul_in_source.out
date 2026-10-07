@@ -1,0 +1,1 @@
+{"api":"v1","compiler":{"version":"0.1.0-dev","language":"0.1"},"result":{"success":false,"diagnostics":[{"severity":"error","code":"E0102","message":"unexpected character U+0000","file":"main.dpm","line":2,"col":14,"end_line":2,"end_col":15,"notes":[]}],"truncated":false,"total":1}}

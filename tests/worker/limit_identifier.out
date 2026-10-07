@@ -1,0 +1,1 @@
+{"api":"v1","compiler":{"version":"0.1.0-dev","language":"0.1"},"error":{"code":"limit_exceeded","message":"identifier length in bytes exceeds the limit of 32","limit":{"name":"identifier_bytes","max":32}}}

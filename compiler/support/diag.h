@@ -63,5 +63,7 @@ std::vector<Diagnostic> sorted(const std::vector<Diagnostic>& diags);
 
 std::string render_text(const std::vector<Diagnostic>& diags, const SourceMap& sources);
 std::string render_json(const std::vector<Diagnostic>& diags, const SourceMap& sources);
+// Одно сообщение в JSON (объект списка render_json) — в конец out.
+void json_diagnostic(std::string& out, const Diagnostic& d, const SourceMap& sources);
 
 }  // namespace dp

@@ -1,0 +1,1 @@
+{"api":"v1","compiler":{"version":"0.1.0-dev","language":"0.1"},"result":{"success":false,"diagnostics":[{"severity":"error","code":"E0002","message":"nesting is too deep: more than 64 levels","file":"main.dpm","line":2,"col":75,"end_line":2,"end_col":76,"notes":[]}],"truncated":false,"total":1}}

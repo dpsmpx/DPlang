@@ -12,7 +12,8 @@ cmake -S compiler -B build/compiler -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDPLANG_S
 cmake --build build/compiler     # → build/compiler/dplang
 ```
 
-Так собирает и исполнитель тестов. Флаги для всех файлов: C++20, без
+Так собирает и исполнитель тестов; вторая его сборка — `build/release/`
+(Release без санитайзеров) для worker-а онлайн-сервиса. Флаги для всех файлов: C++20, без
 исключений и RTTI, `-Wall -Wextra -Wpedantic -Werror`. Опция
 `DPLANG_SANITIZE` добавляет ASan и UBSan — для тестов и проверок.
 Внешних зависимостей нет. Компилятор C++ — `$CXX` или `g++`. `clang++`
@@ -23,14 +24,14 @@ cmake --build build/compiler     # → build/compiler/dplang
 
 | каталог | что |
 |---|---|
-| `compiler/support/` | исходники и позиции (`source.h`), диагностика (`diag.h`), реестр кодов (`codes.def`), UTF-8 и запись JSON, версии компилятора и языка (`version.h`) |
+| `compiler/support/` | исходники и позиции (`source.h`), диагностика (`diag.h`), реестр кодов (`codes.def`), UTF-8, запись JSON (`json.h`) и строгий разбор (`json_read.h`), версии компилятора и языка (`version.h`) |
 | `compiler/syntax/` | токены (`tokens.def`), лексер (`lexer.h`), значения литералов (`literal.h`), AST (`ast.h`), парсер (`parser.h`), каноническая печать (`printer.h`), дамп AST (`ast_dump.h`) |
 | `compiler/sema/` | проверка программы (`sema.h`): загрузка модулей (`loader.cpp`), объявления и сводки (`collect.cpp`, `summary.cpp`), разрешение типов в записи (`resolve.h`), вывод типа ошибки `!T` (`errinfer.cpp`), тела (`checker.h`: `check.cpp` — инструкции и поток, `check_expr.cpp` — выражения и константы, `check_pat.cpp` — образцы и полнота `match`); типы (`types.h`), объявления (`defs.h`), встроенное (`builtins.h`) |
 | `compiler/ir/` | Core IR (`ir.h`), понижение AST → IR (`lower.h`), верификатор (`verify.h`), эталонный интерпретатор (`interp.h`), текстовая запись (`dump.h`); устройство — `docs/ir/README.md` |
 | `compiler/backend_c/` | C-бэкенд: Core IR → C11 (`emit_c.h`); устройство — `docs/compiler/backend_c.md` |
-| `compiler/api/` | общий вход компиляции (`compile.h`): CLI, фаззер и worker онлайн-сервиса проверяют программу через него |
-| `compiler/driver/` | CLI `dplang` (`main.cpp`); поток с большим стеком (`big_stack.h`) |
-| `compiler/fuzz/` | фаззер «не падает» `dpfuzz` |
+| `compiler/api/` | общий вход компиляции (`compile.h`): CLI, фаззер и worker онлайн-сервиса проверяют программу через него; контракт онлайн-сервиса v1 (`contract.h`) |
+| `compiler/driver/` | CLI `dplang` (`main.cpp`); поток с большим стеком (`big_stack.h`); `dplang worker` (`worker.h`) и его песочница seccomp (`sandbox.h`), пробник песочницы `dpsandbox_probe` |
+| `compiler/fuzz/` | фаззер «не падает» `dpfuzz`: лексер, парсер, проверка, контракт онлайн-сервиса |
 | `runtime/` | runtime на C11 для сгенерированного C: ядро `core/`, вход под Linux `linux/`; устройство — `docs/runtime/README.md` |
 | `tests/` | наборы золотых тестов и их исполнитель `tests/run.py` |
 
@@ -193,7 +194,7 @@ python3 tests/run.py -k cli       # отбор по подстроке пути
 | `diag` | `X.dpm` | `dplang check --format=json` — снимки машиночитаемой диагностики |
 | `ir` | `X.dpm` или каталог `X/` с `main.dpm` | `dplang debug ir` — золотые дампы Core IR после верификатора |
 | `run` | то же | `dplang debug run` — исполнение эталонным интерпретатором: вывод, ловушки, код выхода |
-| `fuzz` | `X.args` — аргументы | `dpfuzz lex\|parse\|check <аргументы>`: корпус — файлы `.dpm` наборов, зерно и число входов заданы; `check` — разбор и проверка без падений, программы без ошибок ещё понижаются и проходят верификатор |
+| `fuzz` | `X.args` — аргументы | `dpfuzz lex\|parse\|check\|contract <аргументы>`: корпус — файлы `.dpm` наборов, зерно и число входов заданы; `check` — разбор и проверка без падений, программы без ошибок ещё понижаются и проходят верификатор; `contract` — тела запросов `tests/worker/*.json`: ответ контракта v1 — JSON нужного вида, не больше предела, тот же при повторе |
 
 Проход `verify` — не набор, а проверка всех программ `.dpm` наборов:
 `dplang debug ir` на каждой. Программа с ошибками даёт код 1, без них — 0;
@@ -208,6 +209,16 @@ python3 tests/run.py -k cli       # отбор по подстроке пути
 E0002. У списков и типов на n — только `check` и `debug parse`: вывод
 `debug types`, `ir` и `c` у глубоких типов растёт квадратично
 (`TODO.md`).
+
+Проходы `worker` и `sandbox` — онлайн-сервис (`tests/worker.py`). Они
+идут на второй сборке — Release без санитайзеров (`build/release/`): под
+ASan worker не запускается. `worker` — золотые тесты контракта v1: тело
+запроса `tests/worker/X.json` идёт в stdin `dplang worker` с пределами
+тестового профиля, ожидаемое — `X.out`. `X.args` заменяет пределы.
+Каждый тест идёт дважды, ответы должны совпасть байт в байт. `sandbox` —
+`dpsandbox_probe`: разрешённое работает, каждое запрещённое действие
+(файлы, сеть, `exec`, `fork`, потоки, исполняемая память, `ptrace`,
+сигналы) убивает процесс сигналом SIGSYS.
 
 Проход `native` — различающие тесты C-бэкенда: каждая программа набора
 `run` переводится `dplang debug c`, собирается с runtime компилятором C

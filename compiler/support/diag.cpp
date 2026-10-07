@@ -142,35 +142,39 @@ std::string render_text(const std::vector<Diagnostic>& diags, const SourceMap& s
     return out;
 }
 
+void json_diagnostic(std::string& out, const Diagnostic& d, const SourceMap& sources) {
+    out += "{\"severity\":";
+    json_string(out, severity_name(d.severity));
+    out += ",\"code\":";
+    json_string(out, code_name(d.code));
+    out += ",\"message\":";
+    json_string(out, d.message);
+    if (d.has_span) {
+        out += ',';
+        json_place(out, sources, d.span);
+    }
+    out += ",\"notes\":[";
+    for (size_t i = 0; i < d.notes.size(); i++) {
+        const Note& n = d.notes[i];
+        if (i) out += ',';
+        out += "{\"message\":";
+        json_string(out, n.message);
+        if (n.has_span) {
+            out += ',';
+            json_place(out, sources, n.span);
+        }
+        out += '}';
+    }
+    out += "]}";
+}
+
 std::string render_json(const std::vector<Diagnostic>& diags, const SourceMap& sources) {
     std::string out = "{\"diagnostics\":[";
     bool first = true;
     for (const Diagnostic& d : sorted(diags)) {
         if (!first) out += ',';
         first = false;
-        out += "{\"severity\":";
-        json_string(out, severity_name(d.severity));
-        out += ",\"code\":";
-        json_string(out, code_name(d.code));
-        out += ",\"message\":";
-        json_string(out, d.message);
-        if (d.has_span) {
-            out += ',';
-            json_place(out, sources, d.span);
-        }
-        out += ",\"notes\":[";
-        for (size_t i = 0; i < d.notes.size(); i++) {
-            const Note& n = d.notes[i];
-            if (i) out += ',';
-            out += "{\"message\":";
-            json_string(out, n.message);
-            if (n.has_span) {
-                out += ',';
-                json_place(out, sources, n.span);
-            }
-            out += '}';
-        }
-        out += "]}";
+        json_diagnostic(out, d, sources);
     }
     out += "]}\n";
     return out;

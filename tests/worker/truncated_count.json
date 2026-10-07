@@ -1,0 +1,1 @@
+{"language": "0.1", "mode": "check", "file_name": "main.dpm", "source": "fn main() {\n    let a0: i32 = \"s\"\n    let a1: i32 = \"s\"\n    let a2: i32 = \"s\"\n    let a3: i32 = \"s\"\n    let a4: i32 = \"s\"\n    let a5: i32 = \"s\"\n    let a6: i32 = \"s\"\n    let a7: i32 = \"s\"\n}\n"}
