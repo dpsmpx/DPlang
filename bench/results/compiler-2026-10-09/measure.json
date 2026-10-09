@@ -1,0 +1,638 @@
+{
+ "env": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+  "cpus": 4,
+  "os": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+  "cc": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "commit": "28fd8bc",
+  "compiler": "build/release/dplang (Release)"
+ },
+ "runs": 10,
+ "check": [
+  {
+   "input": "examples/tomlcheck",
+   "lines": 342,
+   "code": [
+    0
+   ],
+   "wall_ms": 4.168,
+   "wall_min_ms": 3.839,
+   "wall_max_ms": 17.654,
+   "cpu_ms": 4.068,
+   "maxrss_mb": 4.84375
+  },
+  {
+   "input": "tests/run/arith.dpm",
+   "lines": 47,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.1500000000000004,
+   "wall_min_ms": 3.033,
+   "wall_max_ms": 5.381,
+   "cpu_ms": 3.0250000000000004,
+   "maxrss_mb": 4.79296875
+  },
+  {
+   "input": "tests/run/defers.dpm",
+   "lines": 78,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.747,
+   "wall_min_ms": 3.114,
+   "wall_max_ms": 4.84,
+   "cpu_ms": 3.314,
+   "maxrss_mb": 4.6171875
+  },
+  {
+   "input": "tests/run/errors.dpm",
+   "lines": 91,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.814,
+   "wall_min_ms": 3.142,
+   "wall_max_ms": 6.024,
+   "cpu_ms": 3.393,
+   "maxrss_mb": 4.7265625
+  },
+  {
+   "input": "tests/run/lists.dpm",
+   "lines": 78,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.8665,
+   "wall_min_ms": 3.222,
+   "wall_max_ms": 4.908,
+   "cpu_ms": 3.705,
+   "maxrss_mb": 4.70703125
+  },
+  {
+   "input": "tests/run/main_error.dpm",
+   "lines": 16,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.9255000000000004,
+   "wall_min_ms": 2.9459999999999997,
+   "wall_max_ms": 6.438,
+   "cpu_ms": 3.8035,
+   "maxrss_mb": 4.60546875
+  },
+  {
+   "input": "tests/run/main_missing.dpm",
+   "lines": 4,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.407,
+   "wall_min_ms": 3.055,
+   "wall_max_ms": 4.708,
+   "cpu_ms": 3.25,
+   "maxrss_mb": 4.640625
+  },
+  {
+   "input": "tests/run/main_params.dpm",
+   "lines": 4,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.2830000000000004,
+   "wall_min_ms": 2.691,
+   "wall_max_ms": 4.796,
+   "cpu_ms": 3.0665,
+   "maxrss_mb": 4.62109375
+  },
+  {
+   "input": "tests/run/order.dpm",
+   "lines": 55,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.4675,
+   "wall_min_ms": 3.133,
+   "wall_max_ms": 4.633,
+   "cpu_ms": 3.252,
+   "maxrss_mb": 4.7578125
+  },
+  {
+   "input": "tests/run/os_io.dpm",
+   "lines": 30,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.2855,
+   "wall_min_ms": 2.8939999999999997,
+   "wall_max_ms": 5.727,
+   "cpu_ms": 3.1485000000000003,
+   "maxrss_mb": 4.5625
+  },
+  {
+   "input": "tests/run/os_noargs.dpm",
+   "lines": 8,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.9779999999999998,
+   "wall_min_ms": 2.729,
+   "wall_max_ms": 5.265,
+   "cpu_ms": 2.774,
+   "maxrss_mb": 4.546875
+  },
+  {
+   "input": "tests/run/recursive.dpm",
+   "lines": 44,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.1795,
+   "wall_min_ms": 2.9610000000000003,
+   "wall_max_ms": 4.171,
+   "cpu_ms": 3.052,
+   "maxrss_mb": 4.57421875
+  },
+  {
+   "input": "tests/run/refs.dpm",
+   "lines": 72,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.325,
+   "wall_min_ms": 2.781,
+   "wall_max_ms": 3.818,
+   "cpu_ms": 3.2079999999999997,
+   "maxrss_mb": 4.7890625
+  },
+  {
+   "input": "tests/run/strings.dpm",
+   "lines": 58,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.2794999999999996,
+   "wall_min_ms": 2.83,
+   "wall_max_ms": 4.338,
+   "cpu_ms": 3.2,
+   "maxrss_mb": 4.73046875
+  },
+  {
+   "input": "tests/run/structs.dpm",
+   "lines": 79,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.2039999999999997,
+   "wall_min_ms": 2.9859999999999998,
+   "wall_max_ms": 4.439,
+   "cpu_ms": 3.0585,
+   "maxrss_mb": 4.7578125
+  },
+  {
+   "input": "tests/run/trap_abs_min.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.0965,
+   "wall_min_ms": 2.797,
+   "wall_max_ms": 3.371,
+   "cpu_ms": 2.9715,
+   "maxrss_mb": 4.62890625
+  },
+  {
+   "input": "tests/run/trap_assert.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.8154999999999997,
+   "wall_min_ms": 2.523,
+   "wall_max_ms": 3.424,
+   "cpu_ms": 2.6985,
+   "maxrss_mb": 4.6015625
+  },
+  {
+   "input": "tests/run/trap_compound.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.643,
+   "wall_min_ms": 2.356,
+   "wall_max_ms": 3.72,
+   "cpu_ms": 2.4455,
+   "maxrss_mb": 4.6875
+  },
+  {
+   "input": "tests/run/trap_convert.dpm",
+   "lines": 8,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.9275,
+   "wall_min_ms": 2.6940000000000004,
+   "wall_max_ms": 7.005,
+   "cpu_ms": 2.758,
+   "maxrss_mb": 4.6171875
+  },
+  {
+   "input": "tests/run/trap_defer.dpm",
+   "lines": 12,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.0905,
+   "wall_min_ms": 2.644,
+   "wall_max_ms": 3.7230000000000003,
+   "cpu_ms": 2.974,
+   "maxrss_mb": 4.625
+  },
+  {
+   "input": "tests/run/trap_div_zero.dpm",
+   "lines": 9,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.8914999999999997,
+   "wall_min_ms": 2.781,
+   "wall_max_ms": 3.604,
+   "cpu_ms": 2.79,
+   "maxrss_mb": 4.70703125
+  },
+  {
+   "input": "tests/run/trap_f32.dpm",
+   "lines": 8,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.7625,
+   "wall_min_ms": 2.579,
+   "wall_max_ms": 3.1350000000000002,
+   "cpu_ms": 2.661,
+   "maxrss_mb": 4.640625
+  },
+  {
+   "input": "tests/run/trap_float_int.dpm",
+   "lines": 5,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.9005,
+   "wall_min_ms": 2.589,
+   "wall_max_ms": 3.3080000000000003,
+   "cpu_ms": 2.7605,
+   "maxrss_mb": 4.60546875
+  },
+  {
+   "input": "tests/run/trap_index.dpm",
+   "lines": 9,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.2525,
+   "wall_min_ms": 2.872,
+   "wall_max_ms": 4.433999999999999,
+   "cpu_ms": 3.0325,
+   "maxrss_mb": 4.65234375
+  },
+  {
+   "input": "tests/run/trap_index_neg.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.0709999999999997,
+   "wall_min_ms": 2.943,
+   "wall_max_ms": 3.4819999999999998,
+   "cpu_ms": 2.9555,
+   "maxrss_mb": 4.578125
+  },
+  {
+   "input": "tests/run/trap_insert.dpm",
+   "lines": 7,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.8404999999999996,
+   "wall_min_ms": 3.078,
+   "wall_max_ms": 5.481,
+   "cpu_ms": 3.4855,
+   "maxrss_mb": 4.625
+  },
+  {
+   "input": "tests/run/trap_memory.dpm",
+   "lines": 5,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.5115,
+   "wall_min_ms": 2.9589999999999996,
+   "wall_max_ms": 3.898,
+   "cpu_ms": 3.292,
+   "maxrss_mb": 4.62890625
+  },
+  {
+   "input": "tests/run/trap_min_div.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.2705,
+   "wall_min_ms": 2.8939999999999997,
+   "wall_max_ms": 3.648,
+   "cpu_ms": 2.943,
+   "maxrss_mb": 4.66015625
+  },
+  {
+   "input": "tests/run/trap_nan_int.dpm",
+   "lines": 5,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.9160000000000004,
+   "wall_min_ms": 2.67,
+   "wall_max_ms": 5.169,
+   "cpu_ms": 2.763,
+   "maxrss_mb": 4.65234375
+  },
+  {
+   "input": "tests/run/trap_neg_min.dpm",
+   "lines": 5,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.323,
+   "wall_min_ms": 2.928,
+   "wall_max_ms": 4.045,
+   "cpu_ms": 3.0185000000000004,
+   "maxrss_mb": 4.50390625
+  },
+  {
+   "input": "tests/run/trap_overflow.dpm",
+   "lines": 9,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.0044999999999997,
+   "wall_min_ms": 2.6510000000000002,
+   "wall_max_ms": 3.0599999999999996,
+   "cpu_ms": 2.8315,
+   "maxrss_mb": 4.60546875
+  },
+  {
+   "input": "tests/run/trap_rem_zero.dpm",
+   "lines": 5,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.0345,
+   "wall_min_ms": 2.653,
+   "wall_max_ms": 4.356999999999999,
+   "cpu_ms": 2.8155,
+   "maxrss_mb": 4.65625
+  },
+  {
+   "input": "tests/run/trap_remove.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.6365,
+   "wall_min_ms": 2.382,
+   "wall_max_ms": 3.507,
+   "cpu_ms": 2.4695,
+   "maxrss_mb": 4.68359375
+  },
+  {
+   "input": "tests/run/trap_repeat.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.5425000000000004,
+   "wall_min_ms": 2.401,
+   "wall_max_ms": 3.395,
+   "cpu_ms": 2.442,
+   "maxrss_mb": 4.625
+  },
+  {
+   "input": "tests/run/trap_shift.dpm",
+   "lines": 9,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.6165000000000003,
+   "wall_min_ms": 2.475,
+   "wall_max_ms": 2.835,
+   "cpu_ms": 2.545,
+   "maxrss_mb": 4.640625
+  },
+  {
+   "input": "tests/run/trap_shift_neg.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 2.9135,
+   "wall_min_ms": 2.615,
+   "wall_max_ms": 3.556,
+   "cpu_ms": 2.777,
+   "maxrss_mb": 4.57421875
+  },
+  {
+   "input": "tests/run/trap_slice.dpm",
+   "lines": 15,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.1215,
+   "wall_min_ms": 2.73,
+   "wall_max_ms": 3.985,
+   "cpu_ms": 2.9345,
+   "maxrss_mb": 4.55078125
+  },
+  {
+   "input": "tests/run/trap_split.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.1995,
+   "wall_min_ms": 2.864,
+   "wall_max_ms": 6.6499999999999995,
+   "cpu_ms": 3.038,
+   "maxrss_mb": 4.6015625
+  },
+  {
+   "input": "tests/run/trap_stack.dpm",
+   "lines": 9,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.5685000000000002,
+   "wall_min_ms": 3.0829999999999997,
+   "wall_max_ms": 4.549,
+   "cpu_ms": 3.1485000000000003,
+   "maxrss_mb": 4.65625
+  },
+  {
+   "input": "tests/run/trap_str_slice.dpm",
+   "lines": 6,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.9130000000000003,
+   "wall_min_ms": 3.022,
+   "wall_max_ms": 5.006,
+   "cpu_ms": 3.3485,
+   "maxrss_mb": 4.6328125
+  },
+  {
+   "input": "tests/run/unused_fn.dpm",
+   "lines": 10,
+   "code": [
+    0
+   ],
+   "wall_ms": 3.8004999999999995,
+   "wall_min_ms": 2.803,
+   "wall_max_ms": 8.040000000000001,
+   "cpu_ms": 3.626,
+   "maxrss_mb": 4.625
+  }
+ ],
+ "scaling": [
+  {
+   "copies": 1,
+   "lines": 152,
+   "code": [
+    0
+   ],
+   "wall_ms": 4.064,
+   "wall_min_ms": 3.169,
+   "wall_max_ms": 5.485,
+   "cpu_ms": 3.833,
+   "maxrss_mb": 4.7890625
+  },
+  {
+   "copies": 4,
+   "lines": 599,
+   "code": [
+    0
+   ],
+   "wall_ms": 4.34,
+   "wall_min_ms": 4.026,
+   "wall_max_ms": 5.054,
+   "cpu_ms": 4.1585,
+   "maxrss_mb": 4.83984375
+  },
+  {
+   "copies": 16,
+   "lines": 2387,
+   "code": [
+    0
+   ],
+   "wall_ms": 8.256,
+   "wall_min_ms": 7.2620000000000005,
+   "wall_max_ms": 10.562,
+   "cpu_ms": 7.8134999999999994,
+   "maxrss_mb": 5.71875
+  },
+  {
+   "copies": 64,
+   "lines": 9539,
+   "code": [
+    0
+   ],
+   "wall_ms": 27.2735,
+   "wall_min_ms": 23.552,
+   "wall_max_ms": 42.085,
+   "cpu_ms": 25.463500000000003,
+   "maxrss_mb": 10.63671875
+  }
+ ],
+ "build": [
+  {
+   "what": "debug c",
+   "code": [
+    0
+   ],
+   "wall_ms": 8.2805,
+   "wall_min_ms": 7.108,
+   "wall_max_ms": 10.333,
+   "cpu_ms": 7.822,
+   "maxrss_mb": 5.859375
+  },
+  {
+   "what": "build debug",
+   "code": [
+    0
+   ],
+   "wall_ms": 435.61699999999996,
+   "wall_min_ms": 400.26,
+   "wall_max_ms": 466.802,
+   "cpu_ms": 421.616,
+   "maxrss_mb": 38.87890625
+  },
+  {
+   "what": "build release",
+   "code": [
+    0
+   ],
+   "wall_ms": 868.37,
+   "wall_min_ms": 832.3589999999999,
+   "wall_max_ms": 928.331,
+   "cpu_ms": 844.496,
+   "maxrss_mb": 44.421875
+  }
+ ],
+ "load": [
+  {
+   "what": "native release",
+   "file_lines": 202001,
+   "file_mb": 5.5411481857299805,
+   "code": [
+    0
+   ],
+   "wall_ms": 251.737,
+   "wall_min_ms": 245.45600000000002,
+   "wall_max_ms": 296.02,
+   "cpu_ms": 251.122,
+   "maxrss_mb": 29.66015625
+  },
+  {
+   "what": "native release",
+   "file_lines": 10201,
+   "file_mb": 0.2723550796508789,
+   "code": [
+    0
+   ],
+   "wall_ms": 18.387,
+   "wall_min_ms": 12.592,
+   "wall_max_ms": 25.590000000000003,
+   "cpu_ms": 14.828,
+   "maxrss_mb": 3.140625
+  },
+  {
+   "what": "interpreter (debug run, Release)",
+   "file_lines": 10201,
+   "file_mb": 0.2723550796508789,
+   "code": [
+    0
+   ],
+   "wall_ms": 369.662,
+   "wall_min_ms": 355.996,
+   "wall_max_ms": 422.301,
+   "cpu_ms": 363.98,
+   "maxrss_mb": 8.3125
+  }
+ ],
+ "loc": {
+  "compiler": 13704,
+  "compiler_service_part": 700,
+  "fuzzer": 272,
+  "runtime": 683,
+  "stdlib": 28
+ }
+}
