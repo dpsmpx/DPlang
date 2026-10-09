@@ -1,0 +1,193 @@
+== fox, width 10, Left
+|The quick|
+|brown fox|
+|jumps over|
+|the lazy|
+|dog and|
+|keeps|
+|running|
+|far away.|
+== fox, width 10, Right
+| The quick|
+| brown fox|
+|jumps over|
+|  the lazy|
+|   dog and|
+|     keeps|
+|   running|
+| far away.|
+== fox, width 10, Center
+|The quick|
+|brown fox|
+|jumps over|
+| the lazy|
+| dog and|
+|  keeps|
+| running|
+|far away.|
+== fox, width 10, Justify
+|The  quick|
+|brown  fox|
+|jumps over|
+|the   lazy|
+|dog    and|
+|keeps|
+|running|
+|far away.|
+== fox, width 16, Left
+|The quick brown|
+|fox jumps over|
+|the lazy dog and|
+|keeps running|
+|far away.|
+== fox, width 16, Right
+| The quick brown|
+|  fox jumps over|
+|the lazy dog and|
+|   keeps running|
+|       far away.|
+== fox, width 16, Center
+|The quick brown|
+| fox jumps over|
+|the lazy dog and|
+| keeps running|
+|   far away.|
+== fox, width 16, Justify
+|The  quick brown|
+|fox  jumps  over|
+|the lazy dog and|
+|keeps    running|
+|far away.|
+== fox, width 21, Left
+|The quick brown fox|
+|jumps over the lazy|
+|dog and keeps running|
+|far away.|
+== fox, width 21, Right
+|  The quick brown fox|
+|  jumps over the lazy|
+|dog and keeps running|
+|            far away.|
+== fox, width 21, Center
+| The quick brown fox|
+| jumps over the lazy|
+|dog and keeps running|
+|      far away.|
+== fox, width 21, Justify
+|The  quick  brown fox|
+|jumps  over  the lazy|
+|dog and keeps running|
+|far away.|
+== paragraphs, width 12, Left
+|First|
+|paragraph|
+|here, on two|
+|lines.|
+||
+|Second|
+|one	with a|
+|tab.|
+||
+|x|
+== paragraphs, width 12, Right
+|       First|
+|   paragraph|
+|here, on two|
+|      lines.|
+||
+|      Second|
+|  one	with a|
+|        tab.|
+||
+|           x|
+== paragraphs, width 12, Center
+|   First|
+| paragraph|
+|here, on two|
+|   lines.|
+||
+|   Second|
+| one	with a|
+|    tab.|
+||
+|     x|
+== paragraphs, width 12, Justify
+|First|
+|paragraph|
+|here, on two|
+|lines.|
+||
+|Second|
+|one	with   a|
+|tab.|
+||
+|x|
+== justify gaps, width 10, Justify
+|a b c d|
+== justify gaps, width 9, Justify
+|aa   b  c|
+|last line|
+== justify gaps, width 9, Justify
+|aa b c dd|
+|ee|
+== long words, width 5, Left
+|abcd-|
+|ef|
+== long words, width 5, Left
+|abcd-|
+|efghi|
+== long words, width 5, Right
+|abcd-|
+|efgh-|
+|   ij|
+== long words, width 5, Justify
+|xx|
+|abcd-|
+|efgh-|
+|ij yy|
+|zz|
+== long words, width 5, Center
+| xx|
+|abcd-|
+|efgh-|
+|ij yy|
+| zz|
+== long words, width 8, Justify
+|a|
+|superca-|
+|lifragi-|
+|listice-|
+|xpialid-|
+|ocious|
+|word|
+== width 2, width 2, Left
+|a-|
+|bc|
+|de|
+|f|
+== width 2, width 2, Justify
+|a-|
+|bc|
+|de|
+|f|
+== exact, width 9, Justify
+|four five|
+|sixx|
+== exact, width 14, Right
+|four five sixx|
+== empty, width 10, Left
+(no lines)
+== empty, width 10, Justify
+(no lines)
+== bad width, width 1, Left
+error BadWidth
+== bad width, width 0, Left
+error BadWidth
+== bad width, width -5, Center
+error BadWidth
+== bad width, width 201, Right
+error BadWidth
+== wide, width 200, Center
+|                                                                The quick brown fox jumps over the lazy dog and keeps running far away.|
+== wide, width 200, Justify
+|The quick brown fox jumps over the lazy dog and keeps running far away.|

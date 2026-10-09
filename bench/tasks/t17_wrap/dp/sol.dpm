@@ -1,0 +1,136 @@
+// t17: эталон на DPlang.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+fn paragraphs(text: str) List[List[str]] {
+    var out: List[List[str]] = []
+    var cur: List[str] = []
+    for line in &text.split("\n") {
+        var words: List[str] = []
+        for w in &line.split(" ") {
+            if len(w) > 0 {
+                words.push(w)
+            }
+        }
+        if len(words) == 0 {
+            if len(cur) > 0 {
+                out.push(cur)
+            }
+            cur.clear()
+        } else {
+            for w in &words {
+                cur.push(w)
+            }
+        }
+    }
+    if len(cur) > 0 {
+        out.push(cur)
+    }
+    return out
+}
+
+fn join(words: &List[str]) str {
+    var s = ""
+    for i in 0..len(words) {
+        if i > 0 {
+            s += " "
+        }
+        s += words[i]
+    }
+    return s
+}
+
+fn spaces(n: i32) str {
+    var s = ""
+    for i in 0..n {
+        s += " "
+    }
+    return s
+}
+
+fn fill(words: &List[str], width: i32) List[List[str]] {
+    var lines: List[List[str]] = []
+    var cur: List[str] = []
+    var cur_len: i32 = 0
+    for w in &words {
+        let n = i32(len(w))
+        if n <= width {
+            if len(cur) == 0 {
+                cur.push(w)
+                cur_len = n
+            } else if cur_len + 1 + n <= width {
+                cur.push(w)
+                cur_len += 1 + n
+            } else {
+                lines.push(cur)
+                cur = [w]
+                cur_len = n
+            }
+            continue
+        }
+        if len(cur) > 0 {
+            lines.push(cur)
+        }
+        var rest = w
+        while len(rest) > width {
+            lines.push([rest[..width - 1] + "-"])
+            rest = rest[width - 1..]
+        }
+        cur = [rest]
+        cur_len = i32(len(rest))
+    }
+    if len(cur) > 0 {
+        lines.push(cur)
+    }
+    return lines
+}
+
+fn render(words: &List[str], width: i32, align: Align, last: bool) str {
+    let s = join(&words)
+    let extra = width - i32(len(s))
+    match align {
+        .Left => return s
+        .Right => return spaces(extra) + s
+        .Center => return spaces(extra / 2) + s
+        .Justify => {
+            if last || len(words) < 2 {
+                return s
+            }
+            let gaps = i32(len(words) - 1)
+            var out = words[0]
+            for g in 0..gaps {
+                var n = 1 + extra / gaps
+                if g < extra % gaps {
+                    n += 1
+                }
+                out += spaces(n) + words[g + 1]
+            }
+            return out
+        }
+    }
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    if width < 2 || width > 200 {
+        fail .BadWidth
+    }
+    var out: List[str] = []
+    for para in &paragraphs(text) {
+        if len(out) > 0 {
+            out.push("")
+        }
+        let lines = fill(&para, width)
+        for k in 0..len(lines) {
+            out.push(render(&lines[k], width, align, k + 1 == len(lines)))
+        }
+    }
+    return out
+}
