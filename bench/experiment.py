@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Измерительная обвязка опыта v0.0 (шаг 0.2, Р35).
+"""Измерительная обвязка опыта (v0.0, шаг 0.2, Р35; v0.1, шаг 13).
 
 Модель (субагент с чистым контекстом) решает задачу эталонного набора на
-C++ или на варианте синтаксиса DPlang (A, B, C), зная язык только по
-краткой спецификации. Обвязка:
+C++, на варианте синтаксиса DPlang (A, B, C — прототип v0.0) или на
+DPlang (dp — настоящий компилятор v0.1), зная язык только по
+спецификации. Обвязка:
 
 - prepare — песочница задания: PROMPT.md (правила, постановка, у t13 —
   целевой интерфейс, у DPlang — спецификация варианта) и начальный код в
   src/ (заготовка, код с ошибками или модули до рефакторинга — в записи
   варианта); драйвер и ожидаемый вывод в песочницу не попадают;
 - check — единственная проверка, доступная модели: перевод прототипом
-  (DPlang), сборка со скрытым драйвером, запуск, сверка с expected.txt;
-  итог — класс и первая ошибка; каждая попытка и снимок кода — в журнал;
+  (варианты) или компилятор DPlang (dp, bench/dp_check.py), сборка со
+  скрытым драйвером, запуск, сверка с ожидаемым; итог — класс и первая
+  ошибка; каждая попытка и снимок кода — в журнал;
 - session — записать расход сессии субагента (из итога инструмента Agent);
 - tokens — точный счёт токенов API Claude (count_tokens, ключ
   ANTHROPIC_API_KEY): прочитано на входе, прочитано диагностик, написано,
@@ -59,20 +61,27 @@ sys.path.insert(0, BENCH)
 sys.path.insert(0, SYNTAX)
 
 import cm  # noqa: E402
+import dp_check  # noqa: E402
 import mkspec  # noqa: E402
 import run_refs  # noqa: E402
 
-LANGS = ('cpp', 'A', 'B', 'C')
-TITLE = {'cpp': 'C++', 'A': 'DPlang, вариант A', 'B': 'DPlang, вариант B', 'C': 'DPlang, вариант C'}
+LANGS = ('cpp', 'A', 'B', 'C', 'dp')
+PROTO = ('A', 'B', 'C')
+TITLE = {'cpp': 'C++', 'A': 'DPlang, вариант A', 'B': 'DPlang, вариант B', 'C': 'DPlang, вариант C',
+         'dp': 'DPlang'}
+# Спецификация для языка dp: docs/spec/core.md с первого раздела.
+SPEC_DP = os.path.join(ROOT, 'docs', 'spec', 'core.md')
+SPEC_DP_TITLE = "# Спецификация DPlang (ядро v0.1)"
 ATTEMPTS = 5
 RUN_TIMEOUT = 20
 COUNT_MODEL = 'claude-opus-5-5'
 MARK = '// --- driver ---'
 ACCEPTED = 'принято'
-# Классы итога проверки. «прототип» — сбой переводчика, а не решения:
-# такие попытки разбираются вручную.
-CLASSES = ('разбор', 'перевод', 'сборка', 'интерфейс', 'ловушка', 'время', 'вывод', 'прототип', ACCEPTED)
-SRC_EXT = {'cpp': ('.cpp', '.hpp', '.h'), 'dp': ('.cm',)}
+# Классы итога проверки. «прототип» и «компилятор» — сбой переводчика или
+# компилятора DPlang, а не решения: такие попытки разбираются вручную.
+CLASSES = ('разбор', 'перевод', 'сборка', 'интерфейс', 'ловушка', 'время', 'вывод', 'прототип', 'компилятор',
+           ACCEPTED)
+SRC_EXT = {'cpp': ('.cpp', '.hpp', '.h'), 'proto': ('.cm',), 'dp': ('.dpm',)}
 MAX_SRC = 200_000
 
 
@@ -96,7 +105,16 @@ def work_dir():
 
 
 def is_dp(lang):
+    """Язык — DPlang: вариант прототипа или настоящий (dp)."""
     return lang != 'cpp'
+
+
+def is_proto(lang):
+    return lang in PROTO
+
+
+def ext_key(lang):
+    return 'proto' if is_proto(lang) else lang
 
 
 def demote(text, by=1):
@@ -120,6 +138,7 @@ class Task:
         self.name = os.path.basename(path)
         self.id = self.name.split('_')[0]
         self.cm = os.path.join(path, 'cm')
+        self.dp = os.path.join(path, 'dp')
         if os.path.isdir(os.path.join(path, 'before')):
             self.kind = 'refactor'
         elif os.path.exists(os.path.join(path, 'buggy.cpp')):
@@ -127,6 +146,18 @@ class Task:
         else:
             self.kind = 'write'
         self.expected = read(os.path.join(path, 'expected.txt'))
+
+    def langs(self):
+        """Языки задачи: C++ всегда; варианты — если есть cm/, dp — если есть dp/."""
+        return [lang for lang in LANGS if lang == 'cpp' or (is_proto(lang) and os.path.isdir(self.cm))
+                or (lang == 'dp' and os.path.isdir(self.dp))]
+
+    def dp_files(self, which):
+        if self.kind == 'refactor':
+            d = os.path.join(self.dp, 'before' if which == 'start' else 'ref')
+            return {os.path.basename(p): read(p) for p in sorted(glob.glob(os.path.join(d, '*.dpm')))}
+        name = 'sol.dpm' if which == 'ref' else ('buggy.dpm' if self.kind == 'fix' else 'stub.dpm')
+        return {'sol.dpm': read(os.path.join(self.dp, name))}
 
     def cm_paths(self, which):
         if self.kind == 'refactor':
@@ -137,7 +168,9 @@ class Task:
 
     def files(self, lang, which):
         """Начальный код (which='start') или эталон ('ref'): имя в src/ → текст."""
-        if is_dp(lang):
+        if lang == 'dp':
+            return self.dp_files(which)
+        if is_proto(lang):
             mods = cm.load(self.cm_paths(which), 'A')
             info = cm.Info(mods)
             texts = {m.name + '.cm': cm.print_module(m, lang, info) for m in mods}
@@ -166,6 +199,8 @@ class Task:
             return {}
         if lang == 'cpp':
             return {os.path.basename(p): read(p) for p in sorted(glob.glob(os.path.join(self.path, 'ref', '*.hpp')))}
+        if lang == 'dp':
+            return {name: dp_interface(text) for name, text in self.dp_files('ref').items()}
         mods = cm.load(self.cm_paths('ref'), 'A')
         info = cm.Info(mods)
         out = {}
@@ -184,9 +219,41 @@ class Task:
         return out
 
 
+def dp_interface(text):
+    """Открытый интерфейс модуля DPlang в каноническом виде (dplang fmt):
+    импорты и pub-объявления с комментариями над ними; тела функций — `// ...`."""
+    lines = text.splitlines()
+    out, pending, i = [], [], 0
+    while i < len(lines):
+        ln = lines[i]
+        if not ln.strip():
+            pending = []
+            i += 1
+            continue
+        if ln.startswith('//'):
+            pending.append(ln)
+            i += 1
+            continue
+        j = i
+        if ln.endswith('{'):
+            while j < len(lines) and lines[j] != '}':
+                j += 1
+        item = lines[i:j + 1]
+        keep = ln.startswith('import ') or ln.startswith('pub ')
+        if keep and ln.startswith('pub fn ') and ln.endswith('{'):
+            item = [ln, '    // ...', '}']
+        if keep:
+            if out and not (ln.startswith('import ') and out[-1].startswith('import ')):
+                out.append('')
+            out += pending + item
+        pending = []
+        i = j + 1
+    return '\n'.join(out) + '\n'
+
+
 def all_tasks():
     return [Task(os.path.join(TASKS, t)) for t in sorted(os.listdir(TASKS))
-            if os.path.isdir(os.path.join(TASKS, t, 'cm'))]
+            if os.path.isdir(os.path.join(TASKS, t, 'cm')) or os.path.isdir(os.path.join(TASKS, t, 'dp'))]
 
 
 def find_task(key):
@@ -218,8 +285,10 @@ def prompt(task, lang, sandbox, attempts, flags, start):
         'Других файлов не открывай, по диску и в сети не ищи.',
         '- Компилятор и другие программы сам не запускай. Проверка — только командой', '',
         f'      python3 {exe} check {sandbox}', '',
-        '  Она ' + ('переводит код прототипом языка в C++, ' if dp else '')
-        + 'собирает его со скрытым драйвером, запускает и сравнивает вывод с ожидаемым; '
+        '  Она ' + {'proto': 'переводит код прототипом языка в C++, собирает его',
+                    'dp': 'собирает код компилятором DPlang',
+                    'cpp': 'собирает его'}[ext_key(lang)]
+        + ' со скрытым драйвером, запускает и сравнивает вывод с ожидаемым; '
         'печатает «принято» или первую ошибку.',
         f'- Попыток проверки — не больше {attempts}, каждая записывается. Проверяй, когда решение '
         'готово целиком, а не для разведки.',
@@ -238,9 +307,15 @@ def prompt(task, lang, sandbox, attempts, flags, start):
         lines.append(f'В {files} — модули до рефакторинга. Измени их так, чтобы интерфейс стал как в '
                      'разделе «Целевой интерфейс»; поведение не меняется.')
     lines.append('')
-    if dp:
+    if is_proto(lang):
         lines.append('Ошибки типов прототип находит при сборке переведённого C++: сообщение называет '
                      'функцию, в которой ошибка, а текст — от компилятора C++.')
+    elif lang == 'dp':
+        mods = 'модули `src/<имя>.dpm`' if task.kind == 'refactor' else 'модуль `sol` (файл `src/sol.dpm`)'
+        lines.append(f'Решение — {mods}. Скрытый драйвер — главный модуль `main`: он импортирует '
+                     + ('эти модули' if task.kind == 'refactor' else '`sol`')
+                     + ' и вызывает открытые (`pub`) функции. Ошибки — диагностика компилятора как есть: '
+                     'файл, строка, код ошибки и место в коде.')
     elif task.kind == 'refactor':
         lines.append(f'Сборка — {cxx_line(flags)}. Драйвер `main.cpp` подключает заголовки модулей и '
                      'собирается вместе со всеми `src/*.cpp`.')
@@ -254,11 +329,19 @@ def prompt(task, lang, sandbox, attempts, flags, start):
         text += '\n## Целевой интерфейс\n'
         for name, body in iface.items():
             text += f'\n`{name}`:\n\n```{fence}\n{body}```\n'
-    if dp:
+    if is_proto(lang):
         spec = read(mkspec.out_path(lang))
         spec = re.sub(r'\A<!--.*?-->\n+', '', spec, flags=re.S)
         text += '\n' + demote(spec)
+    elif lang == 'dp':
+        text += '\n' + demote(dp_spec())
     return text
+
+
+def dp_spec():
+    """Спецификация языка dp для задания: docs/spec/core.md с раздела 1."""
+    body = read(SPEC_DP)
+    return SPEC_DP_TITLE + '\n\n' + body[body.index('\n## 1.') + 1:]
 
 
 def git_commit():
@@ -300,6 +383,8 @@ def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, q
     made = []
     for task in tasks:
         for lang in langs:
+            if lang not in task.langs():
+                continue
             sandbox, log = cell_paths(run_dir, task.id, lang)
             if os.path.exists(log) and not force:
                 raise HarnessError(f'{task.id} {lang}: уже есть в прогоне {run} (--force — пересоздать)')
@@ -381,7 +466,7 @@ def diagnose_build(stderr, lang, build_dir, own, driver, sol_lines=0, code_lines
     if where is None:
         return 'сборка', msg + more
     fname, line, _ = where
-    if is_dp(lang):
+    if is_proto(lang):
         if fname == driver:
             return 'интерфейс', 'драйвер не собирается с решением: ' + msg + more
         fn = generated_fn(code_lines or [], line)
@@ -417,7 +502,7 @@ def compare(expected, got):
 
 
 def source_files(files, lang):
-    ext = SRC_EXT['dp' if is_dp(lang) else 'cpp']
+    ext = SRC_EXT[ext_key(lang)]
     return {n: t for n, t in files.items() if n.endswith(ext)}
 
 
@@ -425,14 +510,19 @@ def evaluate(task, lang, files, build_dir, flags, build=True):
     """Проверка решения: (класс, сообщение). build=False — только разбор и перевод."""
     files = source_files(files, lang)
     if not files:
-        return 'разбор', 'в src/ нет файлов ' + ' '.join('*' + e for e in SRC_EXT['dp' if is_dp(lang) else 'cpp'])
+        return 'разбор', 'в src/ нет файлов ' + ' '.join('*' + e for e in SRC_EXT[ext_key(lang)])
     if sum(len(t) for t in files.values()) > MAX_SRC:
         return 'разбор', f'файлы в src/ больше {MAX_SRC} символов'
     os.makedirs(build_dir, exist_ok=True)
     exe = os.path.join(build_dir, 'driver')
     code_lines = None
     sol_lines = 0
-    if is_dp(lang):
+    if lang == 'dp':
+        if not build:
+            return None, ''
+        driver = read(os.path.join(task.dp, dp_check.DRIVER))
+        return dp_check.evaluate(files, driver, dp_check.expected(task.path), build_dir)
+    if is_proto(lang):
         mods = []
         for name, text in files.items():
             try:
@@ -708,7 +798,7 @@ def summary(rows):
 def render(run, rows, s):
     unit = 'токены' if s['unit'] == 'tokens' else 'символы (токены не сосчитаны — нет ключа, Р35)'
     key = s['unit']
-    lines = [f'# Опыт v0.0: прогон {run}', '']
+    lines = [f'# Опыт: прогон {run}', '']
     if rows:
         m = rows[0]['meta']
         lines += [f'Коммит `{m["commit"][:12]}`, {m["cxx"]}; модель субагентов — {m["agent_model"] or "как у сессии"}; '
@@ -789,7 +879,7 @@ def restore(run, force=False):
 # ---------------------------------------------------------------- самопроверка
 
 START_CLASS = {'write': {'сборка'}, 'fix': {'вывод', 'ловушка'}, 'refactor': {'интерфейс'}}
-FULL = ('cpp', 'A')
+FULL = ('cpp', 'A', 'dp')
 
 
 def selftest_cell(task, lang, sandbox, tmp, flags):
@@ -800,8 +890,12 @@ def selftest_cell(task, lang, sandbox, tmp, flags):
         fails.append(f'{tag}: в PROMPT.md нет команды проверки')
     if MARK in p or task.expected.strip() in p:
         fails.append(f'{tag}: в PROMPT.md попал драйвер или ожидаемый вывод')
-    if is_dp(lang) and f'вариант {lang} — краткая спецификация' not in p:
+    if is_proto(lang) and f'вариант {lang} — краткая спецификация' not in p:
         fails.append(f'{tag}: в PROMPT.md нет спецификации варианта')
+    if lang == 'dp' and (SPEC_DP_TITLE not in p or '[lex.source]' not in p):
+        fails.append(f'{tag}: в PROMPT.md нет спецификации DPlang')
+    if lang == 'dp' and task.kind == 'refactor' and '// ...' not in p:
+        fails.append(f'{tag}: в PROMPT.md нет целевого интерфейса')
     start = read_files(os.path.join(sandbox, 'src'))
     if start != task.files(lang, 'start'):
         fails.append(f'{tag}: src/ не совпадает с начальным кодом')
@@ -831,11 +925,19 @@ def selftest_stub_cpp(task, tmp):
     if r.returncode != 0:
         first = next((ln for ln in r.stderr.splitlines() if 'error' in ln), r.stderr[:200])
         return [f'{task.id}: stub.cpp не собирается с драйвером: {first}']
-    dp = {it.name for it in cm.load([os.path.join(task.cm, 'stub.cm')], 'A')[0].items if isinstance(it, cm.Fn)}
+    dp = set()
+    if os.path.isdir(task.cm):
+        dp = {it.name for it in cm.load([os.path.join(task.cm, 'stub.cm')], 'A')[0].items if isinstance(it, cm.Fn)}
     cpp = set(re.findall(r'^\S[^(\n]*?(\w+)\([^;\n]*\) \{$', read(stub), re.M))
-    if dp != cpp:
-        return [f'{task.id}: функции stub.cpp ({", ".join(sorted(cpp))}) и stub.cm ({", ".join(sorted(dp))}) расходятся']
-    return []
+    fails = []
+    if os.path.isdir(task.cm) and dp != cpp:
+        fails.append(f'{task.id}: функции stub.cpp ({", ".join(sorted(cpp))}) и stub.cm ({", ".join(sorted(dp))}) расходятся')
+    if os.path.isdir(task.dp):
+        real = set(re.findall(r'^pub fn (\w+)\(', read(os.path.join(task.dp, 'stub.dpm')), re.M))
+        if real != cpp:
+            fails.append(f'{task.id}: функции stub.cpp ({", ".join(sorted(cpp))}) и dp/stub.dpm '
+                         f'({", ".join(sorted(real))}) расходятся')
+    return fails
 
 
 def selftest_log(tmp):
@@ -894,12 +996,15 @@ def selftest_restore(tmp, task, texts):
 
 def selftest():
     tasks = all_tasks()
+    if not os.path.exists(dp_check.dplang()):
+        print(f'обвязка: нет компилятора {dp_check.dplang()} — сначала python3 tests/run.py')
+        return 1
     saved = os.environ.get('DPLANG_EXP_WORK')
     with tempfile.TemporaryDirectory() as tmp:
         os.environ['DPLANG_EXP_WORK'] = os.path.join(tmp, 'work')
         flags = build_flags()
         sandboxes = prepare('self', tasks, LANGS, quiet=True)
-        jobs = [(t, lang, s) for (t, lang), s in zip([(t, lang) for t in tasks for lang in LANGS], sandboxes)]
+        jobs = [(t, lang, s) for (t, lang), s in zip([(t, lang) for t in tasks for lang in t.langs()], sandboxes)]
         with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
             results = list(pool.map(lambda j: selftest_cell(j[0], j[1], j[2], tmp, flags), jobs))
             results += list(pool.map(lambda t: selftest_stub_cpp(t, tmp), tasks))
@@ -914,7 +1019,7 @@ def selftest():
         for f in fails:
             print('  ' + f)
         return 1
-    print(f'обвязка: {len(tasks)} задач × {len(LANGS)} языка — задания собираются, начальный код не проходит, '
+    print(f'обвязка: {len(tasks)} задач, ячеек {len(jobs)} — задания собираются, начальный код не проходит, '
           f'эталоны принимаются ({"/".join(FULL)} — со сборкой), журнал, отчёт и восстановление работают')
     return 0
 
