@@ -1,0 +1,147 @@
+// t18: реализация с ошибками — исправить, не переписывая заново.
+pub struct Event {
+    at: i64
+    priority: i32
+    id: i32
+    every: i64
+    name: str
+}
+
+pub struct Scheduler {
+    now: i64
+    next_id: i32
+    pending: i32
+    // двоичная куча: вершина — ближайшее
+    heap: List[Event]
+    // отменённые номера; их записи в куче пропускаются
+    cancelled: List[i32]
+}
+
+pub enum SchedError {
+    BadTime
+    NotFound
+}
+
+pub fn sched_new() Scheduler {
+    return Scheduler { now: 0, next_id: 1, pending: 0, heap: [], cancelled: [] }
+}
+
+fn earlier(a: &Event, b: &Event) bool {
+    if a.at != b.at {
+        return a.at < b.at
+    }
+    if a.priority != b.priority {
+        return a.priority > b.priority
+    }
+    return a.id > b.id
+}
+
+fn swap(h: &mut List[Event], i: int, j: int) {
+    let t = h[i]
+    h[i] = h[j]
+    h[j] = t
+}
+
+fn sift_up(h: &mut List[Event], start: int) {
+    var i = start
+    while i > 0 {
+        let p = (i - 1) / 2
+        if !earlier(&h[i], &h[p]) {
+            break
+        }
+        swap(&mut h, i, p)
+        i = p
+    }
+}
+
+fn sift_down(h: &mut List[Event], start: int) {
+    let n = len(h)
+    var i = start
+    while true {
+        let l = 2 * i + 1
+        let r = l + 1
+        var m = i
+        if l < n && earlier(&h[l], &h[m]) {
+            m = l
+        }
+        if r < n - 1 && earlier(&h[r], &h[m]) {
+            m = r
+        }
+        if m == i {
+            break
+        }
+        swap(&mut h, i, m)
+        i = m
+    }
+}
+
+fn push(s: &mut Scheduler, e: Event) {
+    s.heap.push(e)
+    sift_up(&mut s.heap, len(s.heap) - 1)
+}
+
+fn pop(s: &mut Scheduler) Event {
+    let top = s.heap[0]
+    if let last = s.heap.pop() {
+        if len(s.heap) > 0 {
+            s.heap[0] = last
+            sift_down(&mut s.heap, 0)
+        }
+    }
+    return top
+}
+
+fn is_cancelled(s: &Scheduler, id: i32) bool {
+    return s.cancelled.contains(id)
+}
+
+pub fn sched_add(s: &mut Scheduler, at: i64, priority: i32, every: i64, name: str) SchedError!i32 {
+    if at <= s.now || every < 0 {
+        fail .BadTime
+    }
+    let id = s.next_id
+    s.next_id += 1
+    push(&mut s, Event { at, priority, id, every, name })
+    s.pending += 1
+    return id
+}
+
+pub fn sched_cancel(s: &mut Scheduler, id: i32) SchedError!void {
+    var queued = false
+    for e in &s.heap {
+        if e.id == id {
+            queued = true
+        }
+    }
+    if !queued {
+        fail .NotFound
+    }
+    s.cancelled.push(id)
+    s.pending -= 1
+}
+
+pub fn sched_run(s: &mut Scheduler, until: i64) List[str] {
+    var out: List[str] = []
+    if until < s.now {
+        return out
+    }
+    while len(s.heap) > 0 && s.heap[0].at <= until {
+        var e = pop(&mut s)
+        if is_cancelled(&s, e.id) {
+            continue
+        }
+        out.push(str(e.at) + " " + e.name)
+        if e.every > 0 && e.at + e.every <= until {
+            e.at += e.every
+            push(&mut s, e)
+        } else {
+            s.pending -= 1
+        }
+    }
+    s.now = until
+    return out
+}
+
+pub fn sched_pending(s: &Scheduler) i32 {
+    return s.pending
+}

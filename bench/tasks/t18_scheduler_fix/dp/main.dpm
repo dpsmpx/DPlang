@@ -1,0 +1,78 @@
+// Драйвер t18 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn add(s: &mut sol.Scheduler, at: i64, priority: i32, every: i64, name: str) {
+    match sol.sched_add(&mut s, at, priority, every, name) {
+        ok(id) => println("add " + name + ": id " + str(id))
+        err(e) => println("add " + name + ": bad time")
+    }
+}
+
+fn cancel(s: &mut sol.Scheduler, id: i32) {
+    var what = "ok"
+    match sol.sched_cancel(&mut s, id) {
+        ok(_) => what = "ok"
+        err(e) => what = "not found"
+    }
+    println("cancel " + str(id) + ": " + what + ", pending " + str(sol.sched_pending(&s)))
+}
+
+fn run(s: &mut sol.Scheduler, until: i64) {
+    var line = "run " + str(until) + ":"
+    for f in &sol.sched_run(&mut s, until) {
+        line += " [" + f + "]"
+    }
+    println(line + " | pending " + str(sol.sched_pending(&s)))
+}
+
+fn main() {
+    var s = sol.sched_new()
+    add(&mut s, 0, 0, 0, "boot")
+    add(&mut s, 10, 1, 0, "a")
+    add(&mut s, 10, 1, 0, "b")
+    add(&mut s, 10, 5, 0, "urgent")
+    add(&mut s, 10, 1, 0, "c")
+    add(&mut s, 5, 0, 7, "tick")
+    add(&mut s, 3, 0, -1, "neg")
+    run(&mut s, 10)
+    add(&mut s, 9, 0, 0, "late")
+    add(&mut s, 10, 0, 0, "now")
+    run(&mut s, 11)
+    run(&mut s, 20)
+    cancel(&mut s, 6)
+    cancel(&mut s, 6)
+    cancel(&mut s, 2)
+    cancel(&mut s, 99)
+    run(&mut s, 40)
+    run(&mut s, 30)
+    // Много событий — порядок кучи.
+    var h = sol.sched_new()
+    var x: u64 = 12345
+    for i in 0..40 {
+        x = x *% 6364136223846793005 +% 1442695040888963407
+        let at = i64((x >> 33) % 16)
+        let pr = i32((x >> 20) % 4)
+        match sol.sched_add(&mut h, at, pr, 0, "e" + str(i)) {
+            ok(_) => {}
+            err(e) => println("unexpected error")
+        }
+    }
+    cancel(&mut h, 7)
+    cancel(&mut h, 8)
+    cancel(&mut h, 7)
+    run(&mut h, 7)
+    run(&mut h, 15)
+    // Периодические с разными периодами и отмена в середине.
+    var p = sol.sched_new()
+    add(&mut p, 1, 0, 3, "p3")
+    add(&mut p, 2, 1, 4, "p4")
+    add(&mut p, 4, 2, 0, "once")
+    run(&mut p, 9)
+    run(&mut p, 9)
+    cancel(&mut p, 1)
+    run(&mut p, 18)
+    add(&mut p, 17, 0, 1, "past")
+    add(&mut p, 18, 9, 2, "fast")
+    run(&mut p, 22)
+    cancel(&mut p, 3)
+}
