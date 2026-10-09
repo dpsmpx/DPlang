@@ -1,0 +1,36 @@
+pub enum RingError {
+    Full
+}
+
+pub struct Ring {
+    data: List[i32]
+    head: int = 0
+    count: int = 0
+}
+
+pub fn ring_new(capacity: i32) Ring {
+    return Ring { data: repeat(0, capacity) }
+}
+
+pub fn ring_push(r: &mut Ring, value: i32) RingError!void {
+    let cap = len(r.data)
+    if r.count == cap {
+        fail .Full
+    }
+    r.data[(r.head + r.count) % cap] = value
+    r.count += 1
+}
+
+pub fn ring_pop(r: &mut Ring) ?i32 {
+    if r.count == 0 {
+        return none
+    }
+    let v = r.data[r.head]
+    r.head = (r.head + 1) % len(r.data)
+    r.count -= 1
+    return v
+}
+
+pub fn ring_len(r: &Ring) i32 {
+    return i32(r.count)
+}

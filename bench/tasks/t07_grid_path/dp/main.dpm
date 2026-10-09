@@ -1,0 +1,25 @@
+// Драйвер t07 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn run(rows: []str) {
+    if let n = sol.shortest_path(rows) {
+        println("path " + str(n))
+    } else {
+        println("path none")
+    }
+}
+
+fn main() {
+    let a = ["S..G"]
+    run(a)
+    let b = ["S#.", ".#.", "..G"]
+    run(b)
+    let c = ["S.#.", ".##.", "...#", "#.#G"]
+    run(c)
+    let d = ["S.........", "########..", "..........", ".#########", "........G."]
+    run(d)
+    let e = ["SG"]
+    run(e)
+    let f = ["S#G"]
+    run(f)
+}

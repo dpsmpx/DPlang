@@ -1,0 +1,66 @@
+// Драйвер t04 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn show(name: str, h: sol.Handle) {
+    println(name + " = (" + str(h.index) + "," + str(h.generation) + ")")
+}
+
+fn get(p: &sol.Pool, name: str, h: sol.Handle) {
+    if let v = sol.pool_get(&p, h) {
+        println("get " + name + " " + str(v))
+    } else {
+        println("get " + name + " stale")
+    }
+}
+
+fn create(p: &mut sol.Pool, v: i32) sol.Handle {
+    match sol.pool_create(&mut p, v) {
+        ok(h) => return h
+        err(e) => {
+            assert(false) // pool_create: неожиданная ошибка
+            return sol.Handle { index: -1, generation: -1 }
+        }
+    }
+}
+
+fn flag(b: bool) str {
+    if b {
+        return "1"
+    }
+    return "0"
+}
+
+fn main() {
+    var p = sol.pool_new(3)
+    let a = create(&mut p, 10)
+    show("a", a)
+    let b = create(&mut p, 20)
+    show("b", b)
+    let c = create(&mut p, 30)
+    show("c", c)
+    var full = false
+    match sol.pool_create(&mut p, 40) {
+        ok(_) => full = false
+        err(e) => full = e == .Full
+    }
+    println("create full " + flag(full))
+    println("destroy b " + flag(sol.pool_destroy(&mut p, b)))
+    println("destroy b " + flag(sol.pool_destroy(&mut p, b)))
+    get(&p, "b", b)
+    let d = create(&mut p, 50)
+    show("d", d)
+    get(&p, "b", b)
+    get(&p, "d", d)
+    println("set b " + flag(sol.pool_set(&mut p, b, 1)))
+    println("set d " + flag(sol.pool_set(&mut p, d, 55)))
+    get(&p, "d", d)
+    println("count " + str(sol.pool_count(&p)))
+    println("destroy a " + flag(sol.pool_destroy(&mut p, a)))
+    println("destroy c " + flag(sol.pool_destroy(&mut p, c)))
+    let e = create(&mut p, 60)
+    show("e", e)
+    get(&p, "a", a)
+    get(&p, "e", e)
+    println("count " + str(sol.pool_count(&p)))
+    get(&p, "bad", sol.Handle { index: 7, generation: 1 })
+}

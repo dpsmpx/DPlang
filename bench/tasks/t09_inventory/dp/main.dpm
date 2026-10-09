@@ -1,0 +1,39 @@
+// Драйвер t09 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn add(inv: &mut sol.Inventory, item: i32, count: i32) {
+    match sol.inv_add(&mut inv, item, count) {
+        err(e) => println("add " + str(item) + " " + str(count) + " invalid")
+        ok(left) => println("add " + str(item) + " " + str(count) + " left " + str(left) + " | " + sol.inv_describe(&inv))
+    }
+}
+
+fn rem(inv: &mut sol.Inventory, item: i32, count: i32) {
+    var t = "ok"
+    match sol.inv_remove(&mut inv, item, count) {
+        ok(_) => t = "ok"
+        err(e) => {
+            if e == .NotEnough {
+                t = "not_enough"
+            } else {
+                t = "invalid"
+            }
+        }
+    }
+    println("remove " + str(item) + " " + str(count) + " " + t + " | " + sol.inv_describe(&inv))
+}
+
+fn main() {
+    var inv = sol.inv_new(4)
+    add(&mut inv, 1, 50)
+    add(&mut inv, 1, 30)
+    add(&mut inv, 200, 2)
+    add(&mut inv, 2, 100)
+    add(&mut inv, 0, 1)
+    add(&mut inv, 3, 0)
+    rem(&mut inv, 1, 70)
+    rem(&mut inv, 1, 20)
+    rem(&mut inv, 200, 1)
+    add(&mut inv, 2, 70)
+    println("total 2 = " + str(sol.inv_total(&inv, 2)) + ", total 1 = " + str(sol.inv_total(&inv, 1)))
+}

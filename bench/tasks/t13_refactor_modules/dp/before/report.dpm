@@ -1,0 +1,30 @@
+// Модуль report (до рефакторинга): текстовое описание мира.
+import world
+
+// "0:22 1:dead 2:50" — номер и здоровье или dead для каждого юнита.
+pub fn describe(w: &world.World) str {
+    var out = ""
+    for i in 0..len(w.units) {
+        if i > 0 {
+            out += " "
+        }
+        let u = w.units[i]
+        if u.alive {
+            out += str(i) + ":" + str(u.hp)
+        } else {
+            out += str(i) + ":dead"
+        }
+    }
+    return out
+}
+
+// Число живых юнитов.
+pub fn alive_count(w: &world.World) i32 {
+    var n: i32 = 0
+    for u in &w.units {
+        if u.alive {
+            n += 1
+        }
+    }
+    return n
+}

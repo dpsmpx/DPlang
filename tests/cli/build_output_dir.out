@@ -1,0 +1,3 @@
+--- stderr ---
+error: cannot write '../cli': Is a directory
+[exit 2]

@@ -1,0 +1,23 @@
+// Драйвер t06 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn run(w: i32, h: i32, cells: []i32) {
+    let q = sol.greedy_mesh(w, h, cells)
+    println("quads " + str(len(q)))
+    for r in &q {
+        println("  " + str(r.x) + " " + str(r.y) + " " + str(r.w) + " " + str(r.h) + " " + str(r.block))
+    }
+}
+
+fn main() {
+    let a: List[i32] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    run(4, 3, a)
+    let b: List[i32] = [1, 1, 2, 2, 1, 1, 2, 2, 0, 3, 3, 0, 0, 3, 3, 0]
+    run(4, 4, b)
+    let c: List[i32] = [1, 1, 1, 0, 1, 1, 2, 1, 0, 1, 1, 1, 1, 1, 1]
+    run(5, 3, c)
+    let d: List[i32] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    run(3, 3, d)
+    let e: List[i32] = [4, 4, 4, 5, 5, 5, 4, 4, 5, 5, 5, 5]
+    run(6, 2, e)
+}

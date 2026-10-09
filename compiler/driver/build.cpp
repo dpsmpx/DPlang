@@ -151,11 +151,43 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
     return 0;
 }
 
+// Копирует собранную программу в path (права 0755 с учётом umask).
+// Ошибка — errno; на месте path тогда может остаться неполный файл.
+int copy_program(const std::string& from, const std::string& path) {
+    std::string bytes = read_all(from);
+    if (bytes.empty()) return EIO;
+    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0755);
+    if (fd < 0) return errno;
+    size_t done = 0;
+    while (done < bytes.size()) {
+        ssize_t n = write(fd, bytes.data() + done, bytes.size() - done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) {
+            int e = n < 0 ? errno : EIO;
+            close(fd);
+            return e;
+        }
+        done += static_cast<size_t>(n);
+    }
+    if (close(fd) != 0) return errno;
+    return 0;
+}
+
 }  // namespace
 
+// Программа собирается во временный каталог и копируется в -o: так
+// ошибка записи — ошибка окружения (код 2), а не отказ компилятора C, и
+// неудачная сборка не портит прежний файл.
 int build_native(const std::string& c_code, const BuildOptions& opt) {
     TempDir tmp;
-    return compile(c_code, opt.output, opt, tmp);
+    std::string exe = tmp.file("program");
+    int code = compile(c_code, exe, opt, tmp);
+    if (code != 0) return code;
+    if (int e = copy_program(exe, opt.output)) {
+        say("error: cannot write '" + opt.output + "': " + std::strerror(e) + "\n");
+        return 2;
+    }
+    return 0;
 }
 
 int run_tests(const std::string& c_code, const std::vector<std::string>& names, const BuildOptions& opt) {

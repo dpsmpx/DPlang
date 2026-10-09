@@ -1,0 +1,4 @@
+// t07: заготовка — напишите тела функций по task.md.
+pub fn shortest_path(rows: []str) ?i32 {
+    // ...
+}

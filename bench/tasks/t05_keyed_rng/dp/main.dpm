@@ -1,0 +1,36 @@
+// Драйвер t05 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+// Шестнадцатеричная запись v из digits цифр (printf «%0Nx»).
+fn hex(v: u64, digits: int) str {
+    let alphabet = "0123456789abcdef"
+    var out = ""
+    var x = v
+    for i in 0..digits {
+        let d = i64(x & 15)
+        out = alphabet[d..d + 1] + out
+        x = x >> 4
+    }
+    return out
+}
+
+fn main() {
+    println(hex(u64(sol.hash32(0, 0, 0)), 8))
+    println(hex(u64(sol.hash32(42, 1, 2)), 8))
+    println(hex(u64(sol.hash32(42, -1, -2)), 8))
+    println(hex(u64(sol.hash32(18446744073709551615, 2147483647, -2147483648)), 8))
+    let seeds: List[u64] = [1, 2026]
+    for seed in &seeds {
+        println("seed " + str(seed))
+        for y in i32(-2)..i32(3) {
+            var line = ""
+            for x in i32(-2)..i32(3) {
+                if x != -2 {
+                    line += " "
+                }
+                line += str(sol.height(seed, x, y))
+            }
+            println(line)
+        }
+    }
+}
