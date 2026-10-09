@@ -1,0 +1,42 @@
+price 0.45: 0.45
+price 12.00: 12.00
+price 007.10: 7.10
+price 3.5: bad
+price 1.234: bad
+price -1.00: bad
+price .99: bad
+price 1234567890123.00: bad
+price 123456789012.99: 123456789012.99
+price 1,00: bad
+price : bad
+catalog apple: item 0
+catalog bread: item 1
+catalog cheese: item 2
+catalog apple: duplicate
+catalog gum: item 3
+find cheese: cheese at 7.99
+find milk: none
+empty
+add apple 3: ok | apple x3 1.35; total 1.35
+add bread 1: ok | apple x3 1.35; bread x1 2.10; total 3.45
+add milk 1: unknown item | apple x3 1.35; bread x1 2.10; total 3.45
+add milk 0: unknown item | apple x3 1.35; bread x1 2.10; total 3.45
+add cheese 0: bad quantity | apple x3 1.35; bread x1 2.10; total 3.45
+add cheese 2: ok | apple x3 1.35; bread x1 2.10; cheese x2 15.98; total 19.43
+add apple 2: ok | apple x5 2.25; bread x1 2.10; cheese x2 15.98; total 20.33
+remove bread 2: bad quantity | apple x5 2.25; bread x1 2.10; cheese x2 15.98; total 20.33
+remove milk 1: not in cart | apple x5 2.25; bread x1 2.10; cheese x2 15.98; total 20.33
+remove gum 1: not in cart | apple x5 2.25; bread x1 2.10; cheese x2 15.98; total 20.33
+remove apple 0: bad quantity | apple x5 2.25; bread x1 2.10; cheese x2 15.98; total 20.33
+discount 60: bad discount | total 20.33
+discount -1: bad discount | total 20.33
+discount 10: ok | total 18.30
+remove bread 1: ok | apple x5 2.25; cheese x2 15.98; discount 10% -1.82; total 16.41
+add bread 4: ok | apple x5 2.25; cheese x2 15.98; bread x4 8.40; discount 10% -2.66; total 23.97
+remove apple 5: ok | cheese x2 15.98; bread x4 8.40; discount 10% -2.43; total 21.95
+discount 50: ok | total 12.19
+add gum 1: ok | gum x1 0.05; total 0.05
+discount 50: ok | total 0.03
+gum x1 0.05; discount 50% -0.02; total 0.03
+discount 0: ok | total 0.05
+remove gum 1: ok | empty
