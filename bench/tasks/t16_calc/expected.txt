@@ -1,0 +1,73 @@
+[1 + 2 * 3] => 7
+[(1 + 2) * 3] => 9
+[7 - 2 - 3] => 2
+[100 / 7 / 2] => 7
+[-7 / 2] => -3
+[-7 % 2] => -1
+[7 % -2] => 1
+[2 ^ 3 ^ 2] => 512
+[-2 ^ 2] => -4
+[(-2) ^ 2] => 4
+[2 ^ -1] => error at 3: negative exponent
+[2 ^ - 1 + x] => error at 3: negative exponent
+[0 ^ 0] => 1
+[1 ^ 1000000000000] => 1
+[-1 ^ 1000000000001] => -1
+[(-1) ^ 1000000000001] => -1
+[(-2) ^ 63] => -9223372036854775808
+[2 ^ 63] => error at 3: overflow
+[2 ^ 62 + (2 ^ 62 - 1)] => 9223372036854775807
+[--3] => 3
+[- - 3 - -3] => 6
+[9223372036854775807] => 9223372036854775807
+[9223372036854775808] => error at 1: number too large
+[-9223372036854775808] => error at 2: number too large
+[-9223372036854775807 - 1] => -9223372036854775808
+[-9223372036854775807 - 2] => error at 22: overflow
+[x = -9223372036854775807 - 1; x / -1] => error at 33: overflow
+[x = -9223372036854775807 - 1; x % -1] => 0
+[x = -9223372036854775807 - 1; -x] => error at 31: overflow
+[x = -9223372036854775807 - 1; x * -1] => error at 33: overflow
+[3037000500 * 3037000500] => error at 12: overflow
+[3037000499 * 3037000499] => 9223372030926249001
+[x = 5; y = x * 2; y + x] => 15
+[x = 1; x = x + 1; x = x * 10; x] => 20
+[a = b = 3] => error at 7: unexpected '='
+[x = 4] => 4
+[_tmp = 3; _tmp2 = _tmp ^ 2; _tmp2] => 9
+[x + 1] => error at 1: unknown variable 'x'
+[1 / 0 + x] => error at 3: division by zero
+[x + 1 / 0] => error at 1: unknown variable 'x'
+[y = 1 / 0; z] => error at 7: division by zero
+[5 % 0] => error at 3: division by zero
+[1 / (2 - 2)] => error at 3: division by zero
+[] => error at 1: unexpected end
+[   ] => error at 4: unexpected end
+[1 +] => error at 4: unexpected end
+[1 + ] => error at 5: unexpected end
+[(1 + 2] => error at 7: expected ')'
+[(1 + 2 ] => error at 8: expected ')'
+[(1 2)] => error at 4: expected ')'
+[(1 + )] => error at 6: unexpected ')'
+[()] => error at 2: unexpected ')'
+[1 2] => error at 3: unexpected '2'
+[2x] => error at 2: unexpected 'x'
+[x y] => error at 3: unexpected 'y'
+[1 + * 2] => error at 5: unexpected '*'
+[1 ; ; 2] => error at 5: unexpected ';'
+[1;] => error at 3: unexpected end
+[;] => error at 1: unexpected ';'
+[= 3] => error at 1: unexpected '='
+[x =] => error at 4: unexpected end
+[1 + 2 $ 3] => error at 7: unexpected character '$'
+[1 2 $] => error at 3: unexpected '2'
+[(1 $] => error at 4: unexpected character '$'
+[1 + Abc] => error at 5: unexpected character 'A'
+[99999999999999999999 + 1] => error at 1: number too large
+[1 2 99999999999999999999] => error at 3: unexpected '2'
+[(4 + 5) * (2 - 7) ^ 2 % 1000 - -(3)] => 228
+[a=2;b=a^a^a;b%1000003] => 16
+[   42   ] => 42
+[y + 1; y = 2] => error at 1: unknown variable 'y'
+[x = 2; x ^ 62 * 2] => error at 15: overflow
+[10 % 3 ^ 2] => 1

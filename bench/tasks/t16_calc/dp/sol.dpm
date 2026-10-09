@@ -1,0 +1,437 @@
+// t16: эталон на DPlang.
+const MIN: i64 = -9223372036854775807 - 1
+
+const MAX: i64 = 9223372036854775807
+
+enum Tok {
+    End
+    Num
+    Name
+    Op
+    Bad
+    Big
+}
+
+struct Token {
+    kind: Tok
+    text: str
+    // с 1
+    col: i32
+    value: i64
+    // индекс байта после лексемы
+    end: i32
+}
+
+enum Kind {
+    Num
+    Var
+    Neg
+    Bin
+    Assign
+}
+
+struct Node {
+    kind: Kind
+    op: u8
+    value: i64
+    name: str
+    left: i32
+    right: i32
+    col: i32
+}
+
+struct Var {
+    name: str
+    value: i64
+}
+
+struct Calc {
+    src: str
+    pos: i32
+    has_peek: bool
+    peeked: Token
+    nodes: List[Node]
+    failed: bool
+    err_col: i32
+    err_msg: str
+    vars: List[Var]
+}
+
+fn is_name_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_name_char(c: u8) bool {
+    return is_name_start(c) || is_digit(c)
+}
+
+fn lex(s: str, start: i32) Token {
+    let n = i32(len(s))
+    var pos = start
+    while pos < n && s[pos] == ' ' {
+        pos += 1
+    }
+    if pos >= n {
+        return Token { kind: .End, text: "", col: n + 1, value: 0, end: n }
+    }
+    let c = s[pos]
+    let col = pos + 1
+    if is_digit(c) {
+        var end = pos
+        var v: i64 = 0
+        var big = false
+        while end < n && is_digit(s[end]) {
+            let d = i64(s[end] - '0')
+            if v > (MAX - d) / 10 {
+                big = true
+            } else {
+                v = v * 10 + d
+            }
+            end += 1
+        }
+        var kind = Tok.Num
+        if big {
+            kind = .Big
+        }
+        return Token { kind, text: s[pos..end], col, value: v, end }
+    }
+    if is_name_start(c) {
+        var end = pos
+        while end < n && is_name_char(s[end]) {
+            end += 1
+        }
+        return Token { kind: .Name, text: s[pos..end], col, value: 0, end }
+    }
+    var kind = Tok.Bad
+    if "+-*/%^()=;".find(s[pos..pos + 1]) != none {
+        kind = .Op
+    }
+    return Token { kind, text: s[pos..pos + 1], col, value: 0, end: pos + 1 }
+}
+
+fn fail_at(c: &mut Calc, col: i32, msg: str) {
+    if c.failed {
+        return
+    }
+    c.failed = true
+    c.err_col = col
+    c.err_msg = msg
+}
+
+fn peek(c: &mut Calc) Token {
+    if !c.has_peek {
+        c.peeked = lex(c.src, c.pos)
+        c.has_peek = true
+        if c.peeked.kind == .Bad {
+            fail_at(&mut c, c.peeked.col, "unexpected character '" + c.peeked.text + "'")
+        }
+        if c.peeked.kind == .Big {
+            fail_at(&mut c, c.peeked.col, "number too large")
+        }
+    }
+    return c.peeked
+}
+
+fn take(c: &mut Calc) Token {
+    let t = peek(&mut c)
+    c.pos = t.end
+    c.has_peek = false
+    return t
+}
+
+fn is_op(c: &mut Calc, op: str) bool {
+    let t = peek(&mut c)
+    return !c.failed && t.kind == .Op && t.text == op
+}
+
+fn unexpected(c: &mut Calc) {
+    let t = peek(&mut c)
+    if c.failed {
+        return
+    }
+    if t.kind == .End {
+        fail_at(&mut c, t.col, "unexpected end")
+    } else {
+        fail_at(&mut c, t.col, "unexpected '" + t.text + "'")
+    }
+}
+
+fn add(c: &mut Calc, n: Node) i32 {
+    c.nodes.push(n)
+    return i32(len(c.nodes) - 1)
+}
+
+fn node(kind: Kind, op: u8, left: i32, right: i32, col: i32) Node {
+    return Node { kind, op, value: 0, name: "", left, right, col }
+}
+
+fn atom(c: &mut Calc) i32 {
+    let t = peek(&mut c)
+    if c.failed {
+        return -1
+    }
+    if t.kind == .Num {
+        let n = take(&mut c)
+        return add(&mut c, Node { kind: .Num, op: ' ', value: n.value, name: "", left: -1, right: -1, col: n.col })
+    }
+    if t.kind == .Name {
+        let n = take(&mut c)
+        return add(&mut c, Node { kind: .Var, op: ' ', value: 0, name: n.text, left: -1, right: -1, col: n.col })
+    }
+    if is_op(&mut c, "(") {
+        _ = take(&mut c)
+        let e = expr(&mut c)
+        if c.failed {
+            return -1
+        }
+        if !is_op(&mut c, ")") {
+            let u = peek(&mut c)
+            fail_at(&mut c, u.col, "expected ')'")
+            return -1
+        }
+        _ = take(&mut c)
+        return e
+    }
+    unexpected(&mut c)
+    return -1
+}
+
+fn power(c: &mut Calc) i32 {
+    let a = atom(&mut c)
+    if c.failed {
+        return -1
+    }
+    if is_op(&mut c, "^") {
+        let op = take(&mut c)
+        let b = unary(&mut c)
+        if c.failed {
+            return -1
+        }
+        return add(&mut c, node(.Bin, '^', a, b, op.col))
+    }
+    return a
+}
+
+fn unary(c: &mut Calc) i32 {
+    if is_op(&mut c, "-") {
+        let op = take(&mut c)
+        let a = unary(&mut c)
+        if c.failed {
+            return -1
+        }
+        return add(&mut c, node(.Neg, '-', a, -1, op.col))
+    }
+    return power(&mut c)
+}
+
+fn term(c: &mut Calc) i32 {
+    var a = unary(&mut c)
+    while !c.failed && (is_op(&mut c, "*") || is_op(&mut c, "/") || is_op(&mut c, "%")) {
+        let op = take(&mut c)
+        let b = unary(&mut c)
+        if c.failed {
+            return -1
+        }
+        a = add(&mut c, node(.Bin, op.text[0], a, b, op.col))
+    }
+    return a
+}
+
+fn expr(c: &mut Calc) i32 {
+    var a = term(&mut c)
+    while !c.failed && (is_op(&mut c, "+") || is_op(&mut c, "-")) {
+        let op = take(&mut c)
+        let b = term(&mut c)
+        if c.failed {
+            return -1
+        }
+        a = add(&mut c, node(.Bin, op.text[0], a, b, op.col))
+    }
+    return a
+}
+
+fn stmt(c: &mut Calc) i32 {
+    let t = peek(&mut c)
+    if c.failed {
+        return -1
+    }
+    if t.kind == .Name {
+        let after = lex(c.src, t.end)
+        if after.kind == .Op && after.text == "=" {
+            let name = take(&mut c)
+            let op = take(&mut c)
+            let e = expr(&mut c)
+            if c.failed {
+                return -1
+            }
+            return add(&mut c, Node { kind: .Assign, op: '=', value: 0, name: name.text, left: e, right: -1, col: op.col })
+        }
+    }
+    return expr(&mut c)
+}
+
+// a * b или none, если вне i64.
+fn mul(a: i64, b: i64) ?i64 {
+    if a == 0 || b == 0 {
+        return i64(0)
+    }
+    if a == -1 {
+        if b == MIN {
+            return none
+        }
+        return -b
+    }
+    if b == -1 {
+        if a == MIN {
+            return none
+        }
+        return -a
+    }
+    let q = a *% b
+    if q / b != a {
+        return none
+    }
+    return q
+}
+
+fn power_of(a: i64, b: i64) ?i64 {
+    if b == 0 {
+        return i64(1)
+    }
+    if a == 0 || a == 1 {
+        return a
+    }
+    if a == -1 {
+        if b % 2 == 0 {
+            return i64(1)
+        }
+        return i64(-1)
+    }
+    if b > 63 {
+        return none
+    }
+    var r: i64 = 1
+    for i in i64(0)..b {
+        if let next = mul(r, a) {
+            r = next
+        } else {
+            return none
+        }
+    }
+    return r
+}
+
+fn eval(c: &mut Calc, i: i32) ?i64 {
+    let n = c.nodes[i]
+    match n.kind {
+        .Num => return n.value
+        .Var => {
+            for v in &c.vars {
+                if v.name == n.name {
+                    return v.value
+                }
+            }
+            fail_at(&mut c, n.col, "unknown variable '" + n.name + "'")
+            return none
+        }
+        .Neg => {
+            if let a = eval(&mut c, n.left) {
+                if a == MIN {
+                    fail_at(&mut c, n.col, "overflow")
+                    return none
+                }
+                return -a
+            }
+            return none
+        }
+        .Assign => {
+            if let a = eval(&mut c, n.left) {
+                for v in &mut c.vars {
+                    if v.name == n.name {
+                        v.value = a
+                        return a
+                    }
+                }
+                c.vars.push(Var { name: n.name, value: a })
+                return a
+            }
+            return none
+        }
+        .Bin => return binary(&mut c, n)
+    }
+}
+
+fn binary(c: &mut Calc, n: Node) ?i64 {
+    var a: i64 = 0
+    var b: i64 = 0
+    if let x = eval(&mut c, n.left) {
+        a = x
+    } else {
+        return none
+    }
+    if let y = eval(&mut c, n.right) {
+        b = y
+    } else {
+        return none
+    }
+    var out: ?i64 = none
+    if n.op == '+' {
+        if (b > 0 && a <= MAX - b) || (b <= 0 && a >= MIN - b) {
+            out = a + b
+        }
+    } else if n.op == '-' {
+        if (b < 0 && a <= MAX + b) || (b >= 0 && a >= MIN + b) {
+            out = a - b
+        }
+    } else if n.op == '*' {
+        out = mul(a, b)
+    } else if n.op == '/' || n.op == '%' {
+        if b == 0 {
+            fail_at(&mut c, n.col, "division by zero")
+            return none
+        }
+        if n.op == '%' {
+            return a % b
+        }
+        if !(a == MIN && b == -1) {
+            out = a / b
+        }
+    } else {
+        if b < 0 {
+            fail_at(&mut c, n.col, "negative exponent")
+            return none
+        }
+        out = power_of(a, b)
+    }
+    if out == none {
+        fail_at(&mut c, n.col, "overflow")
+    }
+    return out
+}
+
+pub fn calc(src: str) str {
+    let first = Token { kind: .End, text: "", col: 0, value: 0, end: 0 }
+    var c = Calc { src, pos: 0, has_peek: false, peeked: first, nodes: [], failed: false, err_col: 0, err_msg: "", vars: [] }
+    var stmts: List[i32] = []
+    stmts.push(stmt(&mut c))
+    while !c.failed && is_op(&mut c, ";") {
+        _ = take(&mut c)
+        stmts.push(stmt(&mut c))
+    }
+    if !c.failed && peek(&mut c).kind != .End {
+        unexpected(&mut c)
+    }
+    var v: i64 = 0
+    for s in &stmts {
+        if c.failed {
+            break
+        }
+        if let x = eval(&mut c, s) {
+            v = x
+        }
+    }
+    if c.failed {
+        return "error at " + str(c.err_col) + ": " + c.err_msg
+    }
+    return str(v)
+}
