@@ -80,7 +80,10 @@ void dp_free(void* p) { free(p); }
  *
  * Тот же алгоритм, что compiler/support/format.h: кратчайшая запись,
  * читаемая обратно в то же число (у f32 — в то же f32); обычная форма при
- * десятичном порядке от −4 до 15, без хвоста `.0`, иначе экспоненциальная. */
+ * десятичном порядке от −4 до 15, без хвоста `.0`, иначе экспоненциальная.
+ * Для каждой длины p проверяются правильно округлённая p-значная запись и
+ * её соседи на единицу последнего разряда: у степеней двойки промежуток
+ * округления несимметричен, и читаться обратно может только сосед. */
 
 /* double → float с округлением к ближайшему, как в IEEE 754, без
  * неопределённого поведения C у значений вне диапазона float. */
@@ -93,6 +96,15 @@ static float dp_to_f32(double x) {
         return x < 0 ? -r : r;
     }
     return (float)x;
+}
+
+/* Десятичное d·10^k читается обратно в v (у f32 — strtof: без двойного
+ * округления через double). */
+static bool dp_reads_back(uint64_t d, int k, double v, bool f32) {
+    char buf[48];
+    snprintf(buf, sizeof buf, "%" PRIu64 "e%d", d, k);
+    if (f32) return strtof(buf, NULL) == dp_to_f32(v);
+    return strtod(buf, NULL) == v;
 }
 
 static void dp_format_float(double v, bool f32, char* out, size_t cap) {
@@ -108,23 +120,43 @@ static void dp_format_float(double v, bool f32, char* out, size_t cap) {
         snprintf(out, cap, "%s", signbit(v) ? "-0" : "0");
         return;
     }
-    char buf[48];
+    bool neg = v < 0;
+    double a = fabs(v);
+    uint64_t d = 0;
+    int k = 0;
     for (int p = 1; p <= 17; p++) {
-        snprintf(buf, sizeof buf, "%.*e", p - 1, v);
-        double back = strtod(buf, NULL);
-        if (f32 ? dp_to_f32(back) == (float)v : back == v) break;
+        char buf[48];
+        snprintf(buf, sizeof buf, "%.*e", p - 1, a);
+        /* buf: d[.ddd]e±XX — p цифр и десятичный порядок первой. */
+        d = 0;
+        const char* c = buf;
+        for (; *c != 'e'; c++) {
+            if (*c != '.') d = d * 10 + (uint64_t)(*c - '0');
+        }
+        k = atoi(c + 1) - (p - 1);
+        if (dp_reads_back(d, k, a, f32)) break;
+        uint64_t low = 1;
+        for (int i = 1; i < p; i++) low *= 10; /* у 1.00…0 сосед снизу — 9.99…9 порядком ниже */
+        uint64_t below = d == low ? d * 10 - 1 : d - 1;
+        int below_k = d == low ? k - 1 : k;
+        if (dp_reads_back(below, below_k, a, f32)) {
+            d = below;
+            k = below_k;
+            break;
+        }
+        if (dp_reads_back(d + 1, k, a, f32)) {
+            d = d + 1;
+            break;
+        }
     }
-    /* buf: [-]d[.ddd]e±XX — цифры и десятичный порядок. */
-    bool neg = buf[0] == '-';
-    char* e = strchr(buf, 'e');
     char digits[24];
-    size_t nd = 0;
-    for (char* c = buf + (neg ? 1 : 0); c < e; c++) {
-        if (*c != '.') digits[nd++] = *c;
+    snprintf(digits, sizeof digits, "%" PRIu64, d);
+    size_t nd = strlen(digits);
+    while (nd > 1 && digits[nd - 1] == '0') {
+        digits[--nd] = 0;
+        k++;
     }
-    while (nd > 1 && digits[nd - 1] == '0') nd--;
-    digits[nd] = 0;
-    int exp = atoi(e + 1);
+    int exp = k + (int)nd - 1; /* десятичный порядок первой цифры */
     char* o = out;
     char* end = out + cap - 1;
 #define DP_PUT(ch) \

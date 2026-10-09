@@ -16,9 +16,10 @@ build/compiler/ и прогоняет золотые тесты наборов t
 программа набора run собирается в нативную (debug c, runtime, компилятор
 C — $CC или cc, с ASan и UBSan, если они есть), и её вывод сверяется с тем
 же ожидаемым, что у эталонного интерпретатора. Устройство —
-docs/compiler/README.md, docs/compiler/backend_c.md. Проходы limits,
-worker, sandbox и service — tests/limits.py, tests/worker.py и
-tests/service.py; worker, sandbox и service идут на второй сборке,
+docs/compiler/README.md, docs/compiler/backend_c.md. Проход runtime —
+тесты runtime по функциям и запись плавающих против образца
+(tests/runtime.py). Проходы limits, worker, sandbox и service —
+tests/limits.py, tests/worker.py и tests/service.py; worker, sandbox и service идут на второй сборке,
 Release без санитайзеров (build/release/).
 
     python3 tests/run.py              — собрать и прогнать
@@ -37,6 +38,7 @@ import subprocess
 import sys
 
 import limits
+import runtime
 import service
 import worker
 
@@ -136,6 +138,7 @@ def discover(pattern):
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
     native = [('native', path) for suite, path in tests if suite == 'run']
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
+    deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
     wdir = os.path.join(TESTS, 'worker')
     online = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
               if name.endswith('.json') and pattern in 'worker/' + name]
@@ -158,7 +161,41 @@ def prepare_native():
                            capture_output=True, text=True)
         if r.returncode != 0:
             return f'runtime {os.path.relpath(src, ROOT)}: ' + (r.stderr.strip().splitlines() or ['?'])[0]
+    return runtime.prepare(CC, native_flags, NATIVE, runtime_objects(), os.path.join(RUNTIME, 'core'))
+
+
+def runtime_objects():
+    return [os.path.join(NATIVE, os.path.basename(s) + '.o') for s in RUNTIME_SOURCES]
+
+
+def build_native(path, exe, cwd):
+    """Программа path — в нативную exe (debug c из каталога cwd: места в
+    ловушках — пути от него; runtime). None — собрана; 'check' — не проходит
+    проверку; иначе текст ошибки."""
+    name = os.path.relpath(path, cwd)
+    try:
+        r = subprocess.run([DPLANG, 'debug', 'c', name], capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'debug c: [timeout {TIMEOUT} s]'
+    if r.returncode == 1:
+        return 'check'
+    if r.returncode != 0:
+        return f'debug c: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+    c_path = exe[:-len('.bin')] + '.c'
+    with open(c_path, 'w', encoding='utf-8') as f:
+        f.write(r.stdout)
+    r = subprocess.run([CC] + native_flags + ['-I', os.path.join(RUNTIME, 'core'), c_path] + runtime_objects() +
+                       ['-lm', '-pthread', '-o', exe], capture_output=True, text=True)
+    if r.returncode != 0:
+        errs = [ln for ln in r.stderr.splitlines() if 'error' in ln][:5] or r.stderr.splitlines()[:5]
+        return 'сборка C:\n' + '\n'.join(errs)
     return None
+
+
+def runtime_native(src, exe):
+    """Сборка для прохода runtime: программа без ошибок проверки."""
+    err = build_native(src, exe, os.path.dirname(src))
+    return 'не проходит проверку' if err == 'check' else err
 
 
 def native_one(path):
@@ -166,24 +203,12 @@ def native_one(path):
     cwd = os.path.join(TESTS, 'run')
     name = os.path.relpath(path, cwd)
     flat = name.replace(os.sep, '_')[:-len('.dpm')]
-    try:
-        r = subprocess.run([DPLANG, 'debug', 'c', name], capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
-    except subprocess.TimeoutExpired:
-        return f'debug c: [timeout {TIMEOUT} s]'
-    if r.returncode == 1:
-        return None  # программа не проходит проверку: её диагностику сверяет набор run
-    if r.returncode != 0:
-        return f'debug c: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
-    c_path = os.path.join(NATIVE, flat + '.c')
     exe = os.path.join(NATIVE, flat + '.bin')
-    with open(c_path, 'w', encoding='utf-8') as f:
-        f.write(r.stdout)
-    objs = [os.path.join(NATIVE, os.path.basename(s) + '.o') for s in RUNTIME_SOURCES]
-    r = subprocess.run([CC] + native_flags + ['-I', os.path.join(RUNTIME, 'core'), c_path] + objs +
-                       ['-lm', '-pthread', '-o', exe], capture_output=True, text=True)
-    if r.returncode != 0:
-        errs = [ln for ln in r.stderr.splitlines() if 'error' in ln][:5] or r.stderr.splitlines()[:5]
-        return 'сборка C:\n' + '\n'.join(errs)
+    err = build_native(path, exe, cwd)
+    if err == 'check':
+        return None  # программа не проходит проверку: её диагностику сверяет набор run
+    if err:
+        return err
     try:
         p = subprocess.run([exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
@@ -249,6 +274,8 @@ def run_one(suite, path, bless):
         return native_one(path)
     if suite == 'limits':
         return limits.check_case(path, DPLANG)
+    if suite == 'runtime':
+        return runtime.check_case(path, DPLANG, runtime_native, NATIVE)
     if suite == 'worker':
         return worker.worker_case(path, DPLANG_RELEASE, bless)
     if suite == 'sandbox':
@@ -284,7 +311,7 @@ def main():
             print(err)
             return 1
     tests = discover(a.k)
-    if any(suite == 'native' for suite, _ in tests):
+    if any(suite in ('native', 'runtime') for suite, _ in tests):
         err = prepare_native()
         if err:
             print('компилятор: runtime не собирается')
@@ -304,7 +331,7 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            name = suite + '/' + path if suite in ('limits', 'sandbox', 'service') else os.path.relpath(path, TESTS)
+            name = suite + '/' + path if suite in ('limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1
     verb = 'записано ожидаемое' if a.bless else 'прошли'
