@@ -1,3 +1,4 @@
+// Разбор длительности «1h30m15s»: строки, байты, ошибки-значения, try.
 pub enum DurationError {
     Empty
     BadNumber
@@ -13,6 +14,7 @@ fn unit_seconds(c: u8) ?i64 {
     }
 }
 
+// Части — число и единица h, m или s; пробелы по краям не считаются.
 pub fn parse_duration(text: str) !i64 {
     let s = text.trim()
     if len(s) == 0 {
@@ -42,6 +44,7 @@ pub fn parse_duration(text: str) !i64 {
     return total
 }
 
+// Сумма длительностей; первая ошибка прерывает подсчёт.
 pub fn total_seconds(items: []str) !i64 {
     var sum: i64 = 0
     for item in &items {

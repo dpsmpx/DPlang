@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dplang:diagnostics:1",
+  "title": "DPlang diagnostics, version 1",
+  "description": "Output of `dplang check --format=json` (docs/compiler/cli.md). Diagnostics are sorted by file, position and code.",
+  "type": "object",
+  "required": ["diagnostics"],
+  "additionalProperties": false,
+  "properties": {
+    "diagnostics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/diagnostic" }
+    }
+  },
+  "$defs": {
+    "position": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": ["severity", "code", "message", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "severity": { "enum": ["error", "warning", "note"] },
+        "code": { "type": "string", "pattern": "^E[0-9]{4}$" },
+        "message": { "type": "string" },
+        "file": { "type": "string" },
+        "line": { "$ref": "#/$defs/position" },
+        "col": { "$ref": "#/$defs/position" },
+        "end_line": { "$ref": "#/$defs/position" },
+        "end_col": { "$ref": "#/$defs/position" },
+        "notes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/note" }
+        }
+      },
+      "dependentRequired": {
+        "file": ["line", "col", "end_line", "end_col"]
+      }
+    },
+    "note": {
+      "type": "object",
+      "required": ["message"],
+      "additionalProperties": false,
+      "properties": {
+        "message": { "type": "string" },
+        "file": { "type": "string" },
+        "line": { "$ref": "#/$defs/position" },
+        "col": { "$ref": "#/$defs/position" },
+        "end_line": { "$ref": "#/$defs/position" },
+        "end_col": { "$ref": "#/$defs/position" }
+      },
+      "dependentRequired": {
+        "file": ["line", "col", "end_line", "end_col"]
+      }
+    }
+  }
+}

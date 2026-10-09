@@ -1,0 +1,1 @@
+fmt --check ../print/bench_t01.dpm ../fmt/layout.dpm ../fmt/syntax_error.dpm

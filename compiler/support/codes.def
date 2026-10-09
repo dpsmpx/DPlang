@@ -20,6 +20,10 @@ DP_CODE(E0002, "nesting is too deep",
 
 // --- E01xx: лексика (docs/spec/core.md, раздел 1)
 
+DP_CODE(E0003, "cannot write file",
+        "The compiler could not write a file it was asked to produce: `dplang fmt` writes the formatted "
+        "source back, `dplang build` writes the program. Check that the directory exists and is writable. "
+        "The file is left as it was.")
 DP_CODE(E0101, "invalid UTF-8",
         "Source files must be valid UTF-8 (spec: lex.source). The marked bytes do not form a valid UTF-8 "
         "sequence. Re-save the file as UTF-8.")

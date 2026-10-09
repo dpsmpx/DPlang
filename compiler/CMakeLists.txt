@@ -48,7 +48,7 @@ target_include_directories(dpcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Threads REQUIRED)
 
-add_executable(dplang driver/main.cpp driver/big_stack.cpp driver/sandbox.cpp driver/worker.cpp)
+add_executable(dplang driver/main.cpp driver/big_stack.cpp driver/build.cpp driver/sandbox.cpp driver/worker.cpp)
 target_link_libraries(dplang PRIVATE dpcore Threads::Threads)
 
 # Пробник песочницы worker-а: запирается и пробует запрещённое

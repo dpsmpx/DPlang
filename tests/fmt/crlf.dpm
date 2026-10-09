@@ -1,0 +1,4 @@
+// spec: lex.newline
+fn main() {
+    println("crlf")   
+}

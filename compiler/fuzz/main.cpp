@@ -152,6 +152,13 @@ bool check_parse(const std::string& input) {
     if (diags2.has_errors()) return fail("printed module does not parse:\n" + printed, input);
     if (dp::dump_module(*again) != dump) return fail("printed module parses differently:\n" + printed, input);
     if (dp::print_module(*again, printed) != printed) return fail("printing is not idempotent", input);
+    {
+        // Комментарии — те же, кроме места: печать их не теряет и не повторяет.
+        auto a = dp::comment_texts(*m, input), b = dp::comment_texts(*again, printed);
+        std::sort(a.begin(), a.end());
+        std::sort(b.begin(), b.end());
+        if (a != b) return fail("printed module loses or repeats comments:\n" + printed, input);
+    }
     return true;
 }
 

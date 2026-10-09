@@ -1,0 +1,4 @@
+--- stderr ---
+error: fmt takes one or more files
+run 'dplang help' to list the commands
+[exit 2]

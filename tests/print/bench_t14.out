@@ -1,5 +1,7 @@
 const BLOCK: i32 = 4096
 
+// Блоки по BLOCK подряд; сумма блока и итог — слева направо, поэтому итог
+// не зависит от числа потоков.
 pub fn parallel_sum(values: []f64, threads: i32) f64 {
     let n = i32(len(values))
     let blocks = (n + BLOCK - 1) / BLOCK
@@ -24,6 +26,7 @@ pub fn parallel_sum(values: []f64, threads: i32) f64 {
     return total
 }
 
+// Локальные счётчики на поток и слияние по порядку потоков.
 pub fn parallel_histogram(values: []u32, buckets: i32, threads: i32) List[i64] {
     let n = i64(len(values))
     var local: List[List[i64]] = repeat(repeat(0, buckets), threads)

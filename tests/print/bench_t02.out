@@ -35,6 +35,7 @@ fn skip_blank(s: str, i: int) int {
     return j
 }
 
+// Слово w с позиции i, за которым не идёт символ ключа.
 fn word_at(s: str, i: int, w: str) bool {
     let end = i + len(w)
     return end <= len(s) && s[i..end] == w && (end == len(s) || !key_char(s[end]))
@@ -53,6 +54,7 @@ pub fn parse_line(line: str) !?Entry {
         i += 1
     }
     let key = line[k0..i]
+    // Символ, недопустимый в ключе, сразу за ключом — ошибка ключа.
     if i < len(line) && line[i] != '=' && !is_blank(line[i]) && line[i] != '#' {
         fail .BadKey
     }

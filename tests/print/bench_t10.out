@@ -46,6 +46,7 @@ pub fn encode(edits: []Edit) List[u8] {
     return out
 }
 
+// Varint с позиции pos; pos сдвигается за прочитанное.
 fn get_varint(bytes: []u8, pos: &mut int) !u64 {
     var v: u64 = 0
     for i in 0..10 {

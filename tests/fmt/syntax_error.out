@@ -1,0 +1,9 @@
+// spec: syntax
+fn main( {
+    println("x")
+}
+--- stderr ---
+syntax_error.dpm:2:10: error[E0201]: expected identifier, found '{'
+   2 | fn main( {
+     |          ^
+[exit 1]
