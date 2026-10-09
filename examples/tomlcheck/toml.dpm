@@ -1,0 +1,197 @@
+// Разбор строки подмножества TOML (README.md рядом): пустая строка и
+// комментарий, заголовок таблицы `[имя]`, пара `ключ = значение`.
+
+pub enum LineError {
+    BadKey
+    MissingEquals
+    BadValue
+    BadTable
+    TrailingText
+}
+
+pub enum Value {
+    Int(i64)
+    Bool(bool)
+    Str(str)
+}
+
+pub enum Line {
+    Blank
+    Table(str)
+    Pair { key: str, value: Value }
+}
+
+fn is_blank(c: u8) bool {
+    return c == ' ' || c == '\t'
+}
+
+fn key_start(c: u8) bool {
+    return c >= 'a' && c <= 'z' || c == '_'
+}
+
+fn key_char(c: u8) bool {
+    return key_start(c) || is_digit(c)
+}
+
+fn skip_blank(s: str, i: int) int {
+    var j = i
+    while j < len(s) && is_blank(s[j]) {
+        j += 1
+    }
+    return j
+}
+
+// Конец ключа, который начинается в i; i — если ключа там нет.
+fn key_end(s: str, i: int) int {
+    if i == len(s) || !key_start(s[i]) {
+        return i
+    }
+    var j = i + 1
+    while j < len(s) && key_char(s[j]) {
+        j += 1
+    }
+    return j
+}
+
+// После i — только пробелы и, может быть, комментарий.
+fn rest_is_empty(s: str, i: int) bool {
+    let j = skip_blank(s, i)
+    return j == len(s) || s[j] == '#'
+}
+
+// Слово w с позиции i, за которым не идёт символ ключа.
+fn word_at(s: str, i: int, w: str) bool {
+    let end = i + len(w)
+    return end <= len(s) && s[i..end] == w && (end == len(s) || !key_char(s[end]))
+}
+
+// Значение с позиции i до конца строки (комментарий в конце допустим).
+fn parse_value(line: str, i: int) LineError!Value {
+    if i == len(line) {
+        fail .BadValue
+    }
+    if line[i] == '"' {
+        var j = i + 1
+        while j < len(line) && line[j] != '"' {
+            j += 1
+        }
+        if j == len(line) {
+            fail .BadValue
+        }
+        if !rest_is_empty(line, j + 1) {
+            fail .TrailingText
+        }
+        return .Str(line[i + 1..j])
+    }
+    if word_at(line, i, "true") {
+        return bool_value(line, i + 4, true)
+    }
+    if word_at(line, i, "false") {
+        return bool_value(line, i + 5, false)
+    }
+    var j = i
+    if line[j] == '-' || line[j] == '+' {
+        j += 1
+    }
+    while j < len(line) && is_digit(line[j]) {
+        j += 1
+    }
+    if !rest_is_empty(line, j) {
+        fail .BadValue
+    }
+    if let n = parse_int(line[i..j]) {
+        return .Int(n)
+    }
+    fail .BadValue
+}
+
+fn bool_value(line: str, end: int, b: bool) LineError!Value {
+    if !rest_is_empty(line, end) {
+        fail .TrailingText
+    }
+    return .Bool(b)
+}
+
+// Разбор одной строки (без перевода строки в конце).
+pub fn parse_line(line: str) LineError!Line {
+    let i = skip_blank(line, 0)
+    if rest_is_empty(line, i) {
+        return .Blank
+    }
+    if line[i] == '[' {
+        let k0 = skip_blank(line, i + 1)
+        let k1 = key_end(line, k0)
+        let close = skip_blank(line, k1)
+        if k1 == k0 || close == len(line) || line[close] != ']' {
+            fail .BadTable
+        }
+        if !rest_is_empty(line, close + 1) {
+            fail .TrailingText
+        }
+        return .Table(line[k0..k1])
+    }
+    let k1 = key_end(line, i)
+    if k1 == i {
+        fail .BadKey
+    }
+    let eq = skip_blank(line, k1)
+    if eq == len(line) || line[eq] != '=' {
+        // Символ, недопустимый в ключе, сразу за ключом — ошибка ключа.
+        if k1 < len(line) && !is_blank(line[k1]) && line[k1] != '#' && line[k1] != '=' {
+            fail .BadKey
+        }
+        fail .MissingEquals
+    }
+    let value = try parse_value(line, skip_blank(line, eq + 1))
+    return .Pair { key: line[i..k1], value }
+}
+
+@test
+fn blank_and_comments() !void {
+    assert(try parse_line("") == .Blank)
+    assert(try parse_line("   \t") == .Blank)
+    assert(try parse_line("  # comment") == .Blank)
+}
+
+@test
+fn pairs() !void {
+    assert(try parse_line("name = \"tomlcheck\"") == .Pair { key: "name", value: .Str("tomlcheck") })
+    assert(try parse_line("max_len=-42 # comment") == .Pair { key: "max_len", value: .Int(-42) })
+    assert(try parse_line("\tdebug = true") == .Pair { key: "debug", value: .Bool(true) })
+    assert(try parse_line("big = +9223372036854775807") == .Pair { key: "big", value: .Int(9223372036854775807) })
+    assert(try parse_line("empty = \"\"") == .Pair { key: "empty", value: .Str("") })
+}
+
+@test
+fn tables() !void {
+    assert(try parse_line("[server]") == .Table("server"))
+    assert(try parse_line("  [ db_1 ]  # main") == .Table("db_1"))
+}
+
+// Ошибка разбора строки; none — строка верна.
+fn error_of(line: str) ?LineError {
+    match parse_line(line) {
+        ok(_) => return none
+        err(e) => return e
+    }
+}
+
+@test
+fn errors() {
+    assert(error_of("1x = 2") == .BadKey)
+    assert(error_of("ke-y = 2") == .BadKey)
+    assert(error_of("key 2") == .MissingEquals)
+    assert(error_of("key") == .MissingEquals)
+    assert(error_of("key =") == .BadValue)
+    assert(error_of("key = \"open") == .BadValue)
+    assert(error_of("key = 12abc") == .BadValue)
+    assert(error_of("key = 9223372036854775808") == .BadValue)
+    assert(error_of("key = -") == .BadValue)
+    assert(error_of("key = truest") == .BadValue)
+    assert(error_of("key = \"a\" b") == .TrailingText)
+    assert(error_of("key = true false") == .TrailingText)
+    assert(error_of("[]") == .BadTable)
+    assert(error_of("[table") == .BadTable)
+    assert(error_of("[table] x") == .TrailingText)
+    assert(error_of("key = 1") == none)
+}

@@ -1,0 +1,12 @@
+# Настройки сервера — пример верного файла.
+title = "tomlcheck — пример"
+debug = false
+
+[server]
+host = "localhost"   # имя узла
+port = 8080
+max_connections = +1024
+
+[limits]
+min_offset = -9223372036854775808
+retries = 3

@@ -1,0 +1,18 @@
+samples/config.toml: ok, 7 keys in 2 tables
+samples/crlf.toml: ok, 2 keys in 1 table
+--- stderr ---
+samples/broken.toml:2: error: key must start with a-z or '_' and contain only a-z, 0-9 and '_'
+samples/broken.toml:3: error: key must start with a-z or '_' and contain only a-z, 0-9 and '_'
+samples/broken.toml:4: error: expected '=' after the key
+samples/broken.toml:5: error: value must be an i64 integer, true, false or a "string"
+samples/broken.toml:6: error: value must be an i64 integer, true, false or a "string"
+samples/broken.toml:7: error: value must be an i64 integer, true, false or a "string"
+samples/broken.toml:8: error: unexpected text after the value
+samples/broken.toml:9: error: table header must be [name]
+samples/broken.toml:10: error: table header must be [name]
+samples/broken.toml:12: error: key 'name' is defined twice
+samples/broken.toml:14: error: table [server] is defined twice
+samples/latin1.toml: error: file is not valid UTF-8
+samples/missing.toml: error: file not found
+error: main failed with Failure.Invalid
+[exit 1]

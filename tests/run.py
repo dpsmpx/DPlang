@@ -19,7 +19,8 @@ C — $CC или cc, с ASan и UBSan, если они есть), и её выв
 через `dplang build` в профилях debug и release. Устройство —
 docs/compiler/README.md, docs/compiler/backend_c.md, docs/compiler/cli.md.
 Проход runtime — тесты runtime по функциям и запись плавающих против
-образца (tests/runtime.py). Проходы limits, worker, sandbox и service —
+образца (tests/runtime.py). Проход example — программы examples/X/: их
+тесты, запуск интерпретатором и сборкой, канонический вид. Проходы limits, worker, sandbox и service —
 tests/limits.py, tests/worker.py и tests/service.py; worker, sandbox и
 service идут на второй сборке, Release без санитайзеров (build/release/).
 
@@ -50,6 +51,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.join(ROOT, 'tests')
 SRC = os.path.join(ROOT, 'compiler')
 BUILD = os.path.join(ROOT, 'build', 'compiler')
+EXAMPLES = os.path.join(ROOT, 'examples')
+# Проход example: у программы examples/X/ с каталогом expected/ — четыре случая.
+EXAMPLE_CASES = ('test', 'run', 'build', 'fmt')
 DPLANG = os.path.join(BUILD, 'dplang')
 DPFUZZ = os.path.join(BUILD, 'dpfuzz')
 # Схема машиночитаемой диагностики: ей подчиняется каждый снимок набора diag.
@@ -154,6 +158,10 @@ def discover(pattern):
     native += [('build', path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
     deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
+    if os.path.isdir(EXAMPLES):
+        for ex in sorted(os.listdir(EXAMPLES)):
+            if os.path.isdir(os.path.join(EXAMPLES, ex, 'expected')):
+                deep += [('example', f'{ex}/{c}') for c in EXAMPLE_CASES if pattern in f'example/{ex}/{c}']
     wdir = os.path.join(TESTS, 'worker')
     online = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
               if name.endswith('.json') and pattern in 'worker/' + name]
@@ -239,6 +247,59 @@ def build_pass_one(arg):
         return None
     diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор', 'build', lineterm='', n=1)
     return 'вывод расходится с интерпретатором:\n' + '\n'.join(list(diff)[:20])
+
+
+def capture(argv, cwd):
+    """Вывод команды в формате ожидаемого: stdout, stderr, код."""
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'[timeout {TIMEOUT} s]\n'
+    out = r.stdout
+    if r.stderr:
+        out += '--- stderr ---\n' + r.stderr
+    if r.returncode != 0:
+        out += f'[exit {r.returncode}]\n'
+    return out
+
+
+def example_one(case, bless):
+    """Проход example (examples/X/, шаг 12 v0.1): test — отчёт `dplang test`
+    (expected/test.out); run — интерпретатор с аргументами expected/run.args
+    (expected/run.out); build — `dplang build --release` и запуск, вывод тот
+    же; fmt — исходники в каноническом виде."""
+    ex, kind = case.split('/')
+    cwd = os.path.join(EXAMPLES, ex)
+    exp = os.path.join(cwd, 'expected')
+    args = args_file(os.path.join(exp, 'run.args')) if os.path.exists(os.path.join(exp, 'run.args')) else []
+    if kind == 'fmt':
+        srcs = sorted(f for f in os.listdir(cwd) if f.endswith('.dpm'))
+        got = capture([DPLANG, 'fmt', '--check'] + srcs, cwd)
+        return None if got == '' else 'не в каноническом виде (dplang fmt):\n' + got
+    if kind == 'test':
+        got, want_path = capture([DPLANG, 'test', 'main.dpm'], cwd), os.path.join(exp, 'test.out')
+    elif kind == 'run':
+        got, want_path = capture([DPLANG, 'debug', 'run', 'main.dpm'] + args, cwd), os.path.join(exp, 'run.out')
+    else:
+        exe = os.path.join(NATIVE, 'example_' + ex)
+        r = subprocess.run([DPLANG, 'build', '--release', '-o', exe, 'main.dpm'], capture_output=True, text=True,
+                           timeout=TIMEOUT, cwd=cwd)
+        if r.returncode != 0:
+            return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+        got, want_path = capture([exe] + args, cwd), os.path.join(exp, 'run.out')
+        bless = False  # ожидаемое пишет случай run
+    if bless:
+        with open(want_path, 'w', encoding='utf-8') as f:
+            f.write(got)
+        return None
+    if not os.path.exists(want_path):
+        return f'нет ожидаемого {os.path.relpath(want_path, ROOT)} (--bless)'
+    with open(want_path, encoding='utf-8') as f:
+        want = f.read()
+    if got == want:
+        return None
+    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'ожидалось', 'получено', lineterm='', n=1)
+    return 'вывод расходится:\n' + '\n'.join(list(diff)[:20])
 
 
 def runtime_native(src, exe):
@@ -358,6 +419,8 @@ def run_one(suite, path, bless):
         return build_pass_one(path)
     if suite == 'limits':
         return limits.check_case(path, DPLANG)
+    if suite == 'example':
+        return example_one(path, bless)
     if suite == 'runtime':
         return runtime.check_case(path, DPLANG, runtime_native, NATIVE)
     if suite == 'worker':
@@ -407,7 +470,7 @@ def main():
             print(err)
             return 1
     # Проходы native и build сверяют с ожидаемым набора run — после того, как --bless его перепишет.
-    late = ('native', 'build')
+    late = ('native', 'build', 'example')
     tests = [t for t in tests if t[0] not in late] + [t for t in tests if t[0] in late]
     split = sum(1 for t in tests if t[0] not in late)
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
@@ -421,7 +484,7 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            name = suite + '/' + path if suite in ('limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
+            name = suite + '/' + path if suite in ('example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
             if suite == 'build':
                 name = 'build/' + os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')

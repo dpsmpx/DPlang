@@ -1,0 +1,145 @@
+// tomlcheck — проверка файлов подмножества TOML (README.md рядом).
+//
+//     tomlcheck <файл>...
+//
+// Ошибка — строка «файл:строка: error: сообщение» в stderr; верный файл —
+// «файл: ok, N keys in M tables» в stdout. Код выхода 1, если ошибки есть.
+import os
+import toml
+
+enum Failure {
+    Usage
+    Invalid
+}
+
+fn line_error_text(e: toml.LineError) str {
+    match e {
+        .BadKey => return "key must start with a-z or '_' and contain only a-z, 0-9 and '_'"
+        .MissingEquals => return "expected '=' after the key"
+        .BadValue => return "value must be an i64 integer, true, false or a \"string\""
+        .BadTable => return "table header must be [name]"
+        .TrailingText => return "unexpected text after the value"
+    }
+}
+
+fn io_error_text(e: os.IoError) str {
+    match e {
+        .NotFound => return "file not found"
+        .PermissionDenied => return "permission denied"
+        .InvalidUtf8 => return "file is not valid UTF-8"
+        .Other => return "cannot read the file"
+    }
+}
+
+// Итог проверки текста.
+struct Report {
+    errors: List[str]
+    keys: int = 0
+    tables: int = 0
+}
+
+// Строка без «\r» в конце (файлы с концами строк CRLF).
+fn without_cr(line: str) str {
+    if len(line) > 0 && line[len(line) - 1] == '\r' {
+        return line[0..len(line) - 1]
+    }
+    return line
+}
+
+// Проверка текста: ошибки строк, повторы ключей в таблице и таблиц.
+fn check_text(path: str, text: str) Report {
+    var r = Report { errors: [] }
+    var tables: List[str] = []
+    var keys: List[str] = []
+    let lines = text.split("\n")
+    for i in 0..len(lines) {
+        let n = str(i + 1)
+        match toml.parse_line(without_cr(lines[i])) {
+            err(e) => r.errors.push(path + ":" + n + ": error: " + line_error_text(e))
+            ok(line) => {
+                match line {
+                    .Blank => {}
+                    .Table(name) => {
+                        if tables.contains(name) {
+                            r.errors.push(path + ":" + n + ": error: table [" + name + "] is defined twice")
+                        }
+                        tables.push(name)
+                        keys.clear()
+                        r.tables += 1
+                    }
+                    .Pair { key } => {
+                        if keys.contains(key) {
+                            r.errors.push(path + ":" + n + ": error: key '" + key + "' is defined twice")
+                        }
+                        keys.push(key)
+                        r.keys += 1
+                    }
+                }
+            }
+        }
+    }
+    return r
+}
+
+fn plural(n: int, word: str) str {
+    if n == 1 {
+        return "1 " + word
+    }
+    return str(n) + " " + word + "s"
+}
+
+// Проверка файла; true — без ошибок.
+fn check_file(path: str) bool {
+    match os.read_file(path) {
+        err(e) => {
+            eprintln(path + ": error: " + io_error_text(e))
+            return false
+        }
+        ok(text) => {
+            let r = check_text(path, text)
+            for e in &r.errors {
+                eprintln(e)
+            }
+            if len(r.errors) == 0 {
+                println(path + ": ok, " + plural(r.keys, "key") + " in " + plural(r.tables, "table"))
+            }
+            return len(r.errors) == 0
+        }
+    }
+}
+
+fn main() Failure!void {
+    let args = os.args()
+    if len(args) == 0 {
+        eprintln("usage: tomlcheck <file.toml>...")
+        fail .Usage
+    }
+    var ok = true
+    for path in &args {
+        ok = check_file(path) && ok
+    }
+    if !ok {
+        fail .Invalid
+    }
+}
+
+@test
+fn reports_counts() {
+    let r = check_text("t.toml", "# config\n[server]\nport = 8080\nhost = \"localhost\"\n\n[db]\nport = 5432\n")
+    assert(len(r.errors) == 0 && r.keys == 3 && r.tables == 2)
+}
+
+@test
+fn reports_duplicates() {
+    let r = check_text("t.toml", "a = 1\na = 2\n[x]\na = 3\n[x]\n")
+    assert(len(r.errors) == 2)
+    assert(r.errors[0] == "t.toml:2: error: key 'a' is defined twice")
+    assert(r.errors[1] == "t.toml:5: error: table [x] is defined twice")
+}
+
+@test
+fn reports_line_numbers_and_crlf() {
+    let r = check_text("w.toml", "ok = true\r\nbad = \r\nalso_ok = 1\r\n")
+    assert(len(r.errors) == 1)
+    assert(r.errors[0] == "w.toml:2: error: value must be an i64 integer, true, false or a \"string\"")
+}

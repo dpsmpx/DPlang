@@ -1,0 +1,14 @@
+# Каждая строка ниже — своя ошибка.
+1st = 1
+na-me = "x"
+port 8080
+timeout =
+greeting = "hello
+size = 12kb
+on = true false
+[server
+[]
+name = "a"
+name = "b"
+[server]
+[server]
