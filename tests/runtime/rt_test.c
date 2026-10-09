@@ -1,6 +1,6 @@
 /* spec: trap.def trap.int trap.float trap.convert trap.index trap.builtin trap.memory trap.exit
  *
- * Тесты runtime по функциям (docs/runtime/README.md, раздел 8): граничные
+ * Тесты runtime по функциям (docs/runtime/README.md, раздел 9): граничные
  * значения проверенной арифметики, преобразований, строк, индексов и
  * памяти. Собирается с runtime и санитайзерами из tests/runtime.py.
  *
@@ -167,6 +167,16 @@ static void unit_str(void) {
     CHECK(dp_is_space(' ') && dp_is_space('\t') && dp_is_space('\n') && dp_is_space('\r'));
     CHECK(!dp_is_space('\v') && !dp_is_space('\f') && !dp_is_space(0xA0));
     CHECK(dp_is_alnum('5') && dp_is_alnum('q') && !dp_is_alnum('_'));
+
+    /* UTF-8 файла (Р51): строго, как у лексера. */
+#define U8(lit) (const uint8_t*)(lit), (int64_t)(sizeof(lit) - 1)
+    CHECK(dp_utf8_valid(U8("")) && dp_utf8_valid(U8("ascii")) && dp_utf8_valid(U8("\xc3\xa9\xe2\x82\xac")));
+    CHECK(dp_utf8_valid(U8("\xf0\x9f\x98\x80")) && dp_utf8_valid(U8("\xf4\x8f\xbf\xbf")));  /* U+10FFFF */
+    CHECK(!dp_utf8_valid(U8("\xff")) && !dp_utf8_valid(U8("\x80")) && !dp_utf8_valid(U8("\xc3")));
+    CHECK(!dp_utf8_valid(U8("\xc0\x80")) && !dp_utf8_valid(U8("\xe0\x80\x80")));  /* избыточные */
+    CHECK(!dp_utf8_valid(U8("\xed\xa0\x80")) && !dp_utf8_valid(U8("\xf4\x90\x80\x80")));  /* суррогат, > U+10FFFF */
+    CHECK(!dp_utf8_valid(U8("\xe2\x82")) && !dp_utf8_valid(U8("a\xe2\x28\xa1")));
+#undef U8
 }
 
 static void unit_index_memory(void) {

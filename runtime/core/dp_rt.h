@@ -220,6 +220,21 @@ void dp_print(dp_str s);
 void dp_println(dp_str s);
 void dp_eprintln(dp_str s);
 
+/* --- аргументы программы и файлы (Р51, stdlib/os.dpm) */
+
+/* Запоминает argv программы; argv[0] — её имя, в os.args не входит. */
+void dp_set_args(int argc, char** argv);
+int64_t dp_args_len(void);
+dp_str dp_arg(int64_t i, const char* loc);
+/* Файл целиком в *out (прежнее значение освобождается): 0 — прочитан;
+ * иначе 1 + вариант os.IoError — 1 NotFound, 2 PermissionDenied,
+ * 3 InvalidUtf8, 4 Other — и *out не меняется. Файл больше предела
+ * буфера — ловушка «out of memory». */
+int32_t dp_read_file(dp_str path, dp_str* out, const char* loc);
+/* Байты — корректный UTF-8: без обрезанных, избыточных записей,
+ * суррогатов и символов больше U+10FFFF. */
+bool dp_utf8_valid(const uint8_t* p, int64_t n);
+
 /* --- индексы и срезы (trap.index) */
 
 int64_t dp_check_index(int64_t i, int64_t len, const char* loc);

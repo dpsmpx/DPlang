@@ -3,6 +3,7 @@
  * (compiler/ir/interp.cpp): различающие тесты сравнивают вывод байт в байт. */
 #include "dp_rt.h"
 
+#include <errno.h>
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
@@ -370,6 +371,96 @@ void dp_eprintln(dp_str s) {
     fflush(stdout);
     if (s.len) fwrite(s.ptr, 1, (size_t)s.len, stderr);
     fputc('\n', stderr);
+}
+
+/* --- аргументы программы и файлы (Р51) */
+
+static int dp_argc;
+static char** dp_argv;
+
+void dp_set_args(int argc, char** argv) {
+    dp_argc = argc;
+    dp_argv = argv;
+}
+
+int64_t dp_args_len(void) { return dp_argc > 1 ? dp_argc - 1 : 0; }
+
+dp_str dp_arg(int64_t i, const char* loc) {
+    dp_check_index(i, dp_args_len(), loc);
+    const char* a = dp_argv[i + 1];
+    return dp_str_own((const uint8_t*)a, (int64_t)strlen(a), loc);
+}
+
+bool dp_utf8_valid(const uint8_t* p, int64_t n) {
+    int64_t i = 0;
+    while (i < n) {
+        uint8_t c = p[i];
+        int len;
+        uint32_t cp, min;
+        if (c < 0x80) {
+            i++;
+            continue;
+        }
+        if ((c & 0xE0) == 0xC0) {
+            len = 2, min = 0x80, cp = c & 0x1F;
+        } else if ((c & 0xF0) == 0xE0) {
+            len = 3, min = 0x800, cp = c & 0x0F;
+        } else if ((c & 0xF8) == 0xF0) {
+            len = 4, min = 0x10000, cp = c & 0x07;
+        } else {
+            return false;
+        }
+        if (i + len > n) return false;
+        for (int k = 1; k < len; k++) {
+            if ((p[i + k] & 0xC0) != 0x80) return false;
+            cp = (cp << 6) | (p[i + k] & 0x3F);
+        }
+        if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false;
+        i += len;
+    }
+    return true;
+}
+
+int32_t dp_read_file(dp_str path, dp_str* out, const char* loc) {
+    /* Путь — строка C: байт 0 внутри пути не называет никакого файла. */
+    if (path.len > 0 && memchr(path.ptr, 0, (size_t)path.len)) return 1;
+    char* name = (char*)dp_alloc(path.len + 1, 1, loc);
+    if (path.len) memcpy(name, path.ptr, (size_t)path.len);
+    name[path.len] = 0;
+    FILE* f = fopen(name, "rb");
+    int err = errno;
+    dp_free(name);
+    if (!f) return err == ENOENT || err == ENOTDIR ? 1 : err == EACCES || err == EPERM ? 2 : 4;
+    uint8_t* buf = NULL;
+    int64_t len = 0, cap = 0;
+    for (;;) {
+        if (len == cap) {
+            if (cap >= DP_MAX_BYTES) {
+                fclose(f);
+                dp_free(buf);
+                dp_trap(loc, "out of memory");
+            }
+            cap = cap ? (cap > DP_MAX_BYTES / 2 ? DP_MAX_BYTES : cap * 2) : 65536;
+            buf = (uint8_t*)dp_realloc(buf, cap, 1, loc);
+        }
+        size_t n = fread(buf + len, 1, (size_t)(cap - len), f);
+        len += (int64_t)n;
+        if (n == 0) break;
+    }
+    int bad = ferror(f);
+    fclose(f);
+    if (bad || !dp_utf8_valid(buf, len)) {
+        dp_free(buf);
+        return bad ? 4 : 3;
+    }
+    dp_str_drop(out);
+    if (len == 0) {
+        dp_free(buf);
+        return 0;
+    }
+    out->ptr = (uint8_t*)dp_realloc(buf, len, 1, loc);
+    out->len = len;
+    return 0;
 }
 
 /* --- индексы и срезы (trap.index) */

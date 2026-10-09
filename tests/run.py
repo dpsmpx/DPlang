@@ -77,6 +77,12 @@ def args_file(path):
         return shlex.split(f.read())
 
 
+def program_args(path):
+    """run: аргументы программы X.dpm — из X.args рядом, если он есть (os.args)."""
+    a = path[:-len('.dpm')] + '.args'
+    return args_file(a) if os.path.exists(a) else []
+
+
 # Набор → (расширение входа, программа, построитель аргументов по имени входа).
 SUITES = {
     'cli': ('.args', DPLANG, lambda name, path: args_file(path)),
@@ -89,7 +95,7 @@ SUITES = {
     'fail': ('.dpm', DPLANG, lambda name, path: ['check', name]),
     'diag': ('.dpm', DPLANG, lambda name, path: ['check', '--format=json', name]),
     'ir': ('.dpm', DPLANG, lambda name, path: ['debug', 'ir', name]),
-    'run': ('.dpm', DPLANG, lambda name, path: ['debug', 'run', name]),
+    'run': ('.dpm', DPLANG, lambda name, path: ['debug', 'run', name] + program_args(path)),
     'fmt': ('.dpm', DPLANG, lambda name, path: ['fmt', name]),
     'test': ('.dpm', DPLANG, lambda name, path: ['test', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
@@ -218,7 +224,8 @@ def build_pass_one(arg):
     if r.returncode != 0:
         return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
     try:
-        p = subprocess.run([exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+        p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
+                           timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout
@@ -252,7 +259,8 @@ def native_one(path):
     if err:
         return err
     try:
-        p = subprocess.run([exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+        p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
+                           timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout

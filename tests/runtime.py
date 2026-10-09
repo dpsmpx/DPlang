@@ -16,7 +16,7 @@
 
 Бинарник rt_test собирается с runtime теми же флагами, что программы
 прохода native (C11, -Werror, ASan и UBSan, если они есть). Устройство —
-docs/runtime/README.md, раздел 8.
+docs/runtime/README.md, раздел 9.
 """
 import math
 import os

@@ -722,8 +722,16 @@ private:
                     Intrinsic::Len,     Intrinsic::Repeat,  Intrinsic::Min,     Intrinsic::Max,     Intrinsic::Abs,
                     Intrinsic::ParseInt, Intrinsic::IsDigit, Intrinsic::IsAlpha, Intrinsic::IsSpace, Intrinsic::IsAlnum,
                     Intrinsic::Len,     Intrinsic::Print,   Intrinsic::Println, Intrinsic::Eprintln,
+                    Intrinsic::ArgsLen, Intrinsic::ArgAt,   Intrinsic::ReadFile,
                 };
                 rv = intrinsic(kMap[c->builtin], c->type);
+                if (b == sema::BuiltinFn::ReadFile) {  // __read_file(path, &mut out): out — изменяемое место
+                    rv.ops.push_back(rd(expr(args[0])));
+                    bool fresh = false;
+                    rv.place = lvalue(static_cast<const RefExpr*>(args[1])->operand, fresh);
+                    rv.has_place = true;
+                    return true;
+                }
                 rv.ops = exprs(args);
                 for (size_t i = 0; i < rv.ops.size(); i++) {
                     if (!(b == sema::BuiltinFn::Repeat && i == 0)) rv.ops[i] = rd(std::move(rv.ops[i]));

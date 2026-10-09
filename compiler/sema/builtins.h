@@ -21,13 +21,21 @@ inline constexpr BuiltinType kBuiltinTypes[] = {
 
 enum class BuiltinFn : uint8_t {
     Len, Repeat, Min, Max, Abs, ParseInt, IsDigit, IsAlpha, IsSpace, IsAlnum, Assert, Print, Println, Eprintln,
+    // Внутренние — только для модулей стандартной библиотеки (Р51): простые
+    // типы, обёртки с нормальным API — в stdlib/os.dpm.
+    ArgsLen,   // __args_len() i64 — число аргументов программы без её имени
+    ArgAt,     // __arg(i: i64) str — аргумент i
+    ReadFile,  // __read_file(path: str, out: &mut str) i32 — 0, или код ошибки os.IoError + 1
     Count
 };
 
 inline constexpr std::string_view kBuiltinFnNames[] = {
     "len", "repeat", "min", "max", "abs", "parse_int", "is_digit", "is_alpha", "is_space", "is_alnum", "assert",
-    "print", "println", "eprintln",
+    "print", "println", "eprintln", "__args_len", "__arg", "__read_file",
 };
+
+// Встроенная только для стандартной библиотеки.
+inline bool builtin_internal(int b) { return b >= static_cast<int>(BuiltinFn::ArgsLen); }
 
 // Номер встроенного типа или функции по имени; -1 — нет такого.
 inline int find_builtin_type(std::string_view name) {

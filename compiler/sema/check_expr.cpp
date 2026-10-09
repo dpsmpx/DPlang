@@ -192,6 +192,7 @@ void Checker::resolve_name(NameExpr* n) {
         return;
     }
     int b = find_builtin_fn(n->name);
+    if (b >= 0 && builtin_internal(b) && !m_.stdlib) b = -1;  // `__…` — только стандартной библиотеке (Р51)
     if (b >= 0) {
         n->res.kind = ResKind::BuiltinFn;
         n->res.index = static_cast<uint32_t>(b);
@@ -593,15 +594,36 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     c->builtin = b;
     auto bf = static_cast<BuiltinFn>(b);
     std::string name(kBuiltinFnNames[b]);
-    size_t want = bf == BuiltinFn::Repeat || bf == BuiltinFn::Min || bf == BuiltinFn::Max ? 2 : 1;
+    size_t want = bf == BuiltinFn::Repeat || bf == BuiltinFn::Min || bf == BuiltinFn::Max || bf == BuiltinFn::ReadFile
+                      ? 2
+                  : bf == BuiltinFn::ArgsLen ? 0
+                                             : 1;
     if (c->args.size() != want) {
         error(Code::E0407, c->span, "'" + name + "' takes " + std::to_string(want) + " argument" +
                                         (want == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
         for (Expr* a : c->args) infer(a, nullptr);
         return err();
     }
-    for (Expr* a : c->args) {
-        if (auto* r = as<RefExpr>(a)) {
+    for (size_t i = 0; i < c->args.size(); i++) {
+        Expr* a = c->args[i];
+        bool out = bf == BuiltinFn::ReadFile && i == 1;  // __read_file(path, &mut out)
+        auto* r = as<RefExpr>(a);
+        if (out) {
+            if (!r || !r->mut) {
+                error(Code::E0408, a->span, "the second argument of '" + name + "' is '&mut str'");
+                if (r) r->type = infer(r->operand, nullptr);
+                else infer(a, nullptr);
+                return err();
+            }
+            r->type = check(r->operand, prim(TK::Str));
+            if (!is_place(r->operand)) {
+                error(Code::E0501, r->operand->span, "a reference needs a variable, a field or an element");
+            } else {
+                mutable_place(r->operand, "mutate");
+            }
+            continue;
+        }
+        if (r) {
             error(Code::E0501, r->span, "built-in '" + name + "' takes values; remove the mark");
             r->type = infer(r->operand, nullptr);
             return err();
@@ -654,6 +676,13 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
         case BuiltinFn::Print: case BuiltinFn::Println: case BuiltinFn::Eprintln:
             check(c->args[0], prim(TK::Str));
             return prim(TK::Void);
+        case BuiltinFn::ArgsLen: return prim(TK::I64);
+        case BuiltinFn::ArgAt:
+            check(c->args[0], prim(TK::I64));
+            return prim(TK::Str);
+        case BuiltinFn::ReadFile:
+            check(c->args[0], prim(TK::Str));
+            return prim(TK::I32);
         case BuiltinFn::Count: break;
     }
     return err();

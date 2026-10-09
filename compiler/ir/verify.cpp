@@ -276,8 +276,29 @@ private:
                 same(op(1), prim(TK::Str), "operand");
                 if (rv.type->kind != TK::List || rv.type->elem != prim(TK::Str)) fail("split result is not List[str]");
                 break;
+            case Intrinsic::ArgsLen:
+                args(0);
+                same(rv.type, prim(TK::I64), "result");
+                break;
+            case Intrinsic::ArgAt:
+                args(1);
+                same(op(0), prim(TK::I64), "operand");
+                same(rv.type, prim(TK::Str), "result");
+                break;
+            case Intrinsic::ReadFile:
+                args(1);
+                same(op(0), prim(TK::Str), "operand");
+                same(rv.type, prim(TK::I32), "result");
+                if (!rv.has_place) {
+                    fail("read_file without a place for the text");
+                } else {
+                    same(place(rv.place), prim(TK::Str), "read_file place");
+                    if (!writable(rv.place)) fail("read_file into a read-only place");
+                }
+                break;
         }
         if (rv.has_place && rv.intrinsic != Intrinsic::ListPush && rv.intrinsic != Intrinsic::ListPop &&
+            rv.intrinsic != Intrinsic::ReadFile &&
             rv.intrinsic != Intrinsic::ListInsert && rv.intrinsic != Intrinsic::ListRemove &&
             rv.intrinsic != Intrinsic::ListClear && rv.intrinsic != Intrinsic::ListSort) {
             fail("receiver place on a method that only reads");

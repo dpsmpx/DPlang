@@ -1,0 +1,8 @@
+// spec: module.lookup
+// Встроенные `__…` видны только модулям стандартной библиотеки (Р51).
+fn main() {
+    let n = __args_len()
+    var text = ""
+    let code = __read_file("x", &mut text)
+    println(__arg(0))
+}

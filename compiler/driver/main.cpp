@@ -60,7 +60,8 @@ constexpr std::string_view kUsage =
     "  debug summary <file.dpm> print the interface summaries of a program\n"
     "  debug types <file.dpm>   print the syntax tree of the main module with types\n"
     "  debug ir <file.dpm>      print the Core IR of a program\n"
-    "  debug run <file.dpm>     run a program in the reference interpreter\n"
+    "  debug run <file.dpm> [args...]\n"
+    "                           run a program in the reference interpreter\n"
     "  debug c <file.dpm>       print the C code of a program (C backend)\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
@@ -381,7 +382,7 @@ int cmd_debug_ir(const Cli& cli, const std::vector<std::string_view>& args) {
 // debug run: исполнение программы эталонным интерпретатором (Р43).
 // Код выхода — код программы (docs/ir/README.md, «Интерпретатор»).
 int cmd_debug_run(const Cli& cli, const std::vector<std::string_view>& args) {
-    if (args.size() != 1) return usage_error("debug run takes one file");
+    if (args.empty()) return usage_error("debug run takes a file and the program's arguments");
     dp::SourceMap sources;
     dp::Diagnostics diags;
     auto prog = check_program(cli, args[0], sources, diags);
@@ -390,7 +391,8 @@ int cmd_debug_run(const Cli& cli, const std::vector<std::string_view>& args) {
     auto ir = lower_program(*prog, sources);
     if (!ir) return 3;
     std::fflush(stdout);
-    dp::ir::RunResult r = dp::ir::run(*ir, sources);
+    std::vector<std::string> prog_args(args.begin() + 1, args.end());
+    dp::ir::RunResult r = dp::ir::run(*ir, sources, prog_args);
     std::fflush(stdout);
     if (r.internal) return internal_error(r.message);
     return r.exit_code;
@@ -466,10 +468,9 @@ int cmd_test(const Cli& cli, const std::vector<std::string_view>& args) {
     if (!ir) return 3;
     std::vector<uint32_t> tests;
     std::vector<std::string> names;
-    std::string lib = cli.stdlib + "/";
     for (size_t i = 0; i < ir->fns.size(); i++) {
         const dp::sema::FnDef* d = ir->fns[i].def;
-        if (!d || !d->test || d->module->path.compare(0, lib.size(), lib) == 0) continue;
+        if (!d || !d->test || d->module->stdlib) continue;
         tests.push_back(static_cast<uint32_t>(i));
         names.push_back(ir->fns[i].name);
     }

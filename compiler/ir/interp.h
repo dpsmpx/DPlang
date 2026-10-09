@@ -5,6 +5,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "ir/ir.h"
 #include "support/source.h"
@@ -17,7 +18,8 @@ struct RunResult {
     std::string message;
 };
 
-// Исполняет main программы; вывод — в stdout и stderr процесса.
-RunResult run(const Program& p, const SourceMap& sources);
+// Исполняет main программы с аргументами args (без имени программы,
+// os.args); вывод — в stdout и stderr процесса.
+RunResult run(const Program& p, const SourceMap& sources, const std::vector<std::string>& args = {});
 
 }  // namespace dp::ir

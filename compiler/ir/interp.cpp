@@ -7,6 +7,7 @@
 // (kMaxFrames), переполнение — ловушка.
 #include "ir/interp.h"
 
+#include <cerrno>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
@@ -14,6 +15,7 @@
 #include <tuple>
 
 #include "support/format.h"
+#include "support/utf8.h"
 
 namespace dp::ir {
 
@@ -254,7 +256,8 @@ bool parse_int(const std::string& s, int64_t& out) {
 
 class Interp {
 public:
-    Interp(const Program& p, const SourceMap& sources) : p_(p), sources_(sources) {}
+    Interp(const Program& p, const SourceMap& sources, const std::vector<std::string>& args)
+        : p_(p), sources_(sources), args_(args) {}
 
     RunResult run() {
         if (p_.main_fn < 0) {
@@ -273,6 +276,7 @@ public:
 private:
     const Program& p_;
     const SourceMap& sources_;
+    const std::vector<std::string>& args_;  // аргументы программы без её имени (os.args)
     std::deque<Frame> frames_;
     bool stop_ = false;
     RunResult res_;
@@ -914,9 +918,56 @@ private:
                     a = p + sep.size();
                 }
             }
+            case Intrinsic::ArgsLen: return int_value(args_.size());
+            case Intrinsic::ArgAt: {
+                int64_t i = static_cast<int64_t>(arg(0, s0).i);
+                if (i < 0 || static_cast<uint64_t>(i) >= args_.size()) {
+                    trap("index " + std::to_string(i) + " is out of bounds for length " + std::to_string(args_.size()));
+                    return Value{};
+                }
+                return str_value(args_[static_cast<size_t>(i)]);
+            }
+            case Intrinsic::ReadFile: return read_file(fr, rv, ops[0].s);
             default: break;
         }
         return list_method(fr, rv, ops);
+    }
+
+    // __read_file (Р51): 0 и текст в месте; иначе 1 + номер варианта os.IoError
+    // (NotFound, PermissionDenied, InvalidUtf8, Other); место не меняется.
+    Value read_file(Frame& fr, const Rvalue& rv, const std::string& path) {
+        int code = 0;
+        std::string text;
+        FILE* f = path.find('\0') == std::string::npos ? std::fopen(path.c_str(), "rb") : nullptr;
+        if (!f) {
+            code = errno == ENOENT || errno == ENOTDIR ? 1 : errno == EACCES || errno == EPERM ? 2 : 4;
+            if (path.find('\0') != std::string::npos) code = 1;
+        } else {
+            char buf[65536];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) {
+                text.append(buf, n);
+                if (text.size() > kMaxLen) {
+                    std::fclose(f);
+                    trap("out of memory");
+                    return Value{};
+                }
+            }
+            if (std::ferror(f)) code = 4;  // например, каталог: EISDIR
+            std::fclose(f);
+            for (size_t i = 0; code == 0 && i < text.size();) {
+                uint32_t cp = 0;
+                uint32_t len = decode_utf8(text, i, cp);
+                if (len == 0) code = 3;
+                i += len ? len : 1;
+            }
+        }
+        if (code == 0) {
+            Ref r = resolve(fr, rv.place);
+            if (stop_) return Value{};
+            *r.v = str_value(std::move(text));
+        }
+        return int_value(static_cast<uint64_t>(code));
     }
 
     Value list_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
@@ -988,6 +1039,8 @@ private:
 
 }  // namespace
 
-RunResult run(const Program& p, const SourceMap& sources) { return Interp(p, sources).run(); }
+RunResult run(const Program& p, const SourceMap& sources, const std::vector<std::string>& args) {
+    return Interp(p, sources, args).run();
+}
 
 }  // namespace dp::ir

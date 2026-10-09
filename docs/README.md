@@ -13,7 +13,7 @@
 | узнать, что ещё не решено | `direction/OPEN_DECISIONS.md` |
 | понять архитектуру toolchain | `design/ARCHITECTURE.md` |
 | понять устройство языка | спецификация ядра `spec/core.md` (пишется в v0.1), за ней — проект `design/LANGUAGE.md` |
-| найти компонент в коде | `design/ARCHITECTURE.md`, раздел 10; затем `compiler/README.md` (устройство компилятора), `compiler/cli.md` (команды `dplang`), `ir/README.md` (Core IR, понижение, верификатор, интерпретатор), `compiler/backend_c.md` (C-бэкенд) и `runtime/README.md` (runtime); `stdlib/` появится с кодом |
+| найти компонент в коде | `design/ARCHITECTURE.md`, раздел 10; затем `compiler/README.md` (устройство компилятора), `compiler/cli.md` (команды `dplang`), `ir/README.md` (Core IR, понижение, верификатор, интерпретатор), `compiler/backend_c.md` (C-бэкенд), `runtime/README.md` (runtime) и `stdlib/README.md` (стандартная библиотека) |
 | понять контракт для потребителя | `policy/COMPATIBILITY.md`, `policy/DETERMINISM.md`, спецификация |
 | внести изменение | `../CLAUDE.md` (обязательный минимум), `policy/ENGINEERING.md` |
 | запустить проверки и прочитать результат | `../tools/check/run.sh`, `policy/TESTING.md` (разделы 5–6) |
@@ -36,7 +36,7 @@
 | `ir/` | описание Core IR: устройство, понижение, верификатор, эталонный интерпретатор | v0.1, шаги 6–7 |
 | `runtime/` | описание устройства runtime: ловушки, пределы, вход, код выхода | v0.1, шаги 8–9 |
 | `service/` | онлайн-компилятор (Р49): worker, песочница, шлюз, профиль, модель угроз, DoD сервиса; контракт для dpsmpx.com | основа сделана, запуск выключен |
-| `stdlib/` | описание устройства стандартной библиотеки | появится с кодом |
+| `stdlib/` | описание устройства стандартной библиотеки: модули, внутренние встроенные, `os` | v0.1, шаг 11 |
 | `archive/` | отработанное, с описью | появится с первым архивным документом |
 
 Корень репозитория: `README.md`, `CLAUDE.md`, `TODO.md`, `LICENSE`;

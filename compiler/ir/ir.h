@@ -108,6 +108,9 @@ enum class Intrinsic : uint8_t {
     ListPush, ListPop, ListInsert, ListRemove, ListClear, ListSort, ListContains,
     // методы str: получатель — первый операнд
     StrTrim, StrFind, StrStartsWith, StrSplit,
+    // внутренние стандартной библиотеки (Р51): аргументы программы и файл;
+    // у ReadFile place — строка для текста, ops[0] — путь, результат i32
+    ArgsLen, ArgAt, ReadFile,
 };
 
 enum class RvKind : uint8_t {

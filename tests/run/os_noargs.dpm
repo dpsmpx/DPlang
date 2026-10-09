@@ -1,0 +1,8 @@
+// spec: module.import
+// Без аргументов: os.args() пуст.
+import os
+
+fn main() {
+    let args = os.args()
+    println(str(len(args)) + " arguments")
+}

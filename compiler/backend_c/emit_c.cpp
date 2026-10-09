@@ -894,6 +894,12 @@ std::string FnEmitter::cast(const Rvalue& rv) {
 }
 
 std::string FnEmitter::intrinsic(const Rvalue& rv) {
+    if (rv.has_place && rv.intrinsic == Intrinsic::ReadFile) {
+        // __read_file (Р51): путь читается, текст — в место; результат — код.
+        std::string path = operand(rv.ops[0], false);
+        Lv out = place(rv.place);
+        return "dp_read_file(" + path + ", &" + out.expr + ", " + loc_ + ")";
+    }
     if (rv.has_place) {
         // Метод List: операнды — копии, вычисленные до места списка.
         std::vector<std::string> ops;
@@ -966,6 +972,8 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         }
         case Intrinsic::StrStartsWith: return "dp_str_starts_with(" + ops[0] + ", " + ops[1] + ")";
         case Intrinsic::StrSplit: return "dp_split__" + mangle(rv.type) + "(" + ops[0] + ", " + ops[1] + ", " + loc_ + ")";
+        case Intrinsic::ArgsLen: return "dp_args_len()";
+        case Intrinsic::ArgAt: return "dp_arg((int64_t)" + ops[0] + ", " + loc_ + ")";
         default: break;
     }
     error("unknown intrinsic");
@@ -1215,7 +1223,7 @@ std::string Emitter::entry() {
         return "";
     }
     std::string out = wrapper(p_.fns[static_cast<size_t>(p_.main_fn)], "dp_entry");
-    out += "int main(void) {\n" + uses() + "    return dp_run(dp_entry);\n}\n";
+    out += "int main(int argc, char** argv) {\n" + uses() + "    dp_set_args(argc, argv);\n    return dp_run(dp_entry);\n}\n";
     return out;
 }
 
@@ -1232,6 +1240,7 @@ std::string Emitter::test_entry() {
     out += "    if (argc < 2) {\n        printf(\"%ld\\n\", n);\n        return 0;\n    }\n";
     out += "    char* end = NULL;\n    long i = strtol(argv[1], &end, 10);\n";
     out += "    if (*argv[1] == 0 || *end != 0 || i < 0 || i >= n) return 2;\n";
+    out += "    dp_set_args(1, argv);  /* у теста нет аргументов программы */\n";
     out += "    return dp_run_test(dp_tests[i]);\n}\n";
     return out;
 }

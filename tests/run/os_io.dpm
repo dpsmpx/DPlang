@@ -1,0 +1,30 @@
+// spec: module.import builtin.functions
+// Модуль os (Р51): аргументы программы и чтение файлов; аргументы — os_io.args.
+import os
+
+fn describe(e: os.IoError) str {
+    match e {
+        .NotFound => return "not found"
+        .PermissionDenied => return "permission denied"
+        .InvalidUtf8 => return "not UTF-8"
+        .Other => return "cannot read"
+    }
+}
+
+fn show(path: str) {
+    match os.read_file(path) {
+        ok(text) => print(path + ": " + str(len(text)) + " bytes\n" + text)
+        err(e) => println(path + ": " + describe(e))
+    }
+}
+
+fn main() os.IoError!void {
+    let args = os.args()
+    println(str(len(args)) + " arguments")
+    for a in &args {
+        show(a)
+    }
+    // Ошибка из main — код 1 (trap.exit).
+    let text = try os.read_file("data/no_such_file.txt")
+    println(text)
+}
