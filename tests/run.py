@@ -91,11 +91,12 @@ SUITES = {
     'ir': ('.dpm', DPLANG, lambda name, path: ['debug', 'ir', name]),
     'run': ('.dpm', DPLANG, lambda name, path: ['debug', 'run', name]),
     'fmt': ('.dpm', DPLANG, lambda name, path: ['fmt', name]),
+    'test': ('.dpm', DPLANG, lambda name, path: ['test', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
 # Наборы, где тест может быть каталогом из нескольких модулей: вход —
 # X/main.dpm, ожидаемое — X.out рядом с каталогом.
-DIR_SUITES = {'sema', 'summary', 'types', 'fail', 'ir', 'run'}
+DIR_SUITES = {'sema', 'summary', 'types', 'fail', 'ir', 'run', 'test'}
 # Проход verify: каждая программа наборов понижается в Core IR, и
 # верификатор проверяет её (docs/ir/README.md). Ожидаемого нет: программа
 # с ошибками даёт код 1, без них — 0; внутренняя ошибка и падение — сбой.
@@ -200,7 +201,7 @@ def build_native(path, exe, cwd):
     return None
 
 
-def build_one(arg):
+def build_pass_one(arg):
     """Проход build: `dplang build` (профиль debug или --release), запуск,
     вывод — как у интерпретатора (docs/compiler/cli.md, «build»)."""
     path, _, profile = arg.partition(' ')
@@ -346,7 +347,7 @@ def run_one(suite, path, bless):
     if suite == 'native':
         return native_one(path)
     if suite == 'build':
-        return build_one(path)
+        return build_pass_one(path)
     if suite == 'limits':
         return limits.check_case(path, DPLANG)
     if suite == 'runtime':

@@ -1,0 +1,22 @@
+pub enum Shape {
+    Square(i64)
+    Rect { w: i64, h: i64 }
+}
+
+pub fn area(s: Shape) i64 {
+    match s {
+        .Square(a) => return a * a
+        .Rect { w, h } => return w * h
+    }
+}
+
+@test
+fn rect_area() {
+    assert(area(.Rect { w: 2, h: 5 }) == 10)
+}
+
+// Тест — обычная функция: её можно вызвать.
+@test
+fn calls_test() {
+    rect_area()
+}

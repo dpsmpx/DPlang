@@ -9,6 +9,7 @@ commands:
   fmt [--check] <file.dpm>...
                    format files in place; --check only lists files that would change
   help             show this help
+  test <file.dpm>  run the @test functions of a program, each in its own process
   --version        print the compiler version
   worker ...       serve one request of the online service (see docs/service)
 

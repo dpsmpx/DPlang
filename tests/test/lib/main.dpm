@@ -1,0 +1,9 @@
+// spec: module.test module.import
+// Тесты двух модулей, без main: сначала модуль, который импортируют.
+import shapes
+
+@det
+@test
+fn areas() {
+    assert(shapes.area(shapes.Shape.Square(3)) == 9)
+}

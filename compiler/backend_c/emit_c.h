@@ -19,4 +19,8 @@ struct CResult {
 
 CResult emit_c(const ir::Program& p, const SourceMap& sources);
 
+// Сборка тестов (Р50): вместо main — вход `программа N`, который исполняет
+// тест tests[N] (номер функции в IR); без аргумента — печатает их число.
+CResult emit_c_tests(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>& tests);
+
 }  // namespace dp::backend_c

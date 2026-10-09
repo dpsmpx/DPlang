@@ -1,0 +1,14 @@
+--- stderr ---
+tests.dpm:3:4: error[E0323]: test 'takes_param' must take no parameters and return nothing or 'E!void'
+   3 | fn takes_param(x: i32) {
+     |    ^~~~~~~~~~~
+tests.dpm:8:4: error[E0323]: test 'returns_value' must take no parameters and return nothing or 'E!void'
+   8 | fn returns_value() i32 {
+     |    ^~~~~~~~~~~~~
+tests.dpm:13:4: error[E0323]: test 'returns_result' must take no parameters and return nothing or 'E!void'
+  13 | fn returns_result() !i32 {
+     |    ^~~~~~~~~~~~~~
+tests.dpm:18:1: error[E0319]: attribute '@test' is given twice
+  18 | @test
+     | ^~~~~
+[exit 1]

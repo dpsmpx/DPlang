@@ -132,7 +132,8 @@ DP_CODE(E0318, "duplicate member",
         "A struct has two fields, an enum two variants, a variant two fields or a function two parameters "
         "with the same name (spec: module.scope).")
 DP_CODE(E0319, "unknown attribute",
-        "The only attribute of DPlang v0.1 is `@det` before a function (spec: syntax.item).")
+        "DPlang v0.1 has two attributes, both before a function: `@det` marks deterministic code and "
+        "`@test` marks a test (spec: syntax.item, module.test). Each is written once.")
 DP_CODE(E0320, "not a struct",
         "A struct literal `S { ... }` needs a struct or a record enum variant before the `{` "
         "(spec: expr.struct).")
@@ -146,6 +147,10 @@ DP_CODE(E0322, "missing or invalid `main`",
 
 // --- E04xx: типы (docs/spec/core.md, разделы 4–6 и 9)
 
+DP_CODE(E0323, "invalid test function",
+        "A function marked `@test` takes no parameters and returns nothing or `E!void` (`!void`): "
+        "`dplang test` calls it with no arguments and checks that it returns without a trap or an error "
+        "(spec: module.test).")
 DP_CODE(E0401, "mismatched types",
         "The value has a different type than the place it goes to (spec: type.conv). Only lossless "
         "conversions are implicit: a narrower integer to a wider one that holds all its values, `f32` to "

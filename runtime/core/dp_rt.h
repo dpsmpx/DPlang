@@ -234,5 +234,7 @@ void dp_check_repeat(int64_t n, const char* loc);
  * ошибки main или NULL. */
 typedef const char* (*dp_entry_fn)(void);
 int dp_run(dp_entry_fn entry);
+/* То же для теста (Р50): ошибка — «error: test failed with E.V». */
+int dp_run_test(dp_entry_fn entry);
 
 #endif

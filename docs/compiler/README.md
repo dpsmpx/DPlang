@@ -162,7 +162,8 @@ path/file.dpm:3:13: error[E0101]: unterminated string literal
 
 Машиночитаемый вид — JSON `{"diagnostics": [...]}`. У каждого сообщения
 есть поля `severity`, `code`, `message`, `file`, `line`, `col`,
-`end_line`, `end_col` и `notes`. Схема — `docs/compiler/cli.md` (шаг 10).
+`end_line`, `end_col` и `notes`. Схема — `docs/compiler/diagnostics.schema.json`,
+описание команд — `docs/compiler/cli.md`.
 Коды объясняет `dplang explain <код>`.
 
 ## Тесты
@@ -194,6 +195,8 @@ python3 tests/run.py -k cli       # отбор по подстроке пути
 | `diag` | `X.dpm` | `dplang check --format=json` — снимки машиночитаемой диагностики |
 | `ir` | `X.dpm` или каталог `X/` с `main.dpm` | `dplang debug ir` — золотые дампы Core IR после верификатора |
 | `run` | то же | `dplang debug run` — исполнение эталонным интерпретатором: вывод, ловушки, код выхода |
+| `fmt` | `X.dpm` | `dplang fmt` на копии файла — текст после записи, вывод и код; повторный `fmt --check` ничего не находит |
+| `test` | `X.dpm` или каталог `X/` с `main.dpm` | `dplang test` — отчёт тестов `@test` (Р50) |
 | `fuzz` | `X.args` — аргументы | `dpfuzz lex\|parse\|check\|contract <аргументы>`: корпус — файлы `.dpm` наборов, зерно и число входов заданы; `check` — разбор и проверка без падений, программы без ошибок ещё понижаются и проходят верификатор; `contract` — тела запросов `tests/worker/*.json`: ответ контракта v1 — JSON нужного вида, не больше предела, тот же при повторе |
 
 Проход `verify` — не набор, а проверка всех программ `.dpm` наборов:
@@ -225,6 +228,10 @@ ASan worker не запускается. `worker` — золотые тесты 
 (`$CC` или `cc`, с ASan и UBSan, если они есть) и запускается. Вывод
 сверяется с тем же ожидаемым, что у интерпретатора. Подробно —
 `docs/compiler/backend_c.md`, раздел 7.
+
+Проход `build` — каждая программа набора `run` собирается командой
+`dplang build` в профилях `debug` и `release`, запускается, и её вывод
+сверяется с ожидаемым интерпретатора (`docs/compiler/cli.md`, раздел 3).
 
 Проход `runtime` — тесты runtime по функциям (`tests/runtime.py`,
 `tests/runtime/rt_test.c`): граничные значения, каждая ловушка

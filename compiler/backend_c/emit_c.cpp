@@ -171,20 +171,21 @@ std::string drop_of(const Type* t, const std::string& lv) {
 
 class Emitter {
 public:
-    Emitter(const ir::Program& p, const SourceMap& sources) : p_(p), src_(sources) {}
+    Emitter(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>* tests)
+        : p_(p), src_(sources), tests_(tests) {}
 
     CResult run() {
         for (const Function& f : p_.fns) collect(f);
         std::string out;
         out += "// Сгенерировано C-бэкендом DPlang — не править.\n";
-        out += "#include <math.h>\n#include <string.h>\n\n#include \"dp_rt.h\"\n\n";
+        out += "#include <math.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n#include \"dp_rt.h\"\n\n";
         out += strings();
         out += type_decls();
         out += helpers();
         for (const Function& f : p_.fns) out += fn_head(f) + ";\n";
         out += "\n";
         for (const Function& f : p_.fns) out += function(f);
-        out += entry();
+        out += tests_ ? test_entry() : entry();
         return CResult{out, errors_};
     }
 
@@ -224,6 +225,7 @@ public:
 private:
     const ir::Program& p_;
     const SourceMap& src_;
+    const std::vector<uint32_t>* tests_ = nullptr;  // сборка тестов: функции-тесты по порядку
     std::vector<std::string> errors_;
     std::vector<const Type*> types_;  // составные типы в порядке определения
     std::set<const Type*> seen_;
@@ -598,7 +600,10 @@ private:
     // --- функции программы
 
     std::string function(const Function& f);
+    std::string wrapper(const Function& f, const std::string& name);
+    std::string uses();
     std::string entry();
+    std::string test_entry();
 };
 
 // Перевод одной функции: инструкции — блоками C со своими временными.
@@ -1177,35 +1182,66 @@ std::string Emitter::function(const Function& f) {
     return fe.run();
 }
 
+// Обёртка функции без параметров (main или тест) для dp_run: вызывает её
+// и возвращает имя варианта ошибки «E.V» или NULL.
+std::string Emitter::wrapper(const Function& f, const std::string& name) {
+    std::string out;
+    const Type* ret = f.ret;
+    if (ret->kind == TK::Result) {
+        const Type* e = ret->err;
+        out += "static const char* const " + name + "_err[] = {";
+        for (const sema::VariantDef& v : e->edef->variants) out += cstr(e->edef->name + "." + v.name) + ", ";
+        out += "NULL};\n\n";
+        out += "static const char* " + name + "(void) {\n    " + ctype(ret) + " r = " + fn_name(f) + "();\n";
+        out += "    const char* e = NULL;\n    if (r.is_err) e = " + name + "_err[r.err.tag];\n";
+        std::string d = drop_of(ret, "r");
+        if (!d.empty()) out += "    " + d + "\n";
+        out += "    return e;\n}\n\n";
+    } else {
+        out += "static const char* " + name + "(void) {\n    " + fn_name(f) + "();\n    return NULL;\n}\n\n";
+    }
+    return out;
+}
+
+std::string Emitter::uses() {
+    std::string out;
+    for (size_t i = 0; i < p_.strings.size(); i++) out += "    (void)dp_s" + std::to_string(i) + ";\n";
+    return out;
+}
+
 std::string Emitter::entry() {
     if (p_.main_fn < 0) {
         error("the program has no main function");
         return "";
     }
-    const Function& m = p_.fns[static_cast<size_t>(p_.main_fn)];
+    std::string out = wrapper(p_.fns[static_cast<size_t>(p_.main_fn)], "dp_entry");
+    out += "int main(void) {\n" + uses() + "    return dp_run(dp_entry);\n}\n";
+    return out;
+}
+
+// Вход сборки тестов (Р50): `программа N` исполняет тест номер N, без
+// аргумента — печатает их число.
+std::string Emitter::test_entry() {
     std::string out;
-    const Type* ret = m.ret;
-    std::string uses;
-    for (size_t i = 0; i < p_.strings.size(); i++) uses += "    (void)dp_s" + std::to_string(i) + ";\n";
-    if (ret->kind == TK::Result) {
-        const Type* e = ret->err;
-        out += "static const char* const dp_errname[] = {";
-        for (const sema::VariantDef& v : e->edef->variants) out += cstr(e->edef->name + "." + v.name) + ", ";
-        out += "NULL};\n\n";
-        out += "static const char* dp_entry(void) {\n" + uses + "    " + ctype(ret) + " r = " + fn_name(m) + "();\n";
-        out += "    const char* e = NULL;\n    if (r.is_err) e = dp_errname[r.err.tag];\n";
-        std::string d = drop_of(ret, "r");
-        if (!d.empty()) out += "    " + d + "\n";
-        out += "    return e;\n}\n\n";
-    } else {
-        out += "static const char* dp_entry(void) {\n" + uses + "    " + fn_name(m) + "();\n    return NULL;\n}\n\n";
-    }
-    out += "int main(void) { return dp_run(dp_entry); }\n";
+    for (size_t i = 0; i < tests_->size(); i++) out += wrapper(p_.fns[(*tests_)[i]], "dp_test" + std::to_string(i));
+    out += "static const dp_entry_fn dp_tests[] = {";
+    for (size_t i = 0; i < tests_->size(); i++) out += "dp_test" + std::to_string(i) + ", ";
+    out += "NULL};\n\n";
+    out += "int main(int argc, char** argv) {\n" + uses();
+    out += "    long n = " + std::to_string(tests_->size()) + ";\n";
+    out += "    if (argc < 2) {\n        printf(\"%ld\\n\", n);\n        return 0;\n    }\n";
+    out += "    char* end = NULL;\n    long i = strtol(argv[1], &end, 10);\n";
+    out += "    if (*argv[1] == 0 || *end != 0 || i < 0 || i >= n) return 2;\n";
+    out += "    return dp_run_test(dp_tests[i]);\n}\n";
     return out;
 }
 
 }  // namespace
 
-CResult emit_c(const ir::Program& p, const SourceMap& sources) { return Emitter(p, sources).run(); }
+CResult emit_c(const ir::Program& p, const SourceMap& sources) { return Emitter(p, sources, nullptr).run(); }
+
+CResult emit_c_tests(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>& tests) {
+    return Emitter(p, sources, &tests).run();
+}
 
 }  // namespace dp::backend_c

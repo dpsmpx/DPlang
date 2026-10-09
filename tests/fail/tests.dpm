@@ -1,0 +1,29 @@
+// spec: module.test syntax.item
+@test
+fn takes_param(x: i32) {
+    assert(x > 0)
+}
+
+@test
+fn returns_value() i32 {
+    return 1
+}
+
+@test
+fn returns_result() !i32 {
+    fail .Bad
+}
+
+@test
+@test
+fn twice() {}
+
+@det
+@test
+fn fine() E!void {
+    return
+}
+
+enum E {
+    Bad
+}

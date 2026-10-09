@@ -49,6 +49,7 @@ constexpr std::string_view kUsage =
     "  fmt [--check] <file.dpm>...\n"
     "                   format files in place; --check only lists files that would change\n"
     "  help             show this help\n"
+    "  test <file.dpm>  run the @test functions of a program, each in its own process\n"
     "  --version        print the compiler version\n"
     "  worker ...       serve one request of the online service (see docs/service)\n"
     "\n"
@@ -420,7 +421,7 @@ int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
     for (size_t i = 0; i < args.size(); i++) {
         std::string_view a = args[i];
         if (a == "--release") {
-            opt.release = true;
+            opt.profile = dp::Profile::Release;
         } else if (a == "-o") {
             if (i + 1 >= args.size()) return usage_error("-o needs a path");
             opt.output = std::string(args[++i]);
@@ -445,6 +446,41 @@ int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
     dp::backend_c::CResult c = dp::backend_c::emit_c(*ir, sources);
     if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
     return dp::build_native(c.code, opt);
+}
+
+// test: тесты программы (Р50, docs/compiler/cli.md, «test») — функции
+// @test всех модулей, кроме стандартной библиотеки, по порядку модулей
+// и объявлений; каждый — отдельным процессом, профиль test.
+int cmd_test(const Cli& cli, const std::vector<std::string_view>& args) {
+    std::vector<std::string_view> files;
+    for (std::string_view a : args) {
+        if (a.substr(0, 1) == "-") return usage_error("unknown option '" + std::string(a) + "'");
+        files.push_back(a);
+    }
+    if (files.size() != 1) return usage_error("test takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, files[0], sources, diags);
+    if (!prog || diags.has_errors()) return finish(diags, sources);
+    auto ir = lower_program(*prog, sources);
+    if (!ir) return 3;
+    std::vector<uint32_t> tests;
+    std::vector<std::string> names;
+    std::string lib = cli.stdlib + "/";
+    for (size_t i = 0; i < ir->fns.size(); i++) {
+        const dp::sema::FnDef* d = ir->fns[i].def;
+        if (!d || !d->test || d->module->path.compare(0, lib.size(), lib) == 0) continue;
+        tests.push_back(static_cast<uint32_t>(i));
+        names.push_back(ir->fns[i].name);
+    }
+    dp::backend_c::CResult c = dp::backend_c::emit_c_tests(*ir, sources, tests);
+    if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
+    dp::BuildOptions opt;
+    const char* cc = std::getenv("CC");
+    opt.cc = cc && *cc ? cc : "cc";
+    opt.runtime_dir = cli.runtime;
+    put(dp::render_text(diags.list(), sources), stderr);  // предупреждения, если будут
+    return dp::run_tests(c.code, names, opt);
 }
 
 int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
@@ -485,6 +521,7 @@ static int run_cli(int argc, char** argv) {
     if (cmd == "check") return cmd_check(cli, rest);
     if (cmd == "fmt") return cmd_fmt(rest);
     if (cmd == "build") return cmd_build(cli, rest);
+    if (cmd == "test") return cmd_test(cli, rest);
     if (cmd == "debug") return cmd_debug(cli, rest);
     return usage_error("unknown command '" + std::string(cmd) + "'");
 }

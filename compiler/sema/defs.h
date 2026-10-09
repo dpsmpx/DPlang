@@ -77,7 +77,8 @@ struct FnDef {
     std::string name;
     const ModuleInfo* module = nullptr;
     bool pub = false;
-    bool det = false;  // @det (Р12)
+    bool det = false;   // @det (Р12)
+    bool test = false;  // @test (Р50)
     Span span;
     std::vector<ParamDef> params;
     const Type* ret = nullptr;  // Void — без результата
