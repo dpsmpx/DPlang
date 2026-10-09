@@ -46,6 +46,13 @@ v0.0). Набор — **внутренний материал** (Р5): не пу
   драйвер, с пустыми телами. У `t12` вместо заготовки — `buggy.cm`; у
   `t13` — `before/` (с ним модель и начинает), `ref/` и
   `before_driver.cpp`.
+- `dp/` — то же на настоящем DPlang (v0.1, шаг 13; язык `docs/spec/core.md`):
+  решение `sol.dpm`, заготовка `stub.dpm` (у `t12` — `buggy.dpm`) и
+  драйвер `main.dpm` на DPlang (`import sol`). У `t13` — модули `before/` и
+  `ref/`, драйверы `main.dpm` (новый интерфейс) и `before_main.dpm`
+  (старый). Свой `expected.txt` — только где запись чисел другая (`t14`:
+  `f64` кратчайшей записью, Р48); численно он равен ожидаемому задачи.
+  Проверка — `bench/dp_check.py`, проход `bench` в `tests/run.py`.
 
 В опыте (шаг 0.5) модель получает `task.md`, начальный код и, на
 вариантах DPlang, краткую спецификацию варианта; драйвер и `expected.txt`
@@ -57,6 +64,7 @@ v0.0). Набор — **внутренний материал** (Р5): не пу
 ```sh
 python3 bench/run_refs.py          # входит в tools/check/run.sh
 python3 bench/run_refs.py --bless  # переписать expected.txt — только осознанно
+python3 tests/run.py -k bench/     # варианты dp/ на настоящем компиляторе
 ```
 
 Решения на DPlang проверяет `python3 bench/syntax/run_variants.py` (тоже в

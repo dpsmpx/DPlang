@@ -20,7 +20,8 @@ C — $CC или cc, с ASan и UBSan, если они есть), и её выв
 docs/compiler/README.md, docs/compiler/backend_c.md, docs/compiler/cli.md.
 Проход runtime — тесты runtime по функциям и запись плавающих против
 образца (tests/runtime.py). Проход example — программы examples/X/: их
-тесты, запуск интерпретатором и сборкой, канонический вид. Проходы limits, worker, sandbox и service —
+тесты, запуск интерпретатором и сборкой, канонический вид. Проход bench —
+эталонный набор задач на DPlang (bench/tasks/X/dp/, bench/dp_check.py). Проходы limits, worker, sandbox и service —
 tests/limits.py, tests/worker.py и tests/service.py; worker, sandbox и
 service идут на второй сборке, Release без санитайзеров (build/release/).
 
@@ -48,12 +49,20 @@ import service
 import worker
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, 'bench'))
+import dp_check  # noqa: E402 — проверка решений набора задач (bench/dp_check.py)
+
 TESTS = os.path.join(ROOT, 'tests')
 SRC = os.path.join(ROOT, 'compiler')
 BUILD = os.path.join(ROOT, 'build', 'compiler')
 EXAMPLES = os.path.join(ROOT, 'examples')
 # Проход example: у программы examples/X/ с каталогом expected/ — четыре случая.
 EXAMPLE_CASES = ('test', 'run', 'build', 'fmt')
+# Проход bench: задачи bench/tasks/X/ с каталогом dp/ (эталон набора на DPlang).
+BENCH_TASKS = os.path.join(ROOT, 'bench', 'tasks')
+BENCH_CASES = ('ref', 'start', 'fmt')
+# Начальный код задачи не принимается, и отказ — ожидаемого рода.
+BENCH_START = {'write': {'сборка'}, 'fix': {'вывод', 'ловушка'}, 'refactor': {'интерфейс'}}
 DPLANG = os.path.join(BUILD, 'dplang')
 DPFUZZ = os.path.join(BUILD, 'dpfuzz')
 # Схема машиночитаемой диагностики: ей подчиняется каждый снимок набора diag.
@@ -162,6 +171,11 @@ def discover(pattern):
         for ex in sorted(os.listdir(EXAMPLES)):
             if os.path.isdir(os.path.join(EXAMPLES, ex, 'expected')):
                 deep += [('example', f'{ex}/{c}') for c in EXAMPLE_CASES if pattern in f'example/{ex}/{c}']
+    if os.path.isdir(BENCH_TASKS):
+        for t in sorted(os.listdir(BENCH_TASKS)):
+            if os.path.isdir(os.path.join(BENCH_TASKS, t, 'dp')):
+                cases = BENCH_CASES + (('before',) if bench_kind(t) == 'refactor' else ())
+                deep += [('bench', f'{t}/{c}') for c in cases if pattern in f'bench/{t}/{c}']
     wdir = os.path.join(TESTS, 'worker')
     online = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
               if name.endswith('.json') and pattern in 'worker/' + name]
@@ -302,6 +316,72 @@ def example_one(case, bless):
     return 'вывод расходится:\n' + '\n'.join(list(diff)[:20])
 
 
+def bench_kind(task):
+    path = os.path.join(BENCH_TASKS, task)
+    if os.path.isdir(os.path.join(path, 'before')):
+        return 'refactor'
+    return 'fix' if os.path.exists(os.path.join(path, 'buggy.cpp')) else 'write'
+
+
+def bench_files(task, which):
+    """Модули решения задачи (имя → текст): эталон ref, начальный код start, before."""
+    dp = os.path.join(BENCH_TASKS, task, 'dp')
+    if bench_kind(task) == 'refactor':
+        d = os.path.join(dp, 'before' if which in ('start', 'before') else 'ref')
+        return {n: dp_check.read(os.path.join(d, n)) for n in sorted(os.listdir(d)) if n.endswith('.dpm')}
+    name = 'sol.dpm' if which == 'ref' else ('buggy.dpm' if bench_kind(task) == 'fix' else 'stub.dpm')
+    return {'sol.dpm': dp_check.read(os.path.join(dp, name))}
+
+
+def same_numbers(a, b):
+    """Выводы равны с точностью до записи чисел: слова те же, числа равны как f64."""
+    la, lb = a.splitlines(), b.splitlines()
+    if len(la) != len(lb):
+        return False
+    for x, y in zip(la, lb):
+        wx, wy = x.split(), y.split()
+        if len(wx) != len(wy):
+            return False
+        for u, v in zip(wx, wy):
+            if u == v:
+                continue
+            try:
+                if float(u) != float(v):
+                    return False
+            except ValueError:
+                return False
+    return True
+
+
+def bench_one(case):
+    """Проход bench (bench/tasks/X/dp/, шаг 13 v0.1): ref — эталон с драйвером
+    принимается (bench/dp_check.py), свой dp/expected.txt численно равен
+    expected.txt задачи; start — начальный код для модели не принимается, и
+    отказ ожидаемого рода; before — модули до рефакторинга со старым
+    драйвером дают тот же вывод; fmt — исходники в каноническом виде."""
+    task, kind = case.split('/')
+    path = os.path.join(BENCH_TASKS, task)
+    dp = os.path.join(path, 'dp')
+    if kind == 'fmt':
+        srcs = sorted(os.path.relpath(os.path.join(d, f), dp) for d, _, fs in os.walk(dp) for f in fs if f.endswith('.dpm'))
+        got = capture([DPLANG, 'fmt', '--check'] + srcs, dp)
+        return None if got == '' else 'не в каноническом виде (dplang fmt):\n' + got
+    want = dp_check.expected(path)
+    if kind == 'ref' and os.path.exists(os.path.join(dp, 'expected.txt')):
+        if not same_numbers(want, dp_check.read(os.path.join(path, 'expected.txt'))):
+            return 'dp/expected.txt не равен expected.txt задачи даже с точностью до записи чисел'
+    driver = dp_check.read(os.path.join(dp, 'before_main.dpm' if kind == 'before' else dp_check.DRIVER))
+    build_dir = os.path.join(NATIVE, 'bench', task, kind)
+    if os.path.isdir(build_dir):
+        shutil.rmtree(build_dir)
+    cls, msg = dp_check.evaluate(bench_files(task, kind), driver, want, build_dir, DPLANG)
+    if kind == 'start':
+        if cls in BENCH_START[bench_kind(task)]:
+            return None
+        return f'начальный код: «{cls}», ожидалось {"/".join(sorted(BENCH_START[bench_kind(task)]))}: {msg}'
+    return None if cls == dp_check.ACCEPTED else f'«{cls}»: {msg}'
+
+
 def runtime_native(src, exe):
     """Сборка для прохода runtime: программа без ошибок проверки."""
     err = build_native(src, exe, os.path.dirname(src))
@@ -421,6 +501,8 @@ def run_one(suite, path, bless):
         return limits.check_case(path, DPLANG)
     if suite == 'example':
         return example_one(path, bless)
+    if suite == 'bench':
+        return bench_one(path)
     if suite == 'runtime':
         return runtime.check_case(path, DPLANG, runtime_native, NATIVE)
     if suite == 'worker':
@@ -470,7 +552,7 @@ def main():
             print(err)
             return 1
     # Проходы native и build сверяют с ожидаемым набора run — после того, как --bless его перепишет.
-    late = ('native', 'build', 'example')
+    late = ('native', 'build', 'example', 'bench')
     tests = [t for t in tests if t[0] not in late] + [t for t in tests if t[0] in late]
     split = sum(1 for t in tests if t[0] not in late)
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
@@ -484,7 +566,7 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            name = suite + '/' + path if suite in ('example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
+            name = suite + '/' + path if suite in ('bench', 'example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
             if suite == 'build':
                 name = 'build/' + os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
