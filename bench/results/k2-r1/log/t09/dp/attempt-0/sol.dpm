@@ -1,0 +1,29 @@
+// t09: заготовка — напишите тела функций по task.md.
+pub enum InvError {
+    Invalid
+    NotEnough
+}
+
+pub struct Inventory {
+    // поля — на ваш выбор
+}
+
+pub fn inv_new(slots: i32) Inventory {
+    // ...
+}
+
+pub fn inv_add(inv: &mut Inventory, item: i32, count: i32) InvError!i32 {
+    // ...
+}
+
+pub fn inv_total(inv: &Inventory, item: i32) i32 {
+    // ...
+}
+
+pub fn inv_remove(inv: &mut Inventory, item: i32, count: i32) InvError!void {
+    // ...
+}
+
+pub fn inv_describe(inv: &Inventory) str {
+    // ...
+}

@@ -1,0 +1,438 @@
+// t16: калькулятор целых выражений с переменными.
+// Один проход: разбор с одновременным вычислением. Первая ошибка разбора
+// важнее любой ошибки вычисления; после ошибки вычисления разбор идёт
+// дальше, а вычисление — нет.
+
+const MAXV: i64 = 9223372036854775807
+const MINV: i64 = -9223372036854775807 - 1
+
+// Виды лексем; у операторов вид — сам байт оператора.
+const K_END: u8 = 0
+const K_NUM: u8 = 1
+const K_NAME: u8 = 2
+const K_ERR: u8 = 3
+
+struct State {
+    src: str
+    n: int
+    pos: int
+    kind: u8
+    tstart: int
+    tend: int
+    tval: i64
+    tmsg: str
+    perr: bool
+    pmsg: str
+    pcol: int
+    eerr: bool
+    emsg: str
+    ecol: int
+    names: List[str]
+    vals: List[i64]
+}
+
+fn is_name_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_name_char(c: u8) bool {
+    return is_name_start(c) || is_digit(c)
+}
+
+fn is_op_char(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' ||
+        c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+fn advance(p: &mut State) {
+    while p.pos < p.n && p.src[p.pos] == ' ' {
+        p.pos += 1
+    }
+    p.tstart = p.pos
+    if p.pos >= p.n {
+        p.kind = K_END
+        p.tend = p.pos
+        return
+    }
+    let c = p.src[p.pos]
+    if is_digit(c) {
+        var v: i64 = 0
+        var big = false
+        while p.pos < p.n && is_digit(p.src[p.pos]) {
+            let d = i64(p.src[p.pos]) - 48
+            if !big {
+                if v > (MAXV - d) / 10 {
+                    big = true
+                } else {
+                    v = v * 10 + d
+                }
+            }
+            p.pos += 1
+        }
+        p.tend = p.pos
+        if big {
+            p.kind = K_ERR
+            p.tmsg = "number too large"
+        } else {
+            p.kind = K_NUM
+            p.tval = v
+        }
+        return
+    }
+    if is_name_start(c) {
+        while p.pos < p.n && is_name_char(p.src[p.pos]) {
+            p.pos += 1
+        }
+        p.tend = p.pos
+        p.kind = K_NAME
+        return
+    }
+    if is_op_char(c) {
+        p.pos += 1
+        p.tend = p.pos
+        p.kind = c
+        return
+    }
+    p.pos += 1
+    p.tend = p.pos
+    p.kind = K_ERR
+    let ch = p.src[p.tstart..p.tend]
+    p.tmsg = "unexpected character '" + ch + "'"
+}
+
+fn next_is_eq(p: &mut State) bool {
+    var i = p.pos
+    while i < p.n && p.src[i] == ' ' {
+        i += 1
+    }
+    return i < p.n && p.src[i] == '='
+}
+
+fn perror(p: &mut State, msg: str, col: int) {
+    if !p.perr {
+        p.perr = true
+        p.pmsg = msg
+        p.pcol = col
+    }
+}
+
+fn eval_fail(p: &mut State, msg: str, col: int) {
+    if !p.eerr {
+        p.eerr = true
+        p.emsg = msg
+        p.ecol = col
+    }
+}
+
+// Ошибка грамматики у текущей лексемы.
+fn unexpected(p: &mut State) {
+    if p.kind == K_ERR {
+        let m1 = p.tmsg
+        let c1 = p.tstart + 1
+        perror(&mut p, m1, c1)
+    } else if p.kind == K_END {
+        let c2 = p.n + 1
+        perror(&mut p, "unexpected end", c2)
+    } else {
+        let t3 = p.src[p.tstart..p.tend]
+        let c3 = p.tstart + 1
+        perror(&mut p, "unexpected '" + t3 + "'", c3)
+    }
+}
+
+fn expect_close(p: &mut State) {
+    if p.kind == K_ERR {
+        unexpected(&mut p)
+    } else if p.kind == K_END {
+        let c2 = p.n + 1
+        perror(&mut p, "expected ')'", c2)
+    } else {
+        let c3 = p.tstart + 1
+        perror(&mut p, "expected ')'", c3)
+    }
+}
+
+fn add_ok(a: i64, b: i64) bool {
+    if b > 0 {
+        return a <= MAXV - b
+    }
+    return a >= MINV - b
+}
+
+fn sub_ok(a: i64, b: i64) bool {
+    if b > 0 {
+        return a >= MINV + b
+    }
+    return a <= MAXV + b
+}
+
+fn mul_ok(a: i64, b: i64) bool {
+    if a == 0 || b == 0 {
+        return true
+    }
+    if a > 0 {
+        if b > 0 {
+            return a <= MAXV / b
+        }
+        return b >= MINV / a
+    }
+    if b > 0 {
+        return a >= MINV / b
+    }
+    return a >= MAXV / b
+}
+
+fn apply(p: &mut State, a: i64, b: i64, op: u8, col: int) i64 {
+    if op == '+' {
+        if !add_ok(a, b) {
+            eval_fail(&mut p, "overflow", col)
+            return 0
+        }
+        return a + b
+    }
+    if op == '-' {
+        if !sub_ok(a, b) {
+            eval_fail(&mut p, "overflow", col)
+            return 0
+        }
+        return a - b
+    }
+    if op == '*' {
+        if !mul_ok(a, b) {
+            eval_fail(&mut p, "overflow", col)
+            return 0
+        }
+        return a * b
+    }
+    if b == 0 {
+        eval_fail(&mut p, "division by zero", col)
+        return 0
+    }
+    if op == '/' {
+        if a == MINV && b == -1 {
+            eval_fail(&mut p, "overflow", col)
+            return 0
+        }
+        return a / b
+    }
+    if b == -1 {
+        return 0
+    }
+    return a % b
+}
+
+fn do_pow(p: &mut State, base: i64, ex: i64, col: int) i64 {
+    if ex < 0 {
+        eval_fail(&mut p, "negative exponent", col)
+        return 0
+    }
+    if ex == 0 {
+        return 1
+    }
+    if base == 0 || base == 1 {
+        return base
+    }
+    if base == -1 {
+        if ex % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    // |base| >= 2: переполнение не позже 64-го умножения.
+    var r: i64 = 1
+    var k: i64 = 0
+    while k < ex {
+        if !mul_ok(r, base) {
+            eval_fail(&mut p, "overflow", col)
+            return 0
+        }
+        r = r * base
+        k += 1
+    }
+    return r
+}
+
+fn set_var(p: &mut State, name: str, v: i64) {
+    var i = 0
+    while i < len(p.names) {
+        if p.names[i] == name {
+            p.vals[i] = v
+            return
+        }
+        i += 1
+    }
+    p.names.push(name)
+    p.vals.push(v)
+}
+
+fn get_var(p: &mut State, name: str, col: int) i64 {
+    var i = 0
+    while i < len(p.names) {
+        if p.names[i] == name {
+            return p.vals[i]
+        }
+        i += 1
+    }
+    eval_fail(&mut p, "unknown variable '" + name + "'", col)
+    return 0
+}
+
+fn parse_atom(p: &mut State) i64 {
+    if p.kind == K_NUM {
+        let nv = p.tval
+        advance(&mut p)
+        return nv
+    }
+    if p.kind == K_NAME {
+        let name = p.src[p.tstart..p.tend]
+        let ncol = p.tstart + 1
+        advance(&mut p)
+        if p.perr || p.eerr {
+            return 0
+        }
+        return get_var(&mut p, name, ncol)
+    }
+    if p.kind == '(' {
+        advance(&mut p)
+        let inner = parse_expr(&mut p)
+        if p.perr {
+            return 0
+        }
+        if p.kind != ')' {
+            expect_close(&mut p)
+            return 0
+        }
+        advance(&mut p)
+        return inner
+    }
+    unexpected(&mut p)
+    return 0
+}
+
+fn parse_power(p: &mut State) i64 {
+    let base = parse_atom(&mut p)
+    if p.perr {
+        return 0
+    }
+    if p.kind == '^' {
+        let col = p.tstart + 1
+        advance(&mut p)
+        let ex = parse_unary(&mut p)
+        if p.perr || p.eerr {
+            return 0
+        }
+        return do_pow(&mut p, base, ex, col)
+    }
+    return base
+}
+
+fn parse_unary(p: &mut State) i64 {
+    var neg = 0
+    var ncol = 0
+    while p.kind == '-' {
+        neg += 1
+        ncol = p.tstart + 1
+        advance(&mut p)
+    }
+    let v = parse_power(&mut p)
+    if p.perr || p.eerr || neg == 0 {
+        return v
+    }
+    // Переполниться может только самый внутренний минус: -MIN.
+    if v == MINV {
+        eval_fail(&mut p, "overflow", ncol)
+        return 0
+    }
+    if neg % 2 == 1 {
+        return -v
+    }
+    return v
+}
+
+fn parse_term(p: &mut State) i64 {
+    var acc = parse_unary(&mut p)
+    while !p.perr && (p.kind == '*' || p.kind == '/' || p.kind == '%') {
+        let op = p.kind
+        let col = p.tstart + 1
+        advance(&mut p)
+        let r = parse_unary(&mut p)
+        if !p.perr && !p.eerr {
+            acc = apply(&mut p, acc, r, op, col)
+        }
+    }
+    return acc
+}
+
+fn parse_expr(p: &mut State) i64 {
+    var acc = parse_term(&mut p)
+    while !p.perr && (p.kind == '+' || p.kind == '-') {
+        let op = p.kind
+        let col = p.tstart + 1
+        advance(&mut p)
+        let r = parse_term(&mut p)
+        if !p.perr && !p.eerr {
+            acc = apply(&mut p, acc, r, op, col)
+        }
+    }
+    return acc
+}
+
+fn parse_stmt(p: &mut State) i64 {
+    var is_assign = false
+    if p.kind == K_NAME {
+        is_assign = next_is_eq(&mut p)
+    }
+    if is_assign {
+        let name = p.src[p.tstart..p.tend]
+        advance(&mut p)
+        advance(&mut p)
+        let v = parse_expr(&mut p)
+        if !p.perr && !p.eerr {
+            set_var(&mut p, name, v)
+        }
+        return v
+    }
+    return parse_expr(&mut p)
+}
+
+fn parse_program(p: &mut State) i64 {
+    var last = parse_stmt(&mut p)
+    while !p.perr && p.kind == ';' {
+        advance(&mut p)
+        last = parse_stmt(&mut p)
+    }
+    if !p.perr && p.kind != K_END {
+        unexpected(&mut p)
+    }
+    return last
+}
+
+pub fn calc(src: str) str {
+    var p = State {
+        src: src,
+        n: len(src),
+        pos: 0,
+        kind: K_END,
+        tstart: 0,
+        tend: 0,
+        tval: 0,
+        tmsg: "",
+        perr: false,
+        pmsg: "",
+        pcol: 0,
+        eerr: false,
+        emsg: "",
+        ecol: 0,
+        names: [],
+        vals: [],
+    }
+    advance(&mut p)
+    let res = parse_program(&mut p)
+    if p.perr {
+        return "error at " + str(p.pcol) + ": " + p.pmsg
+    }
+    if p.eerr {
+        return "error at " + str(p.ecol) + ": " + p.emsg
+    }
+    return str(res)
+}

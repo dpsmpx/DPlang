@@ -1,0 +1,170 @@
+// t17: перенос и выравнивание текста.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+// Строка из n пробелов.
+fn spaces(n: int) str {
+    var s = ""
+    var i = 0
+    while i < n {
+        s += " "
+        i += 1
+    }
+    return s
+}
+
+// Слова строки: наибольшие цепочки байт без пробела.
+fn words_of(line: str) List[str] {
+    var ws: List[str] = []
+    var i = 0
+    let n = len(line)
+    while i < n {
+        if line[i] == ' ' {
+            i += 1
+        } else {
+            let start = i
+            while i < n && line[i] != ' ' {
+                i += 1
+            }
+            ws.push(line[start..i])
+        }
+    }
+    return ws
+}
+
+// Слова через один пробел.
+fn join_words(ws: List[str]) str {
+    var s = ""
+    for i in 0..len(ws) {
+        if i > 0 {
+            s += " "
+        }
+        s += ws[i]
+    }
+    return s
+}
+
+// Растянуть строку из нескольких слов ровно до width.
+fn justify(ws: List[str], width: int) str {
+    let n = len(ws)
+    var total = 0
+    for i in 0..n {
+        total += len(ws[i])
+    }
+    let gaps = n - 1
+    let free = width - total
+    let base = free / gaps
+    let extra = free % gaps
+    var s = ws[0]
+    for j in 1..n {
+        var k = base
+        if j - 1 < extra {
+            k += 1
+        }
+        s += spaces(k) + ws[j]
+    }
+    return s
+}
+
+// Готовая строка из слов; stretch — можно ли растягивать при Justify.
+fn render(ws: List[str], width: int, align: Align, stretch: bool) str {
+    let n = len(ws)
+    let s = join_words(ws)
+    let gap = width - len(s)
+    var r = s
+    match align {
+        .Left => r = s
+        .Right => r = spaces(gap) + s
+        .Center => r = spaces(gap / 2) + s
+        .Justify => {
+            if stretch && n > 1 {
+                r = justify(ws, width)
+            }
+        }
+    }
+    return r
+}
+
+// Строки одного абзаца.
+fn layout(words: List[str], width: int, align: Align) List[str] {
+    var res: List[str] = []
+    var cur: List[str] = []
+    var cur_len = 0
+    let cut = width - 1
+    for i in 0..len(words) {
+        var word = words[i]
+        if len(word) > width {
+            if len(cur) > 0 {
+                res.push(render(cur, width, align, true))
+                cur.clear()
+                cur_len = 0
+            }
+            while len(word) > width {
+                res.push(render([word[0..cut] + "-"], width, align, false))
+                word = word[cut..]
+            }
+        }
+        if len(cur) == 0 {
+            cur.push(word)
+            cur_len = len(word)
+        } else if cur_len + 1 + len(word) <= width {
+            cur.push(word)
+            cur_len += 1 + len(word)
+        } else {
+            res.push(render(cur, width, align, true))
+            cur.clear()
+            cur.push(word)
+            cur_len = len(word)
+        }
+    }
+    if len(cur) > 0 {
+        res.push(render(cur, width, align, false))
+    }
+    return res
+}
+
+// Дописать абзац в результат; между абзацами — пустая строка.
+fn add_para(out: &mut List[str], words: List[str], width: int, align: Align) {
+    if len(out) > 0 {
+        out.push("")
+    }
+    let ls = layout(words, width, align)
+    for i in 0..len(ls) {
+        out.push(ls[i])
+    }
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    if width < 2 || width > 200 {
+        fail WrapError.BadWidth
+    }
+    let w: int = width
+    var out: List[str] = []
+    var para: List[str] = []
+    let lines = text.split("\n")
+    for i in 0..len(lines) {
+        let ws = words_of(lines[i])
+        if len(ws) == 0 {
+            if len(para) > 0 {
+                add_para(&mut out, para, w, align)
+                para.clear()
+            }
+        } else {
+            for j in 0..len(ws) {
+                para.push(ws[j])
+            }
+        }
+    }
+    if len(para) > 0 {
+        add_para(&mut out, para, w, align)
+    }
+    return out
+}
