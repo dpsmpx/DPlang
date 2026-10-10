@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /* Плавающие (trap.float, docs/policy/DETERMINISM.md): каждая операция
  * округляется до своего типа. Промежуточная точность сверх типа (x87)
@@ -312,6 +313,9 @@ dp_str dp_arg(int64_t i, const char* loc);
  * 3 InvalidUtf8, 4 Other — и *out не меняется. Файл больше предела
  * буфера — ловушка «out of memory». */
 int32_t dp_read_file(dp_str path, dp_str* out, const char* loc);
+/* Открывает файл для чтения байтов по пути в UTF-8 (порт платформы:
+ * runtime/linux, runtime/windows). NULL — нет; errno — причина. */
+FILE* dp_os_open_read(const char* path);
 /* Байты — корректный UTF-8: без обрезанных, избыточных записей,
  * суррогатов и символов больше U+10FFFF. */
 bool dp_utf8_valid(const uint8_t* p, int64_t n);

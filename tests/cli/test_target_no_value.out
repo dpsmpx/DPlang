@@ -1,0 +1,4 @@
+--- stderr ---
+error: --target needs a target: linux-x86_64, windows-x86_64
+run 'dpl help' to list the commands
+[exit 2]

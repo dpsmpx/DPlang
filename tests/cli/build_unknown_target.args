@@ -1,0 +1,1 @@
+build --target plan9 ../run/arith.dpm

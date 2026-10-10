@@ -17,6 +17,41 @@ extern char** environ;
 
 namespace dp {
 
+const std::vector<Target>& targets() {
+    static const std::vector<Target> list = {
+        {"linux-x86_64", "x86_64-linux-gnu", "linux", true, true, "", {}, {"-lm", "-pthread"}, ""},
+        // clang + lld поверх MinGW-w64; тесты — под Wine (docs/policy/PLATFORMS.md).
+        {"windows-x86_64", "x86_64-w64-mingw32", "windows", false, false, ".exe",
+         {"--target=x86_64-w64-mingw32", "-fuse-ld=lld", "-D__USE_MINGW_ANSI_STDIO=1"}, {"-lshell32"}, "wine"},
+    };
+    return list;
+}
+
+const Target* find_target(std::string_view name) {
+    for (const Target& t : targets()) {
+        if (t.name == name) return &t;
+    }
+    return nullptr;
+}
+
+std::string target_names() {
+    std::string out;
+    for (const Target& t : targets()) out += (out.empty() ? "" : ", ") + std::string(t.name);
+    return out;
+}
+
+std::string cc_for(const Target& t) {
+    const char* env = std::getenv(t.host ? "CC" : "DPL_CROSS_CC");
+    if (env && *env) return env;
+    return t.host ? "cc" : "clang";
+}
+
+std::string runner_for(const Target& t) {
+    const char* env = std::getenv("DPL_RUNNER");
+    if (env && *env && !t.host) return env;
+    return std::string(t.runner);
+}
+
 namespace {
 
 void say(const std::string& s, FILE* f = stderr) { std::fwrite(s.data(), 1, s.size(), f); }
@@ -98,6 +133,8 @@ public:
     std::vector<std::string> files;
 };
 
+const Target& target_of(const BuildOptions& opt) { return opt.target ? *opt.target : targets().front(); }
+
 // Компилятор C умеет ASan и UBSan: пробная сборка пустой программы.
 bool has_sanitizers(const BuildOptions& opt, TempDir& tmp) {
     std::string src = tmp.file("probe.c");
@@ -106,10 +143,27 @@ bool has_sanitizers(const BuildOptions& opt, TempDir& tmp) {
     return spawn_wait({opt.cc, "-fsanitize=address,undefined", src, "-o", exe}, "/dev/null", "/dev/null") == 0;
 }
 
+// Инструменты чужой цели работают: пробная сборка пустой программы с её
+// флагами. Иначе отказ компилятора C был бы принят за ошибку бэкенда.
+bool toolchain_works(const BuildOptions& opt, TempDir& tmp) {
+    const Target& t = target_of(opt);
+    std::string src = tmp.file("toolchain.c");
+    std::string exe = tmp.file("toolchain" + std::string(t.exe_suffix));
+    if (!write_all(src, "#include <stdio.h>\nint main(void) { return 0; }\n")) return false;
+    std::vector<std::string> argv = {opt.cc};
+    for (std::string_view f : t.cflags) argv.emplace_back(f);
+    argv.push_back(src);
+    for (std::string_view l : t.libs) argv.emplace_back(l);
+    argv.push_back("-o");
+    argv.push_back(exe);
+    return spawn_wait(argv, "/dev/null", "/dev/null") == 0;
+}
+
 // Компилирует c_code в exe. Код выхода команды: 0, 2 или 3.
 int compile(const std::string& c_code, const std::string& exe, const BuildOptions& opt, TempDir& tmp) {
+    const Target& t = target_of(opt);
     std::string core = opt.runtime_dir + "/core";
-    std::string platform = opt.runtime_dir + "/linux";
+    std::string platform = opt.runtime_dir + "/" + std::string(t.platform);
     if (!exists(core + "/dp_rt.h") || !exists(core + "/dp_rt.c") || !exists(platform + "/dp_entry.c")) {
         say("error: the dpl runtime is not found in '" + opt.runtime_dir + "'; set DPL_RUNTIME\n");
         return 2;
@@ -120,14 +174,20 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
         say("error: cannot write '" + c_path + "'\n");
         return 2;
     }
+    if (!t.host && !toolchain_works(opt, tmp)) {
+        say("error: the C toolchain for target '" + std::string(t.name) + "' does not work ('" + opt.cc +
+            "' with " + std::string(t.triple) + "); see docs/policy/PLATFORMS.md or set DPL_CROSS_CC\n");
+        return 2;
+    }
     std::vector<std::string> argv = {opt.cc, "-std=c11", "-ffp-contract=off", "-fno-strict-aliasing", "-w"};
+    for (std::string_view f : t.cflags) argv.emplace_back(f);
     if (opt.profile == Profile::Release) {
         argv.push_back("-O2");
     } else {
         argv.push_back("-O0");
         argv.push_back("-g");
     }
-    if (opt.profile == Profile::Test) {
+    if (opt.profile == Profile::Test && t.sanitizers) {
         if (has_sanitizers(opt, tmp)) {
             argv.push_back("-fsanitize=address,undefined");
             argv.push_back("-fno-sanitize-recover=all");
@@ -135,10 +195,12 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
             say("note: the C compiler '" + opt.cc + "' has no ASan and UBSan; tests run without them\n");
         }
     }
-    for (const std::string& a : {std::string("-I"), core, c_path, core + "/dp_rt.c", platform + "/dp_entry.c",
-                                  std::string("-lm"), std::string("-pthread"), std::string("-o"), exe}) {
+    for (const std::string& a : {std::string("-I"), core, c_path, core + "/dp_rt.c", platform + "/dp_entry.c"}) {
         argv.push_back(a);
     }
+    for (std::string_view l : t.libs) argv.emplace_back(l);
+    argv.push_back("-o");
+    argv.push_back(exe);
     int r = spawn_wait(argv);
     if (r < 0) {
         say("error: cannot run the C compiler '" + opt.cc + "': " + std::strerror(-r) + "; set CC to a C11 compiler\n");
@@ -180,7 +242,7 @@ int copy_program(const std::string& from, const std::string& path) {
 // неудачная сборка не портит прежний файл.
 int build_native(const std::string& c_code, const BuildOptions& opt) {
     TempDir tmp;
-    std::string exe = tmp.file("program");
+    std::string exe = tmp.file("program" + std::string(target_of(opt).exe_suffix));
     int code = compile(c_code, exe, opt, tmp);
     if (code != 0) return code;
     if (int e = copy_program(exe, opt.output)) {
@@ -192,19 +254,28 @@ int build_native(const std::string& c_code, const BuildOptions& opt) {
 
 int run_tests(const std::string& c_code, const std::vector<std::string>& names, const BuildOptions& opt) {
     TempDir tmp;
-    std::string exe = tmp.file("tests");
+    std::string exe = tmp.file("tests" + std::string(target_of(opt).exe_suffix));
     if (!names.empty()) {
         BuildOptions o = opt;
         o.profile = Profile::Test;
         int code = compile(c_code, exe, o, tmp);
         if (code != 0) return code;
     }
+    // Wine без журнала отладки: иначе его строки смешались бы с выводом теста.
+    if (opt.runner == "wine") setenv("WINEDEBUG", "-all", 0);
     std::string out_file = tmp.file("out"), err_file = tmp.file("err");
     std::string failures;
     size_t passed = 0, failed = 0;
     for (size_t i = 0; i < names.size(); i++) {
         std::fflush(stdout);
-        int r = spawn_wait({exe, std::to_string(i)}, out_file, err_file);
+        std::vector<std::string> argv = {exe, std::to_string(i)};
+        if (!opt.runner.empty()) argv.insert(argv.begin(), opt.runner);
+        int r = spawn_wait(argv, out_file, err_file);
+        if (r < 0) {
+            say("error: cannot run the tests with '" + argv[0] + "': " + std::strerror(-r) +
+                (opt.runner.empty() ? std::string() : "; set DPL_RUNNER") + "\n");
+            return 2;
+        }
         if (r == 0) {
             passed++;
             say("test " + names[i] + " ... ok\n", stdout);
