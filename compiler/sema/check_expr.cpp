@@ -128,6 +128,7 @@ bool Checker::equatable(const Type* t) {
         case TK::List: case TK::Slice: case TK::Optional: return equatable(t->elem);
         case TK::Map: return false;  // Р54: отображения не сравниваются
         case TK::Struct:
+            if (t->sdef->linear) return false;  // Р60: линейные значения не сравниваются
             for (const FieldDef& f : t->sdef->fields) {
                 if (!equatable(f.type)) return false;
             }
@@ -151,6 +152,7 @@ bool Checker::ordered(const Type* t) {
         case TK::Error: case TK::Bool: case TK::Str: return true;
         case TK::List: case TK::Slice: return ordered(t->elem);
         case TK::Struct:
+            if (t->sdef->linear) return false;  // Р60
             for (const FieldDef& f : t->sdef->fields) {
                 if (!ordered(f.type)) return false;
             }
@@ -190,6 +192,10 @@ void Checker::resolve_name(NameExpr* n) {
             case SymKind::Struct: n->res.kind = ResKind::Struct; n->res.st = s->st; break;
             case SymKind::Enum: n->res.kind = ResKind::Enum; n->res.en = s->en; break;
             case SymKind::Module: n->res.kind = ResKind::Module; n->res.mod = s->mod; break;
+            case SymKind::Handle:  // `extern type` — только тип (Р59)
+                error(Code::E0405, n->span, "type '" + n->name + "' is not a value");
+                n->type = err();
+                break;
         }
         return;
     }
@@ -234,6 +240,10 @@ void Checker::resolve_field(FieldExpr* f) {
             case SymKind::Struct: f->res.kind = ResKind::Struct; f->res.st = s->st; break;
             case SymKind::Enum: f->res.kind = ResKind::Enum; f->res.en = s->en; break;
             case SymKind::Module: break;
+            case SymKind::Handle:
+                error(Code::E0405, f->span, "type '" + f->name + "' is not a value");
+                f->type = err();
+                break;
         }
     } else if (obj->kind == ResKind::Enum) {
         int v = obj->en->find(f->name);

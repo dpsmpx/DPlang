@@ -13,10 +13,10 @@ TypeTable::TypeTable() {
 }
 
 const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e,
-                            const Type* key_type) {
+                            const Type* key_type, const HandleDef* h) {
     auto key = std::make_tuple(static_cast<int>(k), static_cast<const void*>(elem), static_cast<const void*>(err),
                                static_cast<const void*>(s), static_cast<const void*>(e),
-                               static_cast<const void*>(key_type));
+                               static_cast<const void*>(key_type), static_cast<const void*>(h));
     auto it = interned_.find(key);
     if (it != interned_.end()) return it->second;
     Type& t = store_.emplace_back();
@@ -26,6 +26,7 @@ const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const Struc
     t.sdef = s;
     t.edef = e;
     t.key = key_type;
+    t.hdef = h;
     interned_.emplace(key, &t);
     return &t;
 }
@@ -57,6 +58,8 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
             return from && t->sdef->module != from ? t->sdef->module->name + "." + t->sdef->name : t->sdef->name;
         case TK::Enum:
             return from && t->edef->module != from ? t->edef->module->name + "." + t->edef->name : t->edef->name;
+        case TK::Handle:
+            return from && t->hdef->module != from ? t->hdef->module->name + "." + t->hdef->name : t->hdef->name;
     }
     return "?";
 }
@@ -67,7 +70,35 @@ bool contains_slice(const Type* t) {
     return contains_slice(t->elem) || contains_slice(t->err) || contains_slice(t->key);
 }
 
+bool linear_type(const Type* t) {
+    if (!t) return false;
+    if (t->kind == TK::Struct) return t->sdef->linear;
+    if (t->kind == TK::Optional || t->kind == TK::Result) return linear_type(t->elem);
+    return false;
+}
+
+bool linear_in_container(const Type* t) {
+    if (!t) return false;
+    switch (t->kind) {
+        case TK::List: case TK::Slice: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Map: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Optional: return linear_in_container(t->elem);
+        case TK::Result: return linear_in_container(t->elem) || linear_in_container(t->err);
+        default: return false;
+    }
+}
+
 bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str); }
+
+bool c_value_type(const Type* t) {
+    if (!t) return false;
+    if (is_numeric(t) || t->kind == TK::Bool || t->kind == TK::Handle) return true;
+    if (t->kind != TK::Struct || !t->sdef->c) return false;
+    for (const FieldDef& f : t->sdef->fields) {
+        if (!c_value_type(f.type)) return false;
+    }
+    return true;
+}
 
 bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }
 bool is_signed(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::Int; }

@@ -153,6 +153,12 @@ DP_CODE(E0323, "invalid test function",
         "A function marked `@test` takes no parameters and returns nothing or `E!void` (`!void`): "
         "`dpl test` calls it with no arguments and checks that it returns without a trap or an error "
         "(spec: module.test).")
+DP_CODE(E0326, "type cannot cross to C",
+        "A C function (`extern fn`, decision R59) takes and returns only types with a C form (spec: "
+        "ffi.types): integers, floats, `bool`, an `extern type` handle and `@c` structs of these; a `str` "
+        "(passed as a zero-terminated copy, returned as a UTF-8 copy), `[]T` (a pointer to the elements), "
+        "`&T` and `&mut T` (pointers), `&mut List[T]` (a pointer to writable elements) and `?H` for a "
+        "handle that may be NULL. A `@c` struct holds only types with a C form.")
 DP_CODE(E0401, "mismatched types",
         "The value has a different type than the place it goes to (spec: type.conv). Only lossless "
         "conversions are implicit: a narrower integer to a wider one that holds all its values, `f32` to "
@@ -273,3 +279,22 @@ DP_CODE(E0510, "slice cannot be stored",
         "A slice `[]T` is a view into a List owned by someone else, so it only exists as a parameter type "
         "(spec: ref.slices, decision R44). It cannot be a field, a variant value, a List element, a result, "
         "a variable or a constant. Pass the slice straight to a function, or keep a `List[T]`.")
+DP_CODE(E0511, "resource not closed",
+        "A value of a `@linear` type must be closed exactly once on every path: passed by value to a function, "
+        "returned or moved (spec: ffi.linear, decisions R57, R60). It reaches the end of its block, a `return` "
+        "or an error exit without that. Close it, or use `defer close(r)` / `errdefer close(r)`.")
+DP_CODE(E0512, "resource already closed or moved",
+        "A `@linear` value is used after it was closed or moved, or is closed a second time (spec: ffi.linear). "
+        "After `let b = a` use `b`; after `defer close(r)` use `r` only by reference.")
+DP_CODE(E0513, "cannot close or move a resource here",
+        "A `@linear` value cannot be closed or moved here (spec: ffi.linear): inside a loop when it was opened "
+        "outside, while `errdefer` holds it (only `return` may take it), as a single field (destructure the "
+        "struct with `let S { ... } = v`), or by assigning over a value that is not closed yet.")
+DP_CODE(E0514, "linear type not allowed here",
+        "A `@linear` value can live in a variable, a field of a `@linear` struct, `?T` and `E!T` (spec: "
+        "ffi.linear, decision R60). Lists, maps, slices and enum variants cannot hold one until pools and "
+        "handles (v0.3).")
+DP_CODE(E0515, "invalid destructuring",
+        "`let S { f, g: x } = v` lists every field of `S` once and works only for a `@linear` struct, inside "
+        "the module that declares it (spec: stmt.destructure, decision R60). Outside, close the value with "
+        "the functions of that module.")

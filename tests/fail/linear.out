@@ -1,0 +1,59 @@
+--- stderr ---
+linear.dpm:39:1: error[E0511]: 'r' is not closed when the function returns here
+  39 | }
+     | ^
+linear.dpm:42:5: error[E0511]: the resource produced here is never closed; keep it in a variable and close it
+  42 |     open(2)
+     |     ^~~~~~~
+linear.dpm:46:9: error[E0511]: '_ =' drops the resource without closing it
+  46 |     _ = open(3)
+     |         ^~~~~~~
+linear.dpm:52:11: error[E0512]: 'r' is already closed or moved
+  52 |     close(r)
+     |           ^
+linear.dpm:59:17: error[E0512]: 'r' is already closed or moved
+  59 |     println(str(r.id))
+     |                 ^
+linear.dpm:67:1: error[E0511]: 'r' is not closed on every path when the function returns here
+  67 | }
+     | ^
+linear.dpm:72:15: error[E0513]: 'r' was opened outside this loop and cannot be closed or moved inside it; close it after the loop or with 'defer'
+  72 |         close(r)
+     |               ^
+linear.dpm:79:11: error[E0512]: 'r' is closed by 'defer' at the end of its block; use it by reference
+  79 |     close(r)
+     |           ^
+linear.dpm:83:13: error[E0513]: the '@linear' field 'a' cannot be moved out alone; destructure the struct with 'let S { ... } = v'
+  83 |     close(p.a)
+     |             ^
+linear.dpm:91:5: error[E0513]: a '@linear' field cannot be replaced; destructure the struct with 'let S { ... } = v'
+  91 |     q.a = open(9)
+     |     ^~~
+linear.dpm:98:22: error[E0511]: field 'b' holds a resource; bind it to a name and close it
+  98 |     let Pair { a, b: _ } = p
+     |                      ^
+linear.dpm:104:5: error[E0513]: assigning over 'r', whose resource is not closed yet
+ 104 |     r = open(11)
+     |     ^
+linear.dpm:110:12: error[E0511]: '_' drops the resource in the matched value; bind it to a name
+ 110 |         ok(_) => println("ok")
+     |            ^
+linear.dpm:117:13: error[E0511]: 'r' is not closed when the function returns an error here; add 'errdefer' to close it
+ 117 |     let s = try may(14)
+     |             ^~~~~~~~~~~
+linear.dpm:125:5: error[E0511]: 'r' is not closed when the function returns here: 'errdefer' closes it only on errors
+ 125 |     return
+     |     ^~~~~~
+linear.dpm:133:9: error[E0512]: 'r' is already closed or moved, but 'errdefer' would close it again if the function returns an error here
+ 133 |         fail .Bad
+     |         ^~~~~~~~~
+linear.dpm:140:5: error[E0512]: 'r' is already closed or moved, but 'errdefer' would close it again if the function returns an error here
+ 140 |     return wrap(r)
+     |     ^~~~~~~~~~~~~~
+linear.dpm:144:11: error[E0513]: 'r' is a reference: its resource belongs to the caller and cannot be closed or moved here
+ 144 |     close(r)
+     |           ^
+linear.dpm:148:5: error[E0513]: 'r' is a reference: the caller's resource cannot be replaced
+ 148 |     r = open(18)
+     |     ^
+[exit 1]

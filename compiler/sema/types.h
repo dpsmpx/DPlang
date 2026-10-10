@@ -14,6 +14,7 @@ namespace dp::sema {
 
 struct StructDef;
 struct EnumDef;
+struct HandleDef;
 
 enum class TK : uint8_t {
     Error,  // тип ошибочного выражения: дальше сообщений о нём нет
@@ -29,6 +30,7 @@ enum class TK : uint8_t {
     Result,    // E!T; err — перечисление ошибок
     Struct,
     Enum,
+    Handle,    // `extern type` — непрозрачный дескриптор C (Р59); hdef
 };
 
 struct Type {
@@ -38,6 +40,7 @@ struct Type {
     const Type* err = nullptr;   // Result — тип ошибки (перечисление); nullptr — ещё не выведен (Р41)
     const StructDef* sdef = nullptr;
     const EnumDef* edef = nullptr;
+    const HandleDef* hdef = nullptr;
 };
 
 class TypeTable {
@@ -52,13 +55,15 @@ public:
     const Type* result(const Type* err, const Type* value) { return make(TK::Result, value, err, nullptr, nullptr); }
     const Type* struct_type(const StructDef* d) { return make(TK::Struct, nullptr, nullptr, d, nullptr); }
     const Type* enum_type(const EnumDef* d) { return make(TK::Enum, nullptr, nullptr, nullptr, d); }
+    const Type* handle(const HandleDef* d) { return make(TK::Handle, nullptr, nullptr, nullptr, nullptr, nullptr, d); }
 
 private:
     const Type* make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e,
-                     const Type* key = nullptr);
+                     const Type* key = nullptr, const HandleDef* h = nullptr);
     std::deque<Type> store_;
     const Type* prims_[static_cast<size_t>(TK::Str) + 1] = {};
-    std::map<std::tuple<int, const void*, const void*, const void*, const void*, const void*>, const Type*> interned_;
+    std::map<std::tuple<int, const void*, const void*, const void*, const void*, const void*, const void*>, const Type*>
+        interned_;
 };
 
 struct ModuleInfo;
@@ -72,6 +77,15 @@ bool contains_slice(const Type* t);
 
 // Тип годится в ключ Map (Р54): целое, bool или str.
 bool map_key_type(const Type* t);
+
+// Линейный тип (Р60): структура `@linear`, ?T и E!T с линейным T.
+bool linear_type(const Type* t);
+// Линейное значение в List, Map или срезе где-либо в типе (E0514, Р60).
+bool linear_in_container(const Type* t);
+
+// Значение типа переходит границу C как есть (Р59): целое, плавающее,
+// bool, дескриптор `extern type`, структура `@c` из таких.
+bool c_value_type(const Type* t);
 
 bool is_integer(const Type* t);
 bool is_signed(const Type* t);

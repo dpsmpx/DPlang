@@ -1,0 +1,57 @@
+// spec: ffi.linear stmt.destructure stmt.errdefer expr.compare
+// Где линейное значение недопустимо (Р60): контейнеры, поля обычных
+// структур, данные варианта; разбор только своих @linear; errdefer без E!T.
+import res
+
+@linear
+struct Res {
+    id: int
+}
+
+struct Plain {
+    r: Res
+    n: int
+}
+
+@linear
+struct Holder {
+    items: List[Res]
+}
+
+enum Ev {
+    Opened(Res)
+}
+
+fn takes(xs: List[Res]) {
+}
+
+fn no_fail() {
+    errdefer println("x")
+}
+
+fn compare(a: &Res, b: &Res) bool {
+    return a == b
+}
+
+fn foreign(h: res.Handle) {
+    let Handle { id } = h
+}
+
+fn plain(p: Plain) {
+    let Plain { r, n } = p
+}
+
+fn fields(r: Res) {
+    let Res { id, id: other, size } = r
+}
+
+fn missing(r: Res) {
+    let Res {} = r
+}
+
+fn local() {
+    let xs: List[Res] = []
+}
+
+fn main() {
+}

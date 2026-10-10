@@ -15,6 +15,7 @@ struct CResult {
     std::string code;
     // Внутренние ошибки: конструкция IR, которую бэкенд не умеет перевести.
     std::vector<std::string> errors;
+    std::vector<std::string> links;  // библиотеки C программы (`@link`, Р59): `-l<имя>`
 };
 
 CResult emit_c(const ir::Program& p, const SourceMap& sources);

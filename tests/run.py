@@ -19,7 +19,9 @@ C — $CC или cc, с ASan и UBSan, если они есть), и её выв
 через `dpl build` в профилях debug и release; проходы windows и android —
 то же для целей windows-x86_64 (под Wine) и android-arm64 (под
 qemu-aarch64; docs/policy/PLATFORMS.md), если их инструменты есть; иначе
-проход пропускается, и итог говорит об этом. Устройство —
+проход пропускается, и итог говорит об этом. Набор ffi — программы с
+функциями C (Р59): интерпретатор их не исполняет, вывод сборки хоста и
+целей сверяется с X.out. Устройство —
 docs/compiler/README.md, docs/compiler/backend_c.md, docs/compiler/cli.md.
 Проход runtime — тесты runtime по функциям и запись плавающих против
 образца (tests/runtime.py). Проход example — программы examples/X/: их
@@ -114,6 +116,9 @@ SUITES = {
     'run': ('.dpm', DPL, lambda name, path: ['debug', 'run', name] + program_args(path)),
     'fmt': ('.dpm', DPL, lambda name, path: ['fmt', name]),
     'test': ('.dpm', DPL, lambda name, path: ['test', name]),
+    # Функции C (Р59): программа собирается `dpl build` и запускается —
+    # интерпретатор C не вызывает (build_pass_one).
+    'ffi': ('.dpm', DPL, lambda name, path: ['check', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
 # Наборы, где тест может быть каталогом из нескольких модулей: вход —
@@ -168,9 +173,13 @@ def discover(pattern):
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
     native = [('native', path) for suite, path in tests if suite == 'run']
     native += [('build', path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
+    ffi = [path for suite, path in tests if suite == 'ffi']
+    tests = [t for t in tests if t[0] != 'ffi']
+    native += [('ffi', path + profile) for path in ffi for profile in ('', ' --release')]
     for cross in CROSS:
         if cross_tools(cross) is None:
             native += [(cross, path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
+            native += [(cross, path + profile) for path in ffi for profile in ('', ' --release')]
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
     deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
     if os.path.isdir(EXAMPLES):
@@ -267,15 +276,18 @@ def prepare_cross():
     return None
 
 
-def build_pass_one(arg, cross=None):
+def build_pass_one(arg, cross=None, bless=False):
     """Проход build: `dpl build` (профиль debug или --release), запуск,
     вывод — как у интерпретатора (docs/compiler/cli.md, «build»). С
-    cross — проход другой цели: сборка для неё и запуск её runner-ом."""
+    cross — проход другой цели: сборка для неё и запуск её runner-ом.
+    Программы набора ffi сверяются со своим ожидаемым; --bless пишет его
+    по сборке хоста в профиле debug."""
     path, _, profile = arg.partition(' ')
-    cwd = os.path.join(TESTS, 'run')
+    suite = 'ffi' if os.path.relpath(path, TESTS).split(os.sep)[0] == 'ffi' else 'run'
+    cwd = os.path.join(TESTS, suite)
     name = os.path.relpath(path, cwd)
     target, runner, suffix = CROSS[cross] if cross else (None, [], '')
-    exe = os.path.join(NATIVE, (cross or 'build') + '_' + name.replace(os.sep, '_')[:-len('.dpm')] +
+    exe = os.path.join(NATIVE, (cross or 'build') + '_' + suite + '_' + name.replace(os.sep, '_')[:-len('.dpm')] +
                        ('_release' if profile else '') + suffix)
     argv = [DPL, 'build'] + ([profile] if profile else []) + (['--target', target] if target else []) + ['-o', exe, name]
     try:
@@ -296,12 +308,19 @@ def build_pass_one(arg, cross=None):
         got += '--- stderr ---\n' + p.stderr
     if p.returncode != 0:
         got += f'[exit {p.returncode}]\n'
-    with open(expected_path('run', path), encoding='utf-8') as f:
+    exp = expected_path(suite, path)
+    if bless and suite == 'ffi' and not cross and not profile:
+        with open(exp, 'w', encoding='utf-8') as f:
+            f.write(got)
+        return None
+    if not os.path.exists(exp):
+        return f'нет ожидаемого {os.path.relpath(exp, TESTS)} (--bless)'
+    with open(exp, encoding='utf-8') as f:
         want = f.read()
     if got == want:
         return None
-    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор', target or 'build', lineterm='',
-                                n=1)
+    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор' if suite == 'run' else 'ожидалось',
+                                target or 'build', lineterm='', n=1)
     return 'вывод расходится с интерпретатором:\n' + '\n'.join(list(diff)[:20])
 
 
@@ -541,6 +560,8 @@ def run_one(suite, path, bless):
         return build_pass_one(path)
     if suite in CROSS:
         return build_pass_one(path, suite)
+    if suite == 'ffi':
+        return build_pass_one(path, bless=bless)
     if suite == 'limits':
         return limits.check_case(path, DPL)
     if suite == 'example':
@@ -603,6 +624,10 @@ def main():
             return 1
     # Проходы native, build, windows и android сверяют с ожидаемым набора run — после того, как --bless его перепишет.
     late = ('native', 'build', 'example', 'bench') + tuple(CROSS)
+    if a.bless:  # ожидаемое ffi пишет сборка хоста — до сверки других целей с ним
+        first = [t for t in tests if t[0] == 'ffi' and ' ' not in t[1]]
+        for t in first:
+            run_one(t[0], t[1], True)
     tests = [t for t in tests if t[0] not in late] + [t for t in tests if t[0] in late]
     split = sum(1 for t in tests if t[0] not in late)
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
@@ -617,7 +642,7 @@ def main():
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
             name = suite + '/' + path if suite in ('bench', 'example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
-            if suite in ('build',) + tuple(CROSS):
+            if suite in ('build', 'ffi') + tuple(CROSS):
                 name = suite + '/' + os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1

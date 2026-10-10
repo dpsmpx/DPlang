@@ -58,6 +58,12 @@ fn all(xs: &mut List[i32], n: int) !i32 {
     defer {
         b = 0
     }
+    errdefer xs.clear()
+    let Pair { left, right: r, tag: _ } = make()
+    var Pair {
+        left,
+        right,
+    } = make()
     {
         let inner = 1
     }

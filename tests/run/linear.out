@@ -1,0 +1,35 @@
+open 1
+peek 1
+open 2
+close r2 (2)
+open 3
+open 4
+close pair 3+4
+close r4 (4)
+close r3 (3)
+open 5
+close r5 (5)
+pair failed: busy = true, broken = false
+open 6
+open 6
+close r6 (6)
+close r6 (6)
+pair failed: busy = false, broken = true
+open 7
+forward: done 7
+close r7 (7)
+forward: done -7
+forward: failed -7
+forward error: busy = true
+open 8
+close r8 (8)
+open 9
+close r9 (9)
+open 20
+close r20 (20)
+open 21
+close r21 (21)
+open 22
+close r22 (22)
+total 66
+close r1 (1)

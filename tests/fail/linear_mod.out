@@ -1,0 +1,38 @@
+--- stderr ---
+linear_mod/main.dpm:12:8: error[E0514]: field 'r' holds a '@linear' value; mark struct 'Plain' '@linear' too
+  12 |     r: Res
+     |        ^~~
+linear_mod/main.dpm:18:12: error[E0514]: 'List[Res]' holds a '@linear' value in a List, a Map or a slice; keep resources in variables or fields of a '@linear' struct
+  18 |     items: List[Res]
+     |            ^~~~~~~~~
+linear_mod/main.dpm:22:12: error[E0514]: variant 'Opened' cannot hold a '@linear' value; use a '@linear' struct
+  22 |     Opened(Res)
+     |            ^~~
+linear_mod/main.dpm:25:14: error[E0514]: 'List[Res]' holds a '@linear' value in a List, a Map or a slice; keep resources in variables or fields of a '@linear' struct
+  25 | fn takes(xs: List[Res]) {
+     |              ^~~~~~~~~
+linear_mod/main.dpm:29:5: error[E0505]: 'errdefer' runs when the function returns an error; 'no_fail' cannot fail: use 'defer'
+  29 |     errdefer println("x")
+     |     ^~~~~~~~~~~~~~~~~~~~~
+linear_mod/main.dpm:33:14: error[E0422]: values of type 'Res' cannot be compared with '=='
+  33 |     return a == b
+     |              ^~
+linear_mod/main.dpm:37:9: error[E0515]: 'Handle' is not a struct of this module; destructuring needs one
+  37 |     let Handle { id } = h
+     |         ^~~~~~
+linear_mod/main.dpm:41:9: error[E0515]: only a '@linear' struct is destructured; read the fields of 'Plain' with 'v.f'
+  41 |     let Plain { r, n } = p
+     |         ^~~~~
+linear_mod/main.dpm:45:19: error[E0515]: field 'id' is listed twice
+  45 |     let Res { id, id: other, size } = r
+     |                   ^~
+linear_mod/main.dpm:45:30: error[E0406]: struct 'Res' has no field 'size'
+  45 |     let Res { id, id: other, size } = r
+     |                              ^~~~
+linear_mod/main.dpm:49:9: error[E0515]: field 'id' is missing; list every field of 'Res', 'id: _' to skip it
+  49 |     let Res {} = r
+     |         ^~~
+linear_mod/main.dpm:53:13: error[E0514]: 'List[Res]' holds a '@linear' value in a List, a Map or a slice; keep resources in variables
+  53 |     let xs: List[Res] = []
+     |             ^~~~~~~~~
+[exit 1]

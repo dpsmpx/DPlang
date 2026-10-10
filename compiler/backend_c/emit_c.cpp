@@ -42,7 +42,7 @@ namespace {
 bool is_scalar(const Type* t) {
     switch (t->kind) {
         case TK::Bool: case TK::I8: case TK::I16: case TK::I32: case TK::I64: case TK::Int: case TK::U8:
-        case TK::U16: case TK::U32: case TK::U64: case TK::F32: case TK::F64:
+        case TK::U16: case TK::U32: case TK::U64: case TK::F32: case TK::F64: case TK::Handle:
             return true;
         default: return false;
     }
@@ -80,6 +80,7 @@ std::string mangle(const Type* t) {
         case TK::Str: return "str";
         case TK::List: return "L_" + mangle(t->elem);
         case TK::Map: return "M_" + mangle(t->key) + "_" + mangle(t->elem);
+        case TK::Handle: return "H_" + lp(t->hdef->module->name) + lp(t->hdef->name);
         case TK::Slice: return "S_" + mangle(t->elem);
         case TK::Optional: return "O_" + mangle(t->elem);
         case TK::Result: return "R_" + (t->err ? mangle(t->err) : std::string("x")) + "_" + mangle(t->elem);
@@ -104,6 +105,7 @@ std::string ctype(const Type* t) {
         case TK::F32: return "float";
         case TK::F64: return "double";
         case TK::Str: return "dp_str";
+        case TK::Handle: return "void*";  // `extern type` — дескриптор C (Р59)
         default: return "dp_" + mangle(t);
     }
 }
@@ -184,11 +186,43 @@ public:
         out += strings();
         out += type_decls();
         out += helpers();
-        for (const Function& f : p_.fns) out += fn_head(f) + ";\n";
+        for (const Function& f : p_.fns) out += (f.is_extern ? extern_head(f) : fn_head(f)) + ";\n";
         out += "\n";
-        for (const Function& f : p_.fns) out += function(f);
+        for (const Function& f : p_.fns) {
+            if (!f.is_extern) out += function(f);
+        }
         out += tests_ ? test_entry() : entry();
-        return CResult{out, errors_};
+        return CResult{out, errors_, p_.links};
+    }
+
+    // Функция C (Р59): объявление под своим именем dpx_… с меткой символа
+    // C — так оно не спорит с объявлениями заголовков библиотеки C.
+    static std::string extern_name(const Function& f) {
+        size_t dot = f.name.find('.');
+        return "dpx_" + lp(f.name.substr(0, dot)) + lp(f.name.substr(dot + 1));
+    }
+
+    static std::string c_param_type(const ir::Local& l) {
+        const Type* t = l.type;
+        if (l.kind == LocalKind::ParamRef) return "const " + ctype(t) + "*";
+        if (l.kind == LocalKind::ParamMut) return (t->kind == TK::List ? ctype(t->elem) : ctype(t)) + "*";
+        if (t->kind == TK::Str) return "const char*";
+        if (t->kind == TK::Slice) return "const " + ctype(t->elem) + "*";
+        if (t->kind == TK::Optional) return "void*";  // ?H — дескриптор или NULL
+        return ctype(t);
+    }
+
+    static std::string c_result_type(const Type* t) {
+        if (t->kind == TK::Str || (t->kind == TK::Optional && t->elem->kind == TK::Str)) return "const char*";
+        if (t->kind == TK::Optional) return "void*";
+        return ctype(t);
+    }
+
+    std::string extern_head(const Function& f) {
+        std::string h = "extern " + c_result_type(f.ret) + " " + extern_name(f) + "(";
+        for (uint32_t i = 0; i < f.param_count; i++) h += (i ? ", " : "") + c_param_type(f.locals[i]);
+        if (f.param_count == 0) h += "void";
+        return h + ") __asm__(" + cstr(f.c_name) + ")";
     }
 
     // Для FnEmitter.
@@ -874,6 +908,7 @@ private:
     std::string unary(const Rvalue& rv);
     std::string cast(const Rvalue& rv);
     std::string intrinsic(const Rvalue& rv);
+    std::string extern_call(const Rvalue& rv, const Function& g);
     std::string inst(const Inst& in);
     std::string term(const Term& t);
 };
@@ -1211,6 +1246,7 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         case RvKind::Call: {
             line("DP_CALL_CHECK(" + loc_ + ");");
             const Function& g = p_.fns[rv.fn];
+            if (g.is_extern) return extern_call(rv, g);
             std::vector<std::string> args;
             for (size_t i = 0; i < rv.args.size(); i++) {
                 const Arg& a = rv.args[i];
@@ -1334,6 +1370,68 @@ std::string FnEmitter::run() {
         out += term(f_.blocks[bi].term);
     }
     return out + "}\n\n";
+}
+
+// Вызов функции C (Р59): str — копия с нулём в конце на время вызова,
+// []T и &mut List[T] — указатель на элементы, &T и &mut T — указатель,
+// ?H — дескриптор или NULL. Строка и дескриптор из C проверяются: NULL
+// там, где он не ожидается, — ловушка.
+std::string FnEmitter::extern_call(const Rvalue& rv, const Function& g) {
+    std::vector<std::string> args, frees;
+    for (size_t i = 0; i < rv.args.size(); i++) {
+        const Arg& a = rv.args[i];
+        const ir::Local& l = g.locals[i];
+        if (a.kind != Arg::Kind::Value) {
+            Lv lv = place(a.place);
+            args.push_back(l.type->kind == TK::List ? "(" + lv.expr + ").ptr" : "&" + lv.expr);
+            continue;
+        }
+        std::string v = operand(a.op, false);
+        const Type* t = l.type;
+        if (t->kind == TK::Str) {
+            std::string c = fresh("dp_c");
+            line("char* " + c + " = dp_str_to_c(" + v + ", " + loc_ + ");");
+            args.push_back(c);
+            frees.push_back(c);
+        } else if (t->kind == TK::Slice) {
+            args.push_back("(" + v + ").ptr");
+        } else if (t->kind == TK::Optional) {
+            std::string o = fresh("dp_o");
+            line(ctype(t) + " " + o + " = " + v + ";");
+            args.push_back("(" + o + ".has ? " + o + ".value : NULL)");
+        } else {
+            args.push_back(v);
+        }
+    }
+    std::string call = Emitter::extern_name(g) + "(";
+    for (size_t i = 0; i < args.size(); i++) call += (i ? ", " : "") + args[i];
+    call += ")";
+    const Type* t = g.ret;
+    auto free_all = [&] {
+        for (const std::string& c : frees) line("dp_free(" + c + ");");
+    };
+    if (t->kind == TK::Void) {
+        line(call + ";");
+        free_all();
+        return "((void)0)";
+    }
+    std::string r = fresh("dp_r");
+    line(Emitter::c_result_type(t) + " " + r + " = " + call + ";");
+    free_all();
+    std::string what = cstr(g.c_name);
+    if (t->kind == TK::Str) return "dp_str_from_c(" + r + ", " + what + ", " + loc_ + ")";
+    if (t->kind == TK::Handle) {
+        line("if (!" + r + ") dp_trapf(" + loc_ + ", \"C function '%s' returned NULL\", " + what + ");");
+        return r;
+    }
+    if (t->kind == TK::Optional) {
+        std::string o = fresh("dp_o");
+        line(ctype(t) + " " + o + " = {0};");
+        std::string value = t->elem->kind == TK::Str ? "dp_str_from_c(" + r + ", " + what + ", " + loc_ + ")" : r;
+        line("if (" + r + ") {\n            " + o + ".has = true;\n            " + o + ".value = " + value + ";\n        }");
+        return o;
+    }
+    return r;
 }
 
 std::string Emitter::function(const Function& f) {

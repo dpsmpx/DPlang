@@ -21,7 +21,7 @@ Module err_misc
       Let t
         Int 5
 --- stderr ---
-err_misc.dpm:2:1: error[E0201]: expected declaration (fn, struct, enum, const or import), found 'let'
+err_misc.dpm:2:1: error[E0201]: expected declaration (fn, struct, enum, const, import or extern), found 'let'
    2 | let top = 1
      | ^~~
 err_misc.dpm:4:9: error[E0201]: expected identifier, found '='

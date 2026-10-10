@@ -367,7 +367,17 @@ struct Block : Node {
     std::vector<Stmt*> stmts;
 };
 
-struct LetStmt : Stmt {  // `let x = e`, `var x: T = e`
+// Поле разбора `let S { f, g: x } = v` (Р60).
+struct LetField {
+    std::string field;   // имя поля S
+    Span field_span;
+    std::string name;    // имя переменной; `_` — поле не нужно
+    Span name_span;
+    int index = -1;      // номер поля в S (после проверки)
+    sema::Local* local = nullptr;
+};
+
+struct LetStmt : Stmt {  // `let x = e`, `var x: T = e`, разбор `let S { f, g: x } = v`
     static constexpr StmtKind Kind = StmtKind::Let;
     LetStmt() : Stmt(Kind) {}
     bool is_var = false;
@@ -376,6 +386,10 @@ struct LetStmt : Stmt {  // `let x = e`, `var x: T = e`
     Type* type = nullptr;
     Expr* value = nullptr;
     sema::Local* local = nullptr;
+    // Разбор (Р60): name — имя структуры S, fields — поля.
+    bool destructure = false;
+    std::vector<LetField> fields;
+    const sema::StructDef* sdef = nullptr;  // S (после проверки)
 };
 
 enum class AssignOp : uint8_t { Set, Add, Sub, Mul, Div, Rem, BitAnd, BitOr, BitXor, Shl, Shr };
@@ -458,10 +472,11 @@ struct ContinueStmt : Stmt {
     ContinueStmt() : Stmt(Kind) {}
 };
 
-struct DeferStmt : Stmt {
+struct DeferStmt : Stmt {  // `defer s`; `errdefer s` — только при выходе с ошибкой (Р60)
     static constexpr StmtKind Kind = StmtKind::Defer;
     DeferStmt() : Stmt(Kind) {}
     Stmt* body = nullptr;  // BlockStmt или простая инструкция
+    bool on_error = false;  // errdefer
 };
 
 struct FailStmt : Stmt {  // `fail e`
@@ -483,7 +498,7 @@ struct ErrorStmt : Stmt {
 
 // --- объявления
 
-enum class ItemKind : uint8_t { Fn, Struct, Enum, Const, Import, Error };
+enum class ItemKind : uint8_t { Fn, Struct, Enum, Const, Import, ExternType, Error };
 
 struct Item : Node {
     ItemKind kind;
@@ -496,6 +511,10 @@ struct Item : Node {
 struct Attr {
     std::string name;
     Span span;
+    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59)
+    std::string arg;       // значение строки
+    std::string arg_src;   // запись в исходнике, с кавычками
+    std::string text() const { return "@" + name + (has_arg ? "(" + arg_src + ")" : ""); }
 };
 
 enum class ParamMode : uint8_t { Value, Ref, Mut };
@@ -516,6 +535,7 @@ struct FnItem : Item {
     std::vector<Param> params;
     Type* ret = nullptr;  // nullptr — без результата
     Block* body = nullptr;
+    bool is_extern = false;  // `extern fn` — функция C без тела (Р59)
 };
 
 struct FieldDecl {
@@ -529,6 +549,7 @@ struct FieldDecl {
 struct StructItem : Item {
     static constexpr ItemKind Kind = ItemKind::Struct;
     StructItem() : Item(Kind) {}
+    std::vector<Attr> attrs;  // `@c`, `@linear` (Р59)
     std::vector<FieldDecl> fields;
 };
 
@@ -558,6 +579,11 @@ struct ImportItem : Item {  // name — имя модуля
     static constexpr ItemKind Kind = ItemKind::Import;
     ImportItem() : Item(Kind) {}
     std::vector<Attr> attrs;  // `@det import m` — модуль класса D (Р55)
+};
+
+struct ExternTypeItem : Item {  // `extern type Name` — непрозрачный тип C (Р59)
+    static constexpr ItemKind Kind = ItemKind::ExternType;
+    ExternTypeItem() : Item(Kind) {}
 };
 
 struct ErrorItem : Item {

@@ -1,0 +1,152 @@
+// spec: ffi.linear stmt.destructure stmt.errdefer
+// Поток линейных значений (Р60): не закрыт, закрыт дважды, нельзя здесь.
+enum E {
+    Bad
+}
+
+@linear
+struct Res {
+    id: int
+}
+
+@linear
+struct Pair {
+    a: Res
+    b: Res
+}
+
+fn open(id: int) Res {
+    return Res { id: id }
+}
+
+fn close(r: Res) {
+    let Res { id: _ } = r
+}
+
+fn may(id: int) E!Res {
+    if id < 0 {
+        fail .Bad
+    }
+    return open(id)
+}
+
+fn wrap(r: Res) E!Res {
+    return r
+}
+
+fn leak() {
+    let r = open(1)
+}
+
+fn leak_call() {
+    open(2)
+}
+
+fn leak_discard() {
+    _ = open(3)
+}
+
+fn twice() {
+    let r = open(4)
+    close(r)
+    close(r)
+}
+
+fn moved() {
+    let r = open(5)
+    let s = r
+    close(s)
+    println(str(r.id))
+}
+
+fn maybe(flag: bool) {
+    let r = open(6)
+    if flag {
+        close(r)
+    }
+}
+
+fn in_loop() {
+    let r = open(7)
+    for i in 0..2 {
+        close(r)
+    }
+}
+
+fn after_defer() {
+    let r = open(8)
+    defer close(r)
+    close(r)
+}
+
+fn field_move(p: Pair) {
+    close(p.a)
+    let Pair { a, b } = p
+    close(a)
+    close(b)
+}
+
+fn field_assign(p: Pair) {
+    var q = p
+    q.a = open(9)
+    let Pair { a, b } = q
+    close(a)
+    close(b)
+}
+
+fn drop_field(p: Pair) {
+    let Pair { a, b: _ } = p
+    close(a)
+}
+
+fn overwrite() {
+    var r = open(10)
+    r = open(11)
+    close(r)
+}
+
+fn wild() {
+    match may(12) {
+        ok(_) => println("ok")
+        err(_) => println("err")
+    }
+}
+
+fn no_errdefer() E!void {
+    let r = open(13)
+    let s = try may(14)
+    close(s)
+    close(r)
+}
+
+fn errdefer_only() E!void {
+    let r = open(15)
+    errdefer close(r)
+    return
+}
+
+fn closed_then_fail(flag: bool) E!void {
+    let r = open(16)
+    errdefer close(r)
+    close(r)
+    if flag {
+        fail .Bad
+    }
+}
+
+fn moved_into_result() E!Res {
+    let r = open(17)
+    errdefer close(r)
+    return wrap(r)
+}
+
+fn through_ref(r: &Res) {
+    close(r)
+}
+
+fn replace_ref(r: &mut Res) {
+    r = open(18)
+}
+
+fn main() {
+}

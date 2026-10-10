@@ -1,0 +1,4 @@
+has 7: true, has 8: false
+freed 16
+freed 8
+too big: true

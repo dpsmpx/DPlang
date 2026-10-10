@@ -1,7 +1,7 @@
 // spec: syntax.item
 @det
-struct S {
-    a: i32
+enum S {
+    A
 }
 
 pub import world

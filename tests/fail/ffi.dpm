@@ -1,0 +1,30 @@
+// spec: ffi.extern ffi.types ffi.c
+extern type Handle
+
+extern fn takes_list(xs: List[i32]) i32
+extern fn gives_list() List[u8]
+extern fn takes_ref(s: &str) i32
+
+@c
+struct Bad {
+    name: str
+    n: i32
+}
+
+@link("m")
+fn not_c() {
+}
+
+@det
+extern fn det_c(x: i32) i32
+
+@link
+extern fn no_lib()
+
+@c
+fn wrong_place() {
+}
+
+fn main() {
+    let h = Handle
+}

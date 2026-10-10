@@ -96,19 +96,22 @@ public:
             case ItemKind::Fn: {
                 auto* f = static_cast<const FnItem*>(it);
                 std::string attrs;
-                for (const Attr& a : f->attrs) attrs += " @" + a.name;
-                line(d, "Fn " + f->name + pub + attrs);
+                for (const Attr& a : f->attrs) attrs += " " + a.text();
+                line(d, std::string(f->is_extern ? "ExternFn " : "Fn ") + f->name + pub + attrs);
                 for (const Param& p : f->params) {
                     std::string mode = p.mode == ParamMode::Mut ? "&mut " : p.mode == ParamMode::Ref ? "&" : "";
                     line(d + 1, "Param " + p.name + " " + mode + type_text(p.type));
                 }
                 if (f->ret) line(d + 1, "Ret " + type_text(f->ret));
-                block(f->body, d + 1);
+                if (!f->is_extern) block(f->body, d + 1);
                 break;
             }
+            case ItemKind::ExternType: line(d, "ExternType " + it->name + pub); break;
             case ItemKind::Struct: {
                 auto* s = static_cast<const StructItem*>(it);
-                line(d, "Struct " + s->name + pub);
+                std::string attrs;
+                for (const Attr& a : s->attrs) attrs += " " + a.text();
+                line(d, "Struct " + s->name + pub + attrs);
                 for (const FieldDecl& f : s->fields) field(f, d + 1);
                 break;
             }
@@ -170,7 +173,10 @@ public:
         switch (s->kind) {
             case StmtKind::Let: {
                 auto* l = static_cast<const LetStmt*>(s);
-                line(d, std::string(l->is_var ? "Var " : "Let ") + l->name + (l->type ? ": " + type_text(l->type) : ""));
+                std::string fs;
+                for (const LetField& f : l->fields) fs += " " + f.field + (f.name != f.field ? ":" + f.name : "");
+                line(d, std::string(l->is_var ? "Var " : "Let ") + l->name + (l->destructure ? " {" + fs + " }" : "") +
+                            (l->type ? ": " + type_text(l->type) : ""));
                 if (l->value) expr(l->value, d + 1);
                 break;
             }
@@ -232,7 +238,12 @@ public:
             }
             case StmtKind::Break: line(d, "Break"); break;
             case StmtKind::Continue: line(d, "Continue"); break;
-            case StmtKind::Defer: line(d, "Defer"); stmt(static_cast<const DeferStmt*>(s)->body, d + 1); break;
+            case StmtKind::Defer: {
+                auto* df = static_cast<const DeferStmt*>(s);
+                line(d, df->on_error ? "Errdefer" : "Defer");
+                stmt(df->body, d + 1);
+                break;
+            }
             case StmtKind::Fail: line(d, "Fail"); expr(static_cast<const FailStmt*>(s)->value, d + 1); break;
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block, d); break;
             case StmtKind::Error: line(d, "ErrorStmt"); break;

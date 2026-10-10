@@ -421,6 +421,26 @@ bool dp_utf8_valid(const uint8_t* p, int64_t n) {
     return true;
 }
 
+char* dp_str_to_c(dp_str s, const char* loc) {
+    if (s.len > 0 && memchr(s.ptr, 0, (size_t)s.len)) dp_trap(loc, "a str passed to C contains a zero byte");
+    char* c = (char*)dp_alloc(s.len + 1, 1, loc);
+    if (s.len) memcpy(c, s.ptr, (size_t)s.len);
+    c[s.len] = 0;
+    return c;
+}
+
+dp_str dp_str_from_c(const char* p, const char* fn, const char* loc) {
+    if (!p) dp_trapf(loc, "C function '%s' returned NULL instead of a string", fn);
+    size_t n = strlen(p);
+    if (!dp_utf8_valid((const uint8_t*)p, (int64_t)n)) dp_trapf(loc, "C function '%s' returned a string that is not UTF-8", fn);
+    dp_str s = {0};
+    if (n == 0) return s;
+    s.ptr = (uint8_t*)dp_alloc((int64_t)n, 1, loc);
+    memcpy(s.ptr, p, n);
+    s.len = (int64_t)n;
+    return s;
+}
+
 int32_t dp_read_file(dp_str path, dp_str* out, const char* loc) {
     /* Путь — строка C: байт 0 внутри пути не называет никакого файла. */
     if (path.len > 0 && memchr(path.ptr, 0, (size_t)path.len)) return 1;

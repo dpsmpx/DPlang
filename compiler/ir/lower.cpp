@@ -10,6 +10,7 @@
 // освобождать ещё не заполненное или уже отданное (move) значение можно.
 #include "ir/lower.h"
 
+#include <algorithm>
 #include <map>
 
 #include "sema/builtins.h"
@@ -100,6 +101,11 @@ public:
             if (i < node->params.size() && node->params[i].local) locals_[node->params[i].local] = l;
         }
         f_.param_count = static_cast<uint32_t>(def.params.size());
+        if (def.is_extern) {  // функция C (Р59): только сигнатура
+            f_.is_extern = true;
+            f_.c_name = def.name;
+            return;
+        }
         if (def.ret->kind != TK::Void) ret_ = add_local(def.ret, LocalKind::Temp, "");
         cur_ = new_block();
         scopes_.emplace_back();
@@ -145,7 +151,12 @@ private:
         bool is_defer = false;
         uint32_t local = 0;
         const Stmt* defer = nullptr;
+        bool on_error = false;  // errdefer: только на выходе с ошибкой
     };
+    // Вид выхода из областей: errdefer выполняется только на ошибке.
+    // Dynamic — `return` значения E!T: ошибка или нет, видно во время
+    // выполнения по результату.
+    enum class Way : uint8_t { Normal, Error, Dynamic };
     std::vector<std::vector<Cleanup>> scopes_;
 
     struct Loop {
@@ -652,7 +663,7 @@ private:
         Place err = proj(r, ProjKind::ResultError);
         e.ops.push_back(fresh ? move(err) : copy(err));
         assign(local(ret_), std::move(e), t->span);
-        exit_scopes(0, t->span);
+        exit_scopes(0, t->span, Way::Error);
         ret_term(true, t->span);
         cur_ = ok_b;
         const Type* rt = place_type(out_, f_, r);
@@ -853,20 +864,32 @@ private:
     void push_scope() { scopes_.emplace_back(); }
 
     // Очистка одной области: drop и defer в обратном порядке.
-    void cleanup(size_t depth, Span span) {
+    void cleanup(size_t depth, Span span, Way way = Way::Normal) {
         std::vector<Cleanup> items = scopes_[depth];  // defer может открыть новые области
         for (auto it = items.rbegin(); it != items.rend(); ++it) {
-            if (it->is_defer) {
-                stmt(it->defer);
-            } else {
+            if (!it->is_defer) {
                 inst(InstKind::Drop, local(it->local), Rvalue{}, span);
+            } else if (!it->on_error || way == Way::Error) {
+                stmt(it->defer);
+            } else if (way == Way::Dynamic) {  // errdefer — если результат функции ошибка
+                Rvalue test = make(RvKind::IsOk, prim(TK::Bool));
+                test.place = local(ret_);
+                test.has_place = true;
+                Operand ok = to_temp(std::move(test), span);
+                uint32_t run_b = new_block(), done = new_block();
+                branch(ok, done, run_b, span);
+                cur_ = run_b;
+                stmt(it->defer);
+                jump(done, span);
+                cur_ = done;
             }
         }
     }
 
-    // Очистка областей глубже depth (выход из них: return, break, continue).
-    void exit_scopes(size_t depth, Span span) {
-        for (size_t d = scopes_.size(); d > depth; d--) cleanup(d - 1, span);
+    // Очистка областей глубже depth (выход из них: return, break, continue,
+    // fail, ошибка try).
+    void exit_scopes(size_t depth, Span span, Way way = Way::Normal) {
+        for (size_t d = scopes_.size(); d > depth; d--) cleanup(d - 1, span, way);
     }
 
     void pop_scope(Span span) {
@@ -906,7 +929,7 @@ private:
                 Rvalue rv = make(RvKind::MakeErr, f_.ret);
                 rv.ops.push_back(expr(fl->value));
                 assign(local(ret_), std::move(rv), s->span);
-                exit_scopes(0, s->span);
+                exit_scopes(0, s->span, Way::Error);
                 ret_term(true, s->span);
                 pop_scope(s->span);
                 break;
@@ -917,9 +940,11 @@ private:
                 jump(s->kind == StmtKind::Break ? l.brk : l.cont, s->span);
                 break;
             }
-            case StmtKind::Defer:
-                scopes_.back().push_back(Cleanup{true, 0, static_cast<const DeferStmt*>(s)->body});
+            case StmtKind::Defer: {
+                auto* d = static_cast<const DeferStmt*>(s);
+                scopes_.back().push_back(Cleanup{true, 0, d->body, d->on_error});
                 break;
+            }
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;
             case StmtKind::Error: break;
         }
@@ -936,6 +961,10 @@ private:
     }
 
     void let_stmt(const LetStmt* l) {
+        if (l->destructure) {
+            destructure(l);
+            return;
+        }
         uint32_t x = l->local ? var(l->local) : add_local(l->value ? l->value->type : prim(TK::Bool), LocalKind::Var, "_");
         if (l->value) {
             push_scope();
@@ -944,6 +973,23 @@ private:
             pop_scope(l->span);
         }
         own(x);
+    }
+
+    // `let S { f, g: x } = v`: поля значения — в новые переменные.
+    void destructure(const LetStmt* l) {
+        std::vector<uint32_t> xs;
+        push_scope();
+        bool fresh = false;
+        Place v = place_of(expr(l->value), l->value->span, fresh);
+        for (const LetField& f : l->fields) {
+            if (!f.local) continue;  // `_`: поле освобождается вместе со значением
+            uint32_t x = var(f.local);
+            Place p = proj(v, ProjKind::Field, static_cast<uint32_t>(f.index));
+            assign(local(x), use(fresh ? move(std::move(p)) : copy(std::move(p)), f_.locals[x].type), f.name_span);
+            xs.push_back(x);
+        }
+        pop_scope(l->span);
+        for (uint32_t x : xs) own(x);
     }
 
     void assign_stmt(const AssignStmt* a) {
@@ -1272,12 +1318,15 @@ private:
     void return_stmt(const ReturnStmt* s) {
         push_scope();
         bool value = f_.ret->kind != TK::Void;
+        Way way = Way::Normal;
         if (s->value) {
             assign(local(ret_), use(expr(s->value), f_.ret), s->span);
+            // Значение E!T без обёртки ok: может быть и ошибкой.
+            if (s->value->type && s->value->type->kind == TK::Result && !s->value->conv) way = Way::Dynamic;
         } else if (value) {  // `return` в функции `E!void`
             assign(local(ret_), make(RvKind::MakeOk, f_.ret), s->span);
         }
-        exit_scopes(0, s->span);
+        exit_scopes(0, s->span, way);
         ret_term(value, s->span);
         pop_scope(s->span);
     }
@@ -1339,6 +1388,10 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
     }
     out->fns.resize(order.size());
     for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, out->fns[i]).run(*order[i]);
+    for (const sema::FnDef* f : order) {
+        if (!f->is_extern || f->link.empty()) continue;
+        if (std::find(out->links.begin(), out->links.end(), f->link) == out->links.end()) out->links.push_back(f->link);
+    }
     return out;
 }
 

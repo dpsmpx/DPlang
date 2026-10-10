@@ -66,6 +66,7 @@ private:
     void block(ast::Block* b);
     void stmt(ast::Stmt* s);
     void let_stmt(ast::LetStmt* l);
+    void destructure(ast::LetStmt* l);
     void assign_stmt(ast::AssignStmt* a);
     void expr_stmt(ast::ExprStmt* s);
     void if_stmt(ast::IfStmt* s);
@@ -132,5 +133,9 @@ private:
 
 // Вывод типа ошибки непубличных функций `!T` (Р41) — до проверки тел.
 void infer_errors(Program& prog, ModuleInfo& m, Diagnostics& diags);
+
+// Линейные значения (Р57, Р60): закрыты на всех путях, не используются
+// после закрытия — после проверки тел, по типизированному дереву.
+void check_linear(Program& prog, ModuleInfo& m, Diagnostics& diags);
 
 }  // namespace dp::sema

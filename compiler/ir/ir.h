@@ -211,6 +211,8 @@ struct Function {
     const Type* ret = nullptr;  // Void — без результата
     std::vector<Block> blocks;  // вход — блок 0
     bool det = false;           // класс D (Р55): после операций с плавающими — canon (Р56)
+    bool is_extern = false;     // функция C (Р59): блоков нет, имя символа — c_name
+    std::string c_name;         // символ C у extern
 };
 
 struct Program {
@@ -218,6 +220,7 @@ struct Program {
     std::vector<std::string> strings;
     int main_fn = -1;  // `main` главного модуля; -1 — нет
     const sema::TypeTable* types = nullptr;
+    std::vector<std::string> links;  // библиотеки C из `@link` (Р59), без повторов, по порядку объявлений
 };
 
 // Тип места: тип переменной после проекций; nullptr — путь не подходит к типу.

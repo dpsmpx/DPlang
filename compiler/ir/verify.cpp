@@ -21,6 +21,11 @@ public:
             if (!l.type) fail("local %" + std::to_string(i) + " has no type");
         }
         if (!f_.ret) return fail("no result type");
+        if (f_.is_extern) {  // функция C: только сигнатура (Р59)
+            if (!f_.blocks.empty()) fail("extern function with blocks");
+            if (f_.c_name.empty()) fail("extern function without a C name");
+            return;
+        }
         if (f_.blocks.empty()) return fail("no blocks");
         for (size_t b = 0; b < f_.blocks.size(); b++) {
             block_ = b;

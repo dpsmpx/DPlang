@@ -153,6 +153,17 @@ Module stmts
           Assign =
             Name b
             Int 0
+      Errdefer
+        ExprStmt
+          Call
+            Field .clear
+              Name xs
+      Let Pair { left right:r tag:_ }
+        Call
+          Name make
+      Var Pair { left right }
+        Call
+          Name make
       Block
         Let inner
           Int 1

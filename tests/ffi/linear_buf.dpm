@@ -1,0 +1,66 @@
+// spec: ffi.linear ffi.extern stmt.errdefer stmt.destructure
+// Память C под линейным типом (Р57, Р60): буфер malloc освобождается
+// ровно один раз — defer на обычном пути, errdefer на ошибке.
+extern type Mem
+
+extern fn malloc(n: u64) ?Mem
+extern fn free(p: Mem)
+extern fn memset(dst: Mem, c: i32, n: u64) ?Mem
+extern fn memchr(s: Mem, c: i32, n: u64) ?Mem
+
+enum BufError {
+    NoMemory
+    TooBig
+}
+
+@linear
+struct Buf {
+    mem: Mem
+    size: u64
+}
+
+fn alloc(size: u64) BufError!Buf {
+    if let mem = malloc(size) {
+        return Buf { mem: mem, size: size }
+    }
+    fail .NoMemory
+}
+
+fn release(b: Buf) {
+    let Buf { mem, size } = b
+    free(mem)
+    println("freed " + str(size))
+}
+
+fn fill(b: &Buf, byte: i32, n: u64) BufError!void {
+    if n > b.size {
+        fail .TooBig
+    }
+    _ = memset(b.mem, byte, n)
+}
+
+fn has(b: &Buf, byte: i32) bool {
+    return memchr(b.mem, byte, b.size) != none
+}
+
+// errdefer освобождает буфер, если заполнить его не вышло.
+fn filled(size: u64, n: u64) BufError!Buf {
+    let b = try alloc(size)
+    errdefer release(b)
+    try fill(&b, 7, n)
+    return b
+}
+
+fn main() {
+    match filled(16, 16) {
+        ok(b) => {
+            defer release(b)
+            println("has 7: " + str(has(&b, 7)) + ", has 8: " + str(has(&b, 8)))
+        }
+        err(_) => println("unexpected")
+    }
+    match filled(8, 32) {
+        ok(b) => release(b)
+        err(e) => println("too big: " + str(e == .TooBig))
+    }
+}

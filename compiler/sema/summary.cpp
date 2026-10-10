@@ -35,7 +35,8 @@ std::string summary_text(const ModuleInfo& m) {
                 const FnDef& f = *s.fn;
                 out += "  ";
                 if (f.det) out += "@det ";
-                out += "pub fn " + f.name + "(";
+                if (!f.link.empty()) out += "@link(\"" + f.link + "\") ";
+                out += std::string(f.is_extern ? "pub extern fn " : "pub fn ") + f.name + "(";
                 for (size_t i = 0; i < f.params.size(); i++) {
                     const ParamDef& p = f.params[i];
                     out += (i ? ", " : "") + p.name + ": " + mode_text(p.mode) + type_name(p.type, &m);
@@ -47,7 +48,12 @@ std::string summary_text(const ModuleInfo& m) {
             }
             case ast::ItemKind::Struct:
                 if (!s.st || s.st->node != it) break;
-                out += "  pub struct " + s.st->name + " { " + fields_text(s.st->fields, &m) + " }\n";
+                out += std::string("  ") + (s.st->c ? "@c " : "") + (s.st->linear ? "@linear " : "") + "pub struct " +
+                       s.st->name + " { " + fields_text(s.st->fields, &m) + " }\n";
+                break;
+            case ast::ItemKind::ExternType:
+                if (!s.hd) break;
+                out += "  pub extern type " + s.hd->name + "\n";
                 break;
             case ast::ItemKind::Enum: {
                 if (!s.en || s.en->node != it) break;

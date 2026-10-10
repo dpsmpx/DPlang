@@ -82,7 +82,7 @@ bool is_stmt_start(TokKind k) {
     switch (k) {
         case TokKind::KwLet: case TokKind::KwVar: case TokKind::KwIf: case TokKind::KwWhile: case TokKind::KwFor:
         case TokKind::KwParallel: case TokKind::KwMatch: case TokKind::KwReturn: case TokKind::KwBreak:
-        case TokKind::KwContinue: case TokKind::KwDefer: case TokKind::KwFail: return true;
+        case TokKind::KwContinue: case TokKind::KwDefer: case TokKind::KwErrdefer: case TokKind::KwFail: return true;
         default: return false;
     }
 }
@@ -345,6 +345,17 @@ private:
             a.name = expect_ident(s);
             a.span = Span{id_, at_tok.begin, s.end};
             if (failed_) return nullptr;
+            if (eat(TokKind::LParen)) {  // `@link("SDL3")`
+                if (!at(TokKind::Str)) {
+                    expected("a string argument");
+                    return nullptr;
+                }
+                a.has_arg = true;
+                a.arg_src = std::string(text_of(bump()));
+                a.arg = string_literal_value(a.arg_src);
+                if (!expect(TokKind::RParen)) return nullptr;
+                a.span.end = prev_end_;
+            }
             attrs.push_back(a);
             skip_newlines();
         }
@@ -357,6 +368,7 @@ private:
         Item* it = nullptr;
         switch (peek()) {
             case TokKind::KwFn: it = fn_item(); break;
+            case TokKind::KwExtern: it = extern_item(); break;
             case TokKind::KwStruct: it = struct_item(); break;
             case TokKind::KwEnum: it = enum_item(); break;
             case TokKind::KwConst: it = const_item(); break;
@@ -365,21 +377,41 @@ private:
                 it = import_item();
                 break;
             default:
-                expected("declaration (fn, struct, enum, const or import)");
+                expected("declaration (fn, struct, enum, const, import or extern)");
                 return nullptr;
         }
+        if (!it) return nullptr;
         if (!attrs.empty()) {
             if (auto* f = as<FnItem>(it)) f->attrs = std::move(attrs);
             else if (auto* im = as<ImportItem>(it)) im->attrs = std::move(attrs);
-            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function or an import");
+            else if (auto* st = as<StructItem>(it)) st->attrs = std::move(attrs);
+            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function, a struct or an import");
         }
         it->pub = pub;
         it->span = span_from(begin);
         return it;
     }
 
-    Item* fn_item() {
+    // `extern fn f(...) T` без тела или `extern type Name` (Р59).
+    Item* extern_item() {
+        bump();  // extern
+        if (at(TokKind::KwFn)) {
+            auto* f = static_cast<FnItem*>(fn_item(/*is_extern=*/true));
+            return f;
+        }
+        if (at(TokKind::Ident) && text_of(toks_[idx()]) == "type") {
+            bump();
+            auto* t = m_.make<ExternTypeItem>();
+            t->name = expect_ident(t->name_span);
+            return t;
+        }
+        expected("'fn' or 'type' after 'extern'");
+        return nullptr;
+    }
+
+    Item* fn_item(bool is_extern = false) {
         auto* f = m_.make<FnItem>();
+        f->is_extern = is_extern;
         bump();  // fn
         f->name = expect_ident(f->name_span);
         if (!expect(TokKind::LParen)) return f;
@@ -392,6 +424,10 @@ private:
             if (!failed_) expect(TokKind::RParen);
         }
         if (failed_) return f;
+        if (is_extern) {  // без тела: тип результата — до конца строки
+            if (!at(TokKind::Newline) && !at(TokKind::Eof)) f->ret = type();
+            return f;
+        }
         if (!at(TokKind::LBrace)) f->ret = type();
         if (failed_) return f;
         f->body = block();
@@ -656,9 +692,9 @@ private:
             }
             case TokKind::KwBreak: bump(); s = m_.make<BreakStmt>(); break;
             case TokKind::KwContinue: bump(); s = m_.make<ContinueStmt>(); break;
-            case TokKind::KwDefer: {
-                bump();
+            case TokKind::KwDefer: case TokKind::KwErrdefer: {
                 auto* d = m_.make<DeferStmt>();
+                d->on_error = bump().kind == TokKind::KwErrdefer;
                 d->body = at(TokKind::LBrace) ? block_stmt() : stmt();
                 s = d;
                 break;
@@ -681,6 +717,27 @@ private:
         auto* l = m_.make<LetStmt>();
         l->is_var = bump().kind == TokKind::KwVar;
         l->name = expect_ident(l->name_span);
+        if (!failed_ && at(TokKind::LBrace)) {  // разбор `let S { f, g: x } = v` (Р60)
+            l->destructure = true;
+            bump();
+            NlScope nl(*this, true);
+            while (!at(TokKind::RBrace) && !failed_) {
+                LetField f;
+                f.field = expect_ident(f.field_span);
+                f.name = f.field;
+                f.name_span = f.field_span;
+                if (eat(TokKind::Colon)) f.name = expect_ident(f.name_span);
+                l->fields.push_back(f);
+                if (!eat(TokKind::Comma)) break;
+            }
+            if (!failed_) expect(TokKind::RBrace);
+            if (failed_) return l;
+            if (expect(TokKind::Eq)) {
+                skip_newlines();
+                l->value = expr(false);
+            }
+            return l;
+        }
         if (eat(TokKind::Colon)) l->type = type();
         if (failed_) return l;
         if (eat(TokKind::Eq)) {

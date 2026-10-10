@@ -209,6 +209,7 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
     for (const std::string& a : {std::string("-I"), core, c_path, core + "/dp_rt.c", platform + "/dp_entry.c"}) {
         argv.push_back(a);
     }
+    for (const std::string& l : opt.links) argv.push_back("-l" + l);
     for (std::string_view l : t.libs) argv.emplace_back(l);
     argv.push_back("-o");
     argv.push_back(exe);

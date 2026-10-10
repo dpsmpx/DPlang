@@ -1,0 +1,45 @@
+// spec: ffi.extern ffi.types ffi.c
+// Функции библиотеки C на трёх целях (Р59): числа, строки, срезы,
+// указатели на место и на элементы списка, структура @c, дескриптор.
+@link("m")
+extern fn floor(x: f64) f64
+
+@link("m")
+extern fn modf(x: f64, whole: &mut f64) f64
+
+extern fn strlen(s: str) u64
+extern fn atoi(s: str) i32
+extern fn abs(x: i32) i32
+extern fn getenv(name: str) ?str
+extern fn memcmp(a: []u8, b: []u8, n: u64) i32
+extern fn memset(dst: &mut List[u8], c: i32, n: u64) ?Mem
+extern fn div(num: i32, den: i32) DivT
+extern fn strchr(s: str, c: i32) ?Mem
+extern fn strerror(code: i32) str
+
+extern type Mem
+
+@c
+struct DivT {
+    quot: i32
+    rem: i32
+}
+
+fn main() {
+    println(str(floor(-2.5)) + " " + str(abs(-7)) + " " + str(atoi("  42xyz")))
+    var whole: f64 = 0.0
+    let frac = modf(3.25, &mut whole)
+    println(str(frac) + " " + str(whole))
+    println(str(strlen("hello, мир")))
+    println(str(getenv("DPL_FFI_TEST_SURELY_UNSET") == none))
+    let a: List[u8] = [1, 2, 3]
+    let b: List[u8] = [1, 2, 4]
+    println(str(memcmp(a, b, 2) == 0) + " " + str(memcmp(a, b, 3) < 0))
+    var buf: List[u8] = repeat(u8(0), 4)
+    _ = memset(&mut buf, 7, 3)
+    println(str(buf[0]) + str(buf[1]) + str(buf[2]) + str(buf[3]))
+    let d = div(17, 5)
+    println(str(d.quot) + " " + str(d.rem))
+    println(str(strchr("abc", 'z') == none) + " " + str(strchr("abc", 'b') != none))
+    println(str(len(strerror(0)) > 0))
+}

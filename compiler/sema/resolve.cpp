@@ -18,7 +18,8 @@ const Symbol* Resolver::member(const ModuleInfo& mod, const std::string& name, S
         return nullptr;
     }
     const Symbol& s = it->second;
-    bool pub = (s.fn && s.fn->pub) || (s.st && s.st->pub) || (s.en && s.en->pub) || (s.cn && s.cn->pub);
+    bool pub = (s.fn && s.fn->pub) || (s.st && s.st->pub) || (s.en && s.en->pub) || (s.cn && s.cn->pub) ||
+               (s.hd && s.hd->pub);
     if (!pub) {
         Diagnostic& d = diags_.error(Code::E0306, span, "'" + name + "' is private to module '" + mod.name + "'");
         d.notes.push_back(Note{s.span, true, "declared here without 'pub'"});
@@ -47,11 +48,13 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
             } else {
                 s = lookup(n->name);
             }
-            if (s && (s->kind == SymKind::Struct || s->kind == SymKind::Enum)) {
+            if (s && (s->kind == SymKind::Struct || s->kind == SymKind::Enum || s->kind == SymKind::Handle)) {
                 if (!n->args.empty()) {
                     diags_.error(Code::E0314, node->span, "type '" + n->name + "' takes no type arguments");
                 }
-                out = s->kind == SymKind::Struct ? tt.struct_type(s->st) : tt.enum_type(s->en);
+                out = s->kind == SymKind::Struct ? tt.struct_type(s->st)
+                      : s->kind == SymKind::Enum ? tt.enum_type(s->en)
+                                                 : tt.handle(s->hd);
                 break;
             }
             int b = n->module.empty() ? find_builtin_type(n->name) : -1;

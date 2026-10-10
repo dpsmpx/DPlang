@@ -1,0 +1,113 @@
+// spec: ffi.linear stmt.destructure stmt.errdefer stmt.defer error.flow
+// Линейные ресурсы (Р57, Р60): закрытие через defer, errdefer на выходе с
+// ошибкой, перенос, разбор в модуле типа, ?T и E!T с ресурсом.
+enum IoError {
+    Busy
+    Broken
+}
+
+@linear
+struct Res {
+    id: int
+    name: str
+}
+
+@linear
+struct Pair {
+    left: Res
+    right: Res
+    label: str
+}
+
+fn open(id: int) Res {
+    println("open " + str(id))
+    return Res { id: id, name: "r" + str(id) }
+}
+
+fn close(r: Res) {
+    let Res { id, name } = r
+    println("close " + name + " (" + str(id) + ")")
+}
+
+fn peek(r: &Res) int {
+    return r.id
+}
+
+fn try_open(id: int) IoError!Res {
+    if id < 0 {
+        fail .Busy
+    }
+    return open(id)
+}
+
+fn find(id: int) ?Res {
+    if id == 0 {
+        return none
+    }
+    return open(id)
+}
+
+// errdefer закрывает уже открытое, если дальше ошибка; на успехе — нет.
+fn make_pair(a: int, b: int) IoError!Pair {
+    let left = try try_open(a)
+    errdefer close(left)
+    let right = try try_open(b)
+    errdefer close(right)
+    if a == b {
+        fail .Broken
+    }
+    return Pair { left: left, right: right, label: str(a) + "+" + str(b) }
+}
+
+fn close_pair(p: Pair) {
+    let Pair { left, right, label: tag } = p
+    println("close pair " + tag)
+    close(right)
+    close(left)
+}
+
+// `return` значения E!T: errdefer — по результату во время выполнения.
+fn forward(id: int) IoError!Res {
+    errdefer println("forward: failed " + str(id))
+    defer println("forward: done " + str(id))
+    return try_open(id)
+}
+
+fn report(r: IoError!Pair) {
+    match r {
+        ok(p) => close_pair(p)
+        err(e) => println("pair failed: busy = " + str(e == .Busy) + ", broken = " + str(e == .Broken))
+    }
+}
+
+fn main() {
+    let a = open(1)
+    defer close(a)
+    println("peek " + str(peek(&a)))
+    let b = open(2)
+    let c = b
+    close(c)
+    report(make_pair(3, 4))
+    report(make_pair(5, -1))
+    report(make_pair(6, 6))
+    match forward(7) {
+        ok(r) => close(r)
+        err(_) => println("unexpected")
+    }
+    match forward(-7) {
+        ok(r) => close(r)
+        err(e) => println("forward error: busy = " + str(e == .Busy))
+    }
+    if let r = find(8) {
+        close(r)
+    }
+    let d = find(0) ?? open(9)
+    close(d)
+    var total = 0
+    for i in 0..3 {
+        let r = open(20 + i)
+        defer close(r)
+        total += peek(&r) + peek(&a)
+    }
+    println("total " + str(total))
+}
