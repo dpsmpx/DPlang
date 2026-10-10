@@ -1,0 +1,43 @@
+// Модуль combat (после рефакторинга): урон.
+import world
+
+pub enum CombatError {
+    NotFound
+    Dead
+}
+
+fn after_armor(dmg: i32, armor: i32) i32 {
+    return max(1, dmg - armor)
+}
+
+// Урон после брони: max(1, dmg - armor); здоровье не опускается ниже 0.
+// Результат — здоровье после удара.
+pub fn apply_damage(w: &mut world.World, id: world.UnitId, dmg: i32) CombatError!i32 {
+    let i = id.index
+    if i < 0 || i >= len(w.units) {
+        fail CombatError.NotFound
+    }
+    if w.units[i].hp == 0 {
+        fail CombatError.Dead
+    }
+    w.units[i].hp -= after_armor(dmg, w.units[i].armor)
+    if w.units[i].hp < 0 {
+        w.units[i].hp = 0
+    }
+    return w.units[i].hp
+}
+
+// Бьёт всех живых в квадрате |x - cx| <= r, |y - cy| <= r по порядку
+// номеров; возвращает задетых в том же порядке.
+pub fn blast(w: &mut world.World, cx: i32, cy: i32, r: i32, dmg: i32) List[world.UnitId] {
+    var hits: List[world.UnitId] = []
+    for i in 0..len(w.units) {
+        let u = w.units[i]
+        if u.hp != 0 && abs(u.x - cx) <= r && abs(u.y - cy) <= r {
+            let id = world.UnitId { index: i32(i) }
+            _ = apply_damage(&mut w, id, dmg)
+            hits.push(id)
+        }
+    }
+    return hits
+}

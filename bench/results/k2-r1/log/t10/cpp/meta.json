@@ -20,5 +20,10 @@
  "id": "t10",
  "lang": "cpp",
  "kind": "write",
- "created": "2026-10-10T03:18:54"
+ "created": "2026-10-10T03:18:54",
+ "session": {
+  "total_tokens": 53315,
+  "tool_uses": 6,
+  "seconds": 44.9
+ }
 }

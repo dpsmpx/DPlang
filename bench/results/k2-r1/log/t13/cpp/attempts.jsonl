@@ -1,0 +1,1 @@
+{"n": 1, "time": "2026-10-10T03:29:50", "seconds": 1.5, "class": "принято", "output": "попытка 1 из 5: принято", "files": {"combat.cpp": "c8b43b51401f318a", "combat.hpp": "d5b3e3b16b8be4a1", "report.cpp": "36151e99622ac8b6", "report.hpp": "dd43e042cab0aaa3", "world.cpp": "82de0692166fa3f7", "world.hpp": "bd4ff5e9dfea1d5e"}}

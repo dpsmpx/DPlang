@@ -1,0 +1,38 @@
+// t11: физика частиц в фиксированной точке 16.16.
+pub struct Particle {
+    x: i32
+    y: i32
+    vx: i32
+    vy: i32
+}
+
+const G: i32 = -6554
+
+pub fn step(particles: &mut List[Particle]) {
+    for p in &mut particles {
+        var vy: i64 = i64(p.vy) + i64(G)
+        let x: i64 = i64(p.x) + i64(p.vx)
+        var y: i64 = i64(p.y) + vy
+        var vx: i64 = i64(p.vx)
+        if y < 0 {
+            y = 0
+            vy = -(vy * 3) / 4
+            vx = vx * 7 / 8
+        }
+        p.x = i32(x)
+        p.y = i32(y)
+        p.vx = i32(vx)
+        p.vy = i32(vy)
+    }
+}
+
+pub fn checksum(particles: []Particle) u32 {
+    var h: u32 = 17
+    for p in &particles {
+        h = h *% 31 +% u32.wrap(p.x)
+        h = h *% 31 +% u32.wrap(p.y)
+        h = h *% 31 +% u32.wrap(p.vx)
+        h = h *% 31 +% u32.wrap(p.vy)
+    }
+    return h
+}
