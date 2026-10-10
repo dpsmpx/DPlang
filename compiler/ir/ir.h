@@ -45,7 +45,6 @@ enum class ProjKind : uint8_t {
     Unwrap,       // значение ?T (есть — проверено раньше)
     ResultValue,  // значение E!T при успехе
     ResultError,  // ошибка E!T
-    MapKey,       // ключ Map в позиции index — переменная i64; вне границ — ловушка; только чтение (Р54)
     MapValue,     // значение Map по ключу из переменной index; нет ключа — ловушка (Р54)
 };
 
@@ -117,7 +116,7 @@ enum class Intrinsic : uint8_t {
     CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
     // Map (Р54). Изменяющие — получатель-место: MapSet (ops: ключ, значение;
     // вставка или замена), MapRemove (ключ → ?V), MapClear. Читающие —
-    // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K]).
+    // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K], ключи по возрастанию).
     MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys,
 };
 

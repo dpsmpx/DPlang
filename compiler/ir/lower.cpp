@@ -1059,8 +1059,14 @@ private:
             jump(head, s->span);
         } else {
             // `for x in &xs`: x — место xs[k]; длина проверяется на каждом шаге.
+            // `for k in &m`: k — элемент снимка m.keys(), ключи по возрастанию (Р54).
             bool fresh = false;
             Place base = object(s->iter, fresh);
+            if (s->iter->type->kind == TK::Map) {
+                Rvalue keys = intrinsic(Intrinsic::MapKeys, tt_.list(s->iter->type->key));
+                keys.ops.push_back(copy(base));
+                base = place_of(to_temp(std::move(keys), s->iter->span), s->iter->span, fresh);
+            }
             uint32_t k = temp(i64);
             assign(local(k), use(cint(0, i64), i64), s->var_span);
             jump(head, s->span);
@@ -1071,8 +1077,7 @@ private:
             Operand c = to_temp(bin(BinKind::Lt, copy(local(k)), n, prim(TK::Bool)), s->var_span);
             branch(c, body, done, s->var_span);
             cur_ = body;
-            ProjKind pk = s->iter->type->kind == TK::Map ? ProjKind::MapKey : ProjKind::Index;  // Map — ключи (Р54)
-            if (s->local) aliases_[s->local] = proj(base, pk, k);
+            if (s->local) aliases_[s->local] = proj(base, ProjKind::Index, k);
             loops_.push_back(Loop{done, step, scopes_.size()});
             block(s->body);
             loops_.pop_back();

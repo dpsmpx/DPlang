@@ -90,7 +90,6 @@ private:
                 case ProjKind::Unwrap: s += ".some"; if (t) t = t->elem; break;
                 case ProjKind::ResultValue: s += ".ok"; if (t) t = t->elem; break;
                 case ProjKind::ResultError: s += ".err"; if (t) t = t->err; break;
-                case ProjKind::MapKey: s += ".key[%" + std::to_string(pr.index) + "]"; if (t) t = t->key; break;
                 case ProjKind::MapValue: s += "{%" + std::to_string(pr.index) + "}"; if (t) t = t->elem; break;
             }
         }

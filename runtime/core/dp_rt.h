@@ -260,8 +260,8 @@ dp_str dp_str_concat(dp_str a, dp_str b, const char* loc);
 bool dp_str_eq(dp_str a, dp_str b);
 bool dp_str_lt(dp_str a, dp_str b); /* по байтам без знака */
 
-/* Хэш ключа Map (Р54): без случайной соли. Порядок обхода Map — порядок
- * вставки, от хэша он не зависит; хэш нужен только для поиска. */
+/* Хэш ключа Map (Р54): без случайной соли. Обход Map — по возрастанию
+ * ключа, от хэша он не зависит; хэш нужен только для поиска. */
 static inline uint64_t dp_hash_u64(uint64_t x) {
     x ^= x >> 33;
     x *= UINT64_C(0xff51afd7ed558ccd);

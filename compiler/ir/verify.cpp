@@ -54,7 +54,6 @@ private:
         const Type* t = f_.locals[pl.local].type;
         for (size_t i = 0; i < pl.proj.size() && t; i++) {
             if (pl.proj[i].kind == ProjKind::Index && (t->kind == TK::Slice || t->kind == TK::Str)) return false;
-            if (pl.proj[i].kind == ProjKind::MapKey) return false;  // ключ Map только читается
             Place prefix{pl.local, std::vector<Proj>(pl.proj.begin(), pl.proj.begin() + static_cast<long>(i) + 1)};
             t = place_type(p_, f_, prefix);
         }

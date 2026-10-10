@@ -1,0 +1,43 @@
+// spec: type.map stmt.for builtin.methods
+fn show(m: &Map[str, i32]) str {
+    var s = ""
+    for k in &m {
+        s += k + "=" + str(m[k]) + " "
+    }
+    return s
+}
+
+fn main() {
+    var m: Map[str, i32] = []
+    m["pear"] = 1
+    m["Apple"] = 2
+    m["apple"] = 3
+    m["b"] = 4
+    println(show(&m))
+    _ = m.remove("Apple")
+    m["Apple"] = 5
+    m["pear"] = 6
+    println(show(&m))
+    var n: Map[i64, str] = []
+    n[10] = "ten"
+    n[-3] = "minus three"
+    n[0] = "zero"
+    n[-100] = "minus hundred"
+    for k in &n {
+        println(str(k) + " " + n[k])
+    }
+    let ks = n.keys()
+    println(str(ks[0]) + " " + str(ks[len(ks) - 1]))
+    var f: Map[bool, i32] = []
+    f[true] = 1
+    f[false] = 0
+    for k in &f {
+        println(str(k))
+    }
+    var u: Map[u8, i32] = []
+    u[200] = 1
+    u[3] = 2
+    for k in &u.keys() {
+        println(str(k))
+    }
+}
