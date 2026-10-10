@@ -52,6 +52,28 @@ def _kill_group(proc):
         pass
 
 
+async def _discard(stream):
+    """Дочитывает канал до конца и отбрасывает данные."""
+    while await stream.read(65536):
+        pass
+
+
+async def _reap(proc, timeout):
+    """Убивает группу worker-а и ждёт его конца, не дольше timeout на шаг.
+
+    proc.wait() возвращается, только когда закрыты все каналы. Канал,
+    остановленный с непрочитанными данными (переполнение, таймаут),
+    asyncio сам не закрывает — поэтому каналы дочитываются и
+    отбрасываются. Если канал держит процесс вне группы worker-а, ждать
+    дальше нельзя: запрос не должен висеть."""
+    _kill_group(proc)
+    try:
+        await asyncio.wait_for(asyncio.gather(_discard(proc.stdout), _discard(proc.stderr)), timeout)
+        await asyncio.wait_for(proc.wait(), timeout)
+    except asyncio.TimeoutError:
+        pass
+
+
 async def run(argv, body, run_cfg):
     """Запускает worker с телом запроса в stdin; Outcome."""
     workdir = tempfile.mkdtemp(prefix='dpworker-')  # 0700
@@ -63,16 +85,15 @@ async def run(argv, body, run_cfg):
                 stderr=asyncio.subprocess.PIPE, env={}, cwd=workdir, start_new_session=True, close_fds=True)
         except OSError as e:
             return Outcome('spawn_failed', stderr=str(e).encode())
+        timeout = run_cfg['timeout_ms'] / 1000
         try:
-            return await asyncio.wait_for(_exchange(proc, body, run_cfg, start), run_cfg['timeout_ms'] / 1000)
+            return await asyncio.wait_for(_exchange(proc, body, run_cfg, start), timeout)
         except asyncio.TimeoutError:
-            _kill_group(proc)
-            await proc.wait()
+            await _reap(proc, timeout)
             return Outcome('timeout', returncode=proc.returncode, duration_ms=_ms(start))
         finally:
             if proc.returncode is None:
-                _kill_group(proc)
-                await proc.wait()
+                await _reap(proc, timeout)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
@@ -98,10 +119,13 @@ async def _exchange(proc, body, run_cfg, start):
         out, out_over = await out_task
         if out_over:
             _kill_group(proc)  # сразу: иначе worker встанет на полном канале
+            await _discard(proc.stdout)  # иначе канал не закроется и wait() повиснет (_reap)
         err, _ = await err_task
     finally:
         for t in (feeding, out_task, err_task):
             t.cancel()
+        # Отменённые задачи дожидаются: читать канал после них может _reap.
+        await asyncio.gather(feeding, out_task, err_task, return_exceptions=True)
     if out_over:
         await proc.wait()
         return Outcome('overflow', out, err, proc.returncode, _ms(start))
