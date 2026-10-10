@@ -1,0 +1,173 @@
+// t17: перенос и выравнивание текста.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+fn spaces(k: int) str {
+    var s = ""
+    var i: int = 0
+    while i < k {
+        s += " "
+        i += 1
+    }
+    return s
+}
+
+// Слова строки: наибольшие цепочки байт без пробела.
+fn split_words(line: str) List[str] {
+    var words: List[str] = []
+    var start: int = 0
+    var inword = false
+    let n = len(line)
+    for i in 0..n {
+        if line[i] == ' ' {
+            if inword {
+                words.push(line[start..i])
+                inword = false
+            }
+        } else {
+            if !inword {
+                start = i
+                inword = true
+            }
+        }
+    }
+    if inword {
+        words.push(line[start..n])
+    }
+    return words
+}
+
+// Выравнивает строку из слов ws и добавляет её в out.
+// last — последняя строка абзаца.
+fn emit_line(out: &mut List[str], ws: []str, w: int, align: Align, last: bool) {
+    var s = ""
+    for i in 0..len(ws) {
+        if i > 0 {
+            s += " "
+        }
+        s += ws[i]
+    }
+    let n = len(s)
+    match align {
+        .Left => out.push(s)
+        .Right => out.push(spaces(w - n) + s)
+        .Center => out.push(spaces((w - n) / 2) + s)
+        .Justify => {
+            if last || len(ws) < 2 {
+                out.push(s)
+            } else {
+                let gaps = len(ws) - 1
+                let extra = w - n
+                let each = extra / gaps
+                let rem = extra % gaps
+                var js = ""
+                for j in 0..len(ws) {
+                    if j > 0 {
+                        var g = 1 + each
+                        if j - 1 < rem {
+                            g += 1
+                        }
+                        js += spaces(g)
+                    }
+                    js += ws[j]
+                }
+                out.push(js)
+            }
+        }
+    }
+}
+
+// Заполняет и выравнивает строки абзаца из слов words.
+fn emit_para(out: &mut List[str], words: []str, w: int, align: Align) {
+    if len(out) > 0 {
+        out.push("")
+    }
+    let no_words: List[str] = []
+    var cur: List[str] = []
+    var curlen: int = 0
+    for i in 0..len(words) {
+        let word = words[i]
+        let wl = len(word)
+        if wl > w {
+            if len(cur) > 0 {
+                emit_line(&mut out, cur, w, align, false)
+                cur = no_words
+                curlen = 0
+            }
+            let cut = w - 1
+            var rest = word
+            while len(rest) > w {
+                var single: List[str] = []
+                single.push(rest[0..cut] + "-")
+                emit_line(&mut out, single, w, align, false)
+                rest = rest[cut..len(rest)]
+            }
+            cur.push(rest)
+            curlen = len(rest)
+        } else {
+            if len(cur) == 0 {
+                cur.push(word)
+                curlen = wl
+            } else {
+                if curlen + 1 + wl <= w {
+                    cur.push(word)
+                    curlen += 1 + wl
+                } else {
+                    emit_line(&mut out, cur, w, align, false)
+                    cur = no_words
+                    cur.push(word)
+                    curlen = wl
+                }
+            }
+        }
+    }
+    if len(cur) > 0 {
+        emit_line(&mut out, cur, w, align, true)
+    }
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    if width < 2 || width > 200 {
+        fail .BadWidth
+    }
+    let w: int = int(width)
+    var lines: List[str] = []
+    let n = len(text)
+    var ls: int = 0
+    for i in 0..n {
+        if text[i] == '\n' {
+            lines.push(text[ls..i])
+            ls = i + 1
+        }
+    }
+    lines.push(text[ls..n])
+
+    let empty_para: List[str] = []
+    var out: List[str] = []
+    var para: List[str] = []
+    for li in 0..len(lines) {
+        let words = split_words(lines[li])
+        if len(words) == 0 {
+            if len(para) > 0 {
+                emit_para(&mut out, para, w, align)
+                para = empty_para
+            }
+        } else {
+            for wi in 0..len(words) {
+                para.push(words[wi])
+            }
+        }
+    }
+    if len(para) > 0 {
+        emit_para(&mut out, para, w, align)
+    }
+    return out
+}

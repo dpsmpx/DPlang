@@ -1,0 +1,143 @@
+// t17: перенос и выравнивание текста.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+// Слова строки: разделитель — только пробел.
+fn split_words(line: str) List[str] {
+    var out: List[str] = []
+    let parts = line.split(" ")
+    for i in 0..len(parts) {
+        if len(parts[i]) > 0 {
+            out.push(parts[i])
+        }
+    }
+    return out
+}
+
+fn spaces(n: int) str {
+    var s = ""
+    var k = 0
+    while k < n {
+        s += " "
+        k += 1
+    }
+    return s
+}
+
+fn format_row(row: []str, width: int, align: Align, is_last: bool) str {
+    let k = len(row)
+    var total = 0
+    for i in 0..k {
+        total += len(row[i])
+    }
+    let used = total + k - 1
+    if align == Align.Justify && !is_last && k >= 2 {
+        let extra = width - used
+        let gaps = k - 1
+        let each = extra / gaps
+        let rem = extra % gaps
+        var js = row[0]
+        for g in 1..k {
+            var sp = 1 + each
+            if g - 1 < rem {
+                sp += 1
+            }
+            js += spaces(sp) + row[g]
+        }
+        return js
+    }
+    var s = row[0]
+    for j in 1..k {
+        s += " " + row[j]
+    }
+    if align == Align.Right {
+        return spaces(width - used) + s
+    }
+    if align == Align.Center {
+        return spaces((width - used) / 2) + s
+    }
+    return s
+}
+
+fn emit_para(out: &mut List[str], ws: []str, width: int, align: Align) {
+    if len(out) > 0 {
+        out.push("")
+    }
+    var rows: List[List[str]] = []
+    var cur: List[str] = []
+    var curlen = 0
+    let cut = width - 1
+    for i in 0..len(ws) {
+        let wd = ws[i]
+        let n = len(wd)
+        if n > width {
+            if len(cur) > 0 {
+                rows.push(cur)
+                cur = []
+            }
+            var rest = wd
+            while len(rest) > width {
+                var piece: List[str] = []
+                piece.push(rest[..cut] + "-")
+                rows.push(piece)
+                rest = rest[cut..]
+            }
+            cur = []
+            cur.push(rest)
+            curlen = len(rest)
+        } else if len(cur) == 0 {
+            cur.push(wd)
+            curlen = n
+        } else if curlen + 1 + n <= width {
+            cur.push(wd)
+            curlen += 1 + n
+        } else {
+            rows.push(cur)
+            cur = []
+            cur.push(wd)
+            curlen = n
+        }
+    }
+    if len(cur) > 0 {
+        rows.push(cur)
+    }
+    let nrows = len(rows)
+    for r in 0..nrows {
+        out.push(format_row(rows[r], width, align, r == nrows - 1))
+    }
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    if width < 2 || width > 200 {
+        fail .BadWidth
+    }
+    let w = int(width)
+    var out: List[str] = []
+    var para: List[str] = []
+    let lines = text.split("\n")
+    for li in 0..len(lines) {
+        let ws = split_words(lines[li])
+        if len(ws) == 0 {
+            if len(para) > 0 {
+                emit_para(&mut out, para, w, align)
+                para = []
+            }
+        } else {
+            for k in 0..len(ws) {
+                para.push(ws[k])
+            }
+        }
+    }
+    if len(para) > 0 {
+        emit_para(&mut out, para, w, align)
+    }
+    return out
+}

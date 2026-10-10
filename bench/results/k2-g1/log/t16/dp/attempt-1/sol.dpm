@@ -1,0 +1,404 @@
+// t16: калькулятор целых выражений с переменными.
+const MAX: i64 = 9223372036854775807
+const MIN: i64 = -9223372036854775807 - 1
+
+const K_NUM: i32 = 0
+const K_NAME: i32 = 1
+const K_OP: i32 = 2
+const K_END: i32 = 3
+const K_BAD: i32 = 4
+
+pub struct Tok {
+    kind: i32
+    // текст лексемы; у K_BAD — сообщение об ошибке лексики
+    text: str
+    col: int
+    val: i64
+}
+
+pub struct Var {
+    name: str
+    val: i64
+}
+
+pub struct Parser {
+    toks: List[Tok]
+    pos: int
+    ev: bool
+    failed: bool
+    msg: str
+    col: int
+    vars: List[Var]
+}
+
+fn is_dig(c: u8) bool {
+    return c >= '0' && c <= '9'
+}
+
+fn is_name_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_name_char(c: u8) bool {
+    return is_name_start(c) || is_dig(c)
+}
+
+fn is_op_char(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+// Лексемы до первой ошибки лексики (она — последняя лексема K_BAD)
+// или до конца строки (последняя лексема K_END).
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+            continue
+        }
+        let start = i
+        if is_dig(c) {
+            var v: i64 = 0
+            var big = false
+            while i < n && is_dig(src[i]) {
+                let d = i64(src[i] - '0')
+                if !big {
+                    if v > (MAX - d) / 10 {
+                        big = true
+                    } else {
+                        v = v * 10 + d
+                    }
+                }
+                i += 1
+            }
+            if big {
+                toks.push(Tok { kind: K_BAD, text: "number too large", col: start + 1, val: 0 })
+                return toks
+            }
+            toks.push(Tok { kind: K_NUM, text: src[start..i], col: start + 1, val: v })
+            continue
+        }
+        if is_name_start(c) {
+            while i < n && is_name_char(src[i]) {
+                i += 1
+            }
+            toks.push(Tok { kind: K_NAME, text: src[start..i], col: start + 1, val: 0 })
+            continue
+        }
+        if is_op_char(c) {
+            toks.push(Tok { kind: K_OP, text: src[i..i + 1], col: start + 1, val: 0 })
+            i += 1
+            continue
+        }
+        toks.push(Tok { kind: K_BAD, text: "unexpected character '" + src[i..i + 1] + "'", col: start + 1, val: 0 })
+        return toks
+    }
+    toks.push(Tok { kind: K_END, text: "", col: n + 1, val: 0 })
+    return toks
+}
+
+fn fail_at(p: &mut Parser, col: int, msg: str) {
+    if !p.failed {
+        p.failed = true
+        p.col = col
+        p.msg = msg
+    }
+}
+
+// Ошибка у текущей лексемы, которая не может стоять здесь.
+fn unexpected(p: &mut Parser) {
+    let t = p.toks[p.pos]
+    if t.kind == K_BAD {
+        fail_at(&mut p, t.col, t.text)
+    } else if t.kind == K_END {
+        fail_at(&mut p, t.col, "unexpected end")
+    } else {
+        fail_at(&mut p, t.col, "unexpected '" + t.text + "'")
+    }
+}
+
+fn at_op(p: &mut Parser, s: str) bool {
+    let t = p.toks[p.pos]
+    return t.kind == K_OP && t.text == s
+}
+
+fn mul(a: i64, b: i64) ?i64 {
+    if a == 0 || b == 0 {
+        return i64(0)
+    }
+    if (a == -1 && b == MIN) || (b == -1 && a == MIN) {
+        return none
+    }
+    let m = a *% b
+    if m / b != a {
+        return none
+    }
+    return m
+}
+
+fn binop(p: &mut Parser, op: Tok, a: i64, b: i64) i64 {
+    let s = op.text
+    if s == "+" {
+        if (b > 0 && a > MAX - b) || (b < 0 && a < MIN - b) {
+            fail_at(&mut p, op.col, "overflow")
+            return 0
+        }
+        return a + b
+    }
+    if s == "-" {
+        if (b < 0 && a > MAX + b) || (b > 0 && a < MIN + b) {
+            fail_at(&mut p, op.col, "overflow")
+            return 0
+        }
+        return a - b
+    }
+    if s == "*" {
+        if let m = mul(a, b) {
+            return m
+        }
+        fail_at(&mut p, op.col, "overflow")
+        return 0
+    }
+    if b == 0 {
+        fail_at(&mut p, op.col, "division by zero")
+        return 0
+    }
+    if s == "/" {
+        if a == MIN && b == -1 {
+            fail_at(&mut p, op.col, "overflow")
+            return 0
+        }
+        return a / b
+    }
+    // %
+    if b == -1 {
+        return 0
+    }
+    return a % b
+}
+
+fn ipow(p: &mut Parser, col: int, b: i64, e: i64) i64 {
+    if e < 0 {
+        fail_at(&mut p, col, "negative exponent")
+        return 0
+    }
+    if e == 0 {
+        return 1
+    }
+    if b == 0 || b == 1 {
+        return b
+    }
+    if b == -1 {
+        if e % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    if e > 63 {
+        fail_at(&mut p, col, "overflow")
+        return 0
+    }
+    var r: i64 = 1
+    var k: i64 = 0
+    while k < e {
+        if let m = mul(r, b) {
+            r = m
+        } else {
+            fail_at(&mut p, col, "overflow")
+            return 0
+        }
+        k += 1
+    }
+    return r
+}
+
+fn lookup(p: &mut Parser, t: Tok) i64 {
+    for i in 0..len(p.vars) {
+        if p.vars[i].name == t.text {
+            return p.vars[i].val
+        }
+    }
+    fail_at(&mut p, t.col, "unknown variable '" + t.text + "'")
+    return 0
+}
+
+fn set_var(p: &mut Parser, name: str, v: i64) {
+    for i in 0..len(p.vars) {
+        if p.vars[i].name == name {
+            p.vars[i].val = v
+            return
+        }
+    }
+    p.vars.push(Var { name: name, val: v })
+}
+
+fn atom(p: &mut Parser) i64 {
+    let t = p.toks[p.pos]
+    if t.kind == K_NUM {
+        p.pos += 1
+        return t.val
+    }
+    if t.kind == K_NAME {
+        p.pos += 1
+        if p.ev {
+            return lookup(&mut p, t)
+        }
+        return 0
+    }
+    if t.kind == K_OP && t.text == "(" {
+        p.pos += 1
+        let v = expr(&mut p)
+        if p.failed {
+            return 0
+        }
+        let c = p.toks[p.pos]
+        if c.kind == K_OP && c.text == ")" {
+            p.pos += 1
+            return v
+        }
+        if c.kind == K_BAD {
+            fail_at(&mut p, c.col, c.text)
+        } else {
+            fail_at(&mut p, c.col, "expected ')'")
+        }
+        return 0
+    }
+    unexpected(&mut p)
+    return 0
+}
+
+fn power(p: &mut Parser) i64 {
+    let b = atom(&mut p)
+    if p.failed {
+        return 0
+    }
+    if at_op(&mut p, "^") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let e = unary(&mut p)
+        if p.failed {
+            return 0
+        }
+        if p.ev {
+            return ipow(&mut p, op.col, b, e)
+        }
+        return 0
+    }
+    return b
+}
+
+fn unary(p: &mut Parser) i64 {
+    if at_op(&mut p, "-") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let v = unary(&mut p)
+        if p.failed {
+            return 0
+        }
+        if p.ev {
+            if v == MIN {
+                fail_at(&mut p, op.col, "overflow")
+                return 0
+            }
+            return -v
+        }
+        return 0
+    }
+    return power(&mut p)
+}
+
+fn term(p: &mut Parser) i64 {
+    var v = unary(&mut p)
+    while !p.failed && (at_op(&mut p, "*") || at_op(&mut p, "/") || at_op(&mut p, "%")) {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let r = unary(&mut p)
+        if p.failed {
+            return 0
+        }
+        if p.ev {
+            v = binop(&mut p, op, v, r)
+        }
+    }
+    if p.failed {
+        return 0
+    }
+    return v
+}
+
+fn expr(p: &mut Parser) i64 {
+    var v = term(&mut p)
+    while !p.failed && (at_op(&mut p, "+") || at_op(&mut p, "-")) {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let r = term(&mut p)
+        if p.failed {
+            return 0
+        }
+        if p.ev {
+            v = binop(&mut p, op, v, r)
+        }
+    }
+    if p.failed {
+        return 0
+    }
+    return v
+}
+
+fn stmt(p: &mut Parser) i64 {
+    let t = p.toks[p.pos]
+    if t.kind == K_NAME {
+        let nx = p.toks[p.pos + 1]
+        if nx.kind == K_OP && nx.text == "=" {
+            p.pos += 2
+            let v = expr(&mut p)
+            if p.failed {
+                return 0
+            }
+            if p.ev {
+                set_var(&mut p, t.text, v)
+            }
+            return v
+        }
+    }
+    return expr(&mut p)
+}
+
+fn program(p: &mut Parser) i64 {
+    var v = stmt(&mut p)
+    while !p.failed && at_op(&mut p, ";") {
+        p.pos += 1
+        v = stmt(&mut p)
+    }
+    if p.failed {
+        return 0
+    }
+    if p.toks[p.pos].kind != K_END {
+        unexpected(&mut p)
+        return 0
+    }
+    return v
+}
+
+fn error_text(p: &Parser) str {
+    return "error at " + str(p.col) + ": " + p.msg
+}
+
+pub fn calc(src: str) str {
+    let toks = lex(src)
+    var p = Parser { toks: toks, pos: 0, ev: false, failed: false, msg: "", col: 0, vars: [] }
+    _ = program(&mut p)
+    if p.failed {
+        return error_text(&p)
+    }
+    p.pos = 0
+    p.ev = true
+    let v = program(&mut p)
+    if p.failed {
+        return error_text(&p)
+    }
+    return str(v)
+}

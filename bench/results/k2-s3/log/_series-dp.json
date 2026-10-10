@@ -36,6 +36,12 @@
   "work": 52547,
   "final": 124306,
   "calls": 17,
+  "per_check": [
+   11709,
+   21026,
+   7089,
+   6485
+  ],
   "steps": [
    {
     "context": 45487,
@@ -72,7 +78,7 @@
     "read": 23,
     "wrote": 159,
     "tools": [
-     "Bash"
+     "check"
     ]
    },
    {
@@ -96,7 +102,7 @@
     "read": 23,
     "wrote": 159,
     "tools": [
-     "Bash"
+     "check"
     ]
    },
    {
@@ -120,7 +126,7 @@
     "read": 23,
     "wrote": 159,
     "tools": [
-     "Bash"
+     "check"
     ]
    },
    {
@@ -144,7 +150,7 @@
     "read": 23,
     "wrote": 159,
     "tools": [
-     "Bash"
+     "check"
     ]
    },
    {
@@ -168,7 +174,7 @@
     "read": 23,
     "wrote": 159,
     "tools": [
-     "Bash"
+     "check"
     ]
    }
   ]

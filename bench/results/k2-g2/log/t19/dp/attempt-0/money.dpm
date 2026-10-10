@@ -1,0 +1,38 @@
+// Модуль money (до рефакторинга): суммы в копейках.
+
+// "12.05", "-0.50", "3.00".
+pub fn fmt_money(cents: i64) str {
+    var sign = ""
+    var a = cents
+    if cents < 0 {
+        sign = "-"
+        a = -cents
+    }
+    var frac = str(a % 100)
+    if len(frac) < 2 {
+        frac = "0" + frac
+    }
+    return sign + str(a / 100) + "." + frac
+}
+
+// Разбор "D.DD": от 1 до 12 цифр, точка, ровно две цифры; без знака.
+// -1 — неверная запись.
+pub fn parse_money(s: str) i64 {
+    if let dot = s.find(".") {
+        if dot == 0 || dot > 12 || len(s) != dot + 3 {
+            return -1
+        }
+        var v: i64 = 0
+        for i in 0..len(s) {
+            if i == dot {
+                continue
+            }
+            if !is_digit(s[i]) {
+                return -1
+            }
+            v = v * 10 + i64(s[i] - '0')
+        }
+        return v
+    }
+    return -1
+}

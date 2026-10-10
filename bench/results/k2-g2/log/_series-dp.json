@@ -1,0 +1,191 @@
+{
+ "run": "k2-g2",
+ "commit": "a33a2bbf1f2d1c2a748129ebafcf77fe6d0cfeb6",
+ "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+ "flags": [
+  "-std=c++20",
+  "-O1",
+  "-pthread",
+  "-Wall",
+  "-Wextra",
+  "-Werror",
+  "-fno-exceptions",
+  "-fno-rtti",
+  "-fsanitize=address,undefined",
+  "-fno-sanitize-recover=all"
+ ],
+ "attempts_max": 5,
+ "agent_model": "claude-opus-5-5",
+ "doc": "guide",
+ "lang": "dp",
+ "tasks": [
+  "t15",
+  "t16",
+  "t17",
+  "t18",
+  "t19"
+ ],
+ "created": "2026-10-10T06:55:37",
+ "session": {
+  "total_tokens": 119441,
+  "tool_uses": 18,
+  "seconds": 414.0
+ },
+ "usage": {
+  "base": 45487,
+  "prompt": 16254,
+  "work": 56555,
+  "final": 118296,
+  "calls": 18,
+  "per_check": [
+   14159,
+   21521,
+   8267,
+   6524
+  ],
+  "steps": [
+   {
+    "context": 45487,
+    "read": 0,
+    "wrote": 0,
+    "tools": []
+   },
+   {
+    "context": 61741,
+    "read": 30609,
+    "wrote": 73,
+    "tools": [
+     "Read"
+    ]
+   },
+   {
+    "context": 62363,
+    "read": 643,
+    "wrote": 221,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 62560,
+    "read": 106,
+    "wrote": 114,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 74614,
+    "read": 161,
+    "wrote": 8241,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 75286,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   },
+   {
+    "context": 75900,
+    "read": 633,
+    "wrote": 280,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 95737,
+    "read": 161,
+    "wrote": 11997,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 96742,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   },
+   {
+    "context": 97421,
+    "read": 775,
+    "wrote": 280,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 102699,
+    "read": 161,
+    "wrote": 4591,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 103284,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   },
+   {
+    "context": 105688,
+    "read": 4618,
+    "wrote": 283,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 108152,
+    "read": 1402,
+    "wrote": 1049,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 108642,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   },
+   {
+    "context": 112212,
+    "read": 6916,
+    "wrote": 331,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 117991,
+    "read": 302,
+    "wrote": 5650,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 118296,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   }
+  ]
+ }
+}

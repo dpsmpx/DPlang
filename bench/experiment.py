@@ -847,8 +847,10 @@ def transcript_steps(path):
                     names = []
                 for b in m.get('content') or []:
                     if b.get('type') == 'tool_use':
-                        wrote_n += len(json.dumps(b.get('input', {}), ensure_ascii=False))
-                        names.append(b.get('name'))
+                        inp = b.get('input', {})
+                        wrote_n += len(json.dumps(inp, ensure_ascii=False))
+                        cmd = inp.get('command', '') if isinstance(inp, dict) else ''
+                        names.append('check' if 'experiment.py check' in cmd else b.get('name'))
                     elif b.get('type') == 'text':
                         wrote_n += len(b.get('text', ''))
             elif o.get('type') == 'user' and isinstance(m.get('content'), list):
@@ -868,8 +870,14 @@ def usage(run, task_id, lang, transcript):
     if len(rows) < 2:
         raise HarnessError(f'{transcript}: в транскрипте меньше двух вызовов модели')
     base, after_prompt, final = rows[0]['context'], rows[1]['context'], rows[-1]['context']
+    # Работа по задачам серии: рост контекста до каждой проверки (у ячейки — одна часть).
+    parts, start = [], after_prompt
+    for k, r in enumerate(rows):
+        if 'check' in r['tools'] and k + 1 < len(rows):
+            parts.append(rows[k + 1]['context'] - start)
+            start = rows[k + 1]['context']
     data = {'base': base, 'prompt': after_prompt - base, 'work': final - after_prompt, 'final': final,
-            'calls': len(rows), 'steps': rows}
+            'calls': len(rows), 'per_check': parts, 'steps': rows}
     if task_id == 'series':
         path = series_paths(os.path.join(work_dir(), run), lang)[1]
     else:
@@ -881,7 +889,7 @@ def usage(run, task_id, lang, transcript):
     meta['usage'] = data
     write(path, json.dumps(meta, ensure_ascii=False, indent=1) + '\n')
     print(f'{run} {task_id} {lang}: обвязка {base}, задание {data["prompt"]}, работа {data["work"]}, '
-          f'итог {final} (вызовов {len(rows)})')
+          f'итог {final} (вызовов {len(rows)}); работа до каждой проверки: {parts}')
     return 0
 
 
