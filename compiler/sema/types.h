@@ -28,11 +28,13 @@ enum class TK : uint8_t {
     Result,    // E!T; err — перечисление ошибок
     Struct,
     Enum,
+    Map,       // Map[K, V] (Р54): key — ключ, elem — значение
 };
 
 struct Type {
     TK kind = TK::Error;
-    const Type* elem = nullptr;  // List, Slice, Optional — элемент; Result — значение
+    const Type* elem = nullptr;  // List, Slice, Optional — элемент; Result, Map — значение
+    const Type* key = nullptr;   // Map — ключ
     const Type* err = nullptr;   // Result — тип ошибки (перечисление); nullptr — ещё не выведен (Р41)
     const StructDef* sdef = nullptr;
     const EnumDef* edef = nullptr;
@@ -49,6 +51,10 @@ public:
     const Type* result(const Type* err, const Type* value) { return make(TK::Result, value, err, nullptr, nullptr); }
     const Type* struct_type(const StructDef* d) { return make(TK::Struct, nullptr, nullptr, d, nullptr); }
     const Type* enum_type(const EnumDef* d) { return make(TK::Enum, nullptr, nullptr, nullptr, d); }
+    // Map[K, V]; заодно заводит List[K] и List[V] — из них Map состоит в бэкенде.
+    const Type* map(const Type* key, const Type* val);
+    // Уже заведённый List[T]; nullptr — нет такого.
+    const Type* find_list(const Type* elem) const;
 
 private:
     const Type* make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e);
@@ -65,6 +71,10 @@ std::string type_name(const Type* t, const ModuleInfo* from = nullptr);
 
 // Тип содержит срез `[]T` где-либо внутри (Р44: срез — только тип параметра).
 bool contains_slice(const Type* t);
+
+// Определены `==` и `!=` (equatable), `<` и сравнения порядка (ordered); docs/spec/core.md, раздел 4.
+bool equatable(const Type* t);
+bool ordered(const Type* t);
 
 bool is_integer(const Type* t);
 bool is_signed(const Type* t);

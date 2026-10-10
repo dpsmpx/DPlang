@@ -308,6 +308,8 @@ void Checker::for_stmt(ForStmt* s) {
             if (s->mode == ForMode::Mut) {
                 error(Code::E0412, s->iter->span, "'" + tn(t) + "' is read-only; 'for ... in &mut' needs a List");
             }
+        } else if (t->kind == TK::Map) {
+            error(Code::E0419, s->iter->span, "cannot iterate over '" + tn(t) + "'; iterate its keys: 'for k in &m.keys()'");
         } else if (t->kind != TK::Error) {
             error(Code::E0419, s->iter->span, "cannot iterate over '" + tn(t) + "'");
         }
@@ -403,9 +405,42 @@ bool check_main(Program& prog, Diagnostics& diags) {
     return true;
 }
 
+// Внутри t есть f32 или f64: такой ключ Map не упорядочен полностью (nan, Р54).
+static bool has_float(const Type* t, std::vector<const Type*>& path) {
+    if (!t) return false;
+    if (is_float(t)) return true;
+    for (const Type* p : path) {
+        if (p == t) return false;
+    }
+    path.push_back(t);
+    bool found = has_float(t->elem, path) || has_float(t->key, path) || has_float(t->err, path);
+    if (t->kind == TK::Struct) {
+        for (const FieldDef& f : t->sdef->fields) found = found || has_float(f.type, path);
+    } else if (t->kind == TK::Enum) {
+        for (const VariantDef& v : t->edef->variants) {
+            for (const Type* x : v.types) found = found || has_float(x, path);
+            for (const FieldDef& f : v.fields) found = found || has_float(f.type, path);
+        }
+    }
+    path.pop_back();
+    return found;
+}
+
 void check(Program& prog, Diagnostics& diags) {
     for (auto& m : prog.modules) infer_errors(prog, *m, diags);
     for (auto& m : prog.modules) Checker(prog, *m, diags).run();
+    for (const Program::MapKey& k : prog.map_keys) {
+        if (!k.key || k.key->kind == TK::Error) continue;
+        std::vector<const Type*> path;
+        if (!ordered(k.key)) {
+            diags.error(Code::E0422, k.span,
+                        "a Map key must be an ordered type; '" + type_name(k.key, k.module) + "' has no '<'");
+        } else if (has_float(k.key, path)) {
+            diags.error(Code::E0422, k.span,
+                        "a Map key cannot contain 'f32' or 'f64' ('nan' has no order); '" + type_name(k.key, k.module) +
+                            "' does");
+        }
+    }
 }
 
 }  // namespace dp::sema

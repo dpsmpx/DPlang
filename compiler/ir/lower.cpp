@@ -419,6 +419,11 @@ private:
         }
         auto* i = static_cast<const IndexExpr*>(e);
         Place base = object(i->object, fresh);
+        if (const Type* mt = i->object->type; mt && mt->kind == TK::Map) {  // m[k]: ключ — во временное (Р54)
+            uint32_t key = temp(mt->key);
+            assign(local(key), use(rd(expr(i->index)), mt->key), i->index->span);
+            return proj(std::move(base), ProjKind::MapAt, key);
+        }
         uint32_t idx = temp(prim(TK::I64));
         assign(local(idx), use(rd(expr(i->index)), prim(TK::I64)), i->index->span);
         return proj(std::move(base), ProjKind::Index, idx);
@@ -744,6 +749,7 @@ private:
             case CallKind::Method: {
                 auto* f = static_cast<const FieldExpr*>(c->callee);
                 Method m = c->method;
+                if (f->object->type && f->object->type->kind == TK::Map) return map_method(c, f, rv);
                 bool mutating = m < Method::Contains;
                 static constexpr Intrinsic kMap[] = {
                     Intrinsic::ListPush,  Intrinsic::ListPop,  Intrinsic::ListInsert,    Intrinsic::ListRemove,
@@ -892,11 +898,48 @@ private:
         own(x);
     }
 
+    // Методы Map (Р54): remove меняет место, остальные читают операнд.
+    bool map_method(const CallExpr* c, const FieldExpr* f, Rvalue& rv) {
+        switch (c->method) {
+            case Method::Remove: {
+                rv = intrinsic(Intrinsic::MapRemove, c->type);
+                bool fresh = false;
+                rv.place = lvalue(f->object, fresh);
+                rv.has_place = true;
+                rv.ops.push_back(rd(expr(c->args[0])));
+                return true;
+            }
+            case Method::Get: rv = intrinsic(Intrinsic::MapGet, c->type); break;
+            case Method::Has: rv = intrinsic(Intrinsic::MapHas, c->type); break;
+            default: rv = intrinsic(Intrinsic::MapKeys, c->type); break;
+        }
+        std::vector<const Expr*> all{f->object};
+        all.insert(all.end(), c->args.begin(), c->args.end());
+        rv.ops = exprs(all);
+        for (Operand& o : rv.ops) o = rd(std::move(o));
+        return true;
+    }
+
     void assign_stmt(const AssignStmt* a) {
         push_scope();
         auto* n = as<const NameExpr>(a->target);
         if (n && n->name == "_" && a->op == AssignOp::Set) {  // `_ = e`: значение освобождается
             effect(a->value);
+            pop_scope(a->span);
+            return;
+        }
+        auto* ix = as<const IndexExpr>(strip_parens(a->target));
+        if (ix && a->op == AssignOp::Set && ix->object->type && ix->object->type->kind == TK::Map) {
+            // `m[k] = v` вставляет или заменяет (Р54): ключ, затем значение.
+            bool fresh = false;
+            Rvalue rv = intrinsic(Intrinsic::MapSet, prim(TK::Void));
+            rv.place = object(ix->object, fresh);
+            rv.has_place = true;
+            Operand key = rd(expr(ix->index));
+            if (has_effect(a->value)) key = stabilize(std::move(key), ix->index->span);
+            rv.ops.push_back(std::move(key));
+            rv.ops.push_back(expr(a->value));
+            eval(std::move(rv), a->span);
             pop_scope(a->span);
             return;
         }

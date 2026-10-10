@@ -20,11 +20,25 @@ const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const Struc
     Type& t = store_.emplace_back();
     t.kind = k;
     t.elem = elem;
-    t.err = err;
+    t.err = k == TK::Map ? nullptr : err;
+    t.key = k == TK::Map ? err : nullptr;  // у Map ключ лежит в слоте err ключа интернирования
     t.sdef = s;
     t.edef = e;
     interned_.emplace(key, &t);
     return &t;
+}
+
+const Type* TypeTable::map(const Type* key, const Type* val) {
+    list(key);
+    list(val);
+    return make(TK::Map, val, key, nullptr, nullptr);
+}
+
+const Type* TypeTable::find_list(const Type* elem) const {
+    auto it = interned_.find(std::make_tuple(static_cast<int>(TK::List), static_cast<const void*>(elem),
+                                             static_cast<const void*>(nullptr), static_cast<const void*>(nullptr),
+                                             static_cast<const void*>(nullptr)));
+    return it == interned_.end() ? nullptr : it->second;
 }
 
 std::string type_name(const Type* t, const ModuleInfo* from) {
@@ -53,6 +67,7 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
             return from && t->sdef->module != from ? t->sdef->module->name + "." + t->sdef->name : t->sdef->name;
         case TK::Enum:
             return from && t->edef->module != from ? t->edef->module->name + "." + t->edef->name : t->edef->name;
+        case TK::Map: return "Map[" + type_name(t->key, from) + ", " + type_name(t->elem, from) + "]";
     }
     return "?";
 }
@@ -60,7 +75,53 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
 bool contains_slice(const Type* t) {
     if (!t) return false;
     if (t->kind == TK::Slice) return true;
-    return contains_slice(t->elem) || contains_slice(t->err);
+    return contains_slice(t->elem) || contains_slice(t->err) || contains_slice(t->key);
+}
+
+bool equatable(const Type* t) {
+    switch (t->kind) {
+        case TK::Result: case TK::Void: case TK::Map: return false;
+        case TK::List: case TK::Slice: case TK::Optional: return equatable(t->elem);
+        case TK::Struct:
+            for (const FieldDef& f : t->sdef->fields) {
+                if (!equatable(f.type)) return false;
+            }
+            return true;
+        case TK::Enum:
+            for (const VariantDef& v : t->edef->variants) {
+                for (const Type* p : v.types) {
+                    if (!equatable(p)) return false;
+                }
+                for (const FieldDef& f : v.fields) {
+                    if (!equatable(f.type)) return false;
+                }
+            }
+            return true;
+        default: return true;
+    }
+}
+
+bool ordered(const Type* t) {
+    switch (t->kind) {
+        case TK::Error: case TK::Bool: case TK::Str: return true;
+        case TK::List: case TK::Slice: return ordered(t->elem);
+        case TK::Struct:
+            for (const FieldDef& f : t->sdef->fields) {
+                if (!ordered(f.type)) return false;
+            }
+            return true;
+        case TK::Enum:
+            for (const VariantDef& v : t->edef->variants) {
+                for (const Type* p : v.types) {
+                    if (!ordered(p)) return false;
+                }
+                for (const FieldDef& f : v.fields) {
+                    if (!ordered(f.type)) return false;
+                }
+            }
+            return true;
+        default: return is_numeric(t);
+    }
 }
 
 bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }

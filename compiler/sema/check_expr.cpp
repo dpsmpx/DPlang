@@ -65,7 +65,8 @@ constexpr MethodInfo kMethods[] = {
     {"push", Method::Push},   {"pop", Method::Pop},           {"insert", Method::Insert},
     {"remove", Method::Remove}, {"clear", Method::Clear},     {"sort", Method::Sort},
     {"contains", Method::Contains}, {"trim", Method::Trim},   {"find", Method::Find},
-    {"starts_with", Method::StartsWith}, {"split", Method::Split},
+    {"starts_with", Method::StartsWith}, {"split", Method::Split}, {"get", Method::Get},
+    {"has", Method::Has},     {"keys", Method::Keys},
 };
 
 }  // namespace
@@ -118,52 +119,6 @@ bool Checker::literal_like(const Expr* e) const {
                    b->op != BinOp::Gt && b->op != BinOp::Ge && literal_like(b->lhs) && literal_like(b->rhs);
         }
         default: return false;
-    }
-}
-
-bool Checker::equatable(const Type* t) {
-    switch (t->kind) {
-        case TK::Result: case TK::Void: return false;
-        case TK::List: case TK::Slice: case TK::Optional: return equatable(t->elem);
-        case TK::Struct:
-            for (const FieldDef& f : t->sdef->fields) {
-                if (!equatable(f.type)) return false;
-            }
-            return true;
-        case TK::Enum:
-            for (const VariantDef& v : t->edef->variants) {
-                for (const Type* p : v.types) {
-                    if (!equatable(p)) return false;
-                }
-                for (const FieldDef& f : v.fields) {
-                    if (!equatable(f.type)) return false;
-                }
-            }
-            return true;
-        default: return true;
-    }
-}
-
-bool Checker::ordered(const Type* t) {
-    switch (t->kind) {
-        case TK::Error: case TK::Bool: case TK::Str: return true;
-        case TK::List: case TK::Slice: return ordered(t->elem);
-        case TK::Struct:
-            for (const FieldDef& f : t->sdef->fields) {
-                if (!ordered(f.type)) return false;
-            }
-            return true;
-        case TK::Enum:
-            for (const VariantDef& v : t->edef->variants) {
-                for (const Type* p : v.types) {
-                    if (!ordered(p)) return false;
-                }
-                for (const FieldDef& f : v.fields) {
-                    if (!ordered(f.type)) return false;
-                }
-            }
-            return true;
-        default: return is_numeric(t);
     }
 }
 
@@ -635,8 +590,9 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     switch (bf) {
         case BuiltinFn::Len: {
             const Type* t = infer(c->args[0], nullptr);
-            if (t->kind != TK::List && t->kind != TK::Slice && t->kind != TK::Str && t->kind != TK::Error) {
-                error(Code::E0401, c->args[0]->span, "'len' needs a List, a slice or a str, found '" + tn(t) + "'");
+            if (t->kind != TK::List && t->kind != TK::Slice && t->kind != TK::Str && t->kind != TK::Map &&
+                t->kind != TK::Error) {
+                error(Code::E0401, c->args[0]->span, "'len' needs a List, a slice, a str or a Map, found '" + tn(t) + "'");
             }
             return prim(TK::I64);
         }
@@ -720,10 +676,11 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     for (const MethodInfo& m : kMethods) {
         if (f->name == m.name) mi = &m;
     }
-    bool list = t->kind == TK::List, slice = t->kind == TK::Slice, str = t->kind == TK::Str;
+    bool list = t->kind == TK::List, slice = t->kind == TK::Slice, str = t->kind == TK::Str, map = t->kind == TK::Map;
     bool list_method = mi && mi->m <= Method::Contains;
-    bool str_method = mi && mi->m >= Method::Trim;
-    if (!mi || (list_method && !list && !slice) || (str_method && !str)) {
+    bool str_method = mi && mi->m >= Method::Trim && mi->m <= Method::Split;
+    bool map_method = mi && (mi->m >= Method::Get || mi->m == Method::Remove);
+    if (!mi || (map ? !map_method : (list_method && !list && !slice) || (str_method && !str) || mi->m >= Method::Get)) {
         error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
         for (Expr* a : c->args) infer(a, nullptr);
         return err();
@@ -733,7 +690,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     size_t arity = 0;
     switch (mi->m) {
         case Method::Push: case Method::Contains: case Method::Remove: case Method::Find: case Method::StartsWith:
-        case Method::Split:
+        case Method::Split: case Method::Get: case Method::Has:
             arity = 1;
             break;
         case Method::Insert: arity = 2; break;
@@ -745,7 +702,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         for (Expr* a : c->args) infer(a, nullptr);
         return err();
     }
-    bool mutating = list_method && mi->m != Method::Contains;
+    bool mutating = map ? mi->m == Method::Remove : list_method && mi->m != Method::Contains;
     if (mutating) {
         if (slice) {
             error(Code::E0412, f->name_span, "slices are read-only; '" + f->name + "' needs a List");
@@ -754,6 +711,13 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         }
     }
     const Type* elem = t->elem;
+    if (map) {
+        switch (mi->m) {
+            case Method::Get: case Method::Remove: check(c->args[0], t->key); return tt_.optional(elem);
+            case Method::Has: check(c->args[0], t->key); return prim(TK::Bool);
+            default: return tt_.list(t->key);  // keys
+        }
+    }
     switch (mi->m) {
         case Method::Push: check(c->args[0], elem); return prim(TK::Void);
         case Method::Pop: return tt_.optional(elem);
@@ -774,6 +738,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         case Method::Find: check(c->args[0], prim(TK::Str)); return tt_.optional(prim(TK::I64));
         case Method::StartsWith: check(c->args[0], prim(TK::Str)); return prim(TK::Bool);
         case Method::Split: check(c->args[0], prim(TK::Str)); return tt_.list(prim(TK::Str));
+        case Method::Get: case Method::Has: case Method::Keys: break;  // только у Map — выше
     }
     return err();
 }
@@ -948,6 +913,13 @@ const Type* Checker::variant_lit(VariantLitExpr* v, const Type* hint) {
 
 const Type* Checker::list_lit(ListLitExpr* l, const Type* hint) {
     const Type* h = unwrap_hint(hint);
+    if (h && h->kind == TK::Error && l->items.empty()) return err();  // о типе уже сообщено
+    if (h && h->kind == TK::Map) {  // Map — только пустой литерал (Р54)
+        if (l->items.empty()) return h;
+        error(Code::E0401, l->span, "a Map literal can only be empty: '[]'; add entries with 'm[k] = v'");
+        for (Expr* it : l->items) infer(it, nullptr);
+        return err();
+    }
     const Type* elem = h && (h->kind == TK::List || h->kind == TK::Slice) ? h->elem : nullptr;
     if (l->items.empty()) {
         if (!elem) {
@@ -971,6 +943,10 @@ const Type* Checker::list_lit(ListLitExpr* l, const Type* hint) {
 
 const Type* Checker::index_expr(IndexExpr* i) {
     const Type* t = infer(i->object, nullptr);
+    if (t->kind == TK::Map) {  // m[k]: нет ключа — ловушка; `m[k] = v` вставляет (Р54)
+        check(i->index, t->key);
+        return t->elem;
+    }
     const Type* k = infer(i->index, prim(TK::I64));
     if (k->kind != TK::Error) {
         if (!is_integer(k)) error(Code::E0401, i->index->span, "index must be an integer, found '" + tn(k) + "'");
@@ -981,7 +957,8 @@ const Type* Checker::index_expr(IndexExpr* i) {
         case TK::Str: return prim(TK::U8);
         case TK::Error: return err();
         default:
-            error(Code::E0401, i->object->span, "cannot index '" + tn(t) + "'; indexing needs a List, a slice or a str");
+            error(Code::E0401, i->object->span,
+                  "cannot index '" + tn(t) + "'; indexing needs a List, a slice, a str or a Map");
             return err();
     }
 }

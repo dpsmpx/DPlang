@@ -82,6 +82,10 @@ const Value& seq_at(const Value& v, size_t i) {
     return v.k == Value::K::Slice ? v.base->items[static_cast<size_t>(v.lo) + i] : v.items[i];
 }
 
+// Map[K, V] (Р54): Seq из двух List — ключи по возрастанию и значения.
+// Позиция первого ключа не меньше k; found — ключ k есть.
+size_t map_find(const Value& m, const Value& k, const Type* key, bool& found);
+
 // Место: значение или байт строки.
 struct Ref {
     Value* v = nullptr;
@@ -139,6 +143,25 @@ bool less(const Value& a, const Value& b, const Type* t);
 const Type* payload_type(const Type* t, uint32_t variant, size_t k) {
     const sema::VariantDef& v = t->edef->variants[variant];
     return v.form == ast::VariantForm::Tuple ? v.types[k] : v.fields[k].type;
+}
+
+size_t map_find(const Value& m, const Value& k, const Type* key, bool& found) {
+    const std::vector<Value>& keys = m.items[0].items;
+    size_t lo = 0, hi = keys.size();
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (less(keys[mid], k, key)) lo = mid + 1;
+        else hi = mid;
+    }
+    found = lo < keys.size() && !less(k, keys[lo], key);
+    return lo;
+}
+
+Value map_value() {
+    Value v = seq_value(0);
+    v.items.push_back(seq_value(0));
+    v.items.push_back(seq_value(0));
+    return v;
 }
 
 bool equal(const Value& a, const Value& b, const Type* t) {
@@ -358,6 +381,22 @@ private:
                     }
                     r.v = &v.items[pr.sub];
                     break;
+                case ProjKind::MapAt: {
+                    auto at = static_cast<long>(&pr - pl.proj.data());  // тип Map — тип пути до этой проекции
+                    const Type* mt = place_type(p_, f, Place{pl.local, std::vector<Proj>(pl.proj.begin(), pl.proj.begin() + at)});
+                    if (v.k != Value::K::Seq || v.items.size() != 2 || !mt || mt->kind != TK::Map) {
+                        internal("key of a non-Map");
+                        return Ref{};
+                    }
+                    bool found = false;
+                    size_t i = map_find(v, fr.locals[pr.index], mt->key, found);
+                    if (!found) {
+                        trap("key is not in the Map");
+                        return Ref{};
+                    }
+                    r.v = &v.items[1].items[i];
+                    break;
+                }
                 case ProjKind::Unwrap: case ProjKind::ResultValue: case ProjKind::ResultError: {
                     uint32_t want = pr.kind == ProjKind::ResultValue ? 0 : 1;
                     if (v.k != Value::K::Seq || v.tag != want || v.items.empty()) {
@@ -537,6 +576,7 @@ private:
             case RvKind::Cast: return cast(fr, rv);
             case RvKind::MakeStruct: case RvKind::MakeVariant: case RvKind::MakeList: case RvKind::MakeSome:
             case RvKind::MakeNone: case RvKind::MakeOk: case RvKind::MakeErr: {
+                if (rv.type->kind == TK::Map) return map_value();  // пустое отображение
                 uint32_t tag = rv.kind == RvKind::MakeVariant ? rv.variant
                                : rv.kind == RvKind::MakeSome || rv.kind == RvKind::MakeErr ? 1 : 0;
                 Value v = seq_value(tag);
@@ -846,7 +886,18 @@ private:
         switch (rv.intrinsic) {
             case Intrinsic::Len: {
                 const Value& a = arg(0, s0);
+                if (op_type(fr, rv.ops[0])->kind == TK::Map) return int_value(a.items[0].items.size());
                 return int_value(a.k == Value::K::Str ? a.s.size() : seq_len(a));
+            }
+            case Intrinsic::MapGet: case Intrinsic::MapHas: case Intrinsic::MapKeys: {
+                const Value& m = arg(0, s0);
+                if (rv.intrinsic == Intrinsic::MapKeys) return m.items[0];
+                bool found = false;
+                size_t i = map_find(m, arg(1, s1), op_type(fr, rv.ops[0])->key, found);
+                if (rv.intrinsic == Intrinsic::MapHas) return bool_value(found);
+                Value out = seq_value(found ? 1 : 0);
+                if (found) out.items.push_back(m.items[1].items[i]);
+                return out;
             }
             case Intrinsic::Repeat: {
                 const Value& n = arg(1, s1);
@@ -977,9 +1028,45 @@ private:
                 return str_value(args_[static_cast<size_t>(i)]);
             }
             case Intrinsic::ReadFile: return read_file(fr, rv, ops[0].s);
+            case Intrinsic::MapSet: case Intrinsic::MapRemove: return map_method(fr, rv, ops);
             default: break;
         }
         return list_method(fr, rv, ops);
+    }
+
+    // m[k] = v и m.remove(k) (Р54): ops — копии ключа и значения.
+    Value map_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place);
+        if (stop_) return Value{};
+        const Type* mt = place_type(p_, fn(fr), rv.place);
+        if (r.byte >= 0 || r.v->k != Value::K::Seq || r.v->items.size() != 2 || !mt || mt->kind != TK::Map) {
+            internal("map method on a non-Map");
+            return Value{};
+        }
+        std::vector<Value>& keys = r.v->items[0].items;
+        std::vector<Value>& vals = r.v->items[1].items;
+        bool found = false;
+        size_t i = map_find(*r.v, ops[0], mt->key, found);
+        if (rv.intrinsic == Intrinsic::MapSet) {
+            if (found) {
+                vals[i] = std::move(ops[1]);
+                return Value{};
+            }
+            if (keys.size() >= kMaxLen) {
+                trap("out of memory");
+                return Value{};
+            }
+            keys.insert(keys.begin() + static_cast<int64_t>(i), std::move(ops[0]));
+            vals.insert(vals.begin() + static_cast<int64_t>(i), std::move(ops[1]));
+            return Value{};
+        }
+        Value out = seq_value(found ? 1 : 0);
+        if (found) {
+            out.items.push_back(std::move(vals[i]));
+            keys.erase(keys.begin() + static_cast<int64_t>(i));
+            vals.erase(vals.begin() + static_cast<int64_t>(i));
+        }
+        return out;
     }
 
     // __read_file (Р51): 0 и текст в месте; иначе 1 + номер варианта os.IoError

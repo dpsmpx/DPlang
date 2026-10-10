@@ -45,6 +45,7 @@ enum class ProjKind : uint8_t {
     Unwrap,       // значение ?T (есть — проверено раньше)
     ResultValue,  // значение E!T при успехе
     ResultError,  // ошибка E!T
+    MapAt,        // значение Map по ключу: index — переменная с ключом; ключа нет — ловушка (Р54)
 };
 
 struct Proj {
@@ -113,6 +114,11 @@ enum class Intrinsic : uint8_t {
     ArgsLen, ArgAt, ReadFile,
     // проверяемая арифметика целых (Р53): результат ?T, none — вне типа
     CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
+    // Map (Р54). MapSet: place — Map, ops[0] — ключ (читается), ops[1] —
+    // значение (сохраняется); вставляет или заменяет. MapRemove: place —
+    // Map, ops[0] — ключ, результат ?V. MapGet, MapHas, MapKeys: ops[0] —
+    // Map, дальше ключ; результат ?V, bool, List[K] (ключи по возрастанию).
+    MapSet, MapGet, MapHas, MapRemove, MapKeys,
 };
 
 enum class RvKind : uint8_t {
@@ -122,7 +128,7 @@ enum class RvKind : uint8_t {
     Cast,         // cast ops[0] к type
     MakeStruct,   // ops — поля по порядку объявления
     MakeVariant,  // variant; ops — данные по порядку объявления
-    MakeList,     // ops — элементы; type — List[T]
+    MakeList,     // ops — элементы; type — List[T]; у Map[K, V] — пустое отображение, ops нет
     MakeSome,     // ops[0]
     MakeNone,
     MakeOk,       // ops[0]; у E!void операндов нет

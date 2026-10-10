@@ -109,8 +109,6 @@ private:
     void field_inits(std::vector<ast::FieldInit>& inits, const std::vector<FieldDef>& fields, bool defaults_ok,
                      Span span, const std::string& what);
     const EnumDef* enum_for_variant(const std::string& name, const Type* hint, Span span);
-    bool ordered(const Type* t);
-    bool equatable(const Type* t);
 
     // места: изменяемость и корень (Р44)
     bool is_place(ast::Expr* e);

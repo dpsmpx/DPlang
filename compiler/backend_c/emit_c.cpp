@@ -50,7 +50,8 @@ bool is_scalar(const Type* t) {
 
 bool is_composite(const Type* t) {
     switch (t->kind) {
-        case TK::List: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum: return true;
+        case TK::List: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum: case TK::Map:
+            return true;
         default: return false;
     }
 }
@@ -83,6 +84,7 @@ std::string mangle(const Type* t) {
         case TK::Result: return "R_" + (t->err ? mangle(t->err) : std::string("x")) + "_" + mangle(t->elem);
         case TK::Struct: return "T_" + lp(t->sdef->module->name) + lp(t->sdef->name);
         case TK::Enum: return "E_" + lp(t->edef->module->name) + lp(t->edef->name);
+        case TK::Map: return "M_" + mangle(t->key) + "_" + mangle(t->elem);
         default: return "error";
     }
 }
@@ -233,6 +235,12 @@ private:
 
     void error(const std::string& msg) { errors_.push_back(msg); }
 
+public:
+    // List[K] и List[V] отображения Map[K, V]: их заводит TypeTable::map.
+    const Type* keys_of(const Type* m) const { return p_.types->find_list(m->key); }
+    const Type* vals_of(const Type* m) const { return p_.types->find_list(m->elem); }
+
+private:
     // --- сбор типов
 
     void add_type(const Type* t) {
@@ -248,6 +256,11 @@ private:
                 break;
             case TK::Struct:
                 for (const sema::FieldDef& f : t->sdef->fields) add_type(f.type);
+                break;
+            case TK::Map:  // два списка: ключи и значения (Р54)
+                add_type(keys_of(t));
+                add_type(vals_of(t));
+                if (!keys_of(t) || !vals_of(t)) error("map type without its lists");
                 break;
             case TK::Enum:
                 for (uint32_t v = 0; v < t->edef->variants.size(); v++) {
@@ -305,6 +318,7 @@ private:
             case TK::List: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n    int64_t cap;\n"; break;
             case TK::Slice: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n"; break;
             case TK::Optional: out += "    bool has;\n    " + ctype(t->elem) + " value;\n"; break;
+            case TK::Map: out += "    " + ctype(keys_of(t)) + " keys;\n    " + ctype(vals_of(t)) + " vals;\n"; break;
             case TK::Result:
                 out += "    bool is_err;\n";
                 if (t->elem->kind != TK::Void) out += "    " + ctype(t->elem) + " value;\n";
@@ -363,6 +377,9 @@ private:
             }
             if (t->kind == TK::List) def += list_methods(t);
         }
+        for (const Type* t : types_) {
+            if (t->kind == TK::Map) def += map_methods(t);
+        }
         return decl + "\n" + def;
     }
 
@@ -379,6 +396,10 @@ private:
                      eq_of(t->elem, "&a->value", "&b->value") + ";\n";
                 break;
             case TK::Result: b += "    (void)a;\n    (void)b;\n    return true;\n"; break;
+            case TK::Map:
+                b += "    return " + eq_of(keys_of(t), "&a->keys", "&b->keys") + " && " +
+                     eq_of(vals_of(t), "&a->vals", "&b->vals") + ";\n";
+                break;
             case TK::Struct:
                 if (t->sdef->fields.empty()) b += "    (void)a;\n    (void)b;\n";
                 for (const sema::FieldDef& f : t->sdef->fields) {
@@ -429,7 +450,9 @@ private:
                 b += "        if (" + lt_of(t->elem, "&b->ptr[i]", "&a->ptr[i]") + ") return false;\n";
                 b += "    }\n    return a->len < b->len;\n";
                 break;
-            case TK::Optional: case TK::Result: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
+            case TK::Optional: case TK::Result: case TK::Map:
+                b += "    (void)a;\n    (void)b;\n    return false;\n";
+                break;
             case TK::Struct: {
                 std::vector<std::pair<const Type*, std::string>> parts;
                 for (const sema::FieldDef& f : t->sdef->fields) parts.push_back({f.type, "f_" + f.name});
@@ -475,6 +498,7 @@ private:
                 b += "    dp_free(v->ptr);\n";
                 break;
             case TK::Optional: b += "    if (v->has) {\n" + drop_line(t->elem, "v->value", "        ") + "    }\n"; break;
+            case TK::Map: b += drop_line(keys_of(t), "v->keys", "    ") + drop_line(vals_of(t), "v->vals", "    "); break;
             case TK::Result:
                 b += "    if (v->is_err) {\n" + drop_line(t->err, "v->err", "        ") + "    } else {\n";
                 if (t->elem->kind != TK::Void) b += drop_line(t->elem, "v->value", "        ");
@@ -515,6 +539,10 @@ private:
             }
             case TK::Optional:
                 b += "    " + n + " r = *v;\n    if (v->has) r.value = " + copy_of(t->elem, "v->value") + ";\n";
+                break;
+            case TK::Map:
+                b += "    " + n + " r = {0};\n    r.keys = " + copy_of(keys_of(t), "v->keys") + ";\n    r.vals = " +
+                     copy_of(vals_of(t), "v->vals") + ";\n";
                 break;
             case TK::Result:
                 b += "    " + n + " r = *v;\n    if (v->is_err) r.err = " + copy_of(t->err, "v->err") + ";\n";
@@ -593,6 +621,47 @@ private:
             b += "        if (!dp_str_find_from(s, sep, a, &p)) {\n            dp_push__" + m +
                  "(&out, dp_str_sub(s, a, s.len), loc);\n            return out;\n        }\n";
             b += "        dp_push__" + m + "(&out, dp_str_sub(s, a, p), loc);\n        a = p + sep.len;\n    }\n}\n\n";
+        }
+        return b;
+    }
+
+    // Map[K, V] (Р54): ключи по возрастанию, поиск двоичный. Ключ и
+    // значение в set и remove — свои: функция ими владеет.
+    std::string map_methods(const Type* t) {
+        std::string n = ctype(t), m = mangle(t), kc = ctype(t->key), vc = ctype(t->elem);
+        std::string lk = mangle(keys_of(t)), lv = mangle(vals_of(t)), v = mangle(t->elem);
+        std::string b;
+        b += "DP_INLINE int64_t dp_mfind__" + m + "(const " + n + "* mp, const " + kc + "* k, bool* found) {\n";
+        b += "    int64_t lo = 0, hi = mp->keys.len;\n    while (lo < hi) {\n        int64_t mid = lo + (hi - lo) / 2;\n";
+        b += "        if (" + lt_of(t->key, "&mp->keys.ptr[mid]", "k") + ") lo = mid + 1;\n        else hi = mid;\n    }\n";
+        b += "    *found = lo < mp->keys.len && !" + lt_of(t->key, "k", "&mp->keys.ptr[lo]") + ";\n    return lo;\n}\n\n";
+        b += "DP_INLINE " + vc + "* dp_mat__" + m + "(" + n + "* mp, const " + kc + "* k, const char* loc) {\n";
+        b += "    bool found = false;\n    int64_t i = dp_mfind__" + m + "(mp, k, &found);\n";
+        b += "    if (!found) dp_trap(loc, \"key is not in the Map\");\n    return &mp->vals.ptr[i];\n}\n\n";
+        b += "DP_INLINE void dp_mset__" + m + "(" + n + "* mp, " + kc + " k, " + vc + " v, const char* loc) {\n";
+        b += "    bool found = false;\n    int64_t i = dp_mfind__" + m + "(mp, &k, &found);\n    if (found) {\n";
+        std::string dv = drop_of(t->elem, "mp->vals.ptr[i]"), dk = drop_of(t->key, "k");
+        if (!dv.empty()) b += "        " + dv + "\n";
+        b += "        mp->vals.ptr[i] = v;\n";
+        if (!dk.empty()) b += "        " + dk + "\n";
+        b += "        return;\n    }\n";
+        b += "    dp_insert__" + lk + "(&mp->keys, i, k, loc);\n    dp_insert__" + lv + "(&mp->vals, i, v, loc);\n}\n\n";
+        b += "DP_INLINE bool dp_mhas__" + m + "(const " + n + "* mp, const " + kc + "* k) {\n";
+        b += "    bool found = false;\n    dp_mfind__" + m + "(mp, k, &found);\n    return found;\n}\n\n";
+        if (mangled_.count("O_" + v)) {
+            b += "DP_INLINE dp_O_" + v + " dp_mget__" + m + "(const " + n + "* mp, const " + kc + "* k) {\n";
+            b += "    dp_O_" + v + " r = {0};\n    bool found = false;\n    int64_t i = dp_mfind__" + m + "(mp, k, &found);\n";
+            b += "    if (found) {\n        r.has = true;\n        r.value = " + copy_of(t->elem, "mp->vals.ptr[i]") +
+                 ";\n    }\n    return r;\n}\n\n";
+            b += "DP_INLINE dp_O_" + v + " dp_mremove__" + m + "(" + n + "* mp, " + kc + " k) {\n";
+            b += "    dp_O_" + v + " r = {0};\n    bool found = false;\n    int64_t i = dp_mfind__" + m + "(mp, &k, &found);\n";
+            b += "    if (found) {\n        r.has = true;\n        r.value = dp_remove__" + lv + "(&mp->vals, i, NULL);\n";
+            b += "        " + kc + " old = dp_remove__" + lk + "(&mp->keys, i, NULL);\n";
+            std::string dold = drop_of(t->key, "old");
+            b += dold.empty() ? "        (void)old;\n" : "        " + dold + "\n";
+            b += "    }\n";
+            if (!dk.empty()) b += "    " + dk + "\n";
+            b += "    return r;\n}\n\n";
         }
         return b;
     }
@@ -684,6 +753,14 @@ private:
                 case ProjKind::Unwrap: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
                 case ProjKind::ResultValue: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
                 case ProjKind::ResultError: r.expr = "(" + r.expr + ").err"; r.type = t->err; break;
+                case ProjKind::MapAt: {
+                    std::string ptr = fresh("dp_p");
+                    line(ctype(t->elem) + "* " + ptr + " = dp_mat__" + mangle(t) + "(&(" + r.expr + "), &" +
+                         local_expr(pr.index) + ", " + loc_ + ");");
+                    r.expr = "(*" + ptr + ")";
+                    r.type = t->elem;
+                    break;
+                }
             }
         }
         return r;
@@ -915,6 +992,8 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             case Intrinsic::ListRemove: return "dp_remove__" + m + "(" + l + ", (int64_t)" + ops[0] + ", " + loc_ + ")";
             case Intrinsic::ListClear: return "dp_clear__" + m + "(" + l + ")";
             case Intrinsic::ListSort: return "dp_sort__" + m + "(" + l + ")";
+            case Intrinsic::MapSet: return "dp_mset__" + m + "(" + l + ", " + ops[0] + ", " + ops[1] + ", " + loc_ + ")";
+            case Intrinsic::MapRemove: return "dp_mremove__" + m + "(" + l + ", " + ops[0] + ")";
             default: error("unknown list method");
                 return "0";
         }
@@ -922,7 +1001,19 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
     std::vector<std::string> ops;
     for (const Operand& o : rv.ops) ops.push_back(operand(o, false));
     switch (rv.intrinsic) {
-        case Intrinsic::Len: return "((int64_t)(" + ops[0] + ").len)";
+        case Intrinsic::Len:
+            if (op_type(rv.ops[0])->kind == TK::Map) return "((int64_t)(" + ops[0] + ").keys.len)";
+            return "((int64_t)(" + ops[0] + ").len)";
+        case Intrinsic::MapGet: case Intrinsic::MapHas: case Intrinsic::MapKeys: {
+            const Type* mt = op_type(rv.ops[0]);
+            std::string mx = fresh("dp_x");
+            line(ctype(mt) + " " + mx + " = " + ops[0] + ";");  // только чтение: копия заголовка, не данных
+            if (rv.intrinsic == Intrinsic::MapKeys) return copy_of(em_.keys_of(mt), mx + ".keys");
+            std::string kx = fresh("dp_x");
+            line(ctype(mt->key) + " " + kx + " = " + ops[1] + ";");
+            const char* fn = rv.intrinsic == Intrinsic::MapGet ? "dp_mget__" : "dp_mhas__";
+            return fn + mangle(mt) + "(&" + mx + ", &" + kx + ")";
+        }
         case Intrinsic::Repeat: {
             const Type* nt = op_type(rv.ops[1]);
             std::string n = fresh("dp_n");
@@ -1027,6 +1118,7 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             return r;
         }
         case RvKind::MakeList: {
+            if (rv.type->kind == TK::Map) return "((" + ctype(rv.type) + "){0})";  // пустое отображение
             std::vector<std::string> ops;
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
             std::string r = fresh("dp_r"), ec = ctype(rv.type->elem);

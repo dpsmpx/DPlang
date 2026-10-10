@@ -1,0 +1,38 @@
+--- stderr ---
+map.dpm:7:16: error[E0422]: a Map key cannot contain 'f32' or 'f64' ('nan' has no order); 'f32' does
+   7 |     var a: Map[f32, i32] = []
+     |                ^~~
+map.dpm:8:16: error[E0422]: a Map key cannot contain 'f32' or 'f64' ('nan' has no order); 'P' does
+   8 |     var b: Map[P, i32] = []
+     |                ^
+map.dpm:9:16: error[E0422]: a Map key must be an ordered type; '?i32' has no '<'
+   9 |     var c: Map[?i32, i32] = []
+     |                ^~~~
+map.dpm:10:12: error[E0314]: 'Map' takes exactly two type arguments: Map[K, V]
+  10 |     var d: Map[str] = []
+     |            ^~~~~~~~
+map.dpm:11:28: error[E0401]: a Map literal can only be empty: '[]'; add entries with 'm[k] = v'
+  11 |     var m: Map[str, i32] = ["x"]
+     |                            ^~~~~
+map.dpm:13:5: error[E0412]: cannot assign to 'e': it is not declared with 'var'
+  13 |     e["k"] = 1
+     |     ^
+map.dpm:14:7: error[E0401]: expected 'str', found 'i64'
+  14 |     m[1] = 2
+     |       ^
+map.dpm:15:15: error[E0419]: cannot iterate over 'Map[str, i32]'; iterate its keys: 'for k in &m.keys()'
+  15 |     for k in &m {
+     |               ^
+map.dpm:18:7: error[E0410]: 'Map[str, i32]' has no method 'push'
+  18 |     m.push(1)
+     |       ^~~~
+map.dpm:19:15: error[E0401]: expected 'str', found 'i64'
+  19 |     _ = m.get(2)
+     |               ^
+map.dpm:20:18: error[E0422]: values of type 'Map[str, i32]' cannot be compared with '=='
+  20 |     let same = m == m
+     |                  ^~
+map.dpm:21:18: error[E0401]: expected 'i32', found 'i64'
+  21 |     let n: i32 = len(m)
+     |                  ^~~~~~
+[exit 1]

@@ -190,6 +190,10 @@ private:
                 public_type(node, t->elem, what);
                 public_type(node, t->err, what);
                 break;
+            case TK::Map:
+                public_type(node, t->key, what);
+                public_type(node, t->elem, what);
+                break;
             case TK::Struct:
                 if (!t->sdef->pub) {
                     diags_.error(Code::E0309, node->span,

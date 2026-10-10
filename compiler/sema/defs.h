@@ -156,6 +156,14 @@ struct Program {
     std::deque<FnDef> fns;
     std::deque<ConstDef> consts;
     std::deque<Local> locals;
+    // Типы Map[K, V] из записи типов: ключ проверяется на порядок после
+    // разбора всех объявлений (у структуры поля известны не сразу).
+    struct MapKey {
+        Span span;
+        const Type* key = nullptr;
+        const ModuleInfo* module = nullptr;
+    };
+    std::vector<MapKey> map_keys;
 };
 
 }  // namespace dp::sema

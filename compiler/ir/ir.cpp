@@ -46,6 +46,10 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
                 if (t->kind != TK::Result || !t->err) return nullptr;
                 t = t->err;
                 break;
+            case ProjKind::MapAt:
+                if (t->kind != TK::Map || pr.index >= f.locals.size() || f.locals[pr.index].type != t->key) return nullptr;
+                t = t->elem;
+                break;
         }
     }
     return t;
@@ -54,7 +58,7 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
 bool needs_drop(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
-        case TK::Str: case TK::List: return true;
+        case TK::Str: case TK::List: case TK::Map: return true;
         case TK::Optional: return needs_drop(t->elem);
         case TK::Result: return needs_drop(t->elem) || needs_drop(t->err);
         case TK::Struct:

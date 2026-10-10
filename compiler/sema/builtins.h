@@ -10,13 +10,14 @@ namespace dp::sema {
 
 struct BuiltinType {
     std::string_view name;
-    TK kind;  // List — обобщённый
+    TK kind;  // List, Map — обобщённые
 };
 
 inline constexpr BuiltinType kBuiltinTypes[] = {
     {"bool", TK::Bool}, {"i8", TK::I8},   {"i16", TK::I16}, {"i32", TK::I32}, {"i64", TK::I64},
     {"int", TK::I64},   {"u8", TK::U8},   {"u16", TK::U16}, {"u32", TK::U32}, {"u64", TK::U64},
     {"f32", TK::F32},   {"f64", TK::F64}, {"str", TK::Str}, {"void", TK::Void}, {"List", TK::List},
+    {"Map", TK::Map},
 };
 
 enum class BuiltinFn : uint8_t {

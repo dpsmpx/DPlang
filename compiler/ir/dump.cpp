@@ -90,6 +90,10 @@ private:
                 case ProjKind::Unwrap: s += ".some"; if (t) t = t->elem; break;
                 case ProjKind::ResultValue: s += ".ok"; if (t) t = t->elem; break;
                 case ProjKind::ResultError: s += ".err"; if (t) t = t->err; break;
+                case ProjKind::MapAt:
+                    s += "{%" + std::to_string(pr.index) + "}";
+                    if (t) t = t->elem;
+                    break;
             }
         }
         return s;
@@ -163,8 +167,9 @@ private:
             "is_space", "is_alnum", "print", "println", "eprintln", "push", "pop", "insert",
             "remove", "clear", "sort", "contains", "trim", "find", "starts_with", "split",
             "__args_len", "__arg", "__read_file", "checked_add", "checked_sub", "checked_mul", "checked_div",
-            "checked_neg",
+            "checked_neg", "map_set", "map_get", "map_has", "map_remove", "map_keys",
         };
+        static_assert(sizeof names / sizeof names[0] == static_cast<size_t>(Intrinsic::MapKeys) + 1);
         return names[static_cast<size_t>(k)];
     }
 

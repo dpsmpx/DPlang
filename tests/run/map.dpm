@@ -1,0 +1,60 @@
+// spec: type.map builtin.methods builtin.functions stmt.assign memory.values expr.literal
+struct Acct {
+    owner: str
+    cents: i64
+    tags: List[str]
+}
+
+fn total(m: &Map[str, i64]) i64 {
+    var s: i64 = 0
+    for k in &m.keys() {
+        s += m[k]
+    }
+    return s
+}
+
+fn bump(m: &mut Map[str, i64], k: str) {
+    if m.has(k) {
+        m[k] += 1
+    } else {
+        m[k] = 1
+    }
+}
+
+fn main() {
+    var m: Map[str, i64] = []
+    m["b"] = 2
+    m["a"] = 1
+    m["c"] = 3
+    m["b"] = 20
+    println(str(len(m)) + " " + str(total(&m)))
+    for k in &m.keys() {
+        println(k + "=" + str(m[k]))
+    }
+    bump(&mut m, "a")
+    bump(&mut m, "z")
+    println(str(m.get("a") ?? -1) + " " + str(m.get("q") ?? -1) + " " + str(m["z"]))
+    if let v = m.remove("c") {
+        println("removed " + str(v))
+    }
+    println(str(m.remove("c") == none) + " " + str(len(m)))
+    var accts: Map[i32, Acct] = []
+    accts[7] = Acct { owner: "x", cents: 5, tags: [] }
+    accts[7].cents += 10
+    accts[7].tags.push("vip")
+    accts[3] = Acct { owner: "y", cents: 1, tags: ["a", "b"] }
+    let copy = accts
+    accts[3].owner = "changed"
+    for id in &accts.keys() {
+        let a = accts[id]
+        println(str(id) + " " + a.owner + " " + str(a.cents) + " " + str(len(a.tags)))
+    }
+    println(copy[3].owner)
+    var nested: Map[str, Map[str, i32]] = []
+    nested["x"] = []
+    nested["x"]["y"] = 5
+    nested["x"]["y"] *= 3
+    println(str(nested["x"]["y"]))
+    let ks = nested.keys()
+    println(str(len(ks)))
+}

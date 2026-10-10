@@ -1,0 +1,22 @@
+// spec: type.map expr.compare stmt.for builtin.methods
+struct P {
+    x: f64
+}
+
+fn main() {
+    var a: Map[f32, i32] = []
+    var b: Map[P, i32] = []
+    var c: Map[?i32, i32] = []
+    var d: Map[str] = []
+    var m: Map[str, i32] = ["x"]
+    let e: Map[str, i32] = []
+    e["k"] = 1
+    m[1] = 2
+    for k in &m {
+        println(k)
+    }
+    m.push(1)
+    _ = m.get(2)
+    let same = m == m
+    let n: i32 = len(m)
+}
