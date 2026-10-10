@@ -1,0 +1,333 @@
+// t16: калькулятор целых выражений с переменными.
+
+enum Kind {
+    Num
+    Name
+    Op
+    End
+    Bad
+}
+
+struct Tok {
+    kind: Kind
+    // текст лексемы; у Bad — сообщение об ошибке лексики
+    text: str
+    col: int
+    val: i64
+}
+
+enum Stop {
+    Halt
+}
+
+struct P {
+    toks: List[Tok]
+    pos: int
+    // false — только разбор, true — вычисление
+    ev: bool
+    vars: Map[str, i64]
+    failed: bool
+    ecol: int
+    emsg: str
+    result: i64
+}
+
+fn is_lower(c: u8) bool {
+    return c >= 'a' && c <= 'z'
+}
+
+fn is_op(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+            continue
+        }
+        if is_digit(c) {
+            let start = i
+            var v: i64 = 0
+            var big = false
+            while i < n && is_digit(src[i]) {
+                if !big {
+                    let d = i64(src[i] - '0')
+                    if let m = checked_mul(v, 10) {
+                        if let s = checked_add(m, d) {
+                            v = s
+                        } else {
+                            big = true
+                        }
+                    } else {
+                        big = true
+                    }
+                }
+                i += 1
+            }
+            if big {
+                toks.push(Tok { kind: .Bad, text: "number too large", col: start + 1, val: 0 })
+                return toks
+            }
+            toks.push(Tok { kind: .Num, text: src[start..i], col: start + 1, val: v })
+            continue
+        }
+        if is_lower(c) || c == '_' {
+            let nstart = i
+            while i < n && (is_lower(src[i]) || is_digit(src[i]) || src[i] == '_') {
+                i += 1
+            }
+            toks.push(Tok { kind: .Name, text: src[nstart..i], col: nstart + 1, val: 0 })
+            continue
+        }
+        if is_op(c) {
+            toks.push(Tok { kind: .Op, text: src[i..i + 1], col: i + 1, val: 0 })
+            i += 1
+            continue
+        }
+        toks.push(Tok { kind: .Bad, text: "unexpected character '" + src[i..i + 1] + "'", col: i + 1, val: 0 })
+        return toks
+    }
+    toks.push(Tok { kind: .End, text: "", col: n + 1, val: 0 })
+    return toks
+}
+
+fn set_err(p: &mut P, col: int, msg: str) {
+    p.failed = true
+    p.ecol = col
+    p.emsg = msg
+}
+
+// Ошибка у текущей лексемы: она не может стоять здесь.
+fn set_tok_err(p: &mut P) {
+    let t = p.toks[p.pos]
+    var msg = "unexpected '" + t.text + "'"
+    if t.kind == .Bad {
+        msg = t.text
+    }
+    if t.kind == .End {
+        msg = "unexpected end"
+    }
+    set_err(&mut p, t.col, msg)
+}
+
+fn peek_op(p: &P, op: str) bool {
+    let t = p.toks[p.pos]
+    return t.kind == .Op && t.text == op
+}
+
+fn ipow(base: i64, ex: i64) ?i64 {
+    if ex == 0 {
+        return 1
+    }
+    if base == 0 || base == 1 {
+        return base
+    }
+    if base == -1 {
+        if ex % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    if ex > 64 {
+        return none
+    }
+    var r: i64 = 1
+    var k: i64 = 0
+    while k < ex {
+        if let m = checked_mul(r, base) {
+            r = m
+        } else {
+            return none
+        }
+        k += 1
+    }
+    return r
+}
+
+fn program(p: &mut P) Stop!i64 {
+    var last = try stmt(&mut p)
+    while peek_op(&p, ";") {
+        p.pos += 1
+        last = try stmt(&mut p)
+    }
+    if p.toks[p.pos].kind != .End {
+        set_tok_err(&mut p)
+        fail .Halt
+    }
+    p.result = last
+    return last
+}
+
+fn stmt(p: &mut P) Stop!i64 {
+    let t = p.toks[p.pos]
+    if t.kind == .Name {
+        let nt = p.toks[p.pos + 1]
+        if nt.kind == .Op && nt.text == "=" {
+            p.pos += 2
+            let v = try expr(&mut p)
+            if p.ev {
+                p.vars[t.text] = v
+            }
+            return v
+        }
+    }
+    return try expr(&mut p)
+}
+
+fn expr(p: &mut P) Stop!i64 {
+    var acc = try term(&mut p)
+    while peek_op(&p, "+") || peek_op(&p, "-") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let rhs = try term(&mut p)
+        if p.ev {
+            var r: ?i64 = none
+            if op.text == "+" {
+                r = checked_add(acc, rhs)
+            } else {
+                r = checked_sub(acc, rhs)
+            }
+            if let rv = r {
+                acc = rv
+            } else {
+                set_err(&mut p, op.col, "overflow")
+                fail .Halt
+            }
+        }
+    }
+    return acc
+}
+
+fn term(p: &mut P) Stop!i64 {
+    var acc = try unary(&mut p)
+    while peek_op(&p, "*") || peek_op(&p, "/") || peek_op(&p, "%") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let rhs = try unary(&mut p)
+        if p.ev {
+            if op.text == "*" {
+                if let mv = checked_mul(acc, rhs) {
+                    acc = mv
+                } else {
+                    set_err(&mut p, op.col, "overflow")
+                    fail .Halt
+                }
+            } else {
+                if rhs == 0 {
+                    set_err(&mut p, op.col, "division by zero")
+                    fail .Halt
+                }
+                if op.text == "/" {
+                    if let dv = checked_div(acc, rhs) {
+                        acc = dv
+                    } else {
+                        set_err(&mut p, op.col, "overflow")
+                        fail .Halt
+                    }
+                } else {
+                    if rhs == -1 {
+                        acc = 0
+                    } else {
+                        acc = acc % rhs
+                    }
+                }
+            }
+        }
+    }
+    return acc
+}
+
+fn unary(p: &mut P) Stop!i64 {
+    if peek_op(&p, "-") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let v = try unary(&mut p)
+        if p.ev {
+            if let nv = checked_neg(v) {
+                return nv
+            }
+            set_err(&mut p, op.col, "overflow")
+            fail .Halt
+        }
+        return 0
+    }
+    return try power(&mut p)
+}
+
+fn power(p: &mut P) Stop!i64 {
+    let base = try atom(&mut p)
+    if peek_op(&p, "^") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let ex = try unary(&mut p)
+        if p.ev {
+            if ex < 0 {
+                set_err(&mut p, op.col, "negative exponent")
+                fail .Halt
+            }
+            if let pv = ipow(base, ex) {
+                return pv
+            }
+            set_err(&mut p, op.col, "overflow")
+            fail .Halt
+        }
+        return 0
+    }
+    return base
+}
+
+fn atom(p: &mut P) Stop!i64 {
+    let t = p.toks[p.pos]
+    if t.kind == .Num {
+        p.pos += 1
+        return t.val
+    }
+    if t.kind == .Name {
+        p.pos += 1
+        if p.ev {
+            if let vv = p.vars.get(t.text) {
+                return vv
+            }
+            set_err(&mut p, t.col, "unknown variable '" + t.text + "'")
+            fail .Halt
+        }
+        return 0
+    }
+    if t.kind == .Op && t.text == "(" {
+        p.pos += 1
+        let v = try expr(&mut p)
+        let ct = p.toks[p.pos]
+        if ct.kind == .Op && ct.text == ")" {
+            p.pos += 1
+            return v
+        }
+        if ct.kind == .Bad {
+            set_err(&mut p, ct.col, ct.text)
+        } else {
+            set_err(&mut p, ct.col, "expected ')'")
+        }
+        fail .Halt
+    }
+    set_tok_err(&mut p)
+    fail .Halt
+}
+
+pub fn calc(src: str) str {
+    let toks = lex(src)
+    var p = P { toks: toks, pos: 0, ev: false, vars: [], failed: false, ecol: 0, emsg: "", result: 0 }
+    _ = program(&mut p)
+    if !p.failed {
+        p.pos = 0
+        p.ev = true
+        _ = program(&mut p)
+    }
+    if p.failed {
+        return "error at " + str(p.ecol) + ": " + p.emsg
+    }
+    return str(p.result)
+}

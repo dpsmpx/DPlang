@@ -1,0 +1,46 @@
+// Модуль catalog (после рефакторинга): товары по номерам.
+pub struct ItemId {
+    index: i32
+}
+
+pub struct Item {
+    code: str
+    // копейки
+    price: i64
+}
+
+pub struct Catalog {
+    // ItemId.index — индекс
+    items: List[Item]
+}
+
+pub enum CatalogError {
+    Duplicate
+}
+
+// Добавляет товар; ошибка Duplicate, если код уже есть.
+pub fn catalog_add(c: &mut Catalog, code: str, price: i64) CatalogError!ItemId {
+    if catalog_find(&c, code) != none {
+        fail .Duplicate
+    }
+    c.items.push(Item { code, price })
+    return ItemId { index: i32(len(c.items) - 1) }
+}
+
+// Товар по коду; нет значения, если такого кода нет.
+pub fn catalog_find(c: &Catalog, code: str) ?ItemId {
+    for i in 0..len(c.items) {
+        if c.items[i].code == code {
+            return ItemId { index: i32(i) }
+        }
+    }
+    return none
+}
+
+pub fn catalog_price(c: &Catalog, id: ItemId) i64 {
+    return c.items[id.index].price
+}
+
+pub fn catalog_code(c: &Catalog, id: ItemId) str {
+    return c.items[id.index].code
+}
