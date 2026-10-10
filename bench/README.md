@@ -25,9 +25,9 @@
 чистым контекстом, одновременно — не больше 2–3 (Р35).
 
 ```sh
-python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A] [--attempts 5] [--agent-model M]
+python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A] [--attempts 5] [--agent-model M] [--series]
 python3 bench/experiment.py check DIR          # единственная проверка, доступная модели
-python3 bench/experiment.py session RUN TASK LANG --tokens N [--tool-uses K] [--seconds S]
+python3 bench/experiment.py session RUN TASK|series LANG --tokens N [--tool-uses K] [--seconds S]
 python3 bench/experiment.py tokens RUN [--model M]   # нужен ANTHROPIC_API_KEY
 python3 bench/experiment.py report RUN [--save]      # --save — в bench/results/RUN/
 python3 bench/experiment.py restore RUN [--force]    # из bench/results/RUN/ обратно в рабочий каталог
@@ -136,6 +136,28 @@ python3 bench/experiment.py selftest           # шаг «обвязка» в to
    сначала возвращается из `bench/results/` командой `restore RUN`; так
    же досчитываются токены, когда появится ключ.
 6. Отчёт — `docs/audits/<дата>-syntax-experiment.md`, решение — О1.
+
+### Серия (Р-17)
+
+В обычном прогоне ячейка — отдельная сессия субагента. Поэтому
+спецификация читается в каждой ячейке заново, и чтение перевешивает
+экономию в коде (риск Р-17). Серия мерит другой случай: несколько
+изменений в одной сессии.
+
+- `prepare RUN --series` создаёт ячейки как обычно и, кроме них, задание
+  серии на каждый язык — `RUN/series/LANG/PROMPT.md`. В нём один раз
+  правила, затем задачи по порядку, у каждой — своя папка и своя команда
+  `check`, в конце один раз спецификация. `PROMPT.md` ячейки — только
+  ссылка на задание серии.
+- На каждый язык — один субагент с сообщением «Прочитай
+  `RUN/series/LANG/PROMPT.md` и выполни задание оттуда.»
+- Попытки, журнал и снимки — по ячейкам, как обычно.
+- Расход всей сессии записывает `session RUN series LANG --tokens …` в
+  `RUN/_log/_series-LANG.json`. Копия задания серии лежит рядом, в
+  `_series-LANG.PROMPT.md`.
+- `report` добавляет раздел «Серии». В нём задание серии в символах и
+  расход сессии на одну принятую задачу — главная мера целей
+  (`GOAL.md`, раздел 2) при нескольких изменениях на сессию.
 
 ### Ограничения
 

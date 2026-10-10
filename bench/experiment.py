@@ -14,7 +14,11 @@ dpl (dp — настоящий компилятор v0.1), зная язык т�
   (варианты) или компилятор dpl (dp, bench/dp_check.py), сборка со
   скрытым драйвером, запуск, сверка с ожидаемым; итог — класс и первая
   ошибка; каждая попытка и снимок кода — в журнал;
-- session — записать расход сессии субагента (из итога инструмента Agent);
+- prepare --series — серия (Р-17): задачи по очереди в одной сессии
+  субагента, спецификация читается один раз; задание серии —
+  RUN/series/LANG/PROMPT.md;
+- session — записать расход сессии субагента (из итога инструмента Agent;
+  у серии — TASK = series);
 - tokens — точный счёт токенов API Claude (count_tokens, ключ
   ANTHROPIC_API_KEY): прочитано на входе, прочитано диагностик, написано,
   итоговое решение;
@@ -24,9 +28,9 @@ dpl (dp — настоящий компилятор v0.1), зная язык т�
   чтобы досчитать токены или отчёт в другой сессии;
 - selftest — проверка самой обвязки (шаг «обвязка» в tools/check/run.sh).
 
-    python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A]
+    python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A] [--series]
     python3 bench/experiment.py check DIR
-    python3 bench/experiment.py session RUN TASK LANG --tokens N [--tool-uses K] [--seconds S]
+    python3 bench/experiment.py session RUN TASK|series LANG --tokens N [--tool-uses K] [--seconds S]
     python3 bench/experiment.py tokens RUN [--model M]
     python3 bench/experiment.py report RUN [--save]
     python3 bench/experiment.py restore RUN [--force]
@@ -375,12 +379,13 @@ def read_files(d):
     return {n: read(os.path.join(d, n)) for n in sorted(os.listdir(d)) if os.path.isfile(os.path.join(d, n))}
 
 
-def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, quiet=False):
+def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, quiet=False, series=False):
     run_dir = os.path.join(work_dir(), run)
     flags = build_flags()
     common = {'run': run, 'commit': git_commit(), 'cxx': cxx_version(), 'flags': flags,
               'attempts_max': attempts, 'agent_model': agent_model}
     made = []
+    in_series = {lang: [] for lang in langs}
     for task in tasks:
         for lang in langs:
             if lang not in task.langs():
@@ -393,18 +398,95 @@ def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, q
                     shutil.rmtree(d)
             start = task.files(lang, 'start')
             snapshot(start, os.path.join(sandbox, 'src'))
-            write(os.path.join(sandbox, 'PROMPT.md'), prompt(task, lang, sandbox, attempts, flags, start))
+            text = prompt(task, lang, sandbox, attempts, flags, start)
+            if series:
+                in_series[lang].append((task, sandbox, text))
+                text = (f'# Задача {task.id} на {TITLE[lang]} — часть серии\n\nЗадание — в '
+                        f'`{series_paths(run_dir, lang)[0]}`.\n')
+            write(os.path.join(sandbox, 'PROMPT.md'), text)
             snapshot(start, os.path.join(log, 'attempt-0'))
-            meta = dict(common, task=task.name, id=task.id, lang=lang, kind=task.kind,
+            meta = dict(common, task=task.name, id=task.id, lang=lang, kind=task.kind, series=series,
                         created=datetime.datetime.now().isoformat(timespec='seconds'))
             write(os.path.join(log, 'meta.json'), json.dumps(meta, ensure_ascii=False, indent=1) + '\n')
             made.append(sandbox)
+    if series:
+        for lang, items in in_series.items():
+            if not items:
+                continue
+            path, meta_path = series_paths(run_dir, lang)
+            text = series_prompt(items, lang, attempts)
+            write(path, text)
+            write(meta_path[:-len('.json')] + '.PROMPT.md', text)
+            meta = dict(common, lang=lang, tasks=[t.id for t, _, _ in items],
+                        created=datetime.datetime.now().isoformat(timespec='seconds'))
+            write(meta_path, json.dumps(meta, ensure_ascii=False, indent=1) + '\n')
     if not quiet:
         for s in made:
             print(s)
-        print(f'песочниц: {len(made)}. Сообщение субагенту — «Прочитай <песочница>/PROMPT.md и выполни '
-              'задание оттуда.» (bench/README.md)')
+        if series:
+            for lang in langs:
+                if in_series[lang]:
+                    print(series_paths(run_dir, lang)[0])
+            print('серия: на язык — один субагент с сообщением «Прочитай <серия>/PROMPT.md и выполни '
+                  'задание оттуда.» (bench/README.md)')
+        else:
+            print(f'песочниц: {len(made)}. Сообщение субагенту — «Прочитай <песочница>/PROMPT.md и выполни '
+                  'задание оттуда.» (bench/README.md)')
     return made
+
+
+# Серия (Р-17): один субагент решает по очереди несколько задач в одной
+# сессии; спецификация читается один раз. Задание серии — RUN/series/LANG/
+# PROMPT.md, его копия и расход сессии — в RUN/_log/_series-LANG.*.
+SPEC_MARK = '\n' + demote(SPEC_DP_TITLE).rstrip('\n') + '\n'
+
+
+def series_paths(run_dir, lang):
+    return (os.path.join(run_dir, 'series', lang, 'PROMPT.md'),
+            os.path.join(run_dir, '_log', f'_series-{lang}.json'))
+
+
+def task_part(text):
+    """Часть задания ячейки от раздела «Код» до спецификации."""
+    body = text[text.index('## Код\n'):]
+    if SPEC_MARK in body:
+        body = body[:body.index(SPEC_MARK)]
+    return body.rstrip('\n') + '\n'
+
+
+def series_prompt(items, lang, attempts):
+    """Задание серии: правила один раз, задачи по порядку, спецификация один раз."""
+    exe = os.path.join(BENCH, 'experiment.py')
+    dp = is_dp(lang)
+    n = len(items)
+    what = {'proto': 'переводит код прототипом языка в C++, собирает его',
+            'dp': 'собирает код компилятором dpl', 'cpp': 'собирает его'}[ext_key(lang)]
+    lines = [
+        f'# Серия из {n} задач на {TITLE[lang]}', '',
+        f'Задание опыта: решить по очереди {n} задач в одной работе'
+        + (', зная язык только по спецификации в конце этого файла.' if dp else '.'), '',
+        '## Правила', '',
+        '- Задачи решаются по порядку, следующая — после того, как кончилась предыдущая. У каждой '
+        'задачи своя папка (в её разделе): читай этот файл и `src/` папки задачи, правь файлы в её '
+        '`src/`. Других файлов не открывай, по диску и в сети не ищи.',
+        '- Компилятор и другие программы сам не запускай. Проверка задачи — только командой из её '
+        f'раздела. Она {what} со скрытым драйвером, запускает и сравнивает вывод с ожидаемым; '
+        'печатает «принято» или первую ошибку.',
+        f'- Попыток проверки на задачу — не больше {attempts}, каждая записывается. Проверяй, когда '
+        'решение готово целиком, а не для разведки.',
+        '- Задача кончается на «принято» или когда попытки кончились. Ответ в конце — по строке на '
+        'задачу: задача, номер последней попытки и её итог.', '',
+    ]
+    text = '\n'.join(lines)
+    for k, (task, sandbox, cell_text) in enumerate(items, 1):
+        text += (f'\n## Задача {k} из {n}: {task.id}\n\nПапка — `{sandbox}`. Проверка:\n\n'
+                 f'      python3 {exe} check {sandbox}\n\n' + demote(task_part(cell_text)))
+    if lang == 'dp':
+        text += '\n' + demote(dp_spec())
+    elif is_proto(lang):
+        spec = read(mkspec.out_path(lang))
+        text += '\n' + demote(re.sub(r'\A<!--.*?-->\n+', '', spec, flags=re.S))
+    return text
 
 
 # ---------------------------------------------------------------- проверка
@@ -628,8 +710,13 @@ def check(sandbox):
 
 
 def session(run, task_id, lang, tokens, tool_uses=None, seconds=None):
-    _, log = cell_paths(os.path.join(work_dir(), run), find_task(task_id).id, lang)
-    path = os.path.join(log, 'meta.json')
+    if task_id == 'series':
+        path = series_paths(os.path.join(work_dir(), run), lang)[1]
+        if not os.path.exists(path):
+            raise HarnessError(f'в прогоне {run} нет серии на {lang}')
+    else:
+        _, log = cell_paths(os.path.join(work_dir(), run), find_task(task_id).id, lang)
+        path = os.path.join(log, 'meta.json')
     meta = json.loads(read(path))
     meta['session'] = {'total_tokens': tokens, 'tool_uses': tool_uses, 'seconds': seconds}
     write(path, json.dumps(meta, ensure_ascii=False, indent=1) + '\n')
@@ -836,7 +923,7 @@ def report(run, save=False):
         raise HarnessError(f'нет прогона {run_dir}')
     rows = collect(run_dir)
     s = summary(rows)
-    text = render(run, rows, s)
+    text = render(run, rows, s) + render_series(run_dir, rows)
     sys.stdout.write(text)
     if save:
         dest = os.path.join(RESULTS, run)
@@ -851,6 +938,43 @@ def report(run, save=False):
               json.dumps({'rows': rows, 'summary': s}, ensure_ascii=False, indent=1) + '\n')
         print(f'\nзаписано: {os.path.relpath(dest, ROOT)}')
     return 0
+
+
+def series_rows(run_dir, rows):
+    """Серии прогона: язык, задачи, принято, задание, написано, решение, расход сессии."""
+    out = []
+    for lang in LANGS:
+        path, meta_path = series_paths(run_dir, lang)
+        if not os.path.exists(meta_path):
+            continue
+        meta = json.loads(read(meta_path))
+        cells_ = [r for r in rows if r['lang'] == lang and r['task'] in meta['tasks']]
+        sess = (meta.get('session') or {}).get('total_tokens')
+        acc = sum(1 for r in cells_ if r['status'] == ACCEPTED)
+        out.append({'lang': lang, 'tasks': meta['tasks'], 'accepted': acc,
+                    'first_try': sum(r['first_try'] for r in cells_),
+                    'prompt': len(read(meta_path[:-len('.json')] + '.PROMPT.md')),
+                    'written': sum(r['chars']['written'] for r in cells_),
+                    'final': sum(r['chars']['final'] for r in cells_),
+                    'session': sess, 'per_change': round(sess / acc) if sess and acc else None})
+    return out
+
+
+def render_series(run_dir, rows):
+    sr = series_rows(run_dir, rows)
+    if not sr:
+        return ''
+    lines = ['', '## Серии (Р-17)', '',
+             'Один субагент на язык решает задачи по очереди в одной сессии; спецификация читается один '
+             'раз. «Задание» — символы задания серии; «сессия» — расход всей сессии по итогу инструмента '
+             'Agent; «на изменение» — сессия на одну принятую задачу.', '',
+             '| язык | задачи | принято | с первой попытки | задание | написано | решение | сессия | на изменение |',
+             '|---|---|---|---|---|---|---|---|---|']
+    for r in sr:
+        lines.append(f'| {TITLE[r["lang"]]} | {", ".join(r["tasks"])} | {r["accepted"]} из {len(r["tasks"])} | '
+                     f'{r["first_try"]} | {r["prompt"]} | {r["written"]} | {r["final"]} | {r["session"] or "—"} | '
+                     f'{r["per_change"] or "—"} |')
+    return '\n'.join(lines) + '\n'
 
 
 def restore(run, force=False):
@@ -872,6 +996,10 @@ def restore(run, force=False):
         last = len(read_attempts(log))
         snapshot(read_files(os.path.join(log, f'attempt-{last}')), os.path.join(sandbox, 'src'))
         n += 1
+    for lang in LANGS:
+        path, meta_path = series_paths(run_dir, lang)
+        if os.path.exists(meta_path):
+            write(path, read(meta_path[:-len('.json')] + '.PROMPT.md'))
     print(f'восстановлено: {n} ячеек прогона {run} в {run_dir}')
     return 0
 
@@ -994,6 +1122,50 @@ def selftest_restore(tmp, task, texts):
     return [] if back == texts else ['восстановленный прогон даёт другие тексты для счёта']
 
 
+def selftest_series(tmp):
+    """Серия: задание с правилами и спецификацией один раз, проверки всех задач, отчёт с серией."""
+    tasks = [find_task('t15'), find_task('t16')]
+    quiet = open(os.devnull, 'w')
+    old = sys.stdout
+    sys.stdout = quiet
+    fails = []
+    try:
+        prepare('series', tasks, ['cpp', 'dp'], attempts=2, quiet=True, series=True)
+        run_dir = os.path.join(work_dir(), 'series')
+        for lang in ('cpp', 'dp'):
+            path, meta_path = series_paths(run_dir, lang)
+            p = read(path)
+            for t in tasks:
+                sandbox, _ = cell_paths(run_dir, t.id, lang)
+                if f'check {sandbox}' not in p:
+                    fails.append(f'серия {lang}: нет проверки {t.id}')
+                if t.expected.strip() in p or MARK in p:
+                    fails.append(f'серия {lang}: в задание попал драйвер или ожидаемый вывод')
+                if 'часть серии' not in read(os.path.join(sandbox, 'PROMPT.md')):
+                    fails.append(f'серия {lang}: PROMPT.md ячейки {t.id} — не ссылка на серию')
+            if p.count('## Правила') != 1:
+                fails.append(f'серия {lang}: правила не один раз')
+            if p.count('[lex.source]') != (1 if lang == 'dp' else 0):
+                fails.append(f'серия {lang}: спецификация не один раз')
+        sandbox, _ = cell_paths(run_dir, 't15', 'dp')
+        snapshot(tasks[0].files('dp', 'ref'), os.path.join(sandbox, 'src'))
+        rc = check(sandbox)
+        session('series', 'series', 'dp', 1000)
+        report('series')
+        rows = collect(run_dir)
+        sr = {r['lang']: r for r in series_rows(run_dir, rows)}
+    except HarnessError as e:
+        return [f'серия: {e}']
+    finally:
+        sys.stdout = old
+        quiet.close()
+    if rc != 0:
+        fails.append('серия: эталон t15 в серии не принят')
+    if sr.get('dp', {}).get('per_change') != 1000 or sr.get('cpp', {}).get('session') is not None:
+        fails.append(f'серия: в отчёте не тот расход ({sr})')
+    return fails
+
+
 def selftest():
     tasks = all_tasks()
     if not os.path.exists(dp_check.dpl()):
@@ -1009,6 +1181,7 @@ def selftest():
             results = list(pool.map(lambda j: selftest_cell(j[0], j[1], j[2], tmp, flags), jobs))
             results += list(pool.map(lambda t: selftest_stub_cpp(t, tmp), tasks))
         results.append(selftest_log(tmp))
+        results.append(selftest_series(tmp))
     if saved is None:
         del os.environ['DPL_EXP_WORK']
     else:
@@ -1020,7 +1193,7 @@ def selftest():
             print('  ' + f)
         return 1
     print(f'обвязка: {len(tasks)} задач, ячеек {len(jobs)} — задания собираются, начальный код не проходит, '
-          f'эталоны принимаются ({"/".join(FULL)} — со сборкой), журнал, отчёт и восстановление работают')
+          f'эталоны принимаются ({"/".join(FULL)} — со сборкой), журнал, отчёт, восстановление и серия работают')
     return 0
 
 
@@ -1037,6 +1210,7 @@ def main(argv):
     p.add_argument('--attempts', type=int, default=ATTEMPTS)
     p.add_argument('--agent-model', default='')
     p.add_argument('--force', action='store_true')
+    p.add_argument('--series', action='store_true')
     p = sub.add_parser('check')
     p.add_argument('dir')
     p = sub.add_parser('session')
@@ -1064,7 +1238,7 @@ def main(argv):
             bad = [x for x in langs if x not in LANGS]
             if bad:
                 raise HarnessError(f'неизвестный язык: {", ".join(bad)} (есть: {", ".join(LANGS)})')
-            prepare(a.run, tasks, langs, a.attempts, a.agent_model, a.force)
+            prepare(a.run, tasks, langs, a.attempts, a.agent_model, a.force, series=a.series)
             return 0
         if a.cmd == 'check':
             return check(a.dir)
