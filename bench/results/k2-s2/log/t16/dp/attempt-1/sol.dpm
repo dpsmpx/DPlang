@@ -1,0 +1,386 @@
+// t16: калькулятор целых выражений с переменными.
+
+const I64_MAX: i64 = 9223372036854775807
+const I64_MIN: i64 = -9223372036854775807 - 1
+
+enum Tk {
+    Num
+    Name
+    Op
+    End
+    Err
+}
+
+struct Tok {
+    kind: Tk
+    // текст лексемы; у Err — сообщение об ошибке
+    text: str
+    val: i64
+    col: int
+}
+
+struct P {
+    toks: List[Tok]
+    pos: int
+    eval: bool
+    names: List[str]
+    vals: List[i64]
+    msg: str
+    col: int
+}
+
+enum CalcErr {
+    Fail
+}
+
+fn is_name_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_name_char(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_' || is_digit(c)
+}
+
+fn is_op_char(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+// Лексемы до первой ошибки лексики; в конце — End или Err.
+fn lex(src: str) List[Tok] {
+    var out: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+        } else if is_digit(c) {
+            let start = i
+            var v: i64 = 0
+            var big = false
+            while i < n && is_digit(src[i]) {
+                let d = i64(src[i] - '0')
+                if !big {
+                    if v > (I64_MAX - d) / 10 {
+                        big = true
+                    } else {
+                        v = v * 10 + d
+                    }
+                }
+                i += 1
+            }
+            if big {
+                out.push(Tok { kind: Tk.Err, text: "number too large", val: 0, col: start + 1 })
+                return out
+            }
+            out.push(Tok { kind: Tk.Num, text: src[start..i], val: v, col: start + 1 })
+        } else if is_name_start(c) {
+            let start = i
+            i += 1
+            while i < n && is_name_char(src[i]) {
+                i += 1
+            }
+            out.push(Tok { kind: Tk.Name, text: src[start..i], val: 0, col: start + 1 })
+        } else if is_op_char(c) {
+            out.push(Tok { kind: Tk.Op, text: src[i..i + 1], val: 0, col: i + 1 })
+            i += 1
+        } else {
+            let m = "unexpected character '" + src[i..i + 1] + "'"
+            out.push(Tok { kind: Tk.Err, text: m, val: 0, col: i + 1 })
+            return out
+        }
+    }
+    out.push(Tok { kind: Tk.End, text: "", val: 0, col: n + 1 })
+    return out
+}
+
+fn op_at(p: &P, k: int, s: str) bool {
+    let i = p.pos + k
+    if i >= len(p.toks) {
+        return false
+    }
+    let t = p.toks[i]
+    return t.kind == Tk.Op && t.text == s
+}
+
+fn set_unexpected(p: &mut P, t: Tok) {
+    if t.kind == Tk.Err {
+        p.msg = t.text
+    } else if t.kind == Tk.End {
+        p.msg = "unexpected end"
+    } else {
+        p.msg = "unexpected '" + t.text + "'"
+    }
+    p.col = t.col
+}
+
+fn set_err(p: &mut P, col: int, msg: str) {
+    p.msg = msg
+    p.col = col
+}
+
+fn add_ovf(a: i64, b: i64) bool {
+    if b > 0 {
+        return a > I64_MAX - b
+    }
+    if b < 0 {
+        return a < I64_MIN - b
+    }
+    return false
+}
+
+fn sub_ovf(a: i64, b: i64) bool {
+    if b < 0 {
+        return a > I64_MAX + b
+    }
+    if b > 0 {
+        return a < I64_MIN + b
+    }
+    return false
+}
+
+fn mul_ovf(a: i64, b: i64) bool {
+    if a == 0 || b == 0 {
+        return false
+    }
+    if a > 0 {
+        if b > 0 {
+            return a > I64_MAX / b
+        }
+        return b < I64_MIN / a
+    }
+    if b > 0 {
+        return a < I64_MIN / b
+    }
+    return a < I64_MAX / b
+}
+
+// Точная степень; none — вне i64. e >= 0.
+fn ipow(b: i64, e: i64) ?i64 {
+    if e == 0 {
+        return 1
+    }
+    if b == 0 {
+        return 0
+    }
+    if b == 1 {
+        return 1
+    }
+    if b == -1 {
+        if e % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    if e > 64 {
+        return none
+    }
+    var r: i64 = 1
+    for _ in 0..e {
+        if mul_ovf(r, b) {
+            return none
+        }
+        r = r * b
+    }
+    return r
+}
+
+fn binop(p: &mut P, t: Tok, a: i64, b: i64) CalcErr!i64 {
+    if t.text == "+" {
+        if add_ovf(a, b) {
+            set_err(&mut p, t.col, "overflow")
+            fail CalcErr.Fail
+        }
+        return a + b
+    }
+    if t.text == "-" {
+        if sub_ovf(a, b) {
+            set_err(&mut p, t.col, "overflow")
+            fail CalcErr.Fail
+        }
+        return a - b
+    }
+    if t.text == "*" {
+        if mul_ovf(a, b) {
+            set_err(&mut p, t.col, "overflow")
+            fail CalcErr.Fail
+        }
+        return a * b
+    }
+    if b == 0 {
+        set_err(&mut p, t.col, "division by zero")
+        fail CalcErr.Fail
+    }
+    if t.text == "/" {
+        if a == I64_MIN && b == -1 {
+            set_err(&mut p, t.col, "overflow")
+            fail CalcErr.Fail
+        }
+        return a / b
+    }
+    if b == -1 {
+        return 0
+    }
+    return a % b
+}
+
+fn atom(p: &mut P) CalcErr!i64 {
+    let t = p.toks[p.pos]
+    if t.kind == Tk.Num {
+        p.pos += 1
+        return t.val
+    }
+    if t.kind == Tk.Name {
+        p.pos += 1
+        if !p.eval {
+            return 0
+        }
+        for i in 0..len(p.names) {
+            if p.names[i] == t.text {
+                return p.vals[i]
+            }
+        }
+        set_err(&mut p, t.col, "unknown variable '" + t.text + "'")
+        fail CalcErr.Fail
+    }
+    if t.kind == Tk.Op && t.text == "(" {
+        p.pos += 1
+        let v = try expr(&mut p)
+        let c = p.toks[p.pos]
+        if c.kind == Tk.Op && c.text == ")" {
+            p.pos += 1
+            return v
+        }
+        if c.kind == Tk.Err {
+            set_err(&mut p, c.col, c.text)
+        } else {
+            set_err(&mut p, c.col, "expected ')'")
+        }
+        fail CalcErr.Fail
+    }
+    set_unexpected(&mut p, t)
+    fail CalcErr.Fail
+}
+
+fn power(p: &mut P) CalcErr!i64 {
+    let base = try atom(&mut p)
+    if !op_at(&p, 0, "^") {
+        return base
+    }
+    let t = p.toks[p.pos]
+    p.pos += 1
+    let e = try unary(&mut p)
+    if !p.eval {
+        return 0
+    }
+    if e < 0 {
+        set_err(&mut p, t.col, "negative exponent")
+        fail CalcErr.Fail
+    }
+    if let r = ipow(base, e) {
+        return r
+    }
+    set_err(&mut p, t.col, "overflow")
+    fail CalcErr.Fail
+}
+
+fn unary(p: &mut P) CalcErr!i64 {
+    if op_at(&p, 0, "-") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        let v = try unary(&mut p)
+        if !p.eval {
+            return 0
+        }
+        if v == I64_MIN {
+            set_err(&mut p, t.col, "overflow")
+            fail CalcErr.Fail
+        }
+        return -v
+    }
+    return try power(&mut p)
+}
+
+fn term(p: &mut P) CalcErr!i64 {
+    var a = try unary(&mut p)
+    while op_at(&p, 0, "*") || op_at(&p, 0, "/") || op_at(&p, 0, "%") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        let b = try unary(&mut p)
+        if p.eval {
+            a = try binop(&mut p, t, a, b)
+        }
+    }
+    return a
+}
+
+fn expr(p: &mut P) CalcErr!i64 {
+    var a = try term(&mut p)
+    while op_at(&p, 0, "+") || op_at(&p, 0, "-") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        let b = try term(&mut p)
+        if p.eval {
+            a = try binop(&mut p, t, a, b)
+        }
+    }
+    return a
+}
+
+fn assign(p: &mut P, name: str, v: i64) {
+    for i in 0..len(p.names) {
+        if p.names[i] == name {
+            p.vals[i] = v
+            return
+        }
+    }
+    p.names.push(name)
+    p.vals.push(v)
+}
+
+fn stmt(p: &mut P) CalcErr!i64 {
+    let t = p.toks[p.pos]
+    if t.kind == Tk.Name && op_at(&p, 1, "=") {
+        p.pos += 2
+        let v = try expr(&mut p)
+        if p.eval {
+            assign(&mut p, t.text, v)
+        }
+        return v
+    }
+    return try expr(&mut p)
+}
+
+fn program(p: &mut P) CalcErr!i64 {
+    var v = try stmt(&mut p)
+    while op_at(&p, 0, ";") {
+        p.pos += 1
+        v = try stmt(&mut p)
+    }
+    let t = p.toks[p.pos]
+    if t.kind != Tk.End {
+        set_unexpected(&mut p, t)
+        fail CalcErr.Fail
+    }
+    return v
+}
+
+pub fn calc(src: str) str {
+    var p = P { toks: lex(src), pos: 0, eval: false, names: [], vals: [], msg: "", col: 0 }
+    var parsed = false
+    match program(&mut p) {
+        ok(_) => parsed = true
+        err(_) => parsed = false
+    }
+    if !parsed {
+        return "error at " + str(p.col) + ": " + p.msg
+    }
+    p.pos = 0
+    p.eval = true
+    var res = ""
+    match program(&mut p) {
+        ok(v) => res = str(v)
+        err(_) => res = "error at " + str(p.col) + ": " + p.msg
+    }
+    return res
+}

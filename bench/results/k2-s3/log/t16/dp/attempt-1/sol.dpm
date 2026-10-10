@@ -1,0 +1,408 @@
+// t16: калькулятор целых выражений с переменными.
+const I64_MAX: i64 = 9223372036854775807
+const I64_MIN: i64 = -9223372036854775807 - 1
+
+enum TokKind {
+    Num
+    Name
+    Op
+    End
+    Bad
+}
+
+// Лексема; у Bad в text — сообщение ошибки лексики.
+struct Tok {
+    kind: TokKind
+    text: str = ""
+    col: int = 0
+    val: i64 = 0
+}
+
+enum OpKind {
+    Push
+    Load
+    Neg
+    Bin
+    Store
+    Drop
+}
+
+// Команда обратной польской записи.
+struct Op {
+    kind: OpKind
+    val: i64 = 0
+    name: str = ""
+    col: int = 0
+}
+
+struct Parser {
+    toks: List[Tok]
+    pos: int = 0
+    code: List[Op]
+    err_col: int = 0
+    err_msg: str = ""
+}
+
+enum ParseError {
+    Stop
+}
+
+enum EvalError {
+    DivZero
+    Overflow
+    NegExp
+}
+
+fn is_name_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_name_byte(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+fn is_op_byte(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+// Лексемы до первой ошибки лексики; в конце — End.
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+        } else if is_digit(c) {
+            let start = i
+            var v: i64 = 0
+            var big = false
+            while i < n && is_digit(src[i]) {
+                let d = i64(src[i] - '0')
+                if !big {
+                    if v > (I64_MAX - d) / 10 {
+                        big = true
+                    } else {
+                        v = v * 10 + d
+                    }
+                }
+                i += 1
+            }
+            if big {
+                toks.push(Tok { kind: .Bad, text: "number too large", col: start + 1 })
+                toks.push(Tok { kind: .End, col: n + 1 })
+                return toks
+            }
+            toks.push(Tok { kind: .Num, text: src[start..i], col: start + 1, val: v })
+        } else if is_name_start(c) {
+            let start = i
+            while i < n && is_name_byte(src[i]) {
+                i += 1
+            }
+            toks.push(Tok { kind: .Name, text: src[start..i], col: start + 1 })
+        } else if is_op_byte(c) {
+            toks.push(Tok { kind: .Op, text: src[i..i + 1], col: i + 1 })
+            i += 1
+        } else {
+            toks.push(Tok { kind: .Bad, text: "unexpected character '" + src[i..i + 1] + "'", col: i + 1 })
+            toks.push(Tok { kind: .End, col: n + 1 })
+            return toks
+        }
+    }
+    toks.push(Tok { kind: .End, col: n + 1 })
+    return toks
+}
+
+fn is_op(t: Tok, s: str) bool {
+    return t.kind == TokKind.Op && t.text == s
+}
+
+fn set_unexpected(p: &mut Parser, t: Tok) {
+    p.err_col = t.col
+    if t.kind == TokKind.Bad {
+        p.err_msg = t.text
+    } else if t.kind == TokKind.End {
+        p.err_msg = "unexpected end"
+    } else {
+        p.err_msg = "unexpected '" + t.text + "'"
+    }
+}
+
+fn p_program(p: &mut Parser) ParseError!void {
+    try p_stmt(&mut p)
+    while is_op(p.toks[p.pos], ";") {
+        p.pos += 1
+        try p_stmt(&mut p)
+    }
+    let t = p.toks[p.pos]
+    if t.kind != TokKind.End {
+        set_unexpected(&mut p, t)
+        fail .Stop
+    }
+}
+
+fn p_stmt(p: &mut Parser) ParseError!void {
+    let t = p.toks[p.pos]
+    if t.kind == TokKind.Name && is_op(p.toks[p.pos + 1], "=") {
+        p.pos += 2
+        try p_expr(&mut p)
+        p.code.push(Op { kind: .Store, name: t.text, col: t.col })
+    } else {
+        try p_expr(&mut p)
+    }
+    p.code.push(Op { kind: .Drop })
+}
+
+fn p_expr(p: &mut Parser) ParseError!void {
+    try p_term(&mut p)
+    while is_op(p.toks[p.pos], "+") || is_op(p.toks[p.pos], "-") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        try p_term(&mut p)
+        p.code.push(Op { kind: .Bin, name: t.text, col: t.col })
+    }
+}
+
+fn p_term(p: &mut Parser) ParseError!void {
+    try p_unary(&mut p)
+    while is_op(p.toks[p.pos], "*") || is_op(p.toks[p.pos], "/") || is_op(p.toks[p.pos], "%") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        try p_unary(&mut p)
+        p.code.push(Op { kind: .Bin, name: t.text, col: t.col })
+    }
+}
+
+fn p_unary(p: &mut Parser) ParseError!void {
+    let t = p.toks[p.pos]
+    if is_op(t, "-") {
+        p.pos += 1
+        try p_unary(&mut p)
+        p.code.push(Op { kind: .Neg, col: t.col })
+    } else {
+        try p_power(&mut p)
+    }
+}
+
+fn p_power(p: &mut Parser) ParseError!void {
+    try p_atom(&mut p)
+    let t = p.toks[p.pos]
+    if is_op(t, "^") {
+        p.pos += 1
+        try p_unary(&mut p)
+        p.code.push(Op { kind: .Bin, name: "^", col: t.col })
+    }
+}
+
+fn p_atom(p: &mut Parser) ParseError!void {
+    let t = p.toks[p.pos]
+    if t.kind == TokKind.Num {
+        p.pos += 1
+        p.code.push(Op { kind: .Push, val: t.val, col: t.col })
+    } else if t.kind == TokKind.Name {
+        p.pos += 1
+        p.code.push(Op { kind: .Load, name: t.text, col: t.col })
+    } else if is_op(t, "(") {
+        p.pos += 1
+        try p_expr(&mut p)
+        let c = p.toks[p.pos]
+        if is_op(c, ")") {
+            p.pos += 1
+        } else if c.kind == TokKind.Bad {
+            p.err_col = c.col
+            p.err_msg = c.text
+            fail .Stop
+        } else {
+            p.err_col = c.col
+            p.err_msg = "expected ')'"
+            fail .Stop
+        }
+    } else {
+        set_unexpected(&mut p, t)
+        fail .Stop
+    }
+}
+
+fn add(a: i64, b: i64) EvalError!i64 {
+    if b > 0 && a > I64_MAX - b {
+        fail .Overflow
+    }
+    if b < 0 && a < I64_MIN - b {
+        fail .Overflow
+    }
+    return a + b
+}
+
+fn sub(a: i64, b: i64) EvalError!i64 {
+    if b < 0 && a > I64_MAX + b {
+        fail .Overflow
+    }
+    if b > 0 && a < I64_MIN + b {
+        fail .Overflow
+    }
+    return a - b
+}
+
+fn mul(a: i64, b: i64) EvalError!i64 {
+    if a == 0 || b == 0 {
+        return 0
+    }
+    if a > 0 {
+        if b > 0 {
+            if a > I64_MAX / b {
+                fail .Overflow
+            }
+        } else {
+            if b < I64_MIN / a {
+                fail .Overflow
+            }
+        }
+    } else {
+        if b > 0 {
+            if a < I64_MIN / b {
+                fail .Overflow
+            }
+        } else {
+            if a < I64_MAX / b {
+                fail .Overflow
+            }
+        }
+    }
+    return a * b
+}
+
+fn div(a: i64, b: i64) EvalError!i64 {
+    if b == 0 {
+        fail .DivZero
+    }
+    if a == I64_MIN && b == -1 {
+        fail .Overflow
+    }
+    return a / b
+}
+
+fn rem(a: i64, b: i64) EvalError!i64 {
+    if b == 0 {
+        fail .DivZero
+    }
+    if b == -1 {
+        return 0
+    }
+    return a % b
+}
+
+fn power(a: i64, b: i64) EvalError!i64 {
+    if b < 0 {
+        fail .NegExp
+    }
+    var result: i64 = 1
+    var base = a
+    var e = b
+    while e > 0 {
+        if e % 2 == 1 {
+            result = try mul(result, base)
+        }
+        e = e / 2
+        if e > 0 {
+            base = try mul(base, base)
+        }
+    }
+    return result
+}
+
+fn apply(op: str, a: i64, b: i64) EvalError!i64 {
+    if op == "+" {
+        return try add(a, b)
+    }
+    if op == "-" {
+        return try sub(a, b)
+    }
+    if op == "*" {
+        return try mul(a, b)
+    }
+    if op == "/" {
+        return try div(a, b)
+    }
+    if op == "%" {
+        return try rem(a, b)
+    }
+    return try power(a, b)
+}
+
+fn emsg(e: EvalError) str {
+    if e == EvalError.DivZero {
+        return "division by zero"
+    }
+    if e == EvalError.NegExp {
+        return "negative exponent"
+    }
+    return "overflow"
+}
+
+fn fmt_err(col: int, msg: str) str {
+    return "error at " + str(col) + ": " + msg
+}
+
+fn run(code: &List[Op]) str {
+    var stack: List[i64] = []
+    var names: List[str] = []
+    var vals: List[i64] = []
+    var last: i64 = 0
+    for k in 0..len(code) {
+        let op = code[k]
+        if op.kind == OpKind.Push {
+            stack.push(op.val)
+        } else if op.kind == OpKind.Load {
+            var found = -1
+            for j in 0..len(names) {
+                if names[j] == op.name {
+                    found = j
+                }
+            }
+            if found < 0 {
+                return fmt_err(op.col, "unknown variable '" + op.name + "'")
+            }
+            stack.push(vals[found])
+        } else if op.kind == OpKind.Neg {
+            let a = stack.pop() ?? 0
+            if a == I64_MIN {
+                return fmt_err(op.col, "overflow")
+            }
+            stack.push(-a)
+        } else if op.kind == OpKind.Bin {
+            let rhs = stack.pop() ?? 0
+            let lhs = stack.pop() ?? 0
+            match apply(op.name, lhs, rhs) {
+                ok(v) => stack.push(v)
+                err(e) => return fmt_err(op.col, emsg(e))
+            }
+        } else if op.kind == OpKind.Store {
+            let value = stack[len(stack) - 1]
+            var slot = -1
+            for j in 0..len(names) {
+                if names[j] == op.name {
+                    slot = j
+                }
+            }
+            if slot < 0 {
+                names.push(op.name)
+                vals.push(value)
+            } else {
+                vals[slot] = value
+            }
+        } else {
+            last = stack.pop() ?? 0
+        }
+    }
+    return str(last)
+}
+
+pub fn calc(src: str) str {
+    var p = Parser { toks: lex(src), code: [] }
+    _ = p_program(&mut p)
+    if len(p.err_msg) > 0 {
+        return fmt_err(p.err_col, p.err_msg)
+    }
+    return run(&p.code)
+}
