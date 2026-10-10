@@ -15,6 +15,9 @@
 | `runtime/linux/dp_entry.c` | порт Linux: поток `main`, код выхода, открытие файла |
 | `runtime/windows/dp_entry.c` | порт Windows x86-64 (MinGW-w64): то же, двоичный вывод, аргументы и пути в UTF-8 |
 
+Android arm64 пользуется портом `runtime/linux`: bionic даёт POSIX
+threads и `fopen`, как glibc.
+
 Порты под другие цели (`docs/policy/PLATFORMS.md`) заменяют только
 каталог платформы: вход `dp_run`, `dp_run_test` и `dp_os_open_read`.
 Зависимостей, кроме библиотеки C, нет: под Linux — ещё POSIX threads,

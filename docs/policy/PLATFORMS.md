@@ -33,11 +33,16 @@
 | цель | описание (`compiler/driver/build.cpp`, `targets`) | порт runtime | проверка |
 |---|---|---|---|
 | Linux x86-64 | хост | `runtime/linux` | весь набор тестов |
-| Windows x86-64 | `windows-x86_64`: clang + lld поверх MinGW-w64 | `runtime/windows` | проход `cross` в `tests/run.py`: набор исполнения в профилях debug и release под Wine; инструменты — `tools/setup/cross_windows.sh` |
-| Android arm64 | — (v0.2, шаг 3) | — | — |
+| Windows x86-64 | `windows-x86_64`: clang + lld поверх MinGW-w64 | `runtime/windows` | проход `windows` в `tests/run.py`: набор исполнения в профилях debug и release под Wine; инструменты — `tools/setup/cross_windows.sh` |
+| Android arm64 | `android-arm64`: clang из Android NDK r30, API 24, статическая программа | `runtime/linux` (POSIX; bionic) | проход `android`: тот же набор под qemu-aarch64 (эмулятор пользовательского режима); инструменты — `tools/setup/cross_android.sh` |
 
-На настоящей Windows программы ещё не запускались (уровень 1 требует
-периодического запуска — до выпуска).
+На настоящей Windows и на устройстве Android программы ещё не
+запускались (уровень 1 требует периодического запуска — до выпуска).
+Программа для Android пока — исполняемый файл командной строки; вход
+NativeActivity — с графической программой (v0.2, шаг 7). Статическая
+сборка связывает bionic из NDK: его уведомления — обязанность
+платформенных инструментов, не dpl (`docs/policy/LICENSING.md`,
+раздел 3).
 
 ## 5. Как добавить цель
 

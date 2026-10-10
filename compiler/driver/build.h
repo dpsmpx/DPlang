@@ -47,7 +47,9 @@ struct BuildOptions {
     std::string runner;       // запуск тестов цели; пусто — напрямую
 };
 
-// Компилятор C для цели: у хоста — $CC или cc, у других — $DPL_CROSS_CC или clang.
+// Компилятор C для цели: у хоста — $CC или cc; у других — $DPL_CROSS_CC,
+// иначе у Android — clang из NDK ($ANDROID_NDK_HOME или /opt/android-ndk),
+// у остальных — clang.
 std::string cc_for(const Target& t);
 // Запуск тестов цели: $DPL_RUNNER или runner цели.
 std::string runner_for(const Target& t);
