@@ -40,8 +40,9 @@ dpl <команда> [аргументы]
 | переменная | для чего | по умолчанию |
 |---|---|---|
 | `CC` | компилятор C для `build` и `test` на хосте | `cc` |
-| `DPL_CROSS_CC` | компилятор C для другой цели (`--target`) | `clang` |
-| `DPL_RUNNER` | чем запускать тесты другой цели | у цели: `wine` для `windows-x86_64` |
+| `DPL_CROSS_CC` | компилятор C для другой цели (`--target`) | у Android — clang из NDK, у остальных — `clang` |
+| `ANDROID_NDK_HOME` | каталог Android NDK | `/opt/android-ndk` |
+| `DPL_RUNNER` | чем запускать тесты другой цели | у цели: `wine` для `windows-x86_64`, `qemu-aarch64` для `android-arm64` |
 | `DPL_RUNTIME` | каталог runtime (`core/` и порты `linux/`, `windows/`) | `runtime/` репозитория рядом со сборкой: `<каталог dpl>/../../runtime` |
 | `DPL_STDLIB` | каталог стандартной библиотеки | `<каталог dpl>/../../stdlib` |
 | `TMPDIR` | временный каталог сборки | `/tmp` |
@@ -78,11 +79,12 @@ dpl <команда> [аргументы]
 |---|---|---|---|---|
 | `linux-x86_64` (хост) | `$CC` или `cc`; `-lm -pthread` | `runtime/linux` | `./prog` | сама программа; профиль `test` — с ASan и UBSan |
 | `windows-x86_64` | `$DPL_CROSS_CC` или `clang`; `--target=x86_64-w64-mingw32 -fuse-ld=lld -D__USE_MINGW_ANSI_STDIO=1`, `-lshell32` | `runtime/windows` | `./prog.exe` | под `$DPL_RUNNER` или `wine`; без санитайзеров |
+| `android-arm64` | `$DPL_CROSS_CC` или clang из NDK; `--target=aarch64-linux-android24 -static`, `-lm` | `runtime/linux` (POSIX, bionic) | `./prog`, статическая | под `$DPL_RUNNER` или `qemu-aarch64`; без санитайзеров |
 
 Перед сборкой для другой цели инструменты проверяются пробной сборкой
 пустой программы: не работают — сообщение и код 2, а не внутренняя
-ошибка. Инструменты Windows в контейнере разработки ставит
-`tools/setup/cross_windows.sh`.
+ошибка. Инструменты в контейнере разработки ставят
+`tools/setup/cross_windows.sh` и `tools/setup/cross_android.sh`.
 
 Runtime связывается статически (Р43): его исходники собираются вместе с
 программой. Сгенерированный C пишется во временный каталог и после
@@ -123,7 +125,7 @@ Runtime связывается статически (Р43): его исходн�
    одну программу в профиле `test`;
 3. исполняет каждый тест отдельным процессом: ловушка или ошибка валит
    только его. С `--target` — для этой цели, запуском через её runner
-   (у Windows — `wine`);
+   (у Windows — `wine`, у Android — `qemu-aarch64`);
 4. пишет отчёт в stdout.
 
 Отчёт — строка на тест по порядку модулей (сначала импортируемые) и

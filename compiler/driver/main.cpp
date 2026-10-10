@@ -53,7 +53,7 @@ constexpr std::string_view kUsage =
     "  test [--target <target>] <file.dpm>\n"
     "                   run the @test functions of a program, each in its own process\n"
     "                   (other targets run under $DPL_RUNNER or the target's runner)\n"
-    "  targets: linux-x86_64 (host), windows-x86_64\n"
+    "  targets: linux-x86_64 (host), windows-x86_64, android-arm64\n"
     "  --version        print the compiler version\n"
     "  worker ...       serve one request of the online service (see docs/service)\n"
     "\n"

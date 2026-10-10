@@ -13,7 +13,7 @@ commands:
   test [--target <target>] <file.dpm>
                    run the @test functions of a program, each in its own process
                    (other targets run under $DPL_RUNNER or the target's runner)
-  targets: linux-x86_64 (host), windows-x86_64
+  targets: linux-x86_64 (host), windows-x86_64, android-arm64
   --version        print the compiler version
   worker ...       serve one request of the online service (see docs/service)
 

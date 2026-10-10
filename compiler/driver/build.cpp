@@ -23,6 +23,10 @@ const std::vector<Target>& targets() {
         // clang + lld поверх MinGW-w64; тесты — под Wine (docs/policy/PLATFORMS.md).
         {"windows-x86_64", "x86_64-w64-mingw32", "windows", false, false, ".exe",
          {"--target=x86_64-w64-mingw32", "-fuse-ld=lld", "-D__USE_MINGW_ANSI_STDIO=1"}, {"-lshell32"}, "wine"},
+        // clang из Android NDK, API 24; порт — POSIX, как у Linux (bionic). Статическая
+        // программа запускается и в эмуляторе пользовательского режима (qemu-aarch64).
+        {"android-arm64", "aarch64-linux-android24", "linux", false, false, "",
+         {"--target=aarch64-linux-android24", "-static"}, {"-lm"}, "qemu-aarch64"},
     };
     return list;
 }
@@ -43,7 +47,13 @@ std::string target_names() {
 std::string cc_for(const Target& t) {
     const char* env = std::getenv(t.host ? "CC" : "DPL_CROSS_CC");
     if (env && *env) return env;
-    return t.host ? "cc" : "clang";
+    if (t.host) return "cc";
+    if (t.name == "android-arm64") {
+        const char* ndk = std::getenv("ANDROID_NDK_HOME");
+        std::string root = ndk && *ndk ? ndk : "/opt/android-ndk";
+        return root + "/toolchains/llvm/prebuilt/linux-x86_64/bin/clang";
+    }
+    return "clang";
 }
 
 std::string runner_for(const Target& t) {
@@ -176,7 +186,8 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
     }
     if (!t.host && !toolchain_works(opt, tmp)) {
         say("error: the C toolchain for target '" + std::string(t.name) + "' does not work ('" + opt.cc +
-            "' with " + std::string(t.triple) + "); see docs/policy/PLATFORMS.md or set DPL_CROSS_CC\n");
+            "' with " + std::string(t.triple) + "); see docs/policy/PLATFORMS.md or set " +
+            (t.name == "android-arm64" ? "ANDROID_NDK_HOME or " : "") + "DPL_CROSS_CC\n");
         return 2;
     }
     std::vector<std::string> argv = {opt.cc, "-std=c11", "-ffp-contract=off", "-fno-strict-aliasing", "-w"};

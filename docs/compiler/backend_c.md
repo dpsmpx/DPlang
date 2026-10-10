@@ -189,10 +189,11 @@ O(n log n), от хэша не зависит. Поиск — открытая �
 сверяет набор `run`. Объекты runtime и программы лежат в
 `build/compiler/native/`.
 
-Проход `cross` делает то же для цели `windows-x86_64`: `dpl build
---target windows-x86_64` в профилях debug и release, запуск под Wine
-(`docs/policy/PLATFORMS.md`). Без инструментов цели проход пропускается,
-и итог `tests/run.py` говорит об этом.
+Проходы `windows` и `android` делают то же для целей `windows-x86_64` и
+`android-arm64`: `dpl build --target …` в профилях debug и release,
+запуск под Wine и qemu-aarch64 (`docs/policy/PLATFORMS.md`). Без
+инструментов цели проход пропускается, и итог `tests/run.py` говорит об
+этом.
 
 Проверено gcc и clang. Набор `run` покрывает:
 
