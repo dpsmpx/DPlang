@@ -1,0 +1,4 @@
+--- stderr ---
+error: unknown target 'plan9'; targets: linux-x86_64, windows-x86_64
+run 'dpl help' to list the commands
+[exit 2]

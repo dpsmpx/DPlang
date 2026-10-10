@@ -41,15 +41,19 @@ constexpr std::string_view kUsage =
     "usage: dpl <command> [arguments]\n"
     "\n"
     "commands:\n"
-    "  build [--release] [-o <path>] <file.dpm>\n"
-    "                   build a native program (C compiler: $CC or cc)\n"
+    "  build [--release] [--target <target>] [-o <path>] <file.dpm>\n"
+    "                   build a native program (C compiler: $CC or cc; for other\n"
+    "                   targets $DPL_CROSS_CC or clang)\n"
     "  check [--format=json] <file.dpm>\n"
     "                   check a program and the modules it imports\n"
     "  explain <code>   explain a diagnostic code, e.g. E0101\n"
     "  fmt [--check] <file.dpm>...\n"
     "                   format files in place; --check only lists files that would change\n"
     "  help             show this help\n"
-    "  test <file.dpm>  run the @test functions of a program, each in its own process\n"
+    "  test [--target <target>] <file.dpm>\n"
+    "                   run the @test functions of a program, each in its own process\n"
+    "                   (other targets run under $DPL_RUNNER or the target's runner)\n"
+    "  targets: linux-x86_64 (host), windows-x86_64\n"
     "  --version        print the compiler version\n"
     "  worker ...       serve one request of the online service (see docs/service)\n"
     "\n"
@@ -417,6 +421,29 @@ int cmd_debug_c(const Cli& cli, const std::vector<std::string_view>& args) {
 // build: нативная программа (docs/compiler/cli.md, «build»). Профиль
 // debug — по умолчанию, --release — с оптимизацией; проверки одни и те же
 // (Р11). Программа — -o путь или имя главного модуля в текущем каталоге.
+// --target <имя>: цель сборки; ошибка — сообщение и false.
+bool parse_target(const std::vector<std::string_view>& args, size_t& i, dp::BuildOptions& opt, int& code) {
+    if (i + 1 >= args.size()) {
+        code = usage_error("--target needs a target: " + dp::target_names());
+        return false;
+    }
+    std::string_view name = args[++i];
+    opt.target = dp::find_target(name);
+    if (!opt.target) {
+        code = usage_error("unknown target '" + std::string(name) + "'; targets: " + dp::target_names());
+        return false;
+    }
+    return true;
+}
+
+// Компилятор C, запуск тестов и runtime цели.
+void finish_options(const Cli& cli, dp::BuildOptions& opt) {
+    if (!opt.target) opt.target = &dp::targets().front();
+    opt.cc = dp::cc_for(*opt.target);
+    opt.runner = dp::runner_for(*opt.target);
+    opt.runtime_dir = cli.runtime;
+}
+
 int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
     dp::BuildOptions opt;
     std::vector<std::string_view> files;
@@ -424,6 +451,9 @@ int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
         std::string_view a = args[i];
         if (a == "--release") {
             opt.profile = dp::Profile::Release;
+        } else if (a == "--target") {
+            int code = 0;
+            if (!parse_target(args, i, opt, code)) return code;
         } else if (a == "-o") {
             if (i + 1 >= args.size()) return usage_error("-o needs a path");
             opt.output = std::string(args[++i]);
@@ -434,10 +464,8 @@ int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
         }
     }
     if (files.size() != 1) return usage_error("build takes one file");
-    if (opt.output.empty()) opt.output = module_name(files[0]);
-    const char* cc = std::getenv("CC");
-    opt.cc = cc && *cc ? cc : "cc";
-    opt.runtime_dir = cli.runtime;
+    finish_options(cli, opt);
+    if (opt.output.empty()) opt.output = module_name(files[0]) + std::string(opt.target->exe_suffix);
     dp::SourceMap sources;
     dp::Diagnostics diags;
     auto prog = check_program(cli, files[0], sources, diags);
@@ -454,10 +482,18 @@ int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
 // @test всех модулей, кроме стандартной библиотеки, по порядку модулей
 // и объявлений; каждый — отдельным процессом, профиль test.
 int cmd_test(const Cli& cli, const std::vector<std::string_view>& args) {
+    dp::BuildOptions opt;
     std::vector<std::string_view> files;
-    for (std::string_view a : args) {
-        if (a.substr(0, 1) == "-") return usage_error("unknown option '" + std::string(a) + "'");
-        files.push_back(a);
+    for (size_t i = 0; i < args.size(); i++) {
+        std::string_view a = args[i];
+        if (a == "--target") {
+            int code = 0;
+            if (!parse_target(args, i, opt, code)) return code;
+        } else if (a.substr(0, 1) == "-") {
+            return usage_error("unknown option '" + std::string(a) + "'");
+        } else {
+            files.push_back(a);
+        }
     }
     if (files.size() != 1) return usage_error("test takes one file");
     dp::SourceMap sources;
@@ -476,10 +512,7 @@ int cmd_test(const Cli& cli, const std::vector<std::string_view>& args) {
     }
     dp::backend_c::CResult c = dp::backend_c::emit_c_tests(*ir, sources, tests);
     if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
-    dp::BuildOptions opt;
-    const char* cc = std::getenv("CC");
-    opt.cc = cc && *cc ? cc : "cc";
-    opt.runtime_dir = cli.runtime;
+    finish_options(cli, opt);
     put(dp::render_text(diags.list(), sources), stderr);  // предупреждения, если будут
     return dp::run_tests(c.code, names, opt);
 }

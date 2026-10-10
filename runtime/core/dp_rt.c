@@ -427,7 +427,7 @@ int32_t dp_read_file(dp_str path, dp_str* out, const char* loc) {
     char* name = (char*)dp_alloc(path.len + 1, 1, loc);
     if (path.len) memcpy(name, path.ptr, (size_t)path.len);
     name[path.len] = 0;
-    FILE* f = fopen(name, "rb");
+    FILE* f = dp_os_open_read(name);
     int err = errno;
     dp_free(name);
     if (!f) return err == ENOENT || err == ENOTDIR ? 1 : err == EACCES || err == EPERM ? 2 : 4;

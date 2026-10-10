@@ -1,15 +1,19 @@
 usage: dpl <command> [arguments]
 
 commands:
-  build [--release] [-o <path>] <file.dpm>
-                   build a native program (C compiler: $CC or cc)
+  build [--release] [--target <target>] [-o <path>] <file.dpm>
+                   build a native program (C compiler: $CC or cc; for other
+                   targets $DPL_CROSS_CC or clang)
   check [--format=json] <file.dpm>
                    check a program and the modules it imports
   explain <code>   explain a diagnostic code, e.g. E0101
   fmt [--check] <file.dpm>...
                    format files in place; --check only lists files that would change
   help             show this help
-  test <file.dpm>  run the @test functions of a program, each in its own process
+  test [--target <target>] <file.dpm>
+                   run the @test functions of a program, each in its own process
+                   (other targets run under $DPL_RUNNER or the target's runner)
+  targets: linux-x86_64 (host), windows-x86_64
   --version        print the compiler version
   worker ...       serve one request of the online service (see docs/service)
 

@@ -38,3 +38,5 @@ static int dp_run_as(dp_entry_fn entry, const char* what) {
 int dp_run(dp_entry_fn entry) { return dp_run_as(entry, "main"); }
 
 int dp_run_test(dp_entry_fn entry) { return dp_run_as(entry, "test"); }
+
+FILE* dp_os_open_read(const char* path) { return fopen(path, "rb"); }

@@ -16,7 +16,9 @@ build/compiler/ и прогоняет золотые тесты наборов t
 программа набора run собирается в нативную (debug c, runtime, компилятор
 C — $CC или cc, с ASan и UBSan, если они есть), и её вывод сверяется с тем
 же ожидаемым, что у эталонного интерпретатора; проход build — то же
-через `dpl build` в профилях debug и release. Устройство —
+через `dpl build` в профилях debug и release; проход cross — то же для
+цели windows-x86_64 под Wine (docs/policy/PLATFORMS.md), если clang, lld,
+MinGW-w64 и wine есть; иначе он пропускается, и итог говорит об этом. Устройство —
 docs/compiler/README.md, docs/compiler/backend_c.md, docs/compiler/cli.md.
 Проход runtime — тесты runtime по функциям и запись плавающих против
 образца (tests/runtime.py). Проход example — программы examples/X/: их
@@ -165,6 +167,8 @@ def discover(pattern):
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
     native = [('native', path) for suite, path in tests if suite == 'run']
     native += [('build', path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
+    if cross_tools() is None:
+        native += [('cross', path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
     deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
     if os.path.isdir(EXAMPLES):
@@ -229,14 +233,39 @@ def build_native(path, exe, cwd):
     return None
 
 
-def build_pass_one(arg):
+CROSS_TARGET = 'windows-x86_64'
+
+
+def cross_tools():
+    """Инструменты прохода cross: None — есть; иначе — чего нет."""
+    missing = [t for t in ('clang', 'ld.lld', 'wine') if not shutil.which(t)]
+    if not os.path.isdir('/usr/x86_64-w64-mingw32'):
+        missing.append('MinGW-w64')
+    return ', '.join(missing) or None
+
+
+def prepare_cross():
+    """Каталог Wine создаётся при первом запуске (секунды): заранее, чтобы
+    параллельные тесты не создавали его наперегонки."""
+    env = dict(os.environ, WINEDEBUG='-all')
+    try:
+        subprocess.run(['wineboot', '--init'], capture_output=True, timeout=300, env=env)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f'wineboot: {e}'
+    return None
+
+
+def build_pass_one(arg, target=None):
     """Проход build: `dpl build` (профиль debug или --release), запуск,
-    вывод — как у интерпретатора (docs/compiler/cli.md, «build»)."""
+    вывод — как у интерпретатора (docs/compiler/cli.md, «build»). С
+    target — проход cross: сборка для цели и запуск под Wine."""
     path, _, profile = arg.partition(' ')
     cwd = os.path.join(TESTS, 'run')
     name = os.path.relpath(path, cwd)
-    exe = os.path.join(NATIVE, 'build_' + name.replace(os.sep, '_')[:-len('.dpm')] + ('_release' if profile else ''))
-    argv = [DPL, 'build'] + ([profile] if profile else []) + ['-o', exe, name]
+    pre = 'cross_' if target else 'build_'
+    exe = os.path.join(NATIVE, pre + name.replace(os.sep, '_')[:-len('.dpm')] + ('_release' if profile else '') +
+                       ('.exe' if target else ''))
+    argv = [DPL, 'build'] + ([profile] if profile else []) + (['--target', target] if target else []) + ['-o', exe, name]
     try:
         r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
@@ -245,9 +274,10 @@ def build_pass_one(arg):
         return None  # программа не проходит проверку: её диагностику сверяет набор run
     if r.returncode != 0:
         return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+    run = ['wine', exe] if target else [exe]
     try:
-        p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
-                           timeout=TIMEOUT, cwd=cwd)
+        p = subprocess.run(run + program_args(path), capture_output=True, text=True, errors='backslashreplace',
+                           timeout=TIMEOUT, cwd=cwd, env=dict(os.environ, WINEDEBUG='-all') if target else None)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout
@@ -259,7 +289,8 @@ def build_pass_one(arg):
         want = f.read()
     if got == want:
         return None
-    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор', 'build', lineterm='', n=1)
+    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор', target or 'build', lineterm='',
+                                n=1)
     return 'вывод расходится с интерпретатором:\n' + '\n'.join(list(diff)[:20])
 
 
@@ -497,6 +528,8 @@ def run_one(suite, path, bless):
         return native_one(path)
     if suite == 'build':
         return build_pass_one(path)
+    if suite == 'cross':
+        return build_pass_one(path, CROSS_TARGET)
     if suite == 'limits':
         return limits.check_case(path, DPL)
     if suite == 'example':
@@ -551,8 +584,14 @@ def main():
             print('компилятор: runtime не собирается')
             print(err)
             return 1
-    # Проходы native и build сверяют с ожидаемым набора run — после того, как --bless его перепишет.
-    late = ('native', 'build', 'example', 'bench')
+    if any(suite == 'cross' for suite, _ in tests):
+        err = prepare_cross()
+        if err:
+            print('компилятор: Wine не готовится')
+            print(err)
+            return 1
+    # Проходы native, build и cross сверяют с ожидаемым набора run — после того, как --bless его перепишет.
+    late = ('native', 'build', 'cross', 'example', 'bench')
     tests = [t for t in tests if t[0] not in late] + [t for t in tests if t[0] in late]
     split = sum(1 for t in tests if t[0] not in late)
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
@@ -567,12 +606,14 @@ def main():
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
             name = suite + '/' + path if suite in ('bench', 'example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
-            if suite == 'build':
-                name = 'build/' + os.path.relpath(path, TESTS)
+            if suite in ('build', 'cross'):
+                name = suite + '/' + os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1
     verb = 'записано ожидаемое' if a.bless else 'прошли'
-    print(f'компилятор: собран, тестов {len(tests)} {verb} ({summary})')
+    skipped = cross_tools()
+    note = f'; cross пропущен — нет {skipped}' if skipped and not a.k else ''
+    print(f'компилятор: собран, тестов {len(tests)} {verb} ({summary}){note}')
     return 0
 
 
