@@ -586,7 +586,8 @@ private:
     }
 
     // Методы Map (Р54). Поиск — открытая адресация по индексу slots
-    // (заполнен не больше чем наполовину); порядок пар — порядок вставки.
+    // (заполнен не больше чем наполовину). Пары лежат в порядке вставки, но
+    // наружу он не виден: ключи отдаются по возрастанию (dp_mkeys).
     std::string map_methods(const Type* t) {
         std::string n = ctype(t), m = mangle(t), kc = ctype(t->key), vc = ctype(t->elem);
         std::string km = mangle(t->key), vm = mangle(t->elem);
@@ -626,8 +627,6 @@ private:
         b += "DP_INLINE " + vc + "* dp_mvalue__" + m + "(" + n + "* m, const " + kc + "* key, const char* loc) {\n";
         b += "    int64_t p = dp_mfind__" + m + "(m, key);\n";
         b += "    if (p < 0) dp_trap(loc, \"key is not in the map\");\n    return &m->vals[p];\n}\n\n";
-        b += "DP_INLINE " + kc + "* dp_mkey__" + m + "(" + n + "* m, int64_t i, const char* loc) {\n";
-        b += "    return &m->keys[dp_check_index(i, m->len, loc)];\n}\n\n";
         b += "DP_INLINE bool dp_mcontains__" + m + "(const " + n + "* m, const " + kc + "* key) {\n";
         b += "    return dp_mfind__" + m + "(m, key) >= 0;\n}\n\n";
         b += "DP_INLINE void dp_mclear__" + m + "(" + n + "* m) {\n";
@@ -655,7 +654,7 @@ private:
             b += "DP_INLINE " + l + " dp_mkeys__" + m + "(const " + n + "* m) {\n    " + l + " r = {0};\n";
             b += "    r.ptr = (" + kc + "*)dp_alloc(m->len, sizeof(" + kc + "), NULL);\n    r.len = m->len;\n    r.cap = m->len;\n";
             b += "    for (int64_t i = 0; i < m->len; i++) r.ptr[i] = " + copy_of(t->key, "m->keys[i]") + ";\n";
-            b += "    return r;\n}\n\n";
+            b += "    dp_sort__" + std::string("L_") + km + "(&r);\n    return r;\n}\n\n";
         }
         return b;
     }
@@ -798,15 +797,12 @@ private:
                 case ProjKind::Unwrap: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
                 case ProjKind::ResultValue: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
                 case ProjKind::ResultError: r.expr = "(" + r.expr + ").err"; r.type = t->err; break;
-                case ProjKind::MapKey: case ProjKind::MapValue: {  // Р54
-                    bool key = pr.kind == ProjKind::MapKey;
-                    const Type* et = key ? t->key : t->elem;
+                case ProjKind::MapValue: {  // Р54
                     std::string ptr = fresh("dp_p");
-                    std::string arg = key ? local_expr(pr.index) : "&(" + local_expr(pr.index) + ")";
-                    line(ctype(et) + "* " + ptr + " = dp_m" + (key ? "key" : "value") + "__" + mangle(t) + "(&(" +
-                         r.expr + "), " + arg + ", " + loc_ + ");");
+                    line(ctype(t->elem) + "* " + ptr + " = dp_mvalue__" + mangle(t) + "(&(" + r.expr + "), &(" +
+                         local_expr(pr.index) + "), " + loc_ + ");");
                     r.expr = "(*" + ptr + ")";
-                    r.type = et;
+                    r.type = t->elem;
                     break;
                 }
             }

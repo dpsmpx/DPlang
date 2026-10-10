@@ -46,12 +46,6 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
                 if (t->kind != TK::Result || !t->err) return nullptr;
                 t = t->err;
                 break;
-            case ProjKind::MapKey:
-                if (t->kind != TK::Map || pr.index >= f.locals.size() || f.locals[pr.index].type->kind != TK::I64) {
-                    return nullptr;
-                }
-                t = t->key;
-                break;
             case ProjKind::MapValue:
                 if (t->kind != TK::Map || pr.index >= f.locals.size() || f.locals[pr.index].type != t->key) {
                     return nullptr;

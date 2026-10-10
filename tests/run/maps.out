@@ -1,6 +1,6 @@
-bob 15 0
 ann 7 1
-{c: 3, a: 10, b: 2} len 3
+bob 15 0
+{a: 10, b: 2, c: 3} len 3
 {a: 10, b: 2, c: 30} 3 -1
 2 -1 true false
 {a: 10, b: 2, c: 30} / {a: 11, b: 2, c: 30, new: 0}

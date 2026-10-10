@@ -371,21 +371,6 @@ private:
                     }
                     r.v = &v.items[pr.sub];
                     break;
-                case ProjKind::MapKey: {
-                    const Value& iv = fr.locals[pr.index];
-                    int64_t i = static_cast<int64_t>(iv.i);
-                    size_t n = v.items.size() / 2;
-                    if (iv.k != Value::K::Int || v.k != Value::K::Seq) {
-                        internal("key position of a non-Map");
-                        return Ref{};
-                    }
-                    if (i < 0 || static_cast<uint64_t>(i) >= n) {
-                        trap("index " + std::to_string(i) + " is out of bounds for length " + std::to_string(n));
-                        return Ref{};
-                    }
-                    r.v = &v.items[2 * static_cast<size_t>(i)];
-                    break;
-                }
                 case ProjKind::MapValue: {
                     if (v.k != Value::K::Seq) {
                         internal("value of a non-Map");
@@ -903,6 +888,7 @@ private:
                 const Value& m = arg(0, s0);
                 Value out = seq_value(0);
                 for (size_t i = 0; i < m.items.size(); i += 2) out.items.push_back(m.items[i]);
+                merge_sort(out.items, op_type(fr, rv.ops[0])->key);  // ключи по возрастанию
                 return out;
             }
             case Intrinsic::MapSet: case Intrinsic::MapRemove: case Intrinsic::MapClear: return map_method(fr, rv, ops);

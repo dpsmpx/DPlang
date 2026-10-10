@@ -307,7 +307,7 @@ void Checker::for_stmt(ForStmt* s) {
         } else if (t->kind == TK::List) {
             elem = t->elem;
             if (s->mode == ForMode::Mut) mutable_place(s->iter, "mutate");
-        } else if (t->kind == TK::Map) {  // Р54: ключи по порядку вставки
+        } else if (t->kind == TK::Map) {  // Р54: ключи по возрастанию
             elem = t->key;
             if (s->mode == ForMode::Mut) {
                 error(Code::E0419, s->iter->span, "keys of a Map cannot be changed; iterate with 'for k in &m'");
