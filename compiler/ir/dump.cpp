@@ -27,6 +27,7 @@ public:
         }
         out_ += ")";
         if (f_.ret && f_.ret->kind != TK::Void) out_ += " " + type(f_.ret);
+        if (f_.det) out_ += " det";
         out_ += "\n";
         for (size_t i = f_.param_count; i < f_.locals.size(); i++) {
             const Local& l = f_.locals[i];
@@ -174,7 +175,11 @@ private:
             case RvKind::Use: return operand(rv.ops[0]);
             case RvKind::Binary: return std::string(bin_name(rv.bin)) + " " + ops(rv.ops);
             case RvKind::Unary:
-                return std::string(rv.un == UnKind::Neg ? "neg " : rv.un == UnKind::Not ? "not " : "bitnot ") + ops(rv.ops);
+                return std::string(rv.un == UnKind::Neg     ? "neg "
+                                   : rv.un == UnKind::Not   ? "not "
+                                   : rv.un == UnKind::Canon ? "canon "
+                                                            : "bitnot ") +
+                       ops(rv.ops);
             case RvKind::Cast: {
                 const char* k = rv.cast == CastKind::Widen ? "widen" : rv.cast == CastKind::Check ? "check"
                               : rv.cast == CastKind::Wrap ? "wrap" : "str";

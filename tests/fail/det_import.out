@@ -1,0 +1,20 @@
+--- stderr ---
+det_import/main.dpm:3:1: error[E0205]: '@test' marks a function, not an import
+   3 | @test import world2
+     | ^~~~~
+det_import/main.dpm:4:6: error[E0319]: attribute '@det' is given twice
+   4 | @det @det import world3
+     |      ^~~~
+det_import/main.dpm:9:5: error[E0425]: 'println' does input or output; 'tick' is class D and cannot use it. Return the value and use it outside class D
+   9 |     println("tick")
+     |     ^~~~~~~~~~~~~~~
+det_import/main.dpm:10:13: error[E0425]: 'os.args' does input or output; 'tick' is class D and cannot use it. Return the value and use it outside class D
+  10 |     let a = os.args()
+     |             ^~~~~~~~~
+det_import/main.dpm:11:28: error[E0425]: 'helper' is not deterministic; 'tick' is class D and cannot call it. Mark it '@det'
+  11 |     return world.step(n) + helper(n)
+     |                            ^~~~~~~~~
+det_import/world.dpm:3:5: error[E0425]: 'eprintln' does input or output; 'step' is class D and cannot use it. Return the value and use it outside class D
+   3 |     eprintln("step")
+     |     ^~~~~~~~~~~~~~~~
+[exit 1]

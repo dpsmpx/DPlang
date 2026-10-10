@@ -1,0 +1,88 @@
+// Модуль класса D: его импортируют с `@det`.
+pub struct Body {
+    x: f64
+    y: f64
+    vx: f64
+    vy: f64
+    mass: f32
+}
+
+pub struct World {
+    bodies: List[Body]
+    seed: u64
+    hits: i64
+}
+
+// xorshift64*: детерминированный генератор с явным состоянием.
+fn next(w: &mut World) u64 {
+    var s = w.seed
+    s = s ^ (s >> 12)
+    s = s ^ (s << 25)
+    s = s ^ (s >> 27)
+    w.seed = s
+    return s *% 2685821657736338717
+}
+
+// Число в [0, 1): 53 старших бита.
+fn unit(w: &mut World) f64 {
+    return f64(next(&mut w) >> 11) / 9007199254740992.0
+}
+
+pub fn new_world(seed: u64, n: int) World {
+    var w = World { bodies: [], seed: seed, hits: 0 }
+    for i in 0..n {
+        let x = unit(&mut w) * 100.0
+        let y = unit(&mut w) * 100.0
+        let vx = unit(&mut w) * 2.0 - 1.0
+        let vy = unit(&mut w) * 2.0 - 1.0
+        let mass = f32(unit(&mut w)) + 0.5
+        w.bodies.push(Body { x, y, vx, vy, mass })
+    }
+    return w
+}
+
+pub fn step(w: &mut World, dt: f64) {
+    for b in &mut w.bodies {
+        let ax = (50.0 - b.x) * 0.01 / f64(b.mass)
+        let ay = (50.0 - b.y) * 0.01 / f64(b.mass) - 0.098
+        b.vx = (b.vx + ax * dt) * 0.999
+        b.vy = (b.vy + ay * dt) * 0.999
+        b.x += b.vx * dt * 10.0
+        b.y += b.vy * dt * 10.0
+        if b.x < 0.0 || b.x > 100.0 {
+            b.vx = -b.vx
+            b.x = min(max(b.x, 0.0), 100.0)
+            w.hits += 1
+        }
+        if b.y < 0.0 || b.y > 100.0 {
+            b.vy = -b.vy
+            b.y = min(max(b.y, 0.0), 100.0)
+            w.hits += 1
+        }
+    }
+}
+
+pub fn report(w: &World) str {
+    var sx: f64 = 0.0
+    var sy: f64 = 0.0
+    var e: f32 = 0.0
+    for b in &w.bodies {
+        sx += b.x
+        sy += b.y
+        e += f32(b.vx * b.vx + b.vy * b.vy) * b.mass * 0.5
+    }
+    let first = w.bodies[0]
+    return "sum " + str(sx) + " " + str(sy) + " energy " + str(e) + " hits " + str(w.hits) + " first " +
+        str(first.x) + " " + str(first.y)
+}
+
+// NaN из операций класса D — канонический (Р56); str пишет его как nan.
+pub fn nan_report() str {
+    var z: f64 = 0.0
+    let n = z / z
+    let m = -n
+    let a = abs(m)
+    let f: f32 = f32(m)
+    let bigger = max(n, 1.0)
+    return str(n) + " " + str(m) + " " + str(a) + " " + str(f) + " " + str(bigger) + " " + str(n == n)
+}

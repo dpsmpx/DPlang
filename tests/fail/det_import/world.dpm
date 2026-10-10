@@ -1,0 +1,5 @@
+// Класс D: импортирован с `@det`.
+pub fn step(n: i64) i64 {
+    eprintln("step")
+    return n + 1
+}

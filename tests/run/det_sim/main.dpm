@@ -1,0 +1,13 @@
+// spec: module.det module.import trap.float
+// Симуляция класса D (Р55, Р56): тот же вывод на всех целях побитово —
+// проходы windows и android сверяют его с интерпретатором.
+@det import physics
+
+fn main() {
+    var w = physics.new_world(20261010, 16)
+    for i in 0..2000 {
+        physics.step(&mut w, 0.01)
+    }
+    println(physics.report(&w))
+    println(physics.nan_report())
+}

@@ -557,6 +557,7 @@ struct ConstItem : Item {
 struct ImportItem : Item {  // name — имя модуля
     static constexpr ItemKind Kind = ItemKind::Import;
     ImportItem() : Item(Kind) {}
+    std::vector<Attr> attrs;  // `@det import m` — модуль класса D (Р55)
 };
 
 struct ErrorItem : Item {

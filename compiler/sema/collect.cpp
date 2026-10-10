@@ -50,7 +50,15 @@ private:
             s.kind = SymKind::Module;
             s.mod = dep;
             for (Item* it : m.ast->items) {
-                if (it->kind == ItemKind::Import && it->name == dep->name) s.span = it->name_span;
+                if (it->kind != ItemKind::Import || it->name != dep->name) continue;
+                s.span = it->name_span;
+                if (!import_det(*static_cast<const ImportItem*>(it))) continue;
+                if (dep->stdlib) {  // стандартная библиотека v0.1 — только os: ввод-вывод
+                    diags_.error(Code::E0425, it->span, "module '" + dep->name +
+                                                            "' does input or output and cannot be imported with '@det'");
+                } else {
+                    dep->det = true;
+                }
             }
             m.scope[dep->name] = s;
         }
@@ -260,6 +268,22 @@ private:
             fields(r, vd.fields, v.fields, d.pub, "enum");
             d.variants.push_back(std::move(v));
         }
+    }
+
+    // `@det import m` (Р55): у импорта — только `@det`, один раз.
+    bool import_det(const ImportItem& im) {
+        bool det = false;
+        for (const Attr& a : im.attrs) {
+            if (a.name == "test") {
+                diags_.error(Code::E0205, a.span, "'@test' marks a function, not an import");
+            } else if (a.name != "det") {
+                diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "'");
+            } else if (det) {
+                diags_.error(Code::E0319, a.span, "attribute '@det' is given twice");
+            }
+            det = det || a.name == "det";
+        }
+        return det;
     }
 
     void fn_sig(Resolver& r, FnDef& f) {

@@ -10,6 +10,7 @@
 #include <cerrno>
 #include <cfloat>
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <deque>
 #include <tuple>
@@ -733,6 +734,13 @@ private:
         switch (rv.un) {
             case UnKind::Not: return bool_value(!a.i);
             case UnKind::BitNot: return int_value(canon(~a.i, t));
+            case UnKind::Canon: {  // Р56: положительный тихий NaN без полезной нагрузки
+                if (!std::isnan(a.f)) return float_value(a.f);
+                uint64_t bits = 0x7ff8000000000000ull;
+                double d = 0;
+                std::memcpy(&d, &bits, sizeof d);
+                return float_value(d);
+            }
             case UnKind::Neg:
                 if (sema::is_float(t)) return float_value(-a.f);
                 if (canon(a.i, t) == canon(1ull << (sema::int_bits(t) - 1), t)) {

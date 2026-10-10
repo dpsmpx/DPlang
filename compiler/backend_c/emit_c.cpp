@@ -966,6 +966,7 @@ std::string FnEmitter::unary(const Rvalue& rv) {
     std::string ct = ctype(t);
     switch (rv.un) {
         case ir::UnKind::Not: return "(!" + a + ")";
+        case ir::UnKind::Canon: return std::string(t->kind == TK::F32 ? "dp_canon_f32(" : "dp_canon_f64(") + a + ")";
         case ir::UnKind::BitNot:
             if (sema::is_signed(t)) return "((" + ct + ")dp_sbits(~(uint64_t)" + a + ", " + bits(t) + "))";
             return "((" + ct + ")dp_ubits(~(uint64_t)" + a + ", " + bits(t) + "))";

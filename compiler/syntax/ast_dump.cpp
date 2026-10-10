@@ -138,7 +138,12 @@ public:
                 expr(c->value, d + 1);
                 break;
             }
-            case ItemKind::Import: line(d, "Import " + it->name); break;
+            case ItemKind::Import: {
+                std::string attrs;
+                for (const Attr& a : static_cast<const ImportItem*>(it)->attrs) attrs += " @" + a.name;
+                line(d, "Import " + it->name + attrs);
+                break;
+            }
             case ItemKind::Error: line(d, "ErrorItem"); break;
         }
     }

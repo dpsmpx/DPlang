@@ -1,0 +1,7 @@
+@det
+import physics
+import os
+
+@det fn step(n: i64) i64 {
+    return n
+}

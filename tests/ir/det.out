@@ -1,0 +1,56 @@
+fn det.mix(%0 a: f64, %1 b: f32) f64 det
+  tmp %2: f64
+  var %3 x: f64
+  tmp %4: f64
+  tmp %5: f64
+  tmp %6: f64
+  tmp %7: f64
+  tmp %8: f64
+  tmp %9: f64
+bb0:
+  %4 = mul copy %0, 2:f64  @6:15
+  %4 = canon copy %4  @6:15
+  %5 = check copy %1 to f64  @6:23
+  %5 = canon copy %5  @6:23
+  %6 = add copy %4, copy %5  @6:21
+  %6 = canon copy %6  @6:21
+  %3 = move %6  @6:5
+  %3 = sub copy %3, 1.5:f64  @7:5
+  %3 = canon copy %3  @7:5
+  %7 = neg copy %3  @8:16
+  %7 = canon copy %7  @8:16
+  %8 = abs(copy %0)  @8:20
+  %8 = canon copy %8  @8:20
+  %9 = max(copy %7, copy %8)  @8:12
+  %9 = canon copy %9  @8:12
+  %2 = move %9  @8:5
+  return move %2  @8:5
+
+fn det.plain(%0 a: f64) f64
+  tmp %1: f64
+  tmp %2: f64
+bb0:
+  %2 = mul copy %0, 2:f64  @12:14
+  %1 = move %2  @12:5
+  return move %1  @12:5
+
+fn det.main()
+  tmp %0: f64
+  tmp %1: str
+  tmp %2: str
+  tmp %3: f64
+  tmp %4: str
+  tmp %5: str
+bb0:
+  %0 = call det.mix(1:f64, 2:f32)  @16:17
+  %1 = str copy %0 to str  @16:13
+  %2 = concat copy %1, " "  @16:32
+  %3 = call det.plain(3:f64)  @16:44
+  %4 = str copy %3 to str  @16:40
+  %5 = concat copy %2, copy %4  @16:38
+  eval println(copy %5)  @16:5
+  drop %5  @16:5
+  drop %4  @16:5
+  drop %2  @16:5
+  drop %1  @16:5
+  return  @17:1

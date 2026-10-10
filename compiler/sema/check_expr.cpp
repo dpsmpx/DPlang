@@ -542,6 +542,19 @@ const Type* Checker::call(CallExpr* c, const Type* hint) {
 const Type* Checker::user_call(CallExpr* c, const FnDef& f) {
     c->call = CallKind::Fn;
     c->fn = &f;
+    if (fn_ && is_det(*fn_) && !is_det(f)) {  // класс D вызывает только класс D (Р55)
+        std::string who = "'" + fn_->name + "' is class D and cannot ";
+        if (f.module->stdlib) {  // os и другие модули с вводом-выводом
+            error(Code::E0425, c->span, "'" + f.module->name + "." + f.name + "' does input or output; " + who +
+                                            "use it. Return the value and use it outside class D");
+        } else if (f.module == fn_->module) {
+            error(Code::E0425, c->span, "'" + f.name + "' is not deterministic; " + who + "call it. Mark it '@det'");
+        } else {
+            error(Code::E0425, c->span, "'" + f.module->name + "." + f.name + "' is not deterministic; " + who +
+                                            "call it. Mark it '@det' or import its module with '@det import " +
+                                            f.module->name + "'");
+        }
+    }
     if (c->args.size() != f.params.size()) {
         error(Code::E0407, c->span, "'" + f.name + "' takes " + std::to_string(f.params.size()) + " argument" +
                                         (f.params.size() == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
@@ -603,6 +616,12 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
                       ? 2
                   : bf == BuiltinFn::ArgsLen ? 0
                                              : 1;
+    bool io = bf == BuiltinFn::Print || bf == BuiltinFn::Println || bf == BuiltinFn::Eprintln ||
+              bf == BuiltinFn::ArgsLen || bf == BuiltinFn::ArgAt || bf == BuiltinFn::ReadFile;
+    if (io && fn_ && is_det(*fn_)) {  // ввод-вывод — не класс D (Р12, Р55)
+        error(Code::E0425, c->span, "'" + name + "' does input or output; '" + fn_->name +
+                                        "' is class D and cannot use it. Return the value and use it outside class D");
+    }
     if (c->args.size() != want) {
         error(Code::E0407, c->span, "'" + name + "' takes " + std::to_string(want) + " argument" +
                                         (want == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
