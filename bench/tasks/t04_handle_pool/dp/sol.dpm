@@ -1,0 +1,76 @@
+pub struct Handle {
+    index: i32
+    generation: i32
+}
+
+pub enum PoolError {
+    Full
+}
+
+pub struct Slot {
+    generation: i32 = 1
+    alive: bool = false
+    value: i32 = 0
+}
+
+pub struct Pool {
+    slots: List[Slot]
+    count: i32 = 0
+}
+
+pub fn pool_new(capacity: i32) Pool {
+    return Pool { slots: repeat(Slot {}, capacity) }
+}
+
+pub fn pool_create(p: &mut Pool, value: i32) PoolError!Handle {
+    for i in 0..len(p.slots) {
+        if !p.slots[i].alive {
+            p.slots[i].alive = true
+            p.slots[i].value = value
+            p.count += 1
+            return Handle { index: i32(i), generation: p.slots[i].generation }
+        }
+    }
+    fail .Full
+}
+
+// Номер живого слота хэндла; нет значения — хэндл устарел.
+fn live(p: &Pool, h: Handle) ?int {
+    if h.index < 0 || h.index >= len(p.slots) {
+        return none
+    }
+    let s = p.slots[h.index]
+    if !s.alive || s.generation != h.generation {
+        return none
+    }
+    return h.index
+}
+
+pub fn pool_get(p: &Pool, h: Handle) ?i32 {
+    if let i = live(&p, h) {
+        return p.slots[i].value
+    }
+    return none
+}
+
+pub fn pool_set(p: &mut Pool, h: Handle, value: i32) bool {
+    if let i = live(&p, h) {
+        p.slots[i].value = value
+        return true
+    }
+    return false
+}
+
+pub fn pool_destroy(p: &mut Pool, h: Handle) bool {
+    if let i = live(&p, h) {
+        p.slots[i].alive = false
+        p.slots[i].generation += 1
+        p.count -= 1
+        return true
+    }
+    return false
+}
+
+pub fn pool_count(p: &Pool) i32 {
+    return p.count
+}

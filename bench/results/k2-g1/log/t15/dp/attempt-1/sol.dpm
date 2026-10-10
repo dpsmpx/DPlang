@@ -1,0 +1,277 @@
+// t15: книга счетов с вложенными транзакциями.
+const BOUND: i64 = 1000000000000000
+const MAX_DEPTH: int = 8
+
+pub struct Account {
+    name: str
+    limit: i64
+    bal: i64
+}
+
+pub struct Ledger {
+    // открытые счета по возрастанию имени
+    accts: List[Account]
+    // снимки accts на момент каждого begin
+    stack: List[List[Account]]
+}
+
+pub fn ledger_new() Ledger {
+    return Ledger { accts: [], stack: [] }
+}
+
+// Слова строки: разделитель — только пробел.
+fn words(line: str) List[str] {
+    var out: List[str] = []
+    let parts = line.split(" ")
+    for i in 0..len(parts) {
+        if len(parts[i]) > 0 {
+            out.push(parts[i])
+        }
+    }
+    return out
+}
+
+fn is_lower(c: u8) bool {
+    return c >= 'a' && c <= 'z'
+}
+
+fn is_dig(c: u8) bool {
+    return c >= '0' && c <= '9'
+}
+
+fn valid_name(s: str) bool {
+    let n = len(s)
+    if n < 1 || n > 16 {
+        return false
+    }
+    if !is_lower(s[0]) {
+        return false
+    }
+    for i in 1..n {
+        let c = s[i]
+        if !(is_lower(c) || is_dig(c) || c == '_') {
+            return false
+        }
+    }
+    return true
+}
+
+// Число из 1..18 цифр, иначе none.
+fn parse_num(s: str) ?i64 {
+    let n = len(s)
+    if n < 1 || n > 18 {
+        return none
+    }
+    var v: i64 = 0
+    for i in 0..n {
+        let c = s[i]
+        if !is_dig(c) {
+            return none
+        }
+        v = v * 10 + i64(c - '0')
+    }
+    return v
+}
+
+fn find_acct(accts: []Account, name: str) ?int {
+    for i in 0..len(accts) {
+        if accts[i].name == name {
+            return i
+        }
+    }
+    return none
+}
+
+fn out_of_bound(b: i64) bool {
+    return b > BOUND || b < -BOUND
+}
+
+fn cmd_open(l: &mut Ledger, w: []str) str {
+    if len(w) != 3 || !valid_name(w[1]) {
+        return "error syntax"
+    }
+    let lim = parse_num(w[2]) ?? -1
+    if lim < 0 {
+        return "error syntax"
+    }
+    let name = w[1]
+    if find_acct(l.accts, name) != none {
+        return "error exists " + name
+    }
+    var pos = 0
+    while pos < len(l.accts) && l.accts[pos].name < name {
+        pos += 1
+    }
+    let acct = Account { name: name, limit: lim, bal: 0 }
+    l.accts.insert(pos, acct)
+    return "ok"
+}
+
+fn cmd_change(l: &mut Ledger, w: []str, is_deposit: bool) str {
+    if len(w) != 3 || !valid_name(w[1]) {
+        return "error syntax"
+    }
+    let amt = parse_num(w[2]) ?? -1
+    if amt < 0 {
+        return "error syntax"
+    }
+    if amt == 0 {
+        return "error amount"
+    }
+    let fi = find_acct(l.accts, w[1]) ?? -1
+    if fi < 0 {
+        return "error unknown " + w[1]
+    }
+    let a = l.accts[fi]
+    var nb: i64 = 0
+    if is_deposit {
+        nb = a.bal + amt
+    } else {
+        nb = a.bal - amt
+        if nb < -a.limit {
+            return "error funds"
+        }
+    }
+    if out_of_bound(nb) {
+        return "error bound"
+    }
+    l.accts[fi].bal = nb
+    return "ok " + str(nb)
+}
+
+fn cmd_transfer(l: &mut Ledger, w: []str) str {
+    if len(w) != 4 || !valid_name(w[1]) || !valid_name(w[2]) {
+        return "error syntax"
+    }
+    let amt = parse_num(w[3]) ?? -1
+    if amt < 0 {
+        return "error syntax"
+    }
+    if amt == 0 {
+        return "error amount"
+    }
+    let fi = find_acct(l.accts, w[1]) ?? -1
+    if fi < 0 {
+        return "error unknown " + w[1]
+    }
+    let ti = find_acct(l.accts, w[2]) ?? -1
+    if ti < 0 {
+        return "error unknown " + w[2]
+    }
+    if fi == ti {
+        return "error same"
+    }
+    var fee = amt / 100
+    if fee < 1 {
+        fee = 1
+    }
+    let src_a = l.accts[fi]
+    let dst_a = l.accts[ti]
+    let nf = src_a.bal - amt - fee
+    if nf < -src_a.limit {
+        return "error funds"
+    }
+    let nt = dst_a.bal + amt
+    if out_of_bound(nf) {
+        return "error bound"
+    }
+    if out_of_bound(nt) {
+        return "error bound"
+    }
+    l.accts[fi].bal = nf
+    l.accts[ti].bal = nt
+    return "ok " + str(nf) + " " + str(nt)
+}
+
+fn cmd_balance(l: &mut Ledger, w: []str) str {
+    if len(w) != 2 || !valid_name(w[1]) {
+        return "error syntax"
+    }
+    let fi = find_acct(l.accts, w[1]) ?? -1
+    if fi < 0 {
+        return "error unknown " + w[1]
+    }
+    return str(l.accts[fi].bal)
+}
+
+fn cmd_close(l: &mut Ledger, w: []str) str {
+    if len(w) != 2 || !valid_name(w[1]) {
+        return "error syntax"
+    }
+    let fi = find_acct(l.accts, w[1]) ?? -1
+    if fi < 0 {
+        return "error unknown " + w[1]
+    }
+    if l.accts[fi].bal != 0 {
+        return "error nonzero"
+    }
+    _ = l.accts.remove(fi)
+    return "ok"
+}
+
+fn cmd_report(l: &mut Ledger) str {
+    if len(l.accts) == 0 {
+        return "(empty)"
+    }
+    var out = ""
+    for i in 0..len(l.accts) {
+        if i > 0 {
+            out += " "
+        }
+        out += l.accts[i].name + ":" + str(l.accts[i].bal)
+    }
+    return out
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    let w = words(line)
+    if len(w) == 0 {
+        return "error syntax"
+    }
+    let cmd = w[0]
+    if cmd == "open" {
+        return cmd_open(&mut l, w)
+    }
+    if cmd == "deposit" {
+        return cmd_change(&mut l, w, true)
+    }
+    if cmd == "withdraw" {
+        return cmd_change(&mut l, w, false)
+    }
+    if cmd == "transfer" {
+        return cmd_transfer(&mut l, w)
+    }
+    if cmd == "balance" {
+        return cmd_balance(&mut l, w)
+    }
+    if cmd == "close" {
+        return cmd_close(&mut l, w)
+    }
+    if cmd == "begin" || cmd == "commit" || cmd == "rollback" || cmd == "report" {
+        if len(w) != 1 {
+            return "error syntax"
+        }
+    } else {
+        return "error syntax"
+    }
+    if cmd == "report" {
+        return cmd_report(&mut l)
+    }
+    if cmd == "begin" {
+        if len(l.stack) >= MAX_DEPTH {
+            return "error depth"
+        }
+        let snap = l.accts
+        l.stack.push(snap)
+        return "ok depth " + str(len(l.stack))
+    }
+    if len(l.stack) == 0 {
+        return "error depth"
+    }
+    if let top = l.stack.pop() {
+        if cmd == "rollback" {
+            l.accts = top
+        }
+    }
+    return "ok depth " + str(len(l.stack))
+}

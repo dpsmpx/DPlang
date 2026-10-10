@@ -1,4 +1,4 @@
-/* Runtime DPlang: ядро (docs/runtime/README.md).
+/* Runtime dpl: ядро (docs/runtime/README.md).
  *
  * Контракт с C-бэкендом (compiler/backend_c/): сгенерированный C
  * подключает этот заголовок и линкуется с dp_rt.c. Всё здесь — C11 с
@@ -21,12 +21,12 @@
  * округляется до своего типа. Промежуточная точность сверх типа (x87)
  * дала бы другие биты — такая цель не поддерживается. */
 #if !defined(FLT_EVAL_METHOD) || FLT_EVAL_METHOD != 0
-#error "DPlang runtime requires FLT_EVAL_METHOD == 0"
+#error "dpl runtime requires FLT_EVAL_METHOD == 0"
 #endif
 
 /* Вспомогательные функции сгенерированного кода: на тип и на список их
  * много, и не все нужны программе — без предупреждений о неиспользуемых.
- * DP_FN — функция программы: DPlang не запрещает функцию без вызовов. */
+ * DP_FN — функция программы: dpl не запрещает функцию без вызовов. */
 #if defined(__GNUC__) || defined(__clang__)
 #define DP_INLINE static inline __attribute__((unused))
 #define DP_FN static __attribute__((unused))
@@ -65,7 +65,7 @@ extern int64_t dp_depth;
 /* --- целые: проверенная арифметика (trap.int)
  *
  * Знаковые типы считаются в int64_t, беззнаковые — в uint64_t; bits —
- * ширина типа DPlang, tname — его имя в сообщении ('i32', 'int').
+ * ширина типа dpl, tname — его имя в сообщении ('i32', 'int').
  * Результат лежит в диапазоне типа, и сгенерированный код приводит его
  * к своему типу без потерь. */
 
@@ -154,6 +154,68 @@ static inline uint64_t dp_urem(uint64_t a, uint64_t b, const char* loc) {
     return a % b;
 }
 
+/* Проверяемая арифметика (Р53): true и *r — точный результат в типе
+ * ширины bits; false — вне типа или делитель 0. Ловушки нет. */
+static inline bool dp_try_sadd(int64_t a, int64_t b, int bits, int64_t* r) {
+    if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) return false;
+    int64_t x = a + b;
+    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_ssub(int64_t a, int64_t b, int bits, int64_t* r) {
+    if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) return false;
+    int64_t x = a - b;
+    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_smul(int64_t a, int64_t b, int bits, int64_t* r) {
+    bool o;
+    if (a > 0) o = b > 0 ? a > INT64_MAX / b : b < INT64_MIN / a;
+    else o = b > 0 ? a < INT64_MIN / b : (a != 0 && b < INT64_MAX / a);
+    if (o) return false;
+    int64_t x = a * b;
+    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_sdiv(int64_t a, int64_t b, int bits, int64_t* r) {
+    if (b == 0 || (a == dp_smin(bits) && b == -1)) return false;
+    *r = a / b;
+    return true;
+}
+static inline bool dp_try_sneg(int64_t a, int bits, int64_t* r) {
+    if (a == dp_smin(bits)) return false;
+    *r = -a;
+    return true;
+}
+static inline bool dp_try_uadd(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    uint64_t x = a + b;
+    if (x < a || x > dp_umax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_usub(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    (void)bits;
+    if (b > a) return false;
+    *r = a - b;
+    return true;
+}
+static inline bool dp_try_umul(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    if (a != 0 && b > UINT64_MAX / a) return false;
+    uint64_t x = a * b;
+    if (x > dp_umax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_udiv(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    (void)bits;
+    if (b == 0) return false;
+    *r = a / b;
+    return true;
+}
+
 /* Сдвиги: счётчик — значение правого операнда (знаковое или нет). */
 _Noreturn void dp_bad_shift_s(int64_t n, const char* tname, const char* loc);
 _Noreturn void dp_bad_shift_u(uint64_t n, const char* tname, const char* loc);
@@ -197,6 +259,25 @@ static inline void dp_str_drop(dp_str* s) {
 dp_str dp_str_concat(dp_str a, dp_str b, const char* loc);
 bool dp_str_eq(dp_str a, dp_str b);
 bool dp_str_lt(dp_str a, dp_str b); /* по байтам без знака */
+
+/* Хэш ключа Map (Р54): без случайной соли. Порядок обхода Map — порядок
+ * вставки, от хэша он не зависит; хэш нужен только для поиска. */
+static inline uint64_t dp_hash_u64(uint64_t x) {
+    x ^= x >> 33;
+    x *= UINT64_C(0xff51afd7ed558ccd);
+    x ^= x >> 33;
+    x *= UINT64_C(0xc4ceb9fe1a85ec53);
+    x ^= x >> 33;
+    return x;
+}
+static inline uint64_t dp_hash_str(dp_str s) {
+    uint64_t h = UINT64_C(14695981039346656037);
+    for (int64_t i = 0; i < s.len; i++) {
+        h ^= s.ptr[i];
+        h *= UINT64_C(1099511628211);
+    }
+    return h;
+}
 uint8_t dp_str_at(dp_str s, int64_t i, const char* loc);
 dp_str dp_str_slice(dp_str s, int64_t lo, int64_t hi, const char* loc);
 dp_str dp_str_sub(dp_str s, int64_t lo, int64_t hi); /* без проверок: границы уже верны */
@@ -220,6 +301,21 @@ void dp_print(dp_str s);
 void dp_println(dp_str s);
 void dp_eprintln(dp_str s);
 
+/* --- аргументы программы и файлы (Р51, stdlib/os.dpm) */
+
+/* Запоминает argv программы; argv[0] — её имя, в os.args не входит. */
+void dp_set_args(int argc, char** argv);
+int64_t dp_args_len(void);
+dp_str dp_arg(int64_t i, const char* loc);
+/* Файл целиком в *out (прежнее значение освобождается): 0 — прочитан;
+ * иначе 1 + вариант os.IoError — 1 NotFound, 2 PermissionDenied,
+ * 3 InvalidUtf8, 4 Other — и *out не меняется. Файл больше предела
+ * буфера — ловушка «out of memory». */
+int32_t dp_read_file(dp_str path, dp_str* out, const char* loc);
+/* Байты — корректный UTF-8: без обрезанных, избыточных записей,
+ * суррогатов и символов больше U+10FFFF. */
+bool dp_utf8_valid(const uint8_t* p, int64_t n);
+
 /* --- индексы и срезы (trap.index) */
 
 int64_t dp_check_index(int64_t i, int64_t len, const char* loc);
@@ -234,5 +330,7 @@ void dp_check_repeat(int64_t n, const char* loc);
  * ошибки main или NULL. */
 typedef const char* (*dp_entry_fn)(void);
 int dp_run(dp_entry_fn entry);
+/* То же для теста (Р50): ошибка — «error: test failed with E.V». */
+int dp_run_test(dp_entry_fn entry);
 
 #endif

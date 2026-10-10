@@ -1,0 +1,355 @@
+// t16: калькулятор целых выражений с переменными.
+// Сначала разбор всей строки без вычисления, затем — тот же разбор
+// с вычислением.
+
+enum K {
+    Num
+    Name
+    Op
+    End
+    Bad
+}
+
+struct Tok {
+    kind: K
+    // текст лексемы; у Bad — сообщение об ошибке лексики
+    text: str
+    col: int
+    val: i64
+}
+
+enum CalcError {
+    Fail
+}
+
+struct P {
+    toks: List[Tok]
+    pos: int
+    evaluating: bool
+    names: List[str]
+    vals: List[i64]
+    err_col: int
+    err_msg: str
+}
+
+fn is_op_byte(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+fn is_name_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_name_rest(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+fn is_dig(c: u8) bool {
+    return c >= '0' && c <= '9'
+}
+
+// Лексемы до конца строки (End) или до первой ошибки лексики (Bad).
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i: int = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+            continue
+        }
+        let col = i + 1
+        if is_dig(c) {
+            var j = i
+            var v: i64 = 0
+            var big = false
+            while j < n && is_dig(src[j]) {
+                if !big {
+                    let d = i64(src[j] - '0')
+                    if let m = checked_mul(v, 10) {
+                        if let s = checked_add(m, d) {
+                            v = s
+                        } else {
+                            big = true
+                        }
+                    } else {
+                        big = true
+                    }
+                }
+                j += 1
+            }
+            if big {
+                toks.push(Tok { kind: K.Bad, text: "number too large", col: col, val: 0 })
+                return toks
+            }
+            toks.push(Tok { kind: K.Num, text: src[i..j], col: col, val: v })
+            i = j
+            continue
+        }
+        if is_name_start(c) {
+            var k = i + 1
+            while k < n && is_name_rest(src[k]) {
+                k += 1
+            }
+            toks.push(Tok { kind: K.Name, text: src[i..k], col: col, val: 0 })
+            i = k
+            continue
+        }
+        if is_op_byte(c) {
+            toks.push(Tok { kind: K.Op, text: src[i..i + 1], col: col, val: 0 })
+            i += 1
+            continue
+        }
+        toks.push(Tok { kind: K.Bad, text: "unexpected character '" + src[i..i + 1] + "'", col: col, val: 0 })
+        return toks
+    }
+    toks.push(Tok { kind: K.End, text: "", col: n + 1, val: 0 })
+    return toks
+}
+
+fn set_err(p: &mut P, col: int, msg: str) {
+    p.err_col = col
+    p.err_msg = msg
+}
+
+fn at_op(p: &P, s: str) bool {
+    let t = p.toks[p.pos]
+    return t.kind == K.Op && t.text == s
+}
+
+// Ошибка у текущей лексемы: она не может стоять здесь.
+fn err_unexpected(p: &mut P) {
+    let t = p.toks[p.pos]
+    if t.kind == K.Bad {
+        set_err(&mut p, t.col, t.text)
+        return
+    }
+    if t.kind == K.End {
+        set_err(&mut p, t.col, "unexpected end")
+        return
+    }
+    set_err(&mut p, t.col, "unexpected '" + t.text + "'")
+}
+
+fn need(p: &mut P, x: ?i64, col: int) CalcError!i64 {
+    if let y = x {
+        return y
+    }
+    set_err(&mut p, col, "overflow")
+    fail .Fail
+}
+
+fn get_var(p: &mut P, name: str, col: int) CalcError!i64 {
+    for i in 0..len(p.names) {
+        if p.names[i] == name {
+            return p.vals[i]
+        }
+    }
+    set_err(&mut p, col, "unknown variable '" + name + "'")
+    fail .Fail
+}
+
+fn set_var(p: &mut P, name: str, v: i64) {
+    for i in 0..len(p.names) {
+        if p.names[i] == name {
+            p.vals[i] = v
+            return
+        }
+    }
+    p.names.push(name)
+    p.vals.push(v)
+}
+
+// Степень b^e при e >= 0; none — если точный результат вне i64.
+fn ipow(b: i64, e: i64) ?i64 {
+    if e == 0 {
+        return 1
+    }
+    if b == 0 || b == 1 {
+        return b
+    }
+    if b == -1 {
+        if e % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    // |b| >= 2: переполнение наступает не позже 64 умножений
+    var r: i64 = 1
+    var k: i64 = 0
+    while k < e {
+        if let m = checked_mul(r, b) {
+            r = m
+        } else {
+            return none
+        }
+        k += 1
+    }
+    return r
+}
+
+fn parse_program(p: &mut P) CalcError!i64 {
+    var last: i64 = try parse_stmt(&mut p)
+    while at_op(&p, ";") {
+        p.pos += 1
+        last = try parse_stmt(&mut p)
+    }
+    if p.toks[p.pos].kind != K.End {
+        err_unexpected(&mut p)
+        fail .Fail
+    }
+    return last
+}
+
+fn parse_stmt(p: &mut P) CalcError!i64 {
+    let t = p.toks[p.pos]
+    if t.kind == K.Name {
+        let nx = p.toks[p.pos + 1]
+        if nx.kind == K.Op && nx.text == "=" {
+            p.pos += 2
+            let v = try parse_expr(&mut p)
+            if p.evaluating {
+                set_var(&mut p, t.text, v)
+            }
+            return v
+        }
+    }
+    return try parse_expr(&mut p)
+}
+
+fn parse_expr(p: &mut P) CalcError!i64 {
+    var v: i64 = try parse_term(&mut p)
+    while at_op(&p, "+") || at_op(&p, "-") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let r = try parse_term(&mut p)
+        if p.evaluating {
+            if op.text == "+" {
+                v = try need(&mut p, checked_add(v, r), op.col)
+            } else {
+                v = try need(&mut p, checked_sub(v, r), op.col)
+            }
+        }
+    }
+    return v
+}
+
+fn parse_term(p: &mut P) CalcError!i64 {
+    var v: i64 = try parse_unary(&mut p)
+    while at_op(&p, "*") || at_op(&p, "/") || at_op(&p, "%") {
+        let op = p.toks[p.pos]
+        p.pos += 1
+        let r = try parse_unary(&mut p)
+        if p.evaluating {
+            if op.text == "*" {
+                v = try need(&mut p, checked_mul(v, r), op.col)
+            } else {
+                if r == 0 {
+                    set_err(&mut p, op.col, "division by zero")
+                    fail .Fail
+                }
+                if op.text == "/" {
+                    v = try need(&mut p, checked_div(v, r), op.col)
+                } else {
+                    if r == -1 {
+                        v = 0
+                    } else {
+                        v = v % r
+                    }
+                }
+            }
+        }
+    }
+    return v
+}
+
+fn parse_unary(p: &mut P) CalcError!i64 {
+    if at_op(&p, "-") {
+        let col = p.toks[p.pos].col
+        p.pos += 1
+        let v = try parse_unary(&mut p)
+        if p.evaluating {
+            return try need(&mut p, checked_neg(v), col)
+        }
+        return v
+    }
+    return try parse_power(&mut p)
+}
+
+fn parse_power(p: &mut P) CalcError!i64 {
+    let b = try parse_atom(&mut p)
+    if at_op(&p, "^") {
+        let col = p.toks[p.pos].col
+        p.pos += 1
+        let e = try parse_unary(&mut p)
+        if p.evaluating {
+            if e < 0 {
+                set_err(&mut p, col, "negative exponent")
+                fail .Fail
+            }
+            return try need(&mut p, ipow(b, e), col)
+        }
+    }
+    return b
+}
+
+fn parse_atom(p: &mut P) CalcError!i64 {
+    let t = p.toks[p.pos]
+    if t.kind == K.Num {
+        p.pos += 1
+        return t.val
+    }
+    if t.kind == K.Name {
+        p.pos += 1
+        if p.evaluating {
+            return try get_var(&mut p, t.text, t.col)
+        }
+        return 0
+    }
+    if t.kind == K.Op && t.text == "(" {
+        p.pos += 1
+        let v = try parse_expr(&mut p)
+        if at_op(&p, ")") {
+            p.pos += 1
+            return v
+        }
+        let u = p.toks[p.pos]
+        if u.kind == K.Bad {
+            set_err(&mut p, u.col, u.text)
+        } else {
+            set_err(&mut p, u.col, "expected ')'")
+        }
+        fail .Fail
+    }
+    err_unexpected(&mut p)
+    fail .Fail
+}
+
+pub fn calc(src: str) str {
+    var p = P { toks: lex(src), pos: 0, evaluating: false, names: [], vals: [], err_col: 0, err_msg: "" }
+    var res = ""
+    var parsed = false
+    match parse_program(&mut p) {
+        ok(v) => {
+            parsed = true
+        }
+        err(e) => {
+            res = "error at " + str(p.err_col) + ": " + p.err_msg
+        }
+    }
+    if !parsed {
+        return res
+    }
+    p.pos = 0
+    p.evaluating = true
+    match parse_program(&mut p) {
+        ok(w) => {
+            res = str(w)
+        }
+        err(e2) => {
+            res = "error at " + str(p.err_col) + ": " + p.err_msg
+        }
+    }
+    return res
+}

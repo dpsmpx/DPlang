@@ -1,0 +1,53 @@
+// Драйвер t13 после рефакторинга (скрыт от модели): новый интерфейс,
+// вывод — тот же, что до. Лежит рядом с модулями world, combat, report.
+import combat
+import report
+import world
+
+fn hp_or_minus1(w: &world.World, id: world.UnitId) i32 {
+    if let hp = world.unit_hp(&w, id) {
+        return hp
+    }
+    return -1
+}
+
+fn do_hit(w: &mut world.World, id: world.UnitId, dmg: i32) {
+    let head = "hit " + str(id.index) + " " + str(dmg) + ": "
+    match combat.apply_damage(&mut w, id, dmg) {
+        ok(hp) => println(head + "hp " + str(hp))
+        err(e) => match e {
+            .NotFound => println(head + "not_found")
+            .Dead => println(head + "dead")
+        }
+    }
+}
+
+fn do_blast(w: &mut world.World, cx: i32, cy: i32, r: i32, dmg: i32) {
+    let hits = combat.blast(&mut w, cx, cy, r, dmg)
+    var line = "blast (" + str(cx) + "," + str(cy) + ") r" + str(r) + " " + str(dmg) + ": " + str(len(hits)) + " hit:"
+    for id in &hits {
+        line += " " + str(id.index)
+    }
+    println(line + " | " + report.describe(&w) + " | alive " + str(report.alive_count(&w)))
+}
+
+fn main() {
+    var w = world.World { units: [] }
+    let a = world.spawn(&mut w, 0, 0, 30, 2)
+    let b = world.spawn(&mut w, 3, 1, 12, 0)
+    let c = world.spawn(&mut w, 10, 10, 50, 10)
+    let d = world.spawn(&mut w, 1, -1, 5, 1)
+    println(report.describe(&w))
+    do_hit(&mut w, a, 10)
+    do_hit(&mut w, c, 4)
+    do_hit(&mut w, world.UnitId { index: 7 }, 1)
+    do_blast(&mut w, 1, 0, 2, 4)
+    do_hit(&mut w, d, 3)
+    do_hit(&mut w, d, 3)
+    do_blast(&mut w, 2, 0, 2, 14)
+    do_blast(&mut w, 10, 10, 0, 100)
+    do_hit(&mut w, b, 1)
+    let far = world.UnitId { index: 9 }
+    let neg = world.UnitId { index: -1 }
+    println("hp " + str(hp_or_minus1(&w, a)) + " " + str(hp_or_minus1(&w, far)) + " " + str(hp_or_minus1(&w, neg)))
+}

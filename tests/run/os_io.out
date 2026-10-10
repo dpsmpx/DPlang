@@ -1,0 +1,12 @@
+6 arguments
+data/hello.txt: 37 bytes
+first line
+вторая строка
+data/empty.txt: 0 bytes
+data/missing.txt: not found
+data/bad_utf8.txt: not UTF-8
+data: cannot read
+two words: not found
+--- stderr ---
+error: main failed with IoError.NotFound
+[exit 1]

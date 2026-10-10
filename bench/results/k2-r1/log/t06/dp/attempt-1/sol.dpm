@@ -1,0 +1,54 @@
+// t06: жадное объединение клеток слоя в прямоугольники.
+pub struct Quad {
+    x: i32
+    y: i32
+    w: i32
+    h: i32
+    block: i32
+}
+
+pub fn greedy_mesh(w: i32, h: i32, cells: []i32) List[Quad] {
+    var out: List[Quad] = []
+    var visited = repeat(false, len(cells))
+    for y in 0..h {
+        for x in 0..w {
+            let at: int = y * w + x
+            let b = cells[at]
+            if b != 0 && !visited[at] {
+                // ширина: подряд вправо клетки того же блока, не посещённые
+                var wd: i32 = 1
+                while x + wd < w {
+                    let j: int = at + wd
+                    if cells[j] != b || visited[j] {
+                        break
+                    }
+                    wd += 1
+                }
+                // высота: подряд вниз строки, где все wd клеток подходят
+                var ht: i32 = 1
+                while y + ht < h {
+                    var full = true
+                    for k in 0..wd {
+                        let j: int = (y + ht) * w + x + k
+                        if cells[j] != b || visited[j] {
+                            full = false
+                        }
+                    }
+                    if !full {
+                        break
+                    }
+                    ht += 1
+                }
+                // отметить прямоугольник посещённым
+                for dy in 0..ht {
+                    for dx in 0..wd {
+                        let j: int = (y + dy) * w + x + dx
+                        visited[j] = true
+                    }
+                }
+                out.push(Quad { x, y, w: wd, h: ht, block: b })
+            }
+        }
+    }
+    return out
+}

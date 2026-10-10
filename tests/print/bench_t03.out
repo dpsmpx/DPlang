@@ -17,16 +17,14 @@ pub fn step(state: State, event: Event) State {
         .LowHealth => return .Flee { ticks: 3 }
         .SeeEnemy { id } => {
             match state {
-                .Flee => {
-                }
+                .Flee => {}
                 _ => return .Chase { target: id }
             }
         }
         .LoseEnemy => {
             match state {
                 .Chase => return .Patrol { waypoint: 0 }
-                _ => {
-                }
+                _ => {}
             }
         }
         .Tick => {
@@ -39,8 +37,7 @@ pub fn step(state: State, event: Event) State {
                     }
                     return .Idle
                 }
-                .Chase => {
-                }
+                .Chase => {}
             }
         }
     }

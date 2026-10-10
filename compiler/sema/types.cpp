@@ -12,9 +12,11 @@ TypeTable::TypeTable() {
     }
 }
 
-const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e) {
+const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e,
+                            const Type* key_type) {
     auto key = std::make_tuple(static_cast<int>(k), static_cast<const void*>(elem), static_cast<const void*>(err),
-                               static_cast<const void*>(s), static_cast<const void*>(e));
+                               static_cast<const void*>(s), static_cast<const void*>(e),
+                               static_cast<const void*>(key_type));
     auto it = interned_.find(key);
     if (it != interned_.end()) return it->second;
     Type& t = store_.emplace_back();
@@ -23,6 +25,7 @@ const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const Struc
     t.err = err;
     t.sdef = s;
     t.edef = e;
+    t.key = key_type;
     interned_.emplace(key, &t);
     return &t;
 }
@@ -46,6 +49,7 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
         case TK::F64: return "f64";
         case TK::Str: return "str";
         case TK::List: return "List[" + type_name(t->elem, from) + "]";
+        case TK::Map: return "Map[" + type_name(t->key, from) + ", " + type_name(t->elem, from) + "]";
         case TK::Slice: return "[]" + type_name(t->elem, from);
         case TK::Optional: return "?" + type_name(t->elem, from);
         case TK::Result: return (t->err ? type_name(t->err, from) : "") + "!" + type_name(t->elem, from);
@@ -60,8 +64,10 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
 bool contains_slice(const Type* t) {
     if (!t) return false;
     if (t->kind == TK::Slice) return true;
-    return contains_slice(t->elem) || contains_slice(t->err);
+    return contains_slice(t->elem) || contains_slice(t->err) || contains_slice(t->key);
 }
+
+bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str); }
 
 bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }
 bool is_signed(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::Int; }

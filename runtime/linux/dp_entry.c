@@ -1,4 +1,4 @@
-/* Runtime DPlang под Linux: вход в программу (trap.exit;
+/* Runtime dpl под Linux: вход в программу (trap.exit;
  * docs/runtime/README.md). main программы исполняется в потоке с большим
  * стеком: предел глубины вызовов (DP_MAX_DEPTH) должен срабатывать
  * ловушкой раньше, чем кончится стек процесса. */
@@ -18,7 +18,7 @@ static void* dp_thread(void* arg) {
     return NULL;
 }
 
-int dp_run(dp_entry_fn entry) {
+static int dp_run_as(dp_entry_fn entry, const char* what) {
     dp_entry_main = entry;
     dp_depth = 0;
     pthread_attr_t attr;
@@ -29,8 +29,12 @@ int dp_run(dp_entry_fn entry) {
     else dp_main_error = entry();
     fflush(stdout);
     if (dp_main_error) {
-        fprintf(stderr, "error: main failed with %s\n", dp_main_error);
+        fprintf(stderr, "error: %s failed with %s\n", what, dp_main_error);
         return 1;
     }
     return 0;
 }
+
+int dp_run(dp_entry_fn entry) { return dp_run_as(entry, "main"); }
+
+int dp_run_test(dp_entry_fn entry) { return dp_run_as(entry, "test"); }

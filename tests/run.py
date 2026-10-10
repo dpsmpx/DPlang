@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Исполнитель тестов компилятора DPlang (docs/policy/TESTING.md).
+"""Исполнитель тестов компилятора dpl (docs/policy/TESTING.md).
 
 Собирает компилятор (CMake и Ninja; отладочная сборка с ASan и UBSan) в
 build/compiler/ и прогоняет золотые тесты наборов tests/<набор>/.
@@ -15,11 +15,15 @@ build/compiler/ и прогоняет золотые тесты наборов t
 каждой программе наборов; проход native — различающие тесты C-бэкенда:
 программа набора run собирается в нативную (debug c, runtime, компилятор
 C — $CC или cc, с ASan и UBSan, если они есть), и её вывод сверяется с тем
-же ожидаемым, что у эталонного интерпретатора. Устройство —
-docs/compiler/README.md, docs/compiler/backend_c.md. Проходы limits,
-worker, sandbox и service — tests/limits.py, tests/worker.py и
-tests/service.py; worker, sandbox и service идут на второй сборке,
-Release без санитайзеров (build/release/).
+же ожидаемым, что у эталонного интерпретатора; проход build — то же
+через `dpl build` в профилях debug и release. Устройство —
+docs/compiler/README.md, docs/compiler/backend_c.md, docs/compiler/cli.md.
+Проход runtime — тесты runtime по функциям и запись плавающих против
+образца (tests/runtime.py). Проход example — программы examples/X/: их
+тесты, запуск интерпретатором и сборкой, канонический вид. Проход bench —
+эталонный набор задач на dpl (bench/tasks/X/dp/, bench/dp_check.py). Проходы limits, worker, sandbox и service —
+tests/limits.py, tests/worker.py и tests/service.py; worker, sandbox и
+service идут на второй сборке, Release без санитайзеров (build/release/).
 
     python3 tests/run.py              — собрать и прогнать
     python3 tests/run.py --bless      — переписать ожидаемое (дифф — на ревью)
@@ -33,23 +37,40 @@ import concurrent.futures
 import difflib
 import os
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 
 import limits
+import runtime
+import schema
 import service
 import worker
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, 'bench'))
+import dp_check  # noqa: E402 — проверка решений набора задач (bench/dp_check.py)
+
 TESTS = os.path.join(ROOT, 'tests')
 SRC = os.path.join(ROOT, 'compiler')
 BUILD = os.path.join(ROOT, 'build', 'compiler')
-DPLANG = os.path.join(BUILD, 'dplang')
+EXAMPLES = os.path.join(ROOT, 'examples')
+# Проход example: у программы examples/X/ с каталогом expected/ — четыре случая.
+EXAMPLE_CASES = ('test', 'run', 'build', 'fmt')
+# Проход bench: задачи bench/tasks/X/ с каталогом dp/ (эталон набора на dpl).
+BENCH_TASKS = os.path.join(ROOT, 'bench', 'tasks')
+BENCH_CASES = ('ref', 'start', 'fmt')
+# Начальный код задачи не принимается, и отказ — ожидаемого рода.
+BENCH_START = {'write': {'сборка'}, 'fix': {'вывод', 'ловушка'}, 'refactor': {'интерфейс'}}
+DPL = os.path.join(BUILD, 'dpl')
 DPFUZZ = os.path.join(BUILD, 'dpfuzz')
+# Схема машиночитаемой диагностики: ей подчиняется каждый снимок набора diag.
+DIAG_SCHEMA = os.path.join(ROOT, 'docs', 'compiler', 'diagnostics.schema.json')
 # Сборка Release без санитайзеров — для worker-а онлайн-сервиса и пробника
 # песочницы (tests/worker.py).
 BUILD_RELEASE = os.path.join(ROOT, 'build', 'release')
-DPLANG_RELEASE = os.path.join(BUILD_RELEASE, 'dplang')
+DPL_RELEASE = os.path.join(BUILD_RELEASE, 'dpl')
 PROBE = os.path.join(BUILD_RELEASE, 'dpsandbox_probe')
 TIMEOUT = 60
 RUNTIME = os.path.join(ROOT, 'runtime')
@@ -69,24 +90,32 @@ def args_file(path):
         return shlex.split(f.read())
 
 
+def program_args(path):
+    """run: аргументы программы X.dpm — из X.args рядом, если он есть (os.args)."""
+    a = path[:-len('.dpm')] + '.args'
+    return args_file(a) if os.path.exists(a) else []
+
+
 # Набор → (расширение входа, программа, построитель аргументов по имени входа).
 SUITES = {
-    'cli': ('.args', DPLANG, lambda name, path: args_file(path)),
-    'lex': ('.dpm', DPLANG, lambda name, path: ['debug', 'lex', name]),
-    'parse': ('.dpm', DPLANG, lambda name, path: ['debug', 'parse', name]),
-    'print': ('.dpm', DPLANG, lambda name, path: ['debug', 'print', name]),
-    'sema': ('.dpm', DPLANG, lambda name, path: ['check', name]),
-    'summary': ('.dpm', DPLANG, lambda name, path: ['debug', 'summary', name]),
-    'types': ('.dpm', DPLANG, lambda name, path: ['debug', 'types', name]),
-    'fail': ('.dpm', DPLANG, lambda name, path: ['check', name]),
-    'diag': ('.dpm', DPLANG, lambda name, path: ['check', '--format=json', name]),
-    'ir': ('.dpm', DPLANG, lambda name, path: ['debug', 'ir', name]),
-    'run': ('.dpm', DPLANG, lambda name, path: ['debug', 'run', name]),
+    'cli': ('.args', DPL, lambda name, path: args_file(path)),
+    'lex': ('.dpm', DPL, lambda name, path: ['debug', 'lex', name]),
+    'parse': ('.dpm', DPL, lambda name, path: ['debug', 'parse', name]),
+    'print': ('.dpm', DPL, lambda name, path: ['debug', 'print', name]),
+    'sema': ('.dpm', DPL, lambda name, path: ['check', name]),
+    'summary': ('.dpm', DPL, lambda name, path: ['debug', 'summary', name]),
+    'types': ('.dpm', DPL, lambda name, path: ['debug', 'types', name]),
+    'fail': ('.dpm', DPL, lambda name, path: ['check', name]),
+    'diag': ('.dpm', DPL, lambda name, path: ['check', '--format=json', name]),
+    'ir': ('.dpm', DPL, lambda name, path: ['debug', 'ir', name]),
+    'run': ('.dpm', DPL, lambda name, path: ['debug', 'run', name] + program_args(path)),
+    'fmt': ('.dpm', DPL, lambda name, path: ['fmt', name]),
+    'test': ('.dpm', DPL, lambda name, path: ['test', name]),
     'fuzz': ('.args', DPFUZZ, lambda name, path: args_file(path)),
 }
 # Наборы, где тест может быть каталогом из нескольких модулей: вход —
 # X/main.dpm, ожидаемое — X.out рядом с каталогом.
-DIR_SUITES = {'sema', 'summary', 'types', 'fail', 'ir', 'run'}
+DIR_SUITES = {'sema', 'summary', 'types', 'fail', 'ir', 'run', 'test'}
 # Проход verify: каждая программа наборов понижается в Core IR, и
 # верификатор проверяет её (docs/ir/README.md). Ожидаемого нет: программа
 # с ошибками даёт код 1, без них — 0; внутренняя ошибка и падение — сбой.
@@ -98,7 +127,7 @@ def build_one(build_dir, build_type, sanitize):
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         cxx = os.environ.get('CXX', 'g++')
         r = subprocess.run(['cmake', '-S', SRC, '-B', build_dir, '-G', 'Ninja', f'-DCMAKE_BUILD_TYPE={build_type}',
-                            f'-DDPLANG_SANITIZE={"ON" if sanitize else "OFF"}', f'-DCMAKE_CXX_COMPILER={cxx}'],
+                            f'-DDPL_SANITIZE={"ON" if sanitize else "OFF"}', f'-DCMAKE_CXX_COMPILER={cxx}'],
                            capture_output=True, text=True)
         if r.returncode != 0:
             return 'cmake: ' + (r.stderr or r.stdout).strip()[-2000:]
@@ -135,7 +164,18 @@ def discover(pattern):
                 tests.append((suite, path))
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
     native = [('native', path) for suite, path in tests if suite == 'run']
+    native += [('build', path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
+    deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
+    if os.path.isdir(EXAMPLES):
+        for ex in sorted(os.listdir(EXAMPLES)):
+            if os.path.isdir(os.path.join(EXAMPLES, ex, 'expected')):
+                deep += [('example', f'{ex}/{c}') for c in EXAMPLE_CASES if pattern in f'example/{ex}/{c}']
+    if os.path.isdir(BENCH_TASKS):
+        for t in sorted(os.listdir(BENCH_TASKS)):
+            if os.path.isdir(os.path.join(BENCH_TASKS, t, 'dp')):
+                cases = BENCH_CASES + (('before',) if bench_kind(t) == 'refactor' else ())
+                deep += [('bench', f'{t}/{c}') for c in cases if pattern in f'bench/{t}/{c}']
     wdir = os.path.join(TESTS, 'worker')
     online = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
               if name.endswith('.json') and pattern in 'worker/' + name]
@@ -158,7 +198,194 @@ def prepare_native():
                            capture_output=True, text=True)
         if r.returncode != 0:
             return f'runtime {os.path.relpath(src, ROOT)}: ' + (r.stderr.strip().splitlines() or ['?'])[0]
+    return runtime.prepare(CC, native_flags, NATIVE, runtime_objects(), os.path.join(RUNTIME, 'core'))
+
+
+def runtime_objects():
+    return [os.path.join(NATIVE, os.path.basename(s) + '.o') for s in RUNTIME_SOURCES]
+
+
+def build_native(path, exe, cwd):
+    """Программа path — в нативную exe (debug c из каталога cwd: места в
+    ловушках — пути от него; runtime). None — собрана; 'check' — не проходит
+    проверку; иначе текст ошибки."""
+    name = os.path.relpath(path, cwd)
+    try:
+        r = subprocess.run([DPL, 'debug', 'c', name], capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'debug c: [timeout {TIMEOUT} s]'
+    if r.returncode == 1:
+        return 'check'
+    if r.returncode != 0:
+        return f'debug c: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+    c_path = exe[:-len('.bin')] + '.c'
+    with open(c_path, 'w', encoding='utf-8') as f:
+        f.write(r.stdout)
+    r = subprocess.run([CC] + native_flags + ['-I', os.path.join(RUNTIME, 'core'), c_path] + runtime_objects() +
+                       ['-lm', '-pthread', '-o', exe], capture_output=True, text=True)
+    if r.returncode != 0:
+        errs = [ln for ln in r.stderr.splitlines() if 'error' in ln][:5] or r.stderr.splitlines()[:5]
+        return 'сборка C:\n' + '\n'.join(errs)
     return None
+
+
+def build_pass_one(arg):
+    """Проход build: `dpl build` (профиль debug или --release), запуск,
+    вывод — как у интерпретатора (docs/compiler/cli.md, «build»)."""
+    path, _, profile = arg.partition(' ')
+    cwd = os.path.join(TESTS, 'run')
+    name = os.path.relpath(path, cwd)
+    exe = os.path.join(NATIVE, 'build_' + name.replace(os.sep, '_')[:-len('.dpm')] + ('_release' if profile else ''))
+    argv = [DPL, 'build'] + ([profile] if profile else []) + ['-o', exe, name]
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'build: [timeout {TIMEOUT} s]'
+    if r.returncode == 1:
+        return None  # программа не проходит проверку: её диагностику сверяет набор run
+    if r.returncode != 0:
+        return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+    try:
+        p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
+                           timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'[timeout {TIMEOUT} s]'
+    got = p.stdout
+    if p.stderr:
+        got += '--- stderr ---\n' + p.stderr
+    if p.returncode != 0:
+        got += f'[exit {p.returncode}]\n'
+    with open(expected_path('run', path), encoding='utf-8') as f:
+        want = f.read()
+    if got == want:
+        return None
+    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор', 'build', lineterm='', n=1)
+    return 'вывод расходится с интерпретатором:\n' + '\n'.join(list(diff)[:20])
+
+
+def capture(argv, cwd):
+    """Вывод команды в формате ожидаемого: stdout, stderr, код."""
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'[timeout {TIMEOUT} s]\n'
+    out = r.stdout
+    if r.stderr:
+        out += '--- stderr ---\n' + r.stderr
+    if r.returncode != 0:
+        out += f'[exit {r.returncode}]\n'
+    return out
+
+
+def example_one(case, bless):
+    """Проход example (examples/X/, шаг 12 v0.1): test — отчёт `dpl test`
+    (expected/test.out); run — интерпретатор с аргументами expected/run.args
+    (expected/run.out); build — `dpl build --release` и запуск, вывод тот
+    же; fmt — исходники в каноническом виде."""
+    ex, kind = case.split('/')
+    cwd = os.path.join(EXAMPLES, ex)
+    exp = os.path.join(cwd, 'expected')
+    args = args_file(os.path.join(exp, 'run.args')) if os.path.exists(os.path.join(exp, 'run.args')) else []
+    if kind == 'fmt':
+        srcs = sorted(f for f in os.listdir(cwd) if f.endswith('.dpm'))
+        got = capture([DPL, 'fmt', '--check'] + srcs, cwd)
+        return None if got == '' else 'не в каноническом виде (dpl fmt):\n' + got
+    if kind == 'test':
+        got, want_path = capture([DPL, 'test', 'main.dpm'], cwd), os.path.join(exp, 'test.out')
+    elif kind == 'run':
+        got, want_path = capture([DPL, 'debug', 'run', 'main.dpm'] + args, cwd), os.path.join(exp, 'run.out')
+    else:
+        exe = os.path.join(NATIVE, 'example_' + ex)
+        r = subprocess.run([DPL, 'build', '--release', '-o', exe, 'main.dpm'], capture_output=True, text=True,
+                           timeout=TIMEOUT, cwd=cwd)
+        if r.returncode != 0:
+            return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+        got, want_path = capture([exe] + args, cwd), os.path.join(exp, 'run.out')
+        bless = False  # ожидаемое пишет случай run
+    if bless:
+        with open(want_path, 'w', encoding='utf-8') as f:
+            f.write(got)
+        return None
+    if not os.path.exists(want_path):
+        return f'нет ожидаемого {os.path.relpath(want_path, ROOT)} (--bless)'
+    with open(want_path, encoding='utf-8') as f:
+        want = f.read()
+    if got == want:
+        return None
+    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'ожидалось', 'получено', lineterm='', n=1)
+    return 'вывод расходится:\n' + '\n'.join(list(diff)[:20])
+
+
+def bench_kind(task):
+    path = os.path.join(BENCH_TASKS, task)
+    if os.path.isdir(os.path.join(path, 'before')):
+        return 'refactor'
+    return 'fix' if os.path.exists(os.path.join(path, 'buggy.cpp')) else 'write'
+
+
+def bench_files(task, which):
+    """Модули решения задачи (имя → текст): эталон ref, начальный код start, before."""
+    dp = os.path.join(BENCH_TASKS, task, 'dp')
+    if bench_kind(task) == 'refactor':
+        d = os.path.join(dp, 'before' if which in ('start', 'before') else 'ref')
+        return {n: dp_check.read(os.path.join(d, n)) for n in sorted(os.listdir(d)) if n.endswith('.dpm')}
+    name = 'sol.dpm' if which == 'ref' else ('buggy.dpm' if bench_kind(task) == 'fix' else 'stub.dpm')
+    return {'sol.dpm': dp_check.read(os.path.join(dp, name))}
+
+
+def same_numbers(a, b):
+    """Выводы равны с точностью до записи чисел: слова те же, числа равны как f64."""
+    la, lb = a.splitlines(), b.splitlines()
+    if len(la) != len(lb):
+        return False
+    for x, y in zip(la, lb):
+        wx, wy = x.split(), y.split()
+        if len(wx) != len(wy):
+            return False
+        for u, v in zip(wx, wy):
+            if u == v:
+                continue
+            try:
+                if float(u) != float(v):
+                    return False
+            except ValueError:
+                return False
+    return True
+
+
+def bench_one(case):
+    """Проход bench (bench/tasks/X/dp/, шаг 13 v0.1): ref — эталон с драйвером
+    принимается (bench/dp_check.py), свой dp/expected.txt численно равен
+    expected.txt задачи; start — начальный код для модели не принимается, и
+    отказ ожидаемого рода; before — модули до рефакторинга со старым
+    драйвером дают тот же вывод; fmt — исходники в каноническом виде."""
+    task, kind = case.split('/')
+    path = os.path.join(BENCH_TASKS, task)
+    dp = os.path.join(path, 'dp')
+    if kind == 'fmt':
+        srcs = sorted(os.path.relpath(os.path.join(d, f), dp) for d, _, fs in os.walk(dp) for f in fs if f.endswith('.dpm'))
+        got = capture([DPL, 'fmt', '--check'] + srcs, dp)
+        return None if got == '' else 'не в каноническом виде (dpl fmt):\n' + got
+    want = dp_check.expected(path)
+    if kind == 'ref' and os.path.exists(os.path.join(dp, 'expected.txt')):
+        if not same_numbers(want, dp_check.read(os.path.join(path, 'expected.txt'))):
+            return 'dp/expected.txt не равен expected.txt задачи даже с точностью до записи чисел'
+    driver = dp_check.read(os.path.join(dp, 'before_main.dpm' if kind == 'before' else dp_check.DRIVER))
+    build_dir = os.path.join(NATIVE, 'bench', task, kind)
+    if os.path.isdir(build_dir):
+        shutil.rmtree(build_dir)
+    cls, msg = dp_check.evaluate(bench_files(task, kind), driver, want, build_dir, DPL)
+    if kind == 'start':
+        if cls in BENCH_START[bench_kind(task)]:
+            return None
+        return f'начальный код: «{cls}», ожидалось {"/".join(sorted(BENCH_START[bench_kind(task)]))}: {msg}'
+    return None if cls == dp_check.ACCEPTED else f'«{cls}»: {msg}'
+
+
+def runtime_native(src, exe):
+    """Сборка для прохода runtime: программа без ошибок проверки."""
+    err = build_native(src, exe, os.path.dirname(src))
+    return 'не проходит проверку' if err == 'check' else err
 
 
 def native_one(path):
@@ -166,26 +393,15 @@ def native_one(path):
     cwd = os.path.join(TESTS, 'run')
     name = os.path.relpath(path, cwd)
     flat = name.replace(os.sep, '_')[:-len('.dpm')]
-    try:
-        r = subprocess.run([DPLANG, 'debug', 'c', name], capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
-    except subprocess.TimeoutExpired:
-        return f'debug c: [timeout {TIMEOUT} s]'
-    if r.returncode == 1:
-        return None  # программа не проходит проверку: её диагностику сверяет набор run
-    if r.returncode != 0:
-        return f'debug c: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
-    c_path = os.path.join(NATIVE, flat + '.c')
     exe = os.path.join(NATIVE, flat + '.bin')
-    with open(c_path, 'w', encoding='utf-8') as f:
-        f.write(r.stdout)
-    objs = [os.path.join(NATIVE, os.path.basename(s) + '.o') for s in RUNTIME_SOURCES]
-    r = subprocess.run([CC] + native_flags + ['-I', os.path.join(RUNTIME, 'core'), c_path] + objs +
-                       ['-lm', '-pthread', '-o', exe], capture_output=True, text=True)
-    if r.returncode != 0:
-        errs = [ln for ln in r.stderr.splitlines() if 'error' in ln][:5] or r.stderr.splitlines()[:5]
-        return 'сборка C:\n' + '\n'.join(errs)
+    err = build_native(path, exe, cwd)
+    if err == 'check':
+        return None  # программа не проходит проверку: её диагностику сверяет набор run
+    if err:
+        return err
     try:
-        p = subprocess.run([exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+        p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
+                           timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout
@@ -206,6 +422,8 @@ def suite_dir_of(suite, path):
 
 
 def actual_output(suite, path):
+    if suite == 'fmt':
+        return fmt_one(path)
     ext, program, make_args = SUITES[suite]
     cwd = suite_dir_of(suite, path)
     name = os.path.relpath(path, cwd)
@@ -230,10 +448,40 @@ def expected_path(suite, path):
     return path[:-len(ext)] + '.out'
 
 
+def fmt_one(path):
+    """Набор fmt: `dpl fmt` правит копию входа во временном каталоге.
+    Ожидаемое — текст файла после него, затем вывод и код. Второй прогон
+    `fmt --check` уже ничего не находит (запись неподвижна)."""
+    name = os.path.basename(path)
+    tmp = tempfile.mkdtemp(prefix='dpfmt-')
+    try:
+        shutil.copy(path, os.path.join(tmp, name))
+        try:
+            r = subprocess.run([DPL, 'fmt', name], capture_output=True, text=True, errors='backslashreplace',
+                               timeout=TIMEOUT, cwd=tmp)
+            again = subprocess.run([DPL, 'fmt', '--check', name], capture_output=True, text=True,
+                                   errors='backslashreplace', timeout=TIMEOUT, cwd=tmp)
+        except subprocess.TimeoutExpired:
+            return f'[timeout {TIMEOUT} s]\n'
+        with open(os.path.join(tmp, name), encoding='utf-8', errors='backslashreplace', newline='') as f:
+            out = f.read()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if r.stdout:
+        out += '--- stdout ---\n' + r.stdout
+    if r.stderr:
+        out += '--- stderr ---\n' + r.stderr
+    if r.returncode != 0:
+        out += f'[exit {r.returncode}]\n'
+    if r.returncode == 0 and (again.returncode != 0 or again.stdout or again.stderr):
+        out += f'[fmt --check after fmt: exit {again.returncode}: {again.stdout + again.stderr}]\n'
+    return out
+
+
 def verify_one(path):
     cwd = os.path.dirname(path)
     try:
-        r = subprocess.run([DPLANG, 'debug', 'ir', os.path.basename(path)], capture_output=True, text=True,
+        r = subprocess.run([DPL, 'debug', 'ir', os.path.basename(path)], capture_output=True, text=True,
                            errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'debug ir: [timeout {TIMEOUT} s]'
@@ -247,15 +495,28 @@ def run_one(suite, path, bless):
         return verify_one(path)
     if suite == 'native':
         return native_one(path)
+    if suite == 'build':
+        return build_pass_one(path)
     if suite == 'limits':
-        return limits.check_case(path, DPLANG)
+        return limits.check_case(path, DPL)
+    if suite == 'example':
+        return example_one(path, bless)
+    if suite == 'bench':
+        return bench_one(path)
+    if suite == 'runtime':
+        return runtime.check_case(path, DPL, runtime_native, NATIVE)
     if suite == 'worker':
-        return worker.worker_case(path, DPLANG_RELEASE, bless)
+        return worker.worker_case(path, DPL_RELEASE, bless)
     if suite == 'sandbox':
         return worker.sandbox_case(path, PROBE)
     if suite == 'service':
-        return service.check_case(path, DPLANG_RELEASE)
+        return service.check_case(path, DPL_RELEASE)
     got = actual_output(suite, path)
+    if suite == 'diag':
+        doc = got.split('--- stderr ---\n')[0].split('[exit ')[0]
+        errs = schema.check_text(doc, DIAG_SCHEMA)
+        if errs:
+            return 'вывод не подходит к схеме diagnostics.schema.json: ' + '; '.join(errs[:5])
     exp_path = expected_path(suite, path)
     if bless:
         with open(exp_path, 'w', encoding='utf-8') as f:
@@ -284,15 +545,16 @@ def main():
             print(err)
             return 1
     tests = discover(a.k)
-    if any(suite == 'native' for suite, _ in tests):
+    if any(suite in ('native', 'runtime') for suite, _ in tests):
         err = prepare_native()
         if err:
             print('компилятор: runtime не собирается')
             print(err)
             return 1
-    # Проход native сверяет с ожидаемым набора run — после того, как --bless его перепишет.
-    tests = [t for t in tests if t[0] != 'native'] + [t for t in tests if t[0] == 'native']
-    split = sum(1 for t in tests if t[0] != 'native')
+    # Проходы native и build сверяют с ожидаемым набора run — после того, как --bless его перепишет.
+    late = ('native', 'build', 'example', 'bench')
+    tests = [t for t in tests if t[0] not in late] + [t for t in tests if t[0] in late]
+    split = sum(1 for t in tests if t[0] not in late)
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
         results = list(pool.map(lambda t: run_one(t[0], t[1], a.bless), tests[:split]))
         results += list(pool.map(lambda t: run_one(t[0], t[1], a.bless), tests[split:]))
@@ -304,7 +566,9 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            name = suite + '/' + path if suite in ('limits', 'sandbox', 'service') else os.path.relpath(path, TESTS)
+            name = suite + '/' + path if suite in ('bench', 'example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
+            if suite == 'build':
+                name = 'build/' + os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1
     verb = 'записано ожидаемое' if a.bless else 'прошли'

@@ -77,7 +77,8 @@ struct FnDef {
     std::string name;
     const ModuleInfo* module = nullptr;
     bool pub = false;
-    bool det = false;  // @det (Р12)
+    bool det = false;   // @det (Р12)
+    bool test = false;  // @test (Р50)
     Span span;
     std::vector<ParamDef> params;
     const Type* ret = nullptr;  // Void — без результата
@@ -140,6 +141,7 @@ struct ModuleInfo {
     std::vector<ModuleInfo*> imports;
     std::map<std::string, Symbol> scope;  // свои объявления и имена импортированных модулей
     bool ok = true;                       // разобран без ошибок
+    bool stdlib = false;                  // модуль стандартной библиотеки: ему видны встроенные `__…` (Р51)
 };
 
 // Программа одного запуска: модули в порядке зависимостей (сначала те,

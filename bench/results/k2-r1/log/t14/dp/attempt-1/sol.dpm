@@ -1,0 +1,64 @@
+// t14: параллельная свёртка с детерминированным итогом.
+// Разбиение фиксировано: блоки по 4096 значений; поток w берёт
+// подряд идущие блоки и пишет их суммы только в свою ячейку parts[w].
+// Слияние — по потокам по порядку, то есть по блокам слева направо.
+pub fn parallel_sum(values: []f64, threads: i32) f64 {
+    let n = len(values)
+    let block = 4096
+    let nblocks = (n + block - 1) / block
+    let t: int = threads
+    let empty: List[f64] = []
+    var parts = repeat(empty, t)
+    parallel for w in 0..t {
+        let first = w * nblocks / t
+        let last = (w + 1) * nblocks / t
+        var local: List[f64] = []
+        for b in first..last {
+            let start = b * block
+            let stop = min(start + block, n)
+            var s = 0.0
+            for i in start..stop {
+                s = s + values[i]
+            }
+            local.push(s)
+        }
+        parts[w] = local
+    }
+    var total = 0.0
+    for w2 in 0..t {
+        let part = parts[w2]
+        for x in &part {
+            total = total + x
+        }
+    }
+    return total
+}
+
+// Поток w считает свою подряд идущую часть значений в локальные
+// счётчики и кладёт их в parts[w]; затем счётчики складываются.
+pub fn parallel_histogram(values: []u32, buckets: i32, threads: i32) List[i64] {
+    let n = len(values)
+    let nb: int = buckets
+    let t: int = threads
+    let zero: i64 = 0
+    let counts0 = repeat(zero, nb)
+    var parts = repeat(counts0, t)
+    parallel for w in 0..t {
+        let lo = w * n / t
+        let hi = (w + 1) * n / t
+        var local = repeat(zero, nb)
+        for i in lo..hi {
+            let k = int(values[i]) % nb
+            local[k] = local[k] + 1
+        }
+        parts[w] = local
+    }
+    var result = repeat(zero, nb)
+    for w2 in 0..t {
+        let part = parts[w2]
+        for k2 in 0..nb {
+            result[k2] = result[k2] + part[k2]
+        }
+    }
+    return result
+}

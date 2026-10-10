@@ -1,0 +1,57 @@
+// t07: кратчайший путь на сетке — обход в ширину.
+pub fn shortest_path(rows: []str) ?i32 {
+    let h = len(rows)
+    if h == 0 {
+        return none
+    }
+    let w = len(rows[0])
+    if w == 0 {
+        return none
+    }
+    var start: int = -1
+    var goal: int = -1
+    for r in 0..h {
+        let line = rows[r]
+        for c in 0..w {
+            let b = line[c]
+            if b == 'S' {
+                start = r * w + c
+            } else if b == 'G' {
+                goal = r * w + c
+            }
+        }
+    }
+    if start < 0 || goal < 0 {
+        return none
+    }
+    let unseen: i32 = -1
+    var dist: List[i32] = repeat(unseen, h * w)
+    var queue: List[int] = []
+    let dr: List[int] = [-1, 1, 0, 0]
+    let dc: List[int] = [0, 0, -1, 1]
+    dist[start] = 0
+    queue.push(start)
+    var head: int = 0
+    while head < len(queue) {
+        let cur = queue[head]
+        head += 1
+        let d = dist[cur]
+        if cur == goal {
+            return d
+        }
+        let cr = cur / w
+        let cc = cur % w
+        for k in 0..4 {
+            let nr = cr + dr[k]
+            let nc = cc + dc[k]
+            if nr >= 0 && nr < h && nc >= 0 && nc < w {
+                let ni = nr * w + nc
+                if rows[nr][nc] != '#' && dist[ni] < 0 {
+                    dist[ni] = d + 1
+                    queue.push(ni)
+                }
+            }
+        }
+    }
+    return none
+}

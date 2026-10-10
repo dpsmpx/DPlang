@@ -1,0 +1,65 @@
+// Драйвер t10 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn hex2(b: u8) str {
+    let alphabet = "0123456789abcdef"
+    let hi = i64(b >> 4)
+    let lo = i64(b & 15)
+    return alphabet[hi..hi + 1] + alphabet[lo..lo + 1]
+}
+
+fn hex(bytes: []u8) {
+    var line = ""
+    for i in 0..len(bytes) {
+        if i > 0 {
+            line += " "
+        }
+        line += hex2(bytes[i])
+    }
+    println(line)
+}
+
+fn error_name(e: sol.DecodeError) str {
+    match e {
+        .Truncated => return "Truncated"
+        .BadValue => return "BadValue"
+        .TrailingBytes => return "TrailingBytes"
+    }
+}
+
+fn dec(bytes: []u8) {
+    match sol.decode(bytes) {
+        err(e) => println("decode error " + error_name(e))
+        ok(edits) => {
+            var line = "decode " + str(len(edits)) + ":"
+            for e in &edits {
+                line += " (" + str(e.x) + "," + str(e.y) + "," + str(e.z) + "," + str(e.block) + ")"
+            }
+            println(line)
+        }
+    }
+}
+
+fn edit(x: i32, y: i32, z: i32, block: i32) sol.Edit {
+    return sol.Edit { x, y, z, block }
+}
+
+fn main() {
+    let edits = [edit(0, 0, 0, 1), edit(1, 0, 0, 1), edit(1, 64, -3, 300), edit(-100000, 64, -3, 65535), edit(2147483647, -2147483648, 0, 0)]
+    let bytes = sol.encode(edits)
+    hex(bytes)
+    dec(bytes)
+    let nothing: List[sol.Edit] = []
+    hex(sol.encode(nothing))
+    dec(sol.encode(nothing))
+    dec(bytes[0..len(bytes) - 1])
+    var extra = bytes
+    extra.push(0)
+    dec(extra)
+    let big: List[u8] = [1, 0, 0, 0, 128, 128, 4] // block = 65536
+    dec(big)
+    let long: List[u8] = [1, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 1]
+    dec(long)
+    let empty: List[u8] = []
+    dec(empty)
+}

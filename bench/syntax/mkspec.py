@@ -4,7 +4,7 @@
 Источник — один шаблон bench/syntax/spec_template.md:
 - вставка ⟦AB: текст⟧ попадает только в спецификации перечисленных
   вариантов;
-- блок кода ```dplang пишется в варианте A и печатается в записи
+- блок кода ```dpl пишется в варианте A и печатается в записи
   каждого варианта переводчиком cm.py, поэтому примеры во всех
   спецификациях одни и те же и всегда разбираются;
 - в конце — образцовые программы bench/syntax/samples/*/cm/sol.cm в
@@ -31,7 +31,7 @@ sys.path.insert(0, HERE)
 import cm  # noqa: E402
 
 CHOICE = re.compile(r'⟦([ABC]+): ?(.*?)⟧', re.S)
-CODE = re.compile(r'```dplang\n(.*?)```', re.S)
+CODE = re.compile(r'```dpl\n(.*?)```', re.S)
 HEADER = ('<!-- Сгенерировано bench/syntax/mkspec.py из bench/syntax/spec_template.md '
           'и bench/syntax/samples/; вручную не править. -->\n\n')
 
@@ -69,12 +69,12 @@ def render(variant):
     info = cm.Info(mods)
     printed = iter(cm.print_module(m, variant, info) for m in mods)
     text = CHOICE.sub(lambda m: m.group(2) if variant in m.group(1) else '', text)
-    text = CODE.sub(lambda m: '```dplang\n' + next(printed) + '```', text)
+    text = CODE.sub(lambda m: '```dpl\n' + next(printed) + '```', text)
     parts = [HEADER, text.rstrip('\n'), '\n\n## Приложение. Образцовые программы\n']
     for p in sample_paths():
         smods = cm.load([p], 'A')
         name = os.path.basename(os.path.dirname(os.path.dirname(p)))
-        parts.append(f'\n### {name}\n\n```dplang\n' + cm.print_module(smods[0], variant, cm.Info(smods)) + '```\n')
+        parts.append(f'\n### {name}\n\n```dpl\n' + cm.print_module(smods[0], variant, cm.Info(smods)) + '```\n')
     return ''.join(parts)
 
 

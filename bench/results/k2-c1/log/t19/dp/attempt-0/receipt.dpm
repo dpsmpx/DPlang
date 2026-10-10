@@ -1,0 +1,25 @@
+// Модуль receipt (до рефакторинга): чек.
+import cart
+import catalog
+import money
+
+// Чек: по строке на строку корзины "CODE xQTY SUM"; если скидка не 0 —
+// "discount P% -X"; затем "total T". Пустая корзина — "empty".
+// Строки чека разделены "; ".
+pub fn receipt(k: &cart.Cart, c: &catalog.Catalog) str {
+    if len(k.items) == 0 {
+        return "empty"
+    }
+    var out = ""
+    var sum: i64 = 0
+    for i in 0..len(k.items) {
+        let line = catalog.catalog_price(&c, k.items[i]) * i64(k.qtys[i])
+        sum += line
+        out += catalog.catalog_code(&c, k.items[i]) + " x" + str(k.qtys[i]) + " " + money.fmt_money(line) + "; "
+    }
+    let total = cart.cart_total(&k, &c)
+    if k.discount != 0 {
+        out += "discount " + str(k.discount) + "% " + money.fmt_money(total - sum) + "; "
+    }
+    return out + "total " + money.fmt_money(total)
+}

@@ -1,0 +1,26 @@
+{
+ "run": "k2-m3",
+ "commit": "cc3e1bd220366e0dd9cbae7f1abc6a50fb76994d",
+ "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+ "flags": [
+  "-std=c++20",
+  "-O1",
+  "-pthread",
+  "-Wall",
+  "-Wextra",
+  "-Werror",
+  "-fno-exceptions",
+  "-fno-rtti",
+  "-fsanitize=address,undefined",
+  "-fno-sanitize-recover=all"
+ ],
+ "attempts_max": 5,
+ "agent_model": "claude-opus-5-5",
+ "doc": "guide",
+ "task": "t15_ledger",
+ "id": "t15",
+ "lang": "dp",
+ "kind": "write",
+ "series": true,
+ "created": "2026-10-10T10:17:40"
+}

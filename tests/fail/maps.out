@@ -1,0 +1,50 @@
+--- stderr ---
+maps.dpm:11:16: error[E0424]: a Map key must be an integer, a bool or a str, found 'f64'
+  11 |     var a: Map[f64, i32] = []
+     |                ^~~
+maps.dpm:12:16: error[E0424]: a Map key must be an integer, a bool or a str, found 'P'
+  12 |     var b: Map[P, i32] = []
+     |                ^
+maps.dpm:13:12: error[E0314]: 'Map' takes exactly two type arguments: Map[K, V]
+  13 |     var c: Map[str] = []
+     |            ^~~~~~~~
+maps.dpm:14:28: error[E0401]: a Map literal must be empty: '[]'; add entries with m[k] = v
+  14 |     var d: Map[str, i32] = ["x"]
+     |                            ^~~~~
+maps.dpm:16:15: error[E0422]: values of type 'Map[str, i32]' cannot be compared with '=='
+  16 |     let e = m == m
+     |               ^~
+maps.dpm:17:13: error[E0403]: a Map cannot be sliced; read values with m[k]
+  17 |     let f = m[1..2]
+     |             ^
+maps.dpm:18:15: error[E0401]: expected 'str', found 'i64'
+  18 |     let g = m[3]
+     |               ^
+maps.dpm:19:19: error[E0419]: keys of a Map cannot be changed; iterate with 'for k in &m'
+  19 |     for k in &mut m {
+     |                   ^
+maps.dpm:22:9: error[E0412]: cannot assign to 'm' while 'for ... in &' iterates over its Map; iterate over a copy of the keys: 'for k in &m.keys()'
+  22 |         m["q"] = 1
+     |         ^
+maps.dpm:23:9: error[E0412]: cannot call 'clear' on 'm' while 'for ... in &' iterates over its Map; iterate over a copy of the keys: 'for k in &m.keys()'
+  23 |         m.clear()
+     |         ^
+maps.dpm:24:17: error[E0412]: cannot call 'remove' on 'm' while 'for ... in &' iterates over its Map; iterate over a copy of the keys: 'for k in &m.keys()'
+  24 |         let r = m.remove("q")
+     |                 ^
+maps.dpm:25:21: error[E0412]: cannot mutate 'm' while 'for ... in &' iterates over its Map; iterate over a copy of the keys: 'for k in &m.keys()'
+  25 |         mutate(&mut m)
+     |                     ^
+maps.dpm:26:9: error[E0412]: cannot assign to 'm' while 'for ... in &' iterates over its Map; iterate over a copy of the keys: 'for k in &m.keys()'
+  26 |         m = []
+     |         ^
+maps.dpm:29:7: error[E0410]: 'Map[str, i32]' has no method 'push'
+  29 |     m.push(1)
+     |       ^~~~
+maps.dpm:30:20: error[E0401]: mismatched types 'i64' and '?i32' in '+'; convert one side explicitly
+  30 |     let h = len(m) + m.get(1)
+     |                    ^
+maps.dpm:30:28: error[E0401]: expected 'str', found 'i64'
+  30 |     let h = len(m) + m.get(1)
+     |                            ^
+[exit 1]

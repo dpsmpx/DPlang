@@ -1,4 +1,4 @@
-// Драйвер t04 для переведённых вариантов DPlang (тот же вывод, что у ref.cpp).
+// Драйвер t04 для переведённых вариантов dpl (тот же вывод, что у ref.cpp).
 #include "cm_out.hpp"
 
 static void show(const char* name, Handle h) { std::printf("%s = (%d,%d)\n", name, h.index, h.generation); }

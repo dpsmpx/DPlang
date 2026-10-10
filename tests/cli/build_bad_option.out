@@ -1,0 +1,4 @@
+--- stderr ---
+error: unknown option '--debug'
+run 'dpl help' to list the commands
+[exit 2]

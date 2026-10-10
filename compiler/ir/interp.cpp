@@ -7,6 +7,7 @@
 // (kMaxFrames), переполнение — ловушка.
 #include "ir/interp.h"
 
+#include <cerrno>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
@@ -14,6 +15,7 @@
 #include <tuple>
 
 #include "support/format.h"
+#include "support/utf8.h"
 
 namespace dp::ir {
 
@@ -78,6 +80,19 @@ size_t seq_len(const Value& v) {
 
 const Value& seq_at(const Value& v, size_t i) {
     return v.k == Value::K::Slice ? v.base->items[static_cast<size_t>(v.lo) + i] : v.items[i];
+}
+
+// Map (Р54) — Seq с парами по порядку вставки: items[2i] — ключ, items[2i + 1] —
+// значение. Ключ — целое, bool или str: сравнение без типа. Поиск — перебором:
+// интерпретатор только для тестов (Р43).
+bool key_equal(const Value& a, const Value& b) { return a.k == b.k && (a.k == Value::K::Str ? a.s == b.s : a.i == b.i); }
+
+// Позиция пары ключа в Map или -1.
+int64_t map_find(const Value& m, const Value& key) {
+    for (size_t i = 0; i + 1 < m.items.size(); i += 2) {
+        if (key_equal(m.items[i], key)) return static_cast<int64_t>(i / 2);
+    }
+    return -1;
 }
 
 // Место: значение или байт строки.
@@ -254,7 +269,8 @@ bool parse_int(const std::string& s, int64_t& out) {
 
 class Interp {
 public:
-    Interp(const Program& p, const SourceMap& sources) : p_(p), sources_(sources) {}
+    Interp(const Program& p, const SourceMap& sources, const std::vector<std::string>& args)
+        : p_(p), sources_(sources), args_(args) {}
 
     RunResult run() {
         if (p_.main_fn < 0) {
@@ -273,6 +289,7 @@ public:
 private:
     const Program& p_;
     const SourceMap& sources_;
+    const std::vector<std::string>& args_;  // аргументы программы без её имени (os.args)
     std::deque<Frame> frames_;
     bool stop_ = false;
     RunResult res_;
@@ -354,6 +371,34 @@ private:
                     }
                     r.v = &v.items[pr.sub];
                     break;
+                case ProjKind::MapKey: {
+                    const Value& iv = fr.locals[pr.index];
+                    int64_t i = static_cast<int64_t>(iv.i);
+                    size_t n = v.items.size() / 2;
+                    if (iv.k != Value::K::Int || v.k != Value::K::Seq) {
+                        internal("key position of a non-Map");
+                        return Ref{};
+                    }
+                    if (i < 0 || static_cast<uint64_t>(i) >= n) {
+                        trap("index " + std::to_string(i) + " is out of bounds for length " + std::to_string(n));
+                        return Ref{};
+                    }
+                    r.v = &v.items[2 * static_cast<size_t>(i)];
+                    break;
+                }
+                case ProjKind::MapValue: {
+                    if (v.k != Value::K::Seq) {
+                        internal("value of a non-Map");
+                        return Ref{};
+                    }
+                    int64_t i = map_find(v, fr.locals[pr.index]);
+                    if (i < 0) {
+                        trap("key is not in the map");
+                        return Ref{};
+                    }
+                    r.v = &v.items[2 * static_cast<size_t>(i) + 1];
+                    break;
+                }
                 case ProjKind::Unwrap: case ProjKind::ResultValue: case ProjKind::ResultError: {
                     uint32_t want = pr.kind == ProjKind::ResultValue ? 0 : 1;
                     if (v.k != Value::K::Seq || v.tag != want || v.items.empty()) {
@@ -540,6 +585,7 @@ private:
                 if (v.items.size() > kMaxLen) trap("out of memory");
                 return v;
             }
+            case RvKind::MakeMap: return seq_value(0);
             case RvKind::SliceOf: return slice(fr, rv);
             case RvKind::Intrinsic: return intrinsic(fr, rv);
             case RvKind::Tag: case RvKind::IsSome: case RvKind::IsOk: {
@@ -593,6 +639,43 @@ private:
             return float_value(r);
         }
         return int_op(rv.bin, a.i, b.i, t, op_type(fr, rv.ops[1]));
+    }
+
+    // Проверяемая арифметика (Р53): точный результат в типе t — true и r.
+    static bool checked(Intrinsic k, uint64_t a, uint64_t b, const Type* t, uint64_t& r) {
+        int bits = sema::int_bits(t);
+        if (sema::is_signed(t)) {
+            int64_t sa = static_cast<int64_t>(a), sb = static_cast<int64_t>(b), sr = 0;
+            int64_t min = bits >= 64 ? INT64_MIN : -static_cast<int64_t>(1ull << (bits - 1));
+            bool o = false;
+            switch (k) {
+                case Intrinsic::CheckedAdd: o = __builtin_add_overflow(sa, sb, &sr); break;
+                case Intrinsic::CheckedSub: o = __builtin_sub_overflow(sa, sb, &sr); break;
+                case Intrinsic::CheckedMul: o = __builtin_mul_overflow(sa, sb, &sr); break;
+                case Intrinsic::CheckedDiv:
+                    if (sb == 0 || (sa == min && sb == -1)) return false;
+                    sr = sa / sb;
+                    break;
+                default:  // CheckedNeg
+                    if (sa == min) return false;
+                    sr = -sa;
+                    break;
+            }
+            if (o || !fits_signed(sr, bits)) return false;
+            r = static_cast<uint64_t>(sr);
+            return true;
+        }
+        bool o = false;
+        switch (k) {
+            case Intrinsic::CheckedAdd: o = __builtin_add_overflow(a, b, &r); break;
+            case Intrinsic::CheckedSub: o = __builtin_sub_overflow(a, b, &r); break;
+            case Intrinsic::CheckedMul: o = __builtin_mul_overflow(a, b, &r); break;
+            default:  // CheckedDiv; checked_neg у беззнаковых не проходит проверку типов
+                if (b == 0) return false;
+                r = a / b;
+                break;
+        }
+        return !o && fits_unsigned(r, bits);
     }
 
     Value int_op(BinKind k, uint64_t a, uint64_t b, const Type* t, const Type* bt) {
@@ -805,8 +888,24 @@ private:
         switch (rv.intrinsic) {
             case Intrinsic::Len: {
                 const Value& a = arg(0, s0);
+                if (op_type(fr, rv.ops[0])->kind == TK::Map) return int_value(a.items.size() / 2);
                 return int_value(a.k == Value::K::Str ? a.s.size() : seq_len(a));
             }
+            case Intrinsic::MapGet: case Intrinsic::MapContains: {
+                const Value& m = arg(0, s0);
+                int64_t i = map_find(m, arg(1, s1));
+                if (rv.intrinsic == Intrinsic::MapContains) return bool_value(i >= 0);
+                Value out = seq_value(i >= 0 ? 1 : 0);
+                if (i >= 0) out.items.push_back(m.items[2 * static_cast<size_t>(i) + 1]);
+                return out;
+            }
+            case Intrinsic::MapKeys: {
+                const Value& m = arg(0, s0);
+                Value out = seq_value(0);
+                for (size_t i = 0; i < m.items.size(); i += 2) out.items.push_back(m.items[i]);
+                return out;
+            }
+            case Intrinsic::MapSet: case Intrinsic::MapRemove: case Intrinsic::MapClear: return map_method(fr, rv, ops);
             case Intrinsic::Repeat: {
                 const Value& n = arg(1, s1);
                 const Type* nt = op_type(fr, rv.ops[1]);
@@ -840,6 +939,18 @@ private:
                     return Value{};
                 }
                 return int_value(canon(static_cast<uint64_t>(v < 0 ? -v : v), t));
+            }
+            case Intrinsic::CheckedAdd: case Intrinsic::CheckedSub: case Intrinsic::CheckedMul:
+            case Intrinsic::CheckedDiv: case Intrinsic::CheckedNeg: {
+                const Type* t = rv.type->elem;
+                Value out = seq_value(0);
+                uint64_t r = 0;
+                bool neg = rv.intrinsic == Intrinsic::CheckedNeg;
+                if (checked(rv.intrinsic, arg(0, s0).i, neg ? 0 : arg(1, s1).i, t, r)) {
+                    out.tag = 1;
+                    out.items.push_back(int_value(r));
+                }
+                return out;
             }
             case Intrinsic::ParseInt: {
                 int64_t v = 0;
@@ -914,9 +1025,96 @@ private:
                     a = p + sep.size();
                 }
             }
+            case Intrinsic::ArgsLen: return int_value(args_.size());
+            case Intrinsic::ArgAt: {
+                int64_t i = static_cast<int64_t>(arg(0, s0).i);
+                if (i < 0 || static_cast<uint64_t>(i) >= args_.size()) {
+                    trap("index " + std::to_string(i) + " is out of bounds for length " + std::to_string(args_.size()));
+                    return Value{};
+                }
+                return str_value(args_[static_cast<size_t>(i)]);
+            }
+            case Intrinsic::ReadFile: return read_file(fr, rv, ops[0].s);
             default: break;
         }
         return list_method(fr, rv, ops);
+    }
+
+    // __read_file (Р51): 0 и текст в месте; иначе 1 + номер варианта os.IoError
+    // (NotFound, PermissionDenied, InvalidUtf8, Other); место не меняется.
+    Value read_file(Frame& fr, const Rvalue& rv, const std::string& path) {
+        int code = 0;
+        std::string text;
+        FILE* f = path.find('\0') == std::string::npos ? std::fopen(path.c_str(), "rb") : nullptr;
+        if (!f) {
+            code = errno == ENOENT || errno == ENOTDIR ? 1 : errno == EACCES || errno == EPERM ? 2 : 4;
+            if (path.find('\0') != std::string::npos) code = 1;
+        } else {
+            char buf[65536];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) {
+                text.append(buf, n);
+                if (text.size() > kMaxLen) {
+                    std::fclose(f);
+                    trap("out of memory");
+                    return Value{};
+                }
+            }
+            if (std::ferror(f)) code = 4;  // например, каталог: EISDIR
+            std::fclose(f);
+            for (size_t i = 0; code == 0 && i < text.size();) {
+                uint32_t cp = 0;
+                uint32_t len = decode_utf8(text, i, cp);
+                if (len == 0) code = 3;
+                i += len ? len : 1;
+            }
+        }
+        if (code == 0) {
+            Ref r = resolve(fr, rv.place);
+            if (stop_) return Value{};
+            *r.v = str_value(std::move(text));
+        }
+        return int_value(static_cast<uint64_t>(code));
+    }
+
+    Value map_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place);
+        if (stop_) return Value{};
+        if (r.byte >= 0 || r.v->k != Value::K::Seq) {
+            internal("map method on a non-Map");
+            return Value{};
+        }
+        std::vector<Value>& items = r.v->items;
+        switch (rv.intrinsic) {
+            case Intrinsic::MapSet: {
+                int64_t i = map_find(*r.v, ops[0]);
+                if (i >= 0) {
+                    items[2 * static_cast<size_t>(i) + 1] = std::move(ops[1]);
+                    return Value{};
+                }
+                if (items.size() / 2 >= kMaxLen) {
+                    trap("out of memory");
+                    return Value{};
+                }
+                items.push_back(std::move(ops[0]));
+                items.push_back(std::move(ops[1]));
+                return Value{};
+            }
+            case Intrinsic::MapRemove: {
+                int64_t i = map_find(*r.v, ops[0]);
+                Value out = seq_value(i >= 0 ? 1 : 0);
+                if (i >= 0) {
+                    auto at = items.begin() + 2 * i;
+                    out.items.push_back(std::move(at[1]));
+                    items.erase(at, at + 2);
+                }
+                return out;
+            }
+            case Intrinsic::MapClear: items.clear(); return Value{};
+            default: break;
+        }
+        internal("unknown intrinsic");
+        return Value{};
     }
 
     Value list_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
@@ -988,6 +1186,8 @@ private:
 
 }  // namespace
 
-RunResult run(const Program& p, const SourceMap& sources) { return Interp(p, sources).run(); }
+RunResult run(const Program& p, const SourceMap& sources, const std::vector<std::string>& args) {
+    return Interp(p, sources, args).run();
+}
 
 }  // namespace dp::ir

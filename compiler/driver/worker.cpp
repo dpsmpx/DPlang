@@ -1,4 +1,4 @@
-// Режим `dplang worker` (worker.h).
+// Режим `dpl worker` (worker.h).
 #include "driver/worker.h"
 
 #include <cerrno>

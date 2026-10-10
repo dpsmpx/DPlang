@@ -1,0 +1,4 @@
+// spec: syntax
+fn main( {
+    println("x")
+}

@@ -1,0 +1,34 @@
+// Драйвер t02 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn error_name(e: sol.ParseError) str {
+    match e {
+        .BadKey => return "BadKey"
+        .MissingEquals => return "MissingEquals"
+        .BadValue => return "BadValue"
+    }
+}
+
+fn show(line: str) {
+    match sol.parse_line(line) {
+        err(e) => println("error " + error_name(e))
+        ok(r) => {
+            if let e = r {
+                match e.value {
+                    .Int(v) => println(e.key + " int " + str(v))
+                    .Bool(b) => println(e.key + " bool " + str(b))
+                    .Str(s) => println(e.key + " str [" + s + "]")
+                }
+            } else {
+                println("none")
+            }
+        }
+    }
+}
+
+fn main() {
+    let lines = ["width = 64", "  name=\"stone wall\"   # comment", "", "   # only comment", "enabled = true", "debug=false#x", "offset = -12", "big = 9223372036854775807", "too_big = 9223372036854775808", "min = -9223372036854775808", "Bad = 1", "9x = 1", "key 1", "key", "key = ", "key = truex", "key = \"open", "key = 12 13", "key-x = 1", "n = -92233720368547758080", "a_b2 = \"\""]
+    for line in &lines {
+        show(line)
+    }
+}

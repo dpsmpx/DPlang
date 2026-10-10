@@ -174,7 +174,7 @@ private:
                 path.pop_back();
                 return found;
             }
-            default: return false;  // List и срез хранят элементы отдельно
+            default: return false;  // List, Map и срез хранят элементы отдельно
         }
     }
 
@@ -189,6 +189,10 @@ private:
             case TK::Result:
                 public_type(node, t->elem, what);
                 public_type(node, t->err, what);
+                break;
+            case TK::Map:
+                public_type(node, t->key, what);
+                public_type(node, t->elem, what);
                 break;
             case TK::Struct:
                 if (!t->sdef->pub) {
@@ -261,8 +265,13 @@ private:
     void fn_sig(Resolver& r, FnDef& f) {
         const FnItem* n = f.node;
         for (const Attr& a : n->attrs) {
-            if (a.name == "det") f.det = true;
-            else diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "'");
+            bool& flag = a.name == "det" ? f.det : f.test;
+            if (a.name != "det" && a.name != "test") {
+                diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "'");
+            } else if (flag) {
+                diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' is given twice");
+            }
+            if (a.name == "det" || a.name == "test") flag = true;
         }
         for (const Param& p : n->params) {
             for (const ParamDef& prev : f.params) {
@@ -291,6 +300,14 @@ private:
             }
         } else {
             f.ret = prog_.types.prim(TK::Void);
+        }
+        if (f.test) {
+            bool ok_ret = f.ret->kind == TK::Void || f.ret->kind == TK::Error ||
+                          (f.ret->kind == TK::Result && f.ret->elem->kind == TK::Void);
+            if (!f.params.empty() || !ok_ret) {
+                diags_.error(Code::E0323, f.span,
+                             "test '" + f.name + "' must take no parameters and return nothing or 'E!void'");
+            }
         }
     }
 };

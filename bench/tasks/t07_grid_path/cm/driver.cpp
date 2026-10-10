@@ -1,4 +1,4 @@
-// Драйвер t07 для переведённых вариантов DPlang (тот же вывод, что у ref.cpp).
+// Драйвер t07 для переведённых вариантов dpl (тот же вывод, что у ref.cpp).
 #include "cm_out.hpp"
 
 static void run(const std::vector<std::string>& rows) {

@@ -50,12 +50,13 @@ bool is_scalar(const Type* t) {
 
 bool is_composite(const Type* t) {
     switch (t->kind) {
-        case TK::List: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum: return true;
+        case TK::List: case TK::Map: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum:
+            return true;
         default: return false;
     }
 }
 
-// Имя DPlang в имени C — с длиной впереди: «a» и «__x» дают 1a3__x, а
+// Имя dpl в имени C — с длиной впереди: «a» и «__x» дают 1a3__x, а
 // «a__» и «x» — 3a__1x; без длины оба дали бы одно имя.
 std::string lp(const std::string& s) { return std::to_string(s.size()) + s; }
 
@@ -78,6 +79,7 @@ std::string mangle(const Type* t) {
         case TK::F64: return "f64";
         case TK::Str: return "str";
         case TK::List: return "L_" + mangle(t->elem);
+        case TK::Map: return "M_" + mangle(t->key) + "_" + mangle(t->elem);
         case TK::Slice: return "S_" + mangle(t->elem);
         case TK::Optional: return "O_" + mangle(t->elem);
         case TK::Result: return "R_" + (t->err ? mangle(t->err) : std::string("x")) + "_" + mangle(t->elem);
@@ -171,20 +173,21 @@ std::string drop_of(const Type* t, const std::string& lv) {
 
 class Emitter {
 public:
-    Emitter(const ir::Program& p, const SourceMap& sources) : p_(p), src_(sources) {}
+    Emitter(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>* tests)
+        : p_(p), src_(sources), tests_(tests) {}
 
     CResult run() {
         for (const Function& f : p_.fns) collect(f);
         std::string out;
-        out += "// Сгенерировано C-бэкендом DPlang — не править.\n";
-        out += "#include <math.h>\n#include <string.h>\n\n#include \"dp_rt.h\"\n\n";
+        out += "// Сгенерировано C-бэкендом dpl — не править.\n";
+        out += "#include <math.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n#include \"dp_rt.h\"\n\n";
         out += strings();
         out += type_decls();
         out += helpers();
         for (const Function& f : p_.fns) out += fn_head(f) + ";\n";
         out += "\n";
         for (const Function& f : p_.fns) out += function(f);
-        out += entry();
+        out += tests_ ? test_entry() : entry();
         return CResult{out, errors_};
     }
 
@@ -224,6 +227,7 @@ public:
 private:
     const ir::Program& p_;
     const SourceMap& src_;
+    const std::vector<uint32_t>* tests_ = nullptr;  // сборка тестов: функции-тесты по порядку
     std::vector<std::string> errors_;
     std::vector<const Type*> types_;  // составные типы в порядке определения
     std::set<const Type*> seen_;
@@ -238,6 +242,10 @@ private:
         seen_.insert(t);
         switch (t->kind) {
             case TK::List: case TK::Slice: add_type(t->elem); break;
+            case TK::Map:
+                add_type(t->key);
+                add_type(t->elem);
+                break;
             case TK::Optional: add_type(t->elem); break;
             case TK::Result:
                 add_type(t->elem);
@@ -301,6 +309,10 @@ private:
         std::string out = "struct " + n + " {\n";
         switch (t->kind) {
             case TK::List: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n    int64_t cap;\n"; break;
+            case TK::Map:  // Р54: пары в порядке вставки и хэш-индекс позиций (позиция + 1, 0 — пусто)
+                out += "    " + ctype(t->key) + "* keys;\n    " + ctype(t->elem) +
+                       "* vals;\n    int64_t len;\n    int64_t cap;\n    int64_t* slots;\n    int64_t nslots;\n";
+                break;
             case TK::Slice: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n"; break;
             case TK::Optional: out += "    bool has;\n    " + ctype(t->elem) + " value;\n"; break;
             case TK::Result:
@@ -361,6 +373,9 @@ private:
             }
             if (t->kind == TK::List) def += list_methods(t);
         }
+        for (const Type* t : types_) {
+            if (t->kind == TK::Map) def += map_methods(t);
+        }
         return decl + "\n" + def;
     }
 
@@ -377,6 +392,7 @@ private:
                      eq_of(t->elem, "&a->value", "&b->value") + ";\n";
                 break;
             case TK::Result: b += "    (void)a;\n    (void)b;\n    return true;\n"; break;
+            case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;  // не сравниваются (Р54)
             case TK::Struct:
                 if (t->sdef->fields.empty()) b += "    (void)a;\n    (void)b;\n";
                 for (const sema::FieldDef& f : t->sdef->fields) {
@@ -427,7 +443,7 @@ private:
                 b += "        if (" + lt_of(t->elem, "&b->ptr[i]", "&a->ptr[i]") + ") return false;\n";
                 b += "    }\n    return a->len < b->len;\n";
                 break;
-            case TK::Optional: case TK::Result: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
+            case TK::Optional: case TK::Result: case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
             case TK::Struct: {
                 std::vector<std::pair<const Type*, std::string>> parts;
                 for (const sema::FieldDef& f : t->sdef->fields) parts.push_back({f.type, "f_" + f.name});
@@ -472,6 +488,13 @@ private:
                 }
                 b += "    dp_free(v->ptr);\n";
                 break;
+            case TK::Map:
+                if (ir::needs_drop(t->key) || ir::needs_drop(t->elem)) {
+                    b += "    for (int64_t i = 0; i < v->len; i++) {\n" + drop_line(t->key, "v->keys[i]", "        ") +
+                         drop_line(t->elem, "v->vals[i]", "        ") + "    }\n";
+                }
+                b += "    dp_free(v->keys);\n    dp_free(v->vals);\n    dp_free(v->slots);\n";
+                break;
             case TK::Optional: b += "    if (v->has) {\n" + drop_line(t->elem, "v->value", "        ") + "    }\n"; break;
             case TK::Result:
                 b += "    if (v->is_err) {\n" + drop_line(t->err, "v->err", "        ") + "    } else {\n";
@@ -511,6 +534,18 @@ private:
                 b += "    for (int64_t i = 0; i < v->len; i++) r.ptr[i] = " + copy_of(t->elem, "v->ptr[i]") + ";\n";
                 break;
             }
+            case TK::Map: {
+                std::string kc = ctype(t->key), vc = ctype(t->elem);
+                b += "    " + n + " r = {0};\n";
+                b += "    r.keys = (" + kc + "*)dp_alloc(v->len, sizeof(" + kc + "), NULL);\n";
+                b += "    r.vals = (" + vc + "*)dp_alloc(v->len, sizeof(" + vc + "), NULL);\n";
+                b += "    r.len = v->len;\n    r.cap = v->len;\n    for (int64_t i = 0; i < v->len; i++) {\n";
+                b += "        r.keys[i] = " + copy_of(t->key, "v->keys[i]") + ";\n";
+                b += "        r.vals[i] = " + copy_of(t->elem, "v->vals[i]") + ";\n    }\n";
+                b += "    if (v->nslots > 0) {\n        r.slots = (int64_t*)dp_alloc(v->nslots, sizeof(int64_t), NULL);\n";
+                b += "        memcpy(r.slots, v->slots, (size_t)v->nslots * sizeof(int64_t));\n        r.nslots = v->nslots;\n    }\n";
+                break;
+            }
             case TK::Optional:
                 b += "    " + n + " r = *v;\n    if (v->has) r.value = " + copy_of(t->elem, "v->value") + ";\n";
                 break;
@@ -542,6 +577,87 @@ private:
             default: b += "    " + n + " r = *v;\n"; break;
         }
         return b + "    return r;\n}\n\n";
+    }
+
+    // Хэш ключа Map (Р54): целое и bool — перемешивание, str — FNV-1a (dp_rt.h).
+    static std::string hash_of(const Type* k, const std::string& x) {
+        if (k->kind == TK::Str) return "dp_hash_str(" + x + ")";
+        return "dp_hash_u64((uint64_t)(" + x + "))";
+    }
+
+    // Методы Map (Р54). Поиск — открытая адресация по индексу slots
+    // (заполнен не больше чем наполовину); порядок пар — порядок вставки.
+    std::string map_methods(const Type* t) {
+        std::string n = ctype(t), m = mangle(t), kc = ctype(t->key), vc = ctype(t->elem);
+        std::string km = mangle(t->key), vm = mangle(t->elem);
+        auto drop_stmt = [&](const Type* x, const std::string& lv) {
+            std::string d = drop_of(x, lv);
+            return d.empty() ? std::string() : "    " + d + "\n";
+        };
+        std::string b;
+        b += "DP_INLINE int64_t dp_mfind__" + m + "(const " + n + "* m, const " + kc + "* key) {\n";
+        b += "    if (m->nslots == 0) return -1;\n    uint64_t mask = (uint64_t)m->nslots - 1;\n";
+        b += "    for (uint64_t i = " + hash_of(t->key, "*key") + " & mask;; i = (i + 1) & mask) {\n";
+        b += "        int64_t s = m->slots[i];\n        if (s == 0) return -1;\n";
+        b += "        if (" + eq_of(t->key, "&m->keys[s - 1]", "key") + ") return s - 1;\n    }\n}\n\n";
+        // Индекс заново под len: размер — степень двойки не меньше 2 * len + 2.
+        b += "DP_INLINE void dp_mindex__" + m + "(" + n + "* m, const char* loc) {\n";
+        b += "    int64_t ns = 8;\n    while (ns < 2 * m->len + 2) ns *= 2;\n    dp_free(m->slots);\n";
+        b += "    m->slots = (int64_t*)dp_alloc(ns, sizeof(int64_t), loc);\n";
+        b += "    memset(m->slots, 0, (size_t)ns * sizeof(int64_t));\n    m->nslots = ns;\n";
+        b += "    uint64_t mask = (uint64_t)ns - 1;\n    for (int64_t p = 0; p < m->len; p++) {\n";
+        b += "        uint64_t i = " + hash_of(t->key, "m->keys[p]") + " & mask;\n";
+        b += "        while (m->slots[i] != 0) i = (i + 1) & mask;\n        m->slots[i] = p + 1;\n    }\n}\n\n";
+        // Вставка или замена: ключ и значение отдаются целиком.
+        b += "DP_INLINE void dp_mset__" + m + "(" + n + "* m, " + kc + " key, " + vc + " val, const char* loc) {\n";
+        b += "    int64_t p = dp_mfind__" + m + "(m, &key);\n    if (p >= 0) {\n";
+        b += "    " + drop_stmt(t->key, "key") + "    " + drop_stmt(t->elem, "m->vals[p]");
+        b += "        m->vals[p] = val;\n        return;\n    }\n";
+        b += "    if (m->len == m->cap) {\n        int64_t nc = m->cap ? m->cap * 2 : 4;\n";
+        b += "        if (nc > DP_MAX_BYTES / (int64_t)sizeof(" + kc + ") || nc > DP_MAX_BYTES / (int64_t)sizeof(" + vc +
+             ")) nc = m->len + 1;\n";
+        b += "        m->keys = (" + kc + "*)dp_realloc(m->keys, nc, sizeof(" + kc + "), loc);\n";
+        b += "        m->vals = (" + vc + "*)dp_realloc(m->vals, nc, sizeof(" + vc + "), loc);\n        m->cap = nc;\n    }\n";
+        b += "    m->keys[m->len] = key;\n    m->vals[m->len] = val;\n    m->len++;\n";
+        b += "    if (2 * m->len + 2 > m->nslots) {\n        dp_mindex__" + m + "(m, loc);\n        return;\n    }\n";
+        b += "    uint64_t mask = (uint64_t)m->nslots - 1;\n";
+        b += "    uint64_t i = " + hash_of(t->key, "m->keys[m->len - 1]") + " & mask;\n";
+        b += "    while (m->slots[i] != 0) i = (i + 1) & mask;\n    m->slots[i] = m->len;\n}\n\n";
+        b += "DP_INLINE " + vc + "* dp_mvalue__" + m + "(" + n + "* m, const " + kc + "* key, const char* loc) {\n";
+        b += "    int64_t p = dp_mfind__" + m + "(m, key);\n";
+        b += "    if (p < 0) dp_trap(loc, \"key is not in the map\");\n    return &m->vals[p];\n}\n\n";
+        b += "DP_INLINE " + kc + "* dp_mkey__" + m + "(" + n + "* m, int64_t i, const char* loc) {\n";
+        b += "    return &m->keys[dp_check_index(i, m->len, loc)];\n}\n\n";
+        b += "DP_INLINE bool dp_mcontains__" + m + "(const " + n + "* m, const " + kc + "* key) {\n";
+        b += "    return dp_mfind__" + m + "(m, key) >= 0;\n}\n\n";
+        b += "DP_INLINE void dp_mclear__" + m + "(" + n + "* m) {\n";
+        if (ir::needs_drop(t->key) || ir::needs_drop(t->elem)) {
+            b += "    for (int64_t i = 0; i < m->len; i++) {\n" + drop_stmt(t->key, "m->keys[i]") +
+                 drop_stmt(t->elem, "m->vals[i]") + "    }\n";
+        }
+        b += "    m->len = 0;\n    if (m->nslots > 0) memset(m->slots, 0, (size_t)m->nslots * sizeof(int64_t));\n}\n\n";
+        if (mangled_.count("O_" + vm)) {
+            std::string o = "dp_O_" + vm;
+            b += "DP_INLINE " + o + " dp_mget__" + m + "(const " + n + "* m, const " + kc + "* key) {\n";
+            b += "    " + o + " r = {0};\n    int64_t p = dp_mfind__" + m + "(m, key);\n";
+            b += "    if (p >= 0) {\n        r.has = true;\n        r.value = " + copy_of(t->elem, "m->vals[p]") +
+                 ";\n    }\n    return r;\n}\n\n";
+            // Удаление сохраняет порядок остальных пар: сдвиг и индекс заново — O(n).
+            b += "DP_INLINE " + o + " dp_mremove__" + m + "(" + n + "* m, " + kc + " key, const char* loc) {\n";
+            b += "    " + o + " r = {0};\n    int64_t p = dp_mfind__" + m + "(m, &key);\n" + drop_stmt(t->key, "key");
+            b += "    if (p < 0) return r;\n    r.has = true;\n    r.value = m->vals[p];\n" + drop_stmt(t->key, "m->keys[p]");
+            b += "    memmove(&m->keys[p], &m->keys[p + 1], (size_t)(m->len - 1 - p) * sizeof(" + kc + "));\n";
+            b += "    memmove(&m->vals[p], &m->vals[p + 1], (size_t)(m->len - 1 - p) * sizeof(" + vc + "));\n";
+            b += "    m->len--;\n    dp_mindex__" + m + "(m, loc);\n    return r;\n}\n\n";
+        }
+        if (mangled_.count("L_" + km)) {
+            std::string l = "dp_L_" + km;
+            b += "DP_INLINE " + l + " dp_mkeys__" + m + "(const " + n + "* m) {\n    " + l + " r = {0};\n";
+            b += "    r.ptr = (" + kc + "*)dp_alloc(m->len, sizeof(" + kc + "), NULL);\n    r.len = m->len;\n    r.cap = m->len;\n";
+            b += "    for (int64_t i = 0; i < m->len; i++) r.ptr[i] = " + copy_of(t->key, "m->keys[i]") + ";\n";
+            b += "    return r;\n}\n\n";
+        }
+        return b;
     }
 
     std::string list_methods(const Type* t) {
@@ -598,7 +714,10 @@ private:
     // --- функции программы
 
     std::string function(const Function& f);
+    std::string wrapper(const Function& f, const std::string& name);
+    std::string uses();
     std::string entry();
+    std::string test_entry();
 };
 
 // Перевод одной функции: инструкции — блоками C со своими временными.
@@ -679,6 +798,17 @@ private:
                 case ProjKind::Unwrap: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
                 case ProjKind::ResultValue: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
                 case ProjKind::ResultError: r.expr = "(" + r.expr + ").err"; r.type = t->err; break;
+                case ProjKind::MapKey: case ProjKind::MapValue: {  // Р54
+                    bool key = pr.kind == ProjKind::MapKey;
+                    const Type* et = key ? t->key : t->elem;
+                    std::string ptr = fresh("dp_p");
+                    std::string arg = key ? local_expr(pr.index) : "&(" + local_expr(pr.index) + ")";
+                    line(ctype(et) + "* " + ptr + " = dp_m" + (key ? "key" : "value") + "__" + mangle(t) + "(&(" +
+                         r.expr + "), " + arg + ", " + loc_ + ");");
+                    r.expr = "(*" + ptr + ")";
+                    r.type = et;
+                    break;
+                }
             }
         }
         return r;
@@ -889,6 +1019,12 @@ std::string FnEmitter::cast(const Rvalue& rv) {
 }
 
 std::string FnEmitter::intrinsic(const Rvalue& rv) {
+    if (rv.has_place && rv.intrinsic == Intrinsic::ReadFile) {
+        // __read_file (Р51): путь читается, текст — в место; результат — код.
+        std::string path = operand(rv.ops[0], false);
+        Lv out = place(rv.place);
+        return "dp_read_file(" + path + ", &" + out.expr + ", " + loc_ + ")";
+    }
     if (rv.has_place) {
         // Метод List: операнды — копии, вычисленные до места списка.
         std::vector<std::string> ops;
@@ -904,6 +1040,9 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             case Intrinsic::ListRemove: return "dp_remove__" + m + "(" + l + ", (int64_t)" + ops[0] + ", " + loc_ + ")";
             case Intrinsic::ListClear: return "dp_clear__" + m + "(" + l + ")";
             case Intrinsic::ListSort: return "dp_sort__" + m + "(" + l + ")";
+            case Intrinsic::MapSet: return "dp_mset__" + m + "(" + l + ", " + ops[0] + ", " + ops[1] + ", " + loc_ + ")";
+            case Intrinsic::MapRemove: return "dp_mremove__" + m + "(" + l + ", " + ops[0] + ", " + loc_ + ")";
+            case Intrinsic::MapClear: return "dp_mclear__" + m + "(" + l + ")";
             default: error("unknown list method");
                 return "0";
         }
@@ -933,6 +1072,23 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             if (sema::is_float(t)) return "((" + ctype(t) + ")fabs((double)" + ops[0] + "))";
             return "((" + ctype(t) + ")dp_sabs((int64_t)" + ops[0] + ", " + bits(t) + ", " + tname(t) + ", " + loc_ + "))";
         }
+        case Intrinsic::CheckedAdd: case Intrinsic::CheckedSub: case Intrinsic::CheckedMul:
+        case Intrinsic::CheckedDiv: case Intrinsic::CheckedNeg: {
+            const Type* t = rv.type->elem;
+            bool sg = sema::is_signed(t);
+            const char* fn = rv.intrinsic == Intrinsic::CheckedAdd ? "add"
+                             : rv.intrinsic == Intrinsic::CheckedSub ? "sub"
+                             : rv.intrinsic == Intrinsic::CheckedMul ? "mul"
+                             : rv.intrinsic == Intrinsic::CheckedDiv ? "div" : "neg";
+            std::string cast = sg ? "(int64_t)" : "(uint64_t)";
+            std::string r = fresh("dp_r"), v = fresh("dp_v");
+            line(ctype(rv.type) + " " + r + " = {0};");
+            line(std::string(sg ? "int64_t " : "uint64_t ") + v + " = 0;");
+            std::string args = cast + ops[0] + (rv.intrinsic == Intrinsic::CheckedNeg ? "" : ", " + cast + ops[1]);
+            line(r + ".has = dp_try_" + (sg ? "s" : "u") + fn + "(" + args + ", " + bits(t) + ", &" + v + ");");
+            line("if (" + r + ".has) " + r + ".value = (" + ctype(t) + ")" + v + ";");
+            return r;
+        }
         case Intrinsic::ParseInt: {
             std::string r = fresh("dp_r");
             line(ctype(rv.type) + " " + r + " = {0};");
@@ -952,6 +1108,14 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             line(ctype(et) + " " + x + " = " + ops[1] + ";");
             return "dp_contains__" + mangle(et) + "((" + ops[0] + ").ptr, (" + ops[0] + ").len, &" + x + ")";
         }
+        case Intrinsic::MapGet: case Intrinsic::MapContains: {  // Р54: ключ — во временном, по адресу
+            const Type* mt = op_type(rv.ops[0]);
+            std::string x = fresh("dp_x");
+            line(ctype(mt->key) + " " + x + " = " + ops[1] + ";");
+            const char* fn = rv.intrinsic == Intrinsic::MapGet ? "dp_mget__" : "dp_mcontains__";
+            return fn + mangle(mt) + "(&" + ops[0] + ", &" + x + ")";
+        }
+        case Intrinsic::MapKeys: return "dp_mkeys__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ")";
         case Intrinsic::StrTrim: return "dp_str_trim(" + ops[0] + ")";
         case Intrinsic::StrFind: {
             std::string r = fresh("dp_r");
@@ -961,6 +1125,8 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         }
         case Intrinsic::StrStartsWith: return "dp_str_starts_with(" + ops[0] + ", " + ops[1] + ")";
         case Intrinsic::StrSplit: return "dp_split__" + mangle(rv.type) + "(" + ops[0] + ", " + ops[1] + ", " + loc_ + ")";
+        case Intrinsic::ArgsLen: return "dp_args_len()";
+        case Intrinsic::ArgAt: return "dp_arg((int64_t)" + ops[0] + ", " + loc_ + ")";
         default: break;
     }
     error("unknown intrinsic");
@@ -996,6 +1162,7 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             }
             return r;
         }
+        case RvKind::MakeMap: return "((" + ctype(rv.type) + "){0})";
         case RvKind::MakeList: {
             std::vector<std::string> ops;
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
@@ -1177,35 +1344,67 @@ std::string Emitter::function(const Function& f) {
     return fe.run();
 }
 
+// Обёртка функции без параметров (main или тест) для dp_run: вызывает её
+// и возвращает имя варианта ошибки «E.V» или NULL.
+std::string Emitter::wrapper(const Function& f, const std::string& name) {
+    std::string out;
+    const Type* ret = f.ret;
+    if (ret->kind == TK::Result) {
+        const Type* e = ret->err;
+        out += "static const char* const " + name + "_err[] = {";
+        for (const sema::VariantDef& v : e->edef->variants) out += cstr(e->edef->name + "." + v.name) + ", ";
+        out += "NULL};\n\n";
+        out += "static const char* " + name + "(void) {\n    " + ctype(ret) + " r = " + fn_name(f) + "();\n";
+        out += "    const char* e = NULL;\n    if (r.is_err) e = " + name + "_err[r.err.tag];\n";
+        std::string d = drop_of(ret, "r");
+        if (!d.empty()) out += "    " + d + "\n";
+        out += "    return e;\n}\n\n";
+    } else {
+        out += "static const char* " + name + "(void) {\n    " + fn_name(f) + "();\n    return NULL;\n}\n\n";
+    }
+    return out;
+}
+
+std::string Emitter::uses() {
+    std::string out;
+    for (size_t i = 0; i < p_.strings.size(); i++) out += "    (void)dp_s" + std::to_string(i) + ";\n";
+    return out;
+}
+
 std::string Emitter::entry() {
     if (p_.main_fn < 0) {
         error("the program has no main function");
         return "";
     }
-    const Function& m = p_.fns[static_cast<size_t>(p_.main_fn)];
+    std::string out = wrapper(p_.fns[static_cast<size_t>(p_.main_fn)], "dp_entry");
+    out += "int main(int argc, char** argv) {\n" + uses() + "    dp_set_args(argc, argv);\n    return dp_run(dp_entry);\n}\n";
+    return out;
+}
+
+// Вход сборки тестов (Р50): `программа N` исполняет тест номер N, без
+// аргумента — печатает их число.
+std::string Emitter::test_entry() {
     std::string out;
-    const Type* ret = m.ret;
-    std::string uses;
-    for (size_t i = 0; i < p_.strings.size(); i++) uses += "    (void)dp_s" + std::to_string(i) + ";\n";
-    if (ret->kind == TK::Result) {
-        const Type* e = ret->err;
-        out += "static const char* const dp_errname[] = {";
-        for (const sema::VariantDef& v : e->edef->variants) out += cstr(e->edef->name + "." + v.name) + ", ";
-        out += "NULL};\n\n";
-        out += "static const char* dp_entry(void) {\n" + uses + "    " + ctype(ret) + " r = " + fn_name(m) + "();\n";
-        out += "    const char* e = NULL;\n    if (r.is_err) e = dp_errname[r.err.tag];\n";
-        std::string d = drop_of(ret, "r");
-        if (!d.empty()) out += "    " + d + "\n";
-        out += "    return e;\n}\n\n";
-    } else {
-        out += "static const char* dp_entry(void) {\n" + uses + "    " + fn_name(m) + "();\n    return NULL;\n}\n\n";
-    }
-    out += "int main(void) { return dp_run(dp_entry); }\n";
+    for (size_t i = 0; i < tests_->size(); i++) out += wrapper(p_.fns[(*tests_)[i]], "dp_test" + std::to_string(i));
+    out += "static const dp_entry_fn dp_tests[] = {";
+    for (size_t i = 0; i < tests_->size(); i++) out += "dp_test" + std::to_string(i) + ", ";
+    out += "NULL};\n\n";
+    out += "int main(int argc, char** argv) {\n" + uses();
+    out += "    long n = " + std::to_string(tests_->size()) + ";\n";
+    out += "    if (argc < 2) {\n        printf(\"%ld\\n\", n);\n        return 0;\n    }\n";
+    out += "    char* end = NULL;\n    long i = strtol(argv[1], &end, 10);\n";
+    out += "    if (*argv[1] == 0 || *end != 0 || i < 0 || i >= n) return 2;\n";
+    out += "    dp_set_args(1, argv);  /* у теста нет аргументов программы */\n";
+    out += "    return dp_run_test(dp_tests[i]);\n}\n";
     return out;
 }
 
 }  // namespace
 
-CResult emit_c(const ir::Program& p, const SourceMap& sources) { return Emitter(p, sources).run(); }
+CResult emit_c(const ir::Program& p, const SourceMap& sources) { return Emitter(p, sources, nullptr).run(); }
+
+CResult emit_c_tests(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>& tests) {
+    return Emitter(p, sources, &tests).run();
+}
 
 }  // namespace dp::backend_c

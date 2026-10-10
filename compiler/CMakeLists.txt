@@ -1,17 +1,17 @@
-# Компилятор DPlang (Р34: C++20 в подмножестве VoxelRPG — без исключений
+# Компилятор dpl (Р34: C++20 в подмножестве VoxelRPG — без исключений
 # и RTTI, без внешних зависимостей). Сборка и тесты — docs/compiler/README.md.
 cmake_minimum_required(VERSION 3.20)
-project(dplang CXX)
+project(dpl CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(DPLANG_SANITIZE "Собрать компилятор с ASan и UBSan" OFF)
+option(DPL_SANITIZE "Собрать компилятор с ASan и UBSan" OFF)
 
 add_compile_options(-fno-exceptions -fno-rtti -Wall -Wextra -Wpedantic -Werror)
-if(DPLANG_SANITIZE)
+if(DPL_SANITIZE)
     add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address,undefined)
 endif()
@@ -48,8 +48,8 @@ target_include_directories(dpcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Threads REQUIRED)
 
-add_executable(dplang driver/main.cpp driver/big_stack.cpp driver/sandbox.cpp driver/worker.cpp)
-target_link_libraries(dplang PRIVATE dpcore Threads::Threads)
+add_executable(dpl driver/main.cpp driver/big_stack.cpp driver/build.cpp driver/sandbox.cpp driver/worker.cpp)
+target_link_libraries(dpl PRIVATE dpcore Threads::Threads)
 
 # Пробник песочницы worker-а: запирается и пробует запрещённое
 # (tests/service, docs/service/README.md, «Изоляция»).

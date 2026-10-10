@@ -1,0 +1,26 @@
+// Драйвер t12 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn run(v: []i32, w: i32) {
+    let r = sol.moving_average(v, w)
+    var line = "w=" + str(w) + " n=" + str(len(r)) + ":"
+    for x in &r {
+        line += " " + str(x)
+    }
+    println(line)
+}
+
+fn main() {
+    let a: List[i32] = [1, 2, 3, 4, 5]
+    run(a, 2)
+    run(a, 5)
+    run(a, 6)
+    let b: List[i32] = [1, 2, 3]
+    run(b, 0)
+    let c: List[i32] = [-5, -4, 7, 8]
+    run(c, 3)
+    let d: List[i32] = [2147483647, 2147483647, 2147483647]
+    run(d, 2)
+    let e: List[i32] = []
+    run(e, 1)
+}

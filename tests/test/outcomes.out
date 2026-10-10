@@ -1,0 +1,14 @@
+test outcomes.divides ... ok
+test outcomes.divides_ok ... ok
+test outcomes.zero_fails ... FAILED
+test outcomes.traps ... FAILED
+
+--- outcomes.zero_fails (exit 1)
+error: test failed with CalcError.DivByZero
+
+--- outcomes.traps (exit 101)
+before the trap
+outcomes.dpm:34:13: trap: index 1 is out of bounds for length 0
+
+test result: FAILED. 2 passed; 2 failed
+[exit 1]

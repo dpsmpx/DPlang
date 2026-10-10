@@ -1,0 +1,155 @@
+// t17: перенос и выравнивание текста.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+// Слова строки: цепочки байт без пробела.
+fn words_of(line: str) List[str] {
+    var ws: List[str] = []
+    let parts = line.split(" ")
+    for i in 0..len(parts) {
+        if len(parts[i]) > 0 {
+            ws.push(parts[i])
+        }
+    }
+    return ws
+}
+
+// Жадное заполнение абзаца: каждая строка — список слов.
+fn fill(words: List[str], w: int) List[List[str]] {
+    var lines: List[List[str]] = []
+    var cur: List[str] = []
+    var curlen = 0
+    for i in 0..len(words) {
+        let word = words[i]
+        let wl = len(word)
+        if wl <= w {
+            if len(cur) == 0 {
+                cur.push(word)
+                curlen = wl
+            } else if curlen + 1 + wl <= w {
+                cur.push(word)
+                curlen += 1 + wl
+            } else {
+                lines.push(cur)
+                cur = []
+                cur.push(word)
+                curlen = wl
+            }
+        } else {
+            if len(cur) > 0 {
+                lines.push(cur)
+            }
+            var rest = word
+            while len(rest) > w {
+                var piece: List[str] = []
+                piece.push(rest[..w - 1] + "-")
+                lines.push(piece)
+                rest = rest[w - 1..]
+            }
+            cur = []
+            cur.push(rest)
+            curlen = len(rest)
+        }
+    }
+    if len(cur) > 0 {
+        lines.push(cur)
+    }
+    return lines
+}
+
+fn spaces(n: int) str {
+    var s = ""
+    var k = 0
+    while k < n {
+        s += " "
+        k += 1
+    }
+    return s
+}
+
+fn join_words(ws: List[str]) str {
+    var s = ""
+    for i in 0..len(ws) {
+        if i > 0 {
+            s += " "
+        }
+        s += ws[i]
+    }
+    return s
+}
+
+fn render(ws: List[str], w: int, align: Align, last: bool) str {
+    let plain = join_words(ws)
+    let pl = len(plain)
+    if align == .Right {
+        return spaces(w - pl) + plain
+    }
+    if align == .Center {
+        return spaces((w - pl) / 2) + plain
+    }
+    if align == .Justify && !last && len(ws) > 1 {
+        var letters = 0
+        for i in 0..len(ws) {
+            letters += len(ws[i])
+        }
+        let gaps = len(ws) - 1
+        let extra = w - letters
+        let base = extra / gaps
+        let rem = extra % gaps
+        var s = ws[0]
+        for j in 1..len(ws) {
+            var g = base
+            if j - 1 < rem {
+                g += 1
+            }
+            s += spaces(g) + ws[j]
+        }
+        return s
+    }
+    return plain
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    if width < 2 || width > 200 {
+        fail .BadWidth
+    }
+    let w = int(width)
+    var paras: List[List[str]] = []
+    var cur: List[str] = []
+    let rows = text.split("\n")
+    for r in 0..len(rows) {
+        let ws = words_of(rows[r])
+        if len(ws) == 0 {
+            if len(cur) > 0 {
+                paras.push(cur)
+                cur = []
+            }
+        } else {
+            for k in 0..len(ws) {
+                cur.push(ws[k])
+            }
+        }
+    }
+    if len(cur) > 0 {
+        paras.push(cur)
+    }
+    var out: List[str] = []
+    for p in 0..len(paras) {
+        if p > 0 {
+            out.push("")
+        }
+        let lines = fill(paras[p], w)
+        for q in 0..len(lines) {
+            out.push(render(lines[q], w, align, q == len(lines) - 1))
+        }
+    }
+    return out
+}

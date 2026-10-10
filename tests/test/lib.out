@@ -1,0 +1,5 @@
+test shapes.rect_area ... ok
+test shapes.calls_test ... ok
+test main.areas ... ok
+
+test result: ok. 3 passed; 0 failed

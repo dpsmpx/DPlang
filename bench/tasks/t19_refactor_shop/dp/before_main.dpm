@@ -1,0 +1,102 @@
+// Драйвер t19 до рефакторинга (скрыт от модели): старый интерфейс.
+// Лежит рядом с модулями из before/.
+import cart
+import catalog
+import money
+import receipt
+
+fn price(s: str) {
+    let v = money.parse_money(s)
+    if v < 0 {
+        println("price " + s + ": bad")
+    } else {
+        println("price " + s + ": " + money.fmt_money(v))
+    }
+}
+
+fn add_item(c: &mut catalog.Catalog, code: str, p: str) {
+    let item = catalog.catalog_add(&mut c, code, money.parse_money(p))
+    if item < 0 {
+        println("catalog " + code + ": duplicate")
+    } else {
+        println("catalog " + code + ": item " + str(item))
+    }
+}
+
+fn find(c: &catalog.Catalog, code: str) {
+    let item = catalog.catalog_find(&c, code)
+    if item < 0 {
+        println("find " + code + ": none")
+    } else {
+        println("find " + code + ": " + catalog.catalog_code(&c, item) + " at " + money.fmt_money(catalog.catalog_price(&c, item)))
+    }
+}
+
+fn code_text(r: i32, minus1: str) str {
+    if r == 0 {
+        return "ok"
+    }
+    if r == -1 {
+        return minus1
+    }
+    return "bad quantity"
+}
+
+fn add(k: &mut cart.Cart, c: &catalog.Catalog, code: str, qty: i32) {
+    let r = cart.cart_add(&mut k, &c, code, qty)
+    println("add " + code + " " + str(qty) + ": " + code_text(r, "unknown item") + " | " + receipt.receipt(&k, &c))
+}
+
+fn remove(k: &mut cart.Cart, c: &catalog.Catalog, code: str, qty: i32) {
+    let r = cart.cart_remove(&mut k, &c, code, qty)
+    println("remove " + code + " " + str(qty) + ": " + code_text(r, "not in cart") + " | " + receipt.receipt(&k, &c))
+}
+
+fn discount(k: &mut cart.Cart, c: &catalog.Catalog, percent: i32) {
+    var what = "bad discount"
+    if cart.cart_discount(&mut k, percent) {
+        what = "ok"
+    }
+    println("discount " + str(percent) + ": " + what + " | total " + money.fmt_money(cart.cart_total(&k, &c)))
+}
+
+fn main() {
+    let prices: List[str] = ["0.45", "12.00", "007.10", "3.5", "1.234", "-1.00", ".99", "1234567890123.00", "123456789012.99", "1,00", ""]
+    for s in &prices {
+        price(s)
+    }
+    var c = catalog.Catalog { items: [] }
+    add_item(&mut c, "apple", "0.45")
+    add_item(&mut c, "bread", "2.10")
+    add_item(&mut c, "cheese", "7.99")
+    add_item(&mut c, "apple", "9.99")
+    add_item(&mut c, "gum", "0.05")
+    find(&c, "cheese")
+    find(&c, "milk")
+    var k = cart.Cart { items: [], qtys: [] }
+    println(receipt.receipt(&k, &c))
+    add(&mut k, &c, "apple", 3)
+    add(&mut k, &c, "bread", 1)
+    add(&mut k, &c, "milk", 1)
+    add(&mut k, &c, "milk", 0)
+    add(&mut k, &c, "cheese", 0)
+    add(&mut k, &c, "cheese", 2)
+    add(&mut k, &c, "apple", 2)
+    remove(&mut k, &c, "bread", 2)
+    remove(&mut k, &c, "milk", 1)
+    remove(&mut k, &c, "gum", 1)
+    remove(&mut k, &c, "apple", 0)
+    discount(&mut k, &c, 60)
+    discount(&mut k, &c, -1)
+    discount(&mut k, &c, 10)
+    remove(&mut k, &c, "bread", 1)
+    add(&mut k, &c, "bread", 4)
+    remove(&mut k, &c, "apple", 5)
+    discount(&mut k, &c, 50)
+    var small = cart.Cart { items: [], qtys: [] }
+    add(&mut small, &c, "gum", 1)
+    discount(&mut small, &c, 50)
+    println(receipt.receipt(&small, &c))
+    discount(&mut small, &c, 0)
+    remove(&mut small, &c, "gum", 1)
+}

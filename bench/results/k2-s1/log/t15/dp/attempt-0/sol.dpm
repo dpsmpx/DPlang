@@ -1,0 +1,12 @@
+// t15: заготовка — напишите тела функций по task.md.
+pub struct Ledger {
+    // поля — на ваш выбор
+}
+
+pub fn ledger_new() Ledger {
+    // ...
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    // ...
+}

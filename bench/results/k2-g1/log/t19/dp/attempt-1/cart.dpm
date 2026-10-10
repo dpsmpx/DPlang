@@ -1,0 +1,73 @@
+// Модуль cart (после рефакторинга): корзина.
+import catalog
+
+pub struct CartLine {
+    item: catalog.ItemId
+    qty: i32
+}
+
+// Строки — в порядке первого добавления.
+pub struct Cart {
+    lines: List[CartLine]
+    discount_percent: i32 = 0
+}
+
+pub enum CartError {
+    UnknownItem
+    NotInCart
+    BadQuantity
+    BadDiscount
+}
+
+fn line_of(cart: &Cart, item: catalog.ItemId) ?int {
+    for i in 0..len(cart.lines) {
+        if cart.lines[i].item.index == item.index {
+            return i
+        }
+    }
+    return none
+}
+
+// Кладёт qty штук товара code (к его строке, если она есть).
+// Ошибки: UnknownItem — нет такого товара; BadQuantity — qty < 1.
+pub fn cart_add(cart: &mut Cart, c: &catalog.Catalog, code: str, qty: i32) CartError!void {
+    if let item = catalog.catalog_find(&c, code) {
+        if qty < 1 {
+            fail .BadQuantity
+        }
+        if let li = line_of(&cart, item) {
+            cart.lines[li].qty += qty
+        } else {
+            cart.lines.push(CartLine { item, qty })
+        }
+        return
+    }
+    fail .UnknownItem
+}
+
+// Убирает qty штук; строка с 0 штук удаляется.
+// Ошибки: NotInCart — товара нет в корзине; BadQuantity — qty < 1 или больше, чем лежит.
+pub fn cart_remove(cart: &mut Cart, c: &catalog.Catalog, code: str, qty: i32) CartError!void {
+    var line: int = -1
+    if let item = catalog.catalog_find(&c, code) {
+        line = line_of(&cart, item) ?? -1
+    }
+    if line < 0 {
+        fail .NotInCart
+    }
+    if qty < 1 || qty > cart.lines[line].qty {
+        fail .BadQuantity
+    }
+    cart.lines[line].qty -= qty
+    if cart.lines[line].qty == 0 {
+        _ = cart.lines.remove(line)
+    }
+}
+
+// Скидка от 0 до 50 процентов; иначе ошибка BadDiscount (скидка не меняется).
+pub fn cart_discount(cart: &mut Cart, percent: i32) CartError!void {
+    if percent < 0 || percent > 50 {
+        fail .BadDiscount
+    }
+    cart.discount_percent = percent
+}

@@ -1,3 +1,19 @@
+// Каноническая печать модуля — `dpl fmt` (docs/compiler/cli.md, «fmt»).
+//
+// Код печатается по AST в одном формате (Р7). Комментарии и пустые
+// строки берутся из токенов дерева без потерь:
+// - комментарий на своей строке стоит перед следующим элементом своего
+//   контейнера (объявление, поле, вариант, инструкция, ветвь match) или
+//   в конце контейнера, с отступом элементов;
+// - комментарий после кода — в конце той же строки: строки элемента или
+//   открывающей скобки;
+// - комментарий внутри элемента, но вне вложенных блоков (например, в
+//   многострочном выражении), печатается своей строкой перед элементом;
+// - пустые строки между элементами сохраняются, не больше одной подряд;
+//   между объявлениями модуля пустая строка есть всегда (кроме
+//   соседних import).
+// Ни один комментарий не теряется и не повторяется: это проверяет круг
+// `debug parse` и фаззер.
 #include "syntax/printer.h"
 
 #include "syntax/ast_dump.h"
@@ -8,32 +24,174 @@ namespace {
 
 using namespace ast;
 
+struct Comment {
+    uint32_t begin = 0, end = 0;
+    bool printed = false;
+};
+
 class Printer {
 public:
-    explicit Printer(std::string_view source) : src_(source) {}
+    Printer(const Module& m, std::string_view source) : m_(m), src_(source) {
+        for (const Token& t : m.tokens) {
+            if (t.kind == TokKind::Comment) comments_.push_back(Comment{t.begin, t.end});
+        }
+    }
     std::string out;
 
-    void module(const Module& m) {
-        const Item* prev = nullptr;
-        for (const Item* it : m.items) {
-            if (prev && !(prev->kind == ItemKind::Import && it->kind == ItemKind::Import)) out += '\n';
-            item(it);
-            prev = it;
+    void module() {
+        const auto& items = m_.items;
+        Lines lines{0, LinesMode::Module};
+        for (size_t i = 0; i < items.size(); i++) {
+            const Item* it = items[i];
+            bool blank = i > 0 && !(items[i - 1]->kind == ItemKind::Import && it->kind == ItemKind::Import);
+            element(lines, it->span, blank, [&] { item(it); });
         }
+        tail(lines, static_cast<uint32_t>(src_.size()));
     }
 
 private:
+    const Module& m_;
     std::string_view src_;
+    std::vector<Comment> comments_;
 
     std::string_view source_of(const Node* n) const { return src_.substr(n->span.begin, n->span.end - n->span.begin); }
     void pad(int d) { out.append(static_cast<size_t>(d) * 4, ' '); }
+
+    // --- комментарии и пустые строки
+
+    std::string_view comment_text(const Comment& c) const {
+        std::string_view t = src_.substr(c.begin, c.end - c.begin);
+        while (!t.empty() && (t.back() == ' ' || t.back() == '\t' || t.back() == '\r')) t.remove_suffix(1);
+        return t;
+    }
+
+    // Между a и b в исходнике есть пустая строка.
+    bool blank_between(uint32_t a, uint32_t b) const {
+        int newlines = 0;
+        for (uint32_t i = a; i < b && i < src_.size(); i++) {
+            char c = src_[i];
+            if (c == '\n') {
+                if (++newlines == 2) return true;
+            } else if (c != ' ' && c != '\t' && c != '\r') {
+                newlines = 0;
+            }
+        }
+        return false;
+    }
+
+    bool same_line(uint32_t a, uint32_t b) const {
+        if (a > b) std::swap(a, b);
+        for (uint32_t i = a; i < b && i < src_.size(); i++) {
+            if (src_[i] == '\n') return false;
+        }
+        return true;
+    }
+
+    // Комментарии после кода на строке, где кончается offset (до конца
+    // строки): печатаются в конце текущей строки вывода.
+    void trailing(uint32_t offset, uint32_t& last_end) {
+        for (Comment& c : comments_) {
+            if (c.printed || c.begin < offset) continue;
+            if (!same_line(offset, c.begin)) break;
+            out += " ";
+            out += comment_text(c);
+            c.printed = true;
+            last_end = c.end;
+        }
+    }
+
+    enum class LinesMode : uint8_t { Module, Lines };
+
+    // Ряд элементов контейнера: отступ, режим и конец последнего
+    // напечатанного элемента (для пустых строк).
+    struct Lines {
+        int indent = 0;
+        LinesMode mode = LinesMode::Lines;
+        uint32_t from = 0;  // начало контейнера: комментарии раньше — не его
+        bool any = false;
+        uint32_t last_end = 0;
+    };
+
+    // Комментарии своими строками перед offset (ведущие).
+    void own_line(Lines& l, uint32_t upto, bool blank_first) {
+        for (Comment& c : comments_) {
+            if (c.printed || c.begin < l.from || c.begin >= upto) continue;
+            bool blank = l.any && (blank_between(l.last_end, c.begin) || blank_first);
+            blank_first = false;
+            if (blank) out += '\n';
+            pad(l.indent);
+            out += comment_text(c);
+            out += '\n';
+            c.printed = true;
+            l.any = true;
+            l.last_end = c.end;
+        }
+    }
+
+    // Элемент контейнера: ведущие комментарии, комментарии внутри него вне
+    // вложенных блоков, сам элемент, комментарий в конце его строки.
+    template <class F>
+    void element(Lines& l, Span span, bool blank_rule, F print) {
+        bool had_lead = false;
+        for (const Comment& c : comments_) had_lead = had_lead || (!c.printed && c.begin >= l.from && c.begin < span.begin);
+        // Пустая строка по правилу модуля — перед ведущими комментариями.
+        own_line(l, span.begin, blank_rule && l.mode == LinesMode::Module);
+        std::string saved;
+        saved.swap(out);
+        pad(l.indent);
+        print();
+        std::string body;
+        body.swap(out);
+        out.swap(saved);
+        bool blank = l.any && (blank_between(l.last_end, span.begin) ||
+                               (blank_rule && l.mode == LinesMode::Module && !had_lead));
+        bool strays = false;
+        for (Comment& c : comments_) {
+            if (c.printed || c.begin < span.begin || c.begin >= span.end) continue;
+            if (!strays && blank) out += '\n';
+            strays = true;
+            pad(l.indent);
+            out += comment_text(c);
+            out += '\n';
+            c.printed = true;
+        }
+        if (blank && !strays) out += '\n';
+        out += body;
+        l.last_end = span.end;
+        trailing(span.end, l.last_end);
+        out += '\n';
+        l.any = true;
+    }
+
+    // Комментарии в конце контейнера (до закрывающей скобки или конца файла).
+    void tail(Lines& l, uint32_t close) { own_line(l, close, false); }
+
+    // Комментарий на строке открывающей скобки.
+    void after_open(uint32_t brace, Lines& l) {
+        l.from = brace + 1;
+        l.last_end = brace + 1;
+        trailing(brace + 1, l.last_end);
+    }
+
+    // Первая «{» в участке [from, to) исходника — по токенам.
+    uint32_t brace_after(uint32_t from, uint32_t to) const {
+        for (const Token& t : m_.tokens) {
+            if (t.begin >= from && t.begin < to && t.kind == TokKind::LBrace) return t.begin;
+        }
+        return from;
+    }
+
+    // --- объявления
 
     void item(const Item* it) {
         std::string pub = it->pub ? "pub " : "";
         switch (it->kind) {
             case ItemKind::Fn: {
                 auto* f = static_cast<const FnItem*>(it);
-                for (const Attr& a : f->attrs) out += "@" + a.name + "\n";
+                for (size_t i = 0; i < f->attrs.size(); i++) {
+                    if (i) pad(0);
+                    out += "@" + f->attrs[i].name + "\n";
+                }
                 out += pub + "fn " + f->name + "(";
                 for (size_t i = 0; i < f->params.size(); i++) {
                     const Param& p = f->params[i];
@@ -47,52 +205,54 @@ private:
                 if (f->ret) out += " " + type_text(f->ret);
                 out += " ";
                 block(f->body, 0);
-                out += '\n';
                 break;
             }
             case ItemKind::Struct: {
                 auto* s = static_cast<const StructItem*>(it);
-                out += pub + "struct " + s->name + " {\n";
-                for (const FieldDecl& f : s->fields) {
-                    pad(1);
-                    field(f);
-                    out += '\n';
-                }
-                out += "}\n";
+                out += pub + "struct " + s->name + " {";
+                Lines l{1, LinesMode::Lines};
+                after_open(brace_after(s->name_span.end, s->span.end), l);
+                out += '\n';
+                for (const FieldDecl& f : s->fields) element(l, f.span, false, [&] { field(f); });
+                tail(l, s->span.end);
+                out += "}";
                 break;
             }
             case ItemKind::Enum: {
                 auto* e = static_cast<const EnumItem*>(it);
-                out += pub + "enum " + e->name + " {\n";
-                for (const VariantDecl& v : e->variants) {
-                    pad(1);
-                    out += v.name;
-                    if (v.form == VariantForm::Tuple) {
-                        out += "(";
-                        for (size_t i = 0; i < v.types.size(); i++) out += (i ? ", " : "") + type_text(v.types[i]);
-                        out += ")";
-                    } else if (v.form == VariantForm::Record) {
-                        out += " { ";
-                        for (size_t i = 0; i < v.fields.size(); i++) {
-                            if (i) out += ", ";
-                            field(v.fields[i]);
-                        }
-                        out += " }";
-                    }
-                    out += '\n';
-                }
-                out += "}\n";
+                out += pub + "enum " + e->name + " {";
+                Lines l{1, LinesMode::Lines};
+                after_open(brace_after(e->name_span.end, e->span.end), l);
+                out += '\n';
+                for (const VariantDecl& v : e->variants) element(l, v.span, false, [&] { variant(v); });
+                tail(l, e->span.end);
+                out += "}";
                 break;
             }
             case ItemKind::Const: {
                 auto* c = static_cast<const ConstItem*>(it);
                 out += pub + "const " + c->name + ": " + type_text(c->type) + " = ";
                 expr(c->value);
-                out += '\n';
                 break;
             }
-            case ItemKind::Import: out += "import " + it->name + "\n"; break;
+            case ItemKind::Import: out += "import " + it->name; break;
             case ItemKind::Error: break;
+        }
+    }
+
+    void variant(const VariantDecl& v) {
+        out += v.name;
+        if (v.form == VariantForm::Tuple) {
+            out += "(";
+            for (size_t i = 0; i < v.types.size(); i++) out += (i ? ", " : "") + type_text(v.types[i]);
+            out += ")";
+        } else if (v.form == VariantForm::Record) {
+            out += " { ";
+            for (size_t i = 0; i < v.fields.size(); i++) {
+                if (i) out += ", ";
+                field(v.fields[i]);
+            }
+            out += " }";
         }
     }
 
@@ -105,18 +265,22 @@ private:
     }
 
     // Блок с текущей позиции: «{», инструкции с отступом d + 1, «}».
-    void block(const Block* b, int d) {
-        if (!b || b->stmts.empty()) {
-            out += "{\n";
-            pad(d);
-            out += "}";
+    void block(const ast::Block* b, int d) {
+        bool empty = !b || b->stmts.empty();
+        for (const Comment& c : comments_) {
+            if (b && !c.printed && c.begin > b->span.begin && c.begin < b->span.end) empty = false;
+        }
+        if (empty) {  // пустой блок без комментариев — `{}`
+            out += "{}";
             return;
         }
-        out += "{\n";
-        for (const Stmt* s : b->stmts) {
-            pad(d + 1);
-            stmt(s, d + 1);
-            out += '\n';
+        out += "{";
+        Lines l{d + 1, LinesMode::Lines};
+        if (b) after_open(b->span.begin, l);
+        out += '\n';
+        if (b) {
+            for (const Stmt* s : b->stmts) element(l, s->span, false, [&] { stmt(s, d + 1); });
+            tail(l, b->span.end > 0 ? b->span.end - 1 : 0);
         }
         pad(d);
         out += "}";
@@ -169,14 +333,18 @@ private:
                 auto* m = static_cast<const MatchStmt*>(s);
                 out += "match ";
                 expr(m->subject);
-                out += " {\n";
+                out += " {";
+                Lines l{d + 1, LinesMode::Lines};
+                after_open(brace_after(m->subject ? m->subject->span.end : m->span.begin, m->span.end), l);
+                out += '\n';
                 for (const MatchArm& a : m->arms) {
-                    pad(d + 1);
-                    pat(a.pat);
-                    out += " => ";
-                    stmt(a.body, d + 1);
-                    out += '\n';
+                    element(l, a.span, false, [&] {
+                        pat(a.pat);
+                        out += " => ";
+                        stmt(a.body, d + 1);
+                    });
                 }
+                tail(l, m->span.end > 0 ? m->span.end - 1 : 0);
                 pad(d);
                 out += "}";
                 break;
@@ -388,9 +556,20 @@ private:
 }  // namespace
 
 std::string print_module(const Module& m, std::string_view source) {
-    Printer p(source);
-    p.module(m);
+    Printer p(m, source);
+    p.module();
     return p.out;
+}
+
+std::vector<std::string> comment_texts(const Module& m, std::string_view source) {
+    std::vector<std::string> out;
+    for (const Token& t : m.tokens) {
+        if (t.kind != TokKind::Comment) continue;
+        std::string_view s = source.substr(t.begin, t.end - t.begin);
+        while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r')) s.remove_suffix(1);
+        out.emplace_back(s);
+    }
+    return out;
 }
 
 }  // namespace dp

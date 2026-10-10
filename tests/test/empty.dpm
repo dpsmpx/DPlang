@@ -1,0 +1,4 @@
+// spec: module.test
+fn main() {
+    println("no tests here")
+}

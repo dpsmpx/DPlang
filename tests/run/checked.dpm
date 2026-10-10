@@ -1,0 +1,45 @@
+// spec: builtin.functions trap.int
+const MAX: i64 = 9223372036854775807
+const MIN: i64 = -9223372036854775807 - 1
+
+fn show(name: str, v: ?i64) {
+    if let x = v {
+        println(name + " = " + str(x))
+    } else {
+        println(name + " = none")
+    }
+}
+
+fn main() {
+    show("add 1 2", checked_add(1, 2))
+    show("add MAX 1", checked_add(MAX, 1))
+    show("add MIN -1", checked_add(MIN, -1))
+    show("add MAX MIN", checked_add(MAX, MIN))
+    show("sub MIN 1", checked_sub(MIN, 1))
+    show("sub 0 MIN", checked_sub(0, MIN))
+    show("sub -1 MIN", checked_sub(-1, MIN))
+    show("mul 3037000499 3037000499", checked_mul(3037000499, 3037000499))
+    show("mul 3037000500 3037000500", checked_mul(3037000500, 3037000500))
+    show("mul MIN -1", checked_mul(MIN, -1))
+    show("mul MIN 1", checked_mul(MIN, 1))
+    show("mul -1 MIN", checked_mul(-1, MIN))
+    show("div 7 -2", checked_div(7, -2))
+    show("div -7 2", checked_div(-7, 2))
+    show("div 1 0", checked_div(1, 0))
+    show("div MIN -1", checked_div(MIN, -1))
+    show("neg MIN", checked_neg(MIN))
+    show("neg MAX", checked_neg(MAX))
+    let a: i32 = 2147483647
+    let b: i32 = 1
+    println("i32 add: " + str(checked_add(a, b) == none) + " " + str(checked_add(a, -b) ?? 0))
+    let c: i8 = -128
+    println("i8 neg: " + str(checked_neg(c) == none) + " mul: " + str(checked_mul(c, i8(-1)) == none) + " " +
+        str(checked_mul(i8(-64), i8(2)) ?? 0))
+    let u: u8 = 200
+    println("u8 add: " + str(checked_add(u, u8(55)) ?? 0) + " " + str(checked_add(u, u8(56)) == none))
+    println("u8 sub: " + str(checked_sub(u8(3), u8(4)) == none) + " mul: " + str(checked_mul(u8(16), u8(16)) == none))
+    let big: u64 = 18446744073709551615
+    println("u64 add: " + str(checked_add(big, u64(1)) == none) + " div: " + str(checked_div(big, u64(0)) == none))
+    let w = checked_add(a, b) ?? a
+    println("fallback " + str(w))
+}

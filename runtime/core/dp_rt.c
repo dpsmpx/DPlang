@@ -1,8 +1,9 @@
-/* Runtime DPlang: ядро без зависимости от платформы (docs/runtime/README.md).
+/* Runtime dpl: ядро без зависимости от платформы (docs/runtime/README.md).
  * Тексты ловушек совпадают с эталонным интерпретатором
  * (compiler/ir/interp.cpp): различающие тесты сравнивают вывод байт в байт. */
 #include "dp_rt.h"
 
+#include <errno.h>
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
@@ -80,7 +81,10 @@ void dp_free(void* p) { free(p); }
  *
  * Тот же алгоритм, что compiler/support/format.h: кратчайшая запись,
  * читаемая обратно в то же число (у f32 — в то же f32); обычная форма при
- * десятичном порядке от −4 до 15, без хвоста `.0`, иначе экспоненциальная. */
+ * десятичном порядке от −4 до 15, без хвоста `.0`, иначе экспоненциальная.
+ * Для каждой длины p проверяются правильно округлённая p-значная запись и
+ * её соседи на единицу последнего разряда: у степеней двойки промежуток
+ * округления несимметричен, и читаться обратно может только сосед. */
 
 /* double → float с округлением к ближайшему, как в IEEE 754, без
  * неопределённого поведения C у значений вне диапазона float. */
@@ -93,6 +97,15 @@ static float dp_to_f32(double x) {
         return x < 0 ? -r : r;
     }
     return (float)x;
+}
+
+/* Десятичное d·10^k читается обратно в v (у f32 — strtof: без двойного
+ * округления через double). */
+static bool dp_reads_back(uint64_t d, int k, double v, bool f32) {
+    char buf[48];
+    snprintf(buf, sizeof buf, "%" PRIu64 "e%d", d, k);
+    if (f32) return strtof(buf, NULL) == dp_to_f32(v);
+    return strtod(buf, NULL) == v;
 }
 
 static void dp_format_float(double v, bool f32, char* out, size_t cap) {
@@ -108,23 +121,43 @@ static void dp_format_float(double v, bool f32, char* out, size_t cap) {
         snprintf(out, cap, "%s", signbit(v) ? "-0" : "0");
         return;
     }
-    char buf[48];
+    bool neg = v < 0;
+    double a = fabs(v);
+    uint64_t d = 0;
+    int k = 0;
     for (int p = 1; p <= 17; p++) {
-        snprintf(buf, sizeof buf, "%.*e", p - 1, v);
-        double back = strtod(buf, NULL);
-        if (f32 ? dp_to_f32(back) == (float)v : back == v) break;
+        char buf[48];
+        snprintf(buf, sizeof buf, "%.*e", p - 1, a);
+        /* buf: d[.ddd]e±XX — p цифр и десятичный порядок первой. */
+        d = 0;
+        const char* c = buf;
+        for (; *c != 'e'; c++) {
+            if (*c != '.') d = d * 10 + (uint64_t)(*c - '0');
+        }
+        k = atoi(c + 1) - (p - 1);
+        if (dp_reads_back(d, k, a, f32)) break;
+        uint64_t low = 1;
+        for (int i = 1; i < p; i++) low *= 10; /* у 1.00…0 сосед снизу — 9.99…9 порядком ниже */
+        uint64_t below = d == low ? d * 10 - 1 : d - 1;
+        int below_k = d == low ? k - 1 : k;
+        if (dp_reads_back(below, below_k, a, f32)) {
+            d = below;
+            k = below_k;
+            break;
+        }
+        if (dp_reads_back(d + 1, k, a, f32)) {
+            d = d + 1;
+            break;
+        }
     }
-    /* buf: [-]d[.ddd]e±XX — цифры и десятичный порядок. */
-    bool neg = buf[0] == '-';
-    char* e = strchr(buf, 'e');
     char digits[24];
-    size_t nd = 0;
-    for (char* c = buf + (neg ? 1 : 0); c < e; c++) {
-        if (*c != '.') digits[nd++] = *c;
+    snprintf(digits, sizeof digits, "%" PRIu64, d);
+    size_t nd = strlen(digits);
+    while (nd > 1 && digits[nd - 1] == '0') {
+        digits[--nd] = 0;
+        k++;
     }
-    while (nd > 1 && digits[nd - 1] == '0') nd--;
-    digits[nd] = 0;
-    int exp = atoi(e + 1);
+    int exp = k + (int)nd - 1; /* десятичный порядок первой цифры */
     char* o = out;
     char* end = out + cap - 1;
 #define DP_PUT(ch) \
@@ -338,6 +371,96 @@ void dp_eprintln(dp_str s) {
     fflush(stdout);
     if (s.len) fwrite(s.ptr, 1, (size_t)s.len, stderr);
     fputc('\n', stderr);
+}
+
+/* --- аргументы программы и файлы (Р51) */
+
+static int dp_argc;
+static char** dp_argv;
+
+void dp_set_args(int argc, char** argv) {
+    dp_argc = argc;
+    dp_argv = argv;
+}
+
+int64_t dp_args_len(void) { return dp_argc > 1 ? dp_argc - 1 : 0; }
+
+dp_str dp_arg(int64_t i, const char* loc) {
+    dp_check_index(i, dp_args_len(), loc);
+    const char* a = dp_argv[i + 1];
+    return dp_str_own((const uint8_t*)a, (int64_t)strlen(a), loc);
+}
+
+bool dp_utf8_valid(const uint8_t* p, int64_t n) {
+    int64_t i = 0;
+    while (i < n) {
+        uint8_t c = p[i];
+        int len;
+        uint32_t cp, min;
+        if (c < 0x80) {
+            i++;
+            continue;
+        }
+        if ((c & 0xE0) == 0xC0) {
+            len = 2, min = 0x80, cp = c & 0x1F;
+        } else if ((c & 0xF0) == 0xE0) {
+            len = 3, min = 0x800, cp = c & 0x0F;
+        } else if ((c & 0xF8) == 0xF0) {
+            len = 4, min = 0x10000, cp = c & 0x07;
+        } else {
+            return false;
+        }
+        if (i + len > n) return false;
+        for (int k = 1; k < len; k++) {
+            if ((p[i + k] & 0xC0) != 0x80) return false;
+            cp = (cp << 6) | (p[i + k] & 0x3F);
+        }
+        if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false;
+        i += len;
+    }
+    return true;
+}
+
+int32_t dp_read_file(dp_str path, dp_str* out, const char* loc) {
+    /* Путь — строка C: байт 0 внутри пути не называет никакого файла. */
+    if (path.len > 0 && memchr(path.ptr, 0, (size_t)path.len)) return 1;
+    char* name = (char*)dp_alloc(path.len + 1, 1, loc);
+    if (path.len) memcpy(name, path.ptr, (size_t)path.len);
+    name[path.len] = 0;
+    FILE* f = fopen(name, "rb");
+    int err = errno;
+    dp_free(name);
+    if (!f) return err == ENOENT || err == ENOTDIR ? 1 : err == EACCES || err == EPERM ? 2 : 4;
+    uint8_t* buf = NULL;
+    int64_t len = 0, cap = 0;
+    for (;;) {
+        if (len == cap) {
+            if (cap >= DP_MAX_BYTES) {
+                fclose(f);
+                dp_free(buf);
+                dp_trap(loc, "out of memory");
+            }
+            cap = cap ? (cap > DP_MAX_BYTES / 2 ? DP_MAX_BYTES : cap * 2) : 65536;
+            buf = (uint8_t*)dp_realloc(buf, cap, 1, loc);
+        }
+        size_t n = fread(buf + len, 1, (size_t)(cap - len), f);
+        len += (int64_t)n;
+        if (n == 0) break;
+    }
+    int bad = ferror(f);
+    fclose(f);
+    if (bad || !dp_utf8_valid(buf, len)) {
+        dp_free(buf);
+        return bad ? 4 : 3;
+    }
+    dp_str_drop(out);
+    if (len == 0) {
+        dp_free(buf);
+        return 0;
+    }
+    out->ptr = (uint8_t*)dp_realloc(buf, len, 1, loc);
+    out->len = len;
+    return 0;
 }
 
 /* --- индексы и срезы (trap.index) */

@@ -1,0 +1,21 @@
+// t10: заготовка — напишите тела функций по task.md.
+pub struct Edit {
+    x: i32
+    y: i32
+    z: i32
+    block: i32
+}
+
+pub enum DecodeError {
+    Truncated
+    BadValue
+    TrailingBytes
+}
+
+pub fn encode(edits: []Edit) List[u8] {
+    // ...
+}
+
+pub fn decode(bytes: []u8) DecodeError!List[Edit] {
+    // ...
+}

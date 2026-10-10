@@ -1,4 +1,4 @@
-# Компилятор DPlang: устройство и сборка
+# Компилятор dpl: устройство и сборка
 
 Описание устройства компилятора v0.1 (`ROADMAP/IMPLEMENTATION.md`).
 Целевая архитектура — `docs/design/ARCHITECTURE.md`; решения — Р34
@@ -8,14 +8,14 @@
 ## Сборка
 
 ```sh
-cmake -S compiler -B build/compiler -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDPLANG_SANITIZE=ON
-cmake --build build/compiler     # → build/compiler/dplang
+cmake -S compiler -B build/compiler -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDPL_SANITIZE=ON
+cmake --build build/compiler     # → build/compiler/dpl
 ```
 
 Так собирает и исполнитель тестов; вторая его сборка — `build/release/`
 (Release без санитайзеров) для worker-а онлайн-сервиса. Флаги для всех файлов: C++20, без
 исключений и RTTI, `-Wall -Wextra -Wpedantic -Werror`. Опция
-`DPLANG_SANITIZE` добавляет ASan и UBSan — для тестов и проверок.
+`DPL_SANITIZE` добавляет ASan и UBSan — для тестов и проверок.
 Внешних зависимостей нет. Компилятор C++ — `$CXX` или `g++`. `clang++`
 тоже собирает; в контейнере сессии — без санитайзеров, у clang там нет
 библиотек ASan.
@@ -30,7 +30,7 @@ cmake --build build/compiler     # → build/compiler/dplang
 | `compiler/ir/` | Core IR (`ir.h`), понижение AST → IR (`lower.h`), верификатор (`verify.h`), эталонный интерпретатор (`interp.h`), текстовая запись (`dump.h`); устройство — `docs/ir/README.md` |
 | `compiler/backend_c/` | C-бэкенд: Core IR → C11 (`emit_c.h`); устройство — `docs/compiler/backend_c.md` |
 | `compiler/api/` | общий вход компиляции (`compile.h`): CLI, фаззер и worker онлайн-сервиса проверяют программу через него; контракт онлайн-сервиса v1 (`contract.h`) |
-| `compiler/driver/` | CLI `dplang` (`main.cpp`); поток с большим стеком (`big_stack.h`); `dplang worker` (`worker.h`) и его песочница seccomp (`sandbox.h`), пробник песочницы `dpsandbox_probe` |
+| `compiler/driver/` | CLI `dpl` (`main.cpp`); поток с большим стеком (`big_stack.h`); `dpl worker` (`worker.h`) и его песочница seccomp (`sandbox.h`), пробник песочницы `dpsandbox_probe` |
 | `compiler/fuzz/` | фаззер «не падает» `dpfuzz`: лексер, парсер, проверка, контракт онлайн-сервиса |
 | `runtime/` | runtime на C11 для сгенерированного C: ядро `core/`, вход под Linux `linux/`; устройство — `docs/runtime/README.md` |
 | `tests/` | наборы золотых тестов и их исполнитель `tests/run.py` |
@@ -162,8 +162,9 @@ path/file.dpm:3:13: error[E0101]: unterminated string literal
 
 Машиночитаемый вид — JSON `{"diagnostics": [...]}`. У каждого сообщения
 есть поля `severity`, `code`, `message`, `file`, `line`, `col`,
-`end_line`, `end_col` и `notes`. Схема — `docs/compiler/cli.md` (шаг 10).
-Коды объясняет `dplang explain <код>`.
+`end_line`, `end_col` и `notes`. Схема — `docs/compiler/diagnostics.schema.json`,
+описание команд — `docs/compiler/cli.md`.
+Коды объясняет `dpl explain <код>`.
 
 ## Тесты
 
@@ -183,28 +184,30 @@ python3 tests/run.py -k cli       # отбор по подстроке пути
 
 | набор | вход | команда |
 |---|---|---|
-| `cli` | `X.args` — аргументы | `dplang <аргументы>` |
-| `lex` | `X.dpm` | `dplang debug lex X.dpm` — токены без пробелов |
-| `parse` | `X.dpm` | `dplang debug parse X.dpm` — дамп AST и проверка круга; ошибки грамматики и восстановление |
-| `print` | `X.dpm` | `dplang debug print X.dpm` — каноническая печать реальных программ (решения набора v0.0 в записи B) |
-| `sema` | `X.dpm` или каталог `X/` с `main.dpm` | `dplang check` — модули, имена, сводки; ожидаемое — диагностика |
-| `summary` | то же | `dplang debug summary` — сводки модулей программы |
-| `types` | то же | `dplang debug types` — AST главного модуля с типами и неявными преобразованиями |
-| `fail` | то же | `dplang check` — отказ компиляции: у каждого кода E04xx и E05xx — хотя бы один случай |
-| `diag` | `X.dpm` | `dplang check --format=json` — снимки машиночитаемой диагностики |
-| `ir` | `X.dpm` или каталог `X/` с `main.dpm` | `dplang debug ir` — золотые дампы Core IR после верификатора |
-| `run` | то же | `dplang debug run` — исполнение эталонным интерпретатором: вывод, ловушки, код выхода |
+| `cli` | `X.args` — аргументы | `dpl <аргументы>` |
+| `lex` | `X.dpm` | `dpl debug lex X.dpm` — токены без пробелов |
+| `parse` | `X.dpm` | `dpl debug parse X.dpm` — дамп AST и проверка круга; ошибки грамматики и восстановление |
+| `print` | `X.dpm` | `dpl debug print X.dpm` — каноническая печать реальных программ (решения набора v0.0 в записи B) |
+| `sema` | `X.dpm` или каталог `X/` с `main.dpm` | `dpl check` — модули, имена, сводки; ожидаемое — диагностика |
+| `summary` | то же | `dpl debug summary` — сводки модулей программы |
+| `types` | то же | `dpl debug types` — AST главного модуля с типами и неявными преобразованиями |
+| `fail` | то же | `dpl check` — отказ компиляции: у каждого кода E04xx и E05xx — хотя бы один случай |
+| `diag` | `X.dpm` | `dpl check --format=json` — снимки машиночитаемой диагностики |
+| `ir` | `X.dpm` или каталог `X/` с `main.dpm` | `dpl debug ir` — золотые дампы Core IR после верификатора |
+| `run` | то же | `dpl debug run` — исполнение эталонным интерпретатором: вывод, ловушки, код выхода |
+| `fmt` | `X.dpm` | `dpl fmt` на копии файла — текст после записи, вывод и код; повторный `fmt --check` ничего не находит |
+| `test` | `X.dpm` или каталог `X/` с `main.dpm` | `dpl test` — отчёт тестов `@test` (Р50) |
 | `fuzz` | `X.args` — аргументы | `dpfuzz lex\|parse\|check\|contract <аргументы>`: корпус — файлы `.dpm` наборов, зерно и число входов заданы; `check` — разбор и проверка без падений, программы без ошибок ещё понижаются и проходят верификатор; `contract` — тела запросов `tests/worker/*.json`: ответ контракта v1 — JSON нужного вида, не больше предела, тот же при повторе |
 
 Проход `verify` — не набор, а проверка всех программ `.dpm` наборов:
-`dplang debug ir` на каждой. Программа с ошибками даёт код 1, без них — 0;
+`dpl debug ir` на каждой. Программа с ошибками даёт код 1, без них — 0;
 внутренняя ошибка или падение — сбой. Так верификатор Core IR проходит
 по всем тестам (`docs/policy/TESTING.md`, раздел 2).
 
 Проход `limits` — предел вложенности (`tests/limits.py`), по тесту на
 конструкцию: скобки, унарные и бинарные операторы, постфиксы, вызовы,
 блоки, `else if`, списки, типы `List[…]`, образцы. Наибольшая принятая
-глубина n ищется делением пополам по `dplang check`. На n все команды
+глубина n ищется делением пополам по `dpl check`. На n все команды
 проходят без падения и сообщений санитайзеров, на n + 1 — ровно одно
 E0002. У списков и типов на n — только `check` и `debug parse`: вывод
 `debug types`, `ir` и `c` у глубоких типов растёт квадратично
@@ -213,7 +216,7 @@ E0002. У списков и типов на n — только `check` и `debug
 Проходы `worker` и `sandbox` — онлайн-сервис (`tests/worker.py`). Они
 идут на второй сборке — Release без санитайзеров (`build/release/`): под
 ASan worker не запускается. `worker` — золотые тесты контракта v1: тело
-запроса `tests/worker/X.json` идёт в stdin `dplang worker` с пределами
+запроса `tests/worker/X.json` идёт в stdin `dpl worker` с пределами
 тестового профиля, ожидаемое — `X.out`. `X.args` заменяет пределы.
 Каждый тест идёт дважды, ответы должны совпасть байт в байт. `sandbox` —
 `dpsandbox_probe`: разрешённое работает, каждое запрещённое действие
@@ -221,10 +224,36 @@ ASan worker не запускается. `worker` — золотые тесты 
 сигналы) убивает процесс сигналом SIGSYS.
 
 Проход `native` — различающие тесты C-бэкенда: каждая программа набора
-`run` переводится `dplang debug c`, собирается с runtime компилятором C
+`run` переводится `dpl debug c`, собирается с runtime компилятором C
 (`$CC` или `cc`, с ASan и UBSan, если они есть) и запускается. Вывод
 сверяется с тем же ожидаемым, что у интерпретатора. Подробно —
 `docs/compiler/backend_c.md`, раздел 7.
+
+Проход `build` — каждая программа набора `run` собирается командой
+`dpl build` в профилях `debug` и `release`, запускается, и её вывод
+сверяется с ожидаемым интерпретатора (`docs/compiler/cli.md`, раздел 3).
+
+Проход `runtime` — тесты runtime по функциям (`tests/runtime.py`,
+`tests/runtime/rt_test.c`): граничные значения, каждая ловушка
+отдельным запуском, вход `dp_run` и запись плавающих против образца,
+вычисленного точной арифметикой. Подробно — `docs/runtime/README.md`,
+раздел 9.
+
+Проход `example` — программы `examples/X/` с каталогом `expected/`: их
+тесты `dpl test`, запуск интерпретатором, сборка `--release` с тем же
+выводом и канонический вид (`examples/tomlcheck/README.md`, «Проверки»).
+
+Проход `bench` — эталонный набор задач на dpl (`bench/tasks/X/dp/`,
+`bench/tasks/README.md`). Проверка решения — `bench/dp_check.py`, та же,
+что у опыта (`bench/experiment.py`, язык `dp`): модули решения и скрытый
+драйвер `main.dpm` собираются `dpl build`, вывод сверяется с
+ожидаемым. Случаи задачи: `ref` — эталон принимается; `start` —
+начальный код для модели не принимается, и отказ ожидаемого рода
+(заготовка — ошибка сборки, код с ошибками — вывод или ловушка, модули до
+рефакторинга — интерфейс); `before` (рефакторинг) — модули до него со
+старым драйвером дают тот же вывод; `fmt` — исходники в каноническом
+виде. Свой `dp/expected.txt` (запись `f64` — кратчайшая, Р48) должен быть
+численно равен `expected.txt` задачи.
 
 Наборы добавляются вместе с шагами (`docs/policy/TESTING.md`, раздел 4);
 их список — `SUITES` в `tests/run.py`.

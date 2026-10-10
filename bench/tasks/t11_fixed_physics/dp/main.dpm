@@ -1,0 +1,32 @@
+// Драйвер t11 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn hex8(v: u32) str {
+    let alphabet = "0123456789abcdef"
+    var out = ""
+    var x = v
+    for i in 0..8 {
+        let d = i64(x & 15)
+        out = alphabet[d..d + 1] + out
+        x = x >> 4
+    }
+    return out
+}
+
+fn p(x: i32, y: i32, vx: i32, vy: i32) sol.Particle {
+    return sol.Particle { x, y, vx, vy }
+}
+
+fn main() {
+    var ps = [p(0, 10 * 65536, 65536, 0), p(5 * 65536, 0, -32768, 3 * 65536), p(-65536, 2 * 65536, 0, -65536)]
+    for t in 1..121 {
+        sol.step(&mut ps)
+        if t % 30 == 0 {
+            println("tick " + str(t))
+            for q in &ps {
+                println("  " + str(q.x) + " " + str(q.y) + " " + str(q.vx) + " " + str(q.vy))
+            }
+        }
+    }
+    println("checksum " + hex8(sol.checksum(ps)))
+}

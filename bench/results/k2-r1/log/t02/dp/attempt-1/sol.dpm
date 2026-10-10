@@ -1,0 +1,130 @@
+// t02: разбор строки «ключ = значение».
+pub enum ParseError {
+    BadKey
+    MissingEquals
+    BadValue
+}
+
+pub enum Value {
+    Int(i64)
+    Bool(bool)
+    Str(str)
+}
+
+pub struct Entry {
+    key: str
+    value: Value
+}
+
+fn is_ws(b: u8) bool {
+    return b == ' ' || b == '\t'
+}
+
+fn is_key_start(b: u8) bool {
+    return (b >= 'a' && b <= 'z') || b == '_'
+}
+
+fn is_key_char(b: u8) bool {
+    return is_key_start(b) || (b >= '0' && b <= '9')
+}
+
+fn skip_ws(line: str, start: int) int {
+    var i = start
+    while i < len(line) && is_ws(line[i]) {
+        i += 1
+    }
+    return i
+}
+
+fn valid_key(k: str) bool {
+    if len(k) == 0 {
+        return false
+    }
+    if !is_key_start(k[0]) {
+        return false
+    }
+    for i in 1..len(k) {
+        if !is_key_char(k[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+fn parse_int_val(t: str) ?i64 {
+    var start = 0
+    if len(t) > 0 && t[0] == '-' {
+        start = 1
+    }
+    if start >= len(t) {
+        return none
+    }
+    for i in start..len(t) {
+        if !is_digit(t[i]) {
+            return none
+        }
+    }
+    return parse_int(t)
+}
+
+fn parse_scalar(tok: str) ParseError!Value {
+    if tok == "true" {
+        return Value.Bool(true)
+    }
+    if tok == "false" {
+        return Value.Bool(false)
+    }
+    if let v = parse_int_val(tok) {
+        return Value.Int(v)
+    }
+    fail ParseError.BadValue
+}
+
+pub fn parse_line(line: str) ParseError!?Entry {
+    let n = len(line)
+    var i = skip_ws(line, 0)
+    if i == n || line[i] == '#' {
+        return none
+    }
+    let ks = i
+    while i < n && !is_ws(line[i]) && line[i] != '=' && line[i] != '#' {
+        i += 1
+    }
+    let key = line[ks..i]
+    if !valid_key(key) {
+        fail ParseError.BadKey
+    }
+    i = skip_ws(line, i)
+    if i == n || line[i] != '=' {
+        fail ParseError.MissingEquals
+    }
+    i = skip_ws(line, i + 1)
+    if i == n || line[i] == '#' {
+        fail ParseError.BadValue
+    }
+    var value = Value.Bool(false)
+    if line[i] == '"' {
+        let vs = i + 1
+        var j = vs
+        while j < n && line[j] != '"' {
+            j += 1
+        }
+        if j == n {
+            fail ParseError.BadValue
+        }
+        value = Value.Str(line[vs..j])
+        i = j + 1
+    } else {
+        let ts = i
+        while i < n && !is_ws(line[i]) && line[i] != '#' {
+            i += 1
+        }
+        value = try parse_scalar(line[ts..i])
+    }
+    i = skip_ws(line, i)
+    if i < n && line[i] != '#' {
+        fail ParseError.BadValue
+    }
+    let e: ?Entry = Entry { key: key, value: value }
+    return e
+}

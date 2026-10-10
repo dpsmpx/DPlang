@@ -1,0 +1,173 @@
+// t17: перенос и выравнивание текста.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+// Строки текста: разделитель — '\n'.
+fn split_lines(t: str) List[str] {
+    var res: List[str] = []
+    let n = len(t)
+    var start = 0
+    for i in 0..n {
+        if t[i] == '\n' {
+            res.push(t[start..i])
+            start = i + 1
+        }
+    }
+    res.push(t[start..n])
+    return res
+}
+
+// Слова строки: разделитель — только пробел.
+fn split_words(line: str) List[str] {
+    var res: List[str] = []
+    let n = len(line)
+    var i = 0
+    while i < n {
+        if line[i] == ' ' {
+            i += 1
+            continue
+        }
+        var j = i
+        while j < n && line[j] != ' ' {
+            j += 1
+        }
+        res.push(line[i..j])
+        i = j
+    }
+    return res
+}
+
+fn spaces(n: int) str {
+    var s = ""
+    var k = 0
+    while k < n {
+        s += " "
+        k += 1
+    }
+    return s
+}
+
+fn one_word(word: str) List[str] {
+    var res: List[str] = []
+    res.push(word)
+    return res
+}
+
+// Жадное заполнение строк абзаца; строка — список слов.
+fn fill(ws: List[str], w: int) List[List[str]] {
+    var res: List[List[str]] = []
+    var cur: List[str] = []
+    var curlen = 0
+    for i in 0..len(ws) {
+        let word = ws[i]
+        let wl = len(word)
+        if wl > w {
+            if len(cur) > 0 {
+                res.push(cur)
+                cur = []
+            }
+            var rest = word
+            while len(rest) > w {
+                res.push(one_word(rest[..w - 1] + "-"))
+                rest = rest[w - 1..]
+            }
+            cur = one_word(rest)
+            curlen = len(rest)
+            continue
+        }
+        if len(cur) == 0 {
+            cur = one_word(word)
+            curlen = wl
+            continue
+        }
+        if curlen + 1 + wl <= w {
+            cur.push(word)
+            curlen += 1 + wl
+            continue
+        }
+        res.push(cur)
+        cur = one_word(word)
+        curlen = wl
+    }
+    if len(cur) > 0 {
+        res.push(cur)
+    }
+    return res
+}
+
+fn render(ws: List[str], w: int, align: Align, last: bool) str {
+    var s = ""
+    for i in 0..len(ws) {
+        if i > 0 {
+            s += " "
+        }
+        s += ws[i]
+    }
+    let pad = w - len(s)
+    if align == .Right {
+        return spaces(pad) + s
+    }
+    if align == .Center {
+        return spaces(pad / 2) + s
+    }
+    if align == .Justify && !last && len(ws) >= 2 {
+        let gaps = len(ws) - 1
+        let each = pad / gaps
+        let rem = pad % gaps
+        var r = ws[0]
+        for k in 1..len(ws) {
+            var g = 1 + each
+            if k - 1 < rem {
+                g += 1
+            }
+            r += spaces(g) + ws[k]
+        }
+        return r
+    }
+    return s
+}
+
+fn flush(out: &mut List[str], para: &mut List[str], w: int, align: Align) {
+    if len(para) == 0 {
+        return
+    }
+    if len(out) > 0 {
+        out.push("")
+    }
+    let lines = fill(para, w)
+    let n = len(lines)
+    for i in 0..n {
+        out.push(render(lines[i], w, align, i == n - 1))
+    }
+    para = []
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    if width < 2 || width > 200 {
+        fail .BadWidth
+    }
+    let w = int(width)
+    var out: List[str] = []
+    var para: List[str] = []
+    let lines = split_lines(text)
+    for i in 0..len(lines) {
+        let ws = split_words(lines[i])
+        if len(ws) == 0 {
+            flush(&mut out, &mut para, w, align)
+        } else {
+            for j in 0..len(ws) {
+                para.push(ws[j])
+            }
+        }
+    }
+    flush(&mut out, &mut para, w, align)
+    return out
+}

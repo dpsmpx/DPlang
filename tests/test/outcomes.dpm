@@ -1,0 +1,35 @@
+// spec: module.test trap.exit
+enum CalcError {
+    DivByZero
+}
+
+fn div(a: i64, b: i64) !i64 {
+    if b == 0 {
+        fail .DivByZero
+    }
+    return a / b
+}
+
+@test
+fn divides() {
+    assert(1 + 1 == 2)
+}
+
+@test
+fn divides_ok() !void {
+    let q = try div(9, 3)
+    assert(q == 3)
+}
+
+@test
+fn zero_fails() !void {
+    let q = try div(1, 0)
+    println(str(q))
+}
+
+@test
+fn traps() {
+    println("before the trap")
+    let xs: List[i32] = []
+    println(str(xs[1]))
+}

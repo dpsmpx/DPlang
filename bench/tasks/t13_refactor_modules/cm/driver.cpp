@@ -1,5 +1,5 @@
 // Драйвер t13 после рефакторинга (новый интерфейс) для переведённых вариантов
-// DPlang. Вывод — тот же, что до.
+// dpl. Вывод — тот же, что до.
 #include "cm_out.hpp"
 
 static int32_t hp_or_minus1(const World& w, UnitId id) {

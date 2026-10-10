@@ -1,0 +1,24 @@
+add 1 2 = 3
+add MAX 1 = none
+add MIN -1 = none
+add MAX MIN = -1
+sub MIN 1 = none
+sub 0 MIN = none
+sub -1 MIN = 9223372036854775807
+mul 3037000499 3037000499 = 9223372030926249001
+mul 3037000500 3037000500 = none
+mul MIN -1 = none
+mul MIN 1 = -9223372036854775808
+mul -1 MIN = none
+div 7 -2 = -3
+div -7 2 = -3
+div 1 0 = none
+div MIN -1 = none
+neg MIN = none
+neg MAX = -9223372036854775807
+i32 add: true 2147483646
+i8 neg: true mul: true -128
+u8 add: 255 true
+u8 sub: true mul: true
+u64 add: true div: true
+fallback 2147483647

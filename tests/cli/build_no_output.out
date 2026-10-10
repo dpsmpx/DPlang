@@ -1,0 +1,4 @@
+--- stderr ---
+error: -o needs a path
+run 'dpl help' to list the commands
+[exit 2]

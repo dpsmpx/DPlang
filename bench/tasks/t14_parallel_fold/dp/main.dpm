@@ -1,0 +1,48 @@
+// Драйвер t14 (скрыт от модели): те же входы, что у ref.cpp. Числа f64
+// печатаются кратчайшей записью (Р48), а не %.17g, поэтому ожидаемое —
+// dp/expected.txt; численно оно равно expected.txt задачи.
+import sol
+
+fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+fn print_hist(name: str, h: &List[i64]) {
+    var line = "hist " + name
+    var total: i64 = 0
+    for c in &h {
+        line += " " + str(c)
+        total += c
+    }
+    println(line + " total " + str(total))
+}
+
+fn main() {
+    let n: i32 = 100003
+    var v: List[f64] = []
+    var u: List[u32] = []
+    for i in 0..n {
+        let h = mix(u64(i))
+        let unit = f64(h >> 11) / 9007199254740992.0
+        v.push((unit * 2.0 - 1.0) * f64(u64(1) << (i % 40)))
+        u.push(u32(h >> 32))
+    }
+    let threads: List[i32] = [1, 2, 3, 8]
+    for t in &threads {
+        println("sum t=" + str(t) + " " + str(sol.parallel_sum(v, t)))
+    }
+    let small: List[f64] = [0.5, 0.25, -1.0]
+    println("sum small " + str(sol.parallel_sum(small, 4)))
+    let empty: List[f64] = []
+    println("sum empty " + str(sol.parallel_sum(empty, 2)))
+    let h1 = sol.parallel_histogram(u, 10, 1)
+    print_hist("t=1", &h1)
+    let h5 = sol.parallel_histogram(u, 10, 5)
+    print_hist("t=5", &h5)
+    let few: List[u32] = [7, 17, 3]
+    let h = sol.parallel_histogram(few, 5, 8)
+    println("hist small " + str(h[0]) + " " + str(h[1]) + " " + str(h[2]) + " " + str(h[3]) + " " + str(h[4]))
+}

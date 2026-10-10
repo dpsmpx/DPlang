@@ -1,0 +1,40 @@
+// Драйвер t01 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn push(r: &mut sol.Ring, v: i32) {
+    match sol.ring_push(&mut r, v) {
+        ok(_) => println("push " + str(v) + " ok")
+        err(e) => println("push " + str(v) + " full")
+    }
+}
+
+fn pop(r: &mut sol.Ring) {
+    if let v = sol.ring_pop(&mut r) {
+        println("pop " + str(v))
+    } else {
+        println("pop none")
+    }
+}
+
+fn main() {
+    var r = sol.ring_new(3)
+    push(&mut r, 1)
+    push(&mut r, 2)
+    push(&mut r, 3)
+    push(&mut r, 4)
+    println("len " + str(sol.ring_len(&r)))
+    pop(&mut r)
+    push(&mut r, 4)
+    pop(&mut r)
+    pop(&mut r)
+    pop(&mut r)
+    pop(&mut r)
+    println("len " + str(sol.ring_len(&r)))
+    for i in i32(10)..i32(17) {
+        push(&mut r, i)
+        if i % 2 != 0 {
+            pop(&mut r)
+        }
+    }
+    println("len " + str(sol.ring_len(&r)))
+}

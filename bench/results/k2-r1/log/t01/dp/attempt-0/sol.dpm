@@ -1,0 +1,24 @@
+// t01: заготовка — напишите тела функций по task.md.
+pub enum RingError {
+    Full
+}
+
+pub struct Ring {
+    // поля — на ваш выбор
+}
+
+pub fn ring_new(capacity: i32) Ring {
+    // ...
+}
+
+pub fn ring_push(r: &mut Ring, value: i32) RingError!void {
+    // ...
+}
+
+pub fn ring_pop(r: &mut Ring) ?i32 {
+    // ...
+}
+
+pub fn ring_len(r: &Ring) i32 {
+    // ...
+}

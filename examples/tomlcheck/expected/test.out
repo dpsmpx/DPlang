@@ -1,0 +1,9 @@
+test toml.blank_and_comments ... ok
+test toml.pairs ... ok
+test toml.tables ... ok
+test toml.errors ... ok
+test main.reports_counts ... ok
+test main.reports_duplicates ... ok
+test main.reports_line_numbers_and_crlf ... ok
+
+test result: ok. 7 passed; 0 failed

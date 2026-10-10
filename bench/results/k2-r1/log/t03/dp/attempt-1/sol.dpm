@@ -1,0 +1,59 @@
+// t03: конечный автомат поведения NPC.
+pub enum State {
+    Idle
+    Patrol { waypoint: i32 }
+    Chase { target: i32 }
+    Flee { ticks: i32 }
+}
+
+pub enum Event {
+    Tick
+    SeeEnemy { id: i32 }
+    LoseEnemy
+    LowHealth
+}
+
+pub fn step(state: State, event: Event) State {
+    var r = state
+    match event {
+        .LowHealth => r = .Flee { ticks: 3 }
+        .SeeEnemy { id } => {
+            match state {
+                .Flee => r = state
+                _ => r = .Chase { target: id }
+            }
+        }
+        .LoseEnemy => {
+            match state {
+                .Chase => r = .Patrol { waypoint: 0 }
+                _ => r = state
+            }
+        }
+        .Tick => {
+            match state {
+                .Idle => r = .Patrol { waypoint: 0 }
+                .Patrol { waypoint } => r = .Patrol { waypoint: (waypoint + 1) % 4 }
+                .Chase => r = state
+                .Flee { ticks } => {
+                    if ticks > 1 {
+                        r = .Flee { ticks: ticks - 1 }
+                    } else {
+                        r = .Idle
+                    }
+                }
+            }
+        }
+    }
+    return r
+}
+
+pub fn describe(state: State) str {
+    var s = ""
+    match state {
+        .Idle => s = "idle"
+        .Patrol { waypoint } => s = "patrol " + str(waypoint)
+        .Chase { target } => s = "chase " + str(target)
+        .Flee { ticks } => s = "flee " + str(ticks)
+    }
+    return s
+}

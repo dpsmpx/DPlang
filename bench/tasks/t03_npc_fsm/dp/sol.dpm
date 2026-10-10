@@ -1,0 +1,54 @@
+pub enum State {
+    Idle
+    Patrol { waypoint: i32 }
+    Chase { target: i32 }
+    Flee { ticks: i32 }
+}
+
+pub enum Event {
+    Tick
+    SeeEnemy { id: i32 }
+    LoseEnemy
+    LowHealth
+}
+
+pub fn step(state: State, event: Event) State {
+    match event {
+        .LowHealth => return .Flee { ticks: 3 }
+        .SeeEnemy { id } => {
+            match state {
+                .Flee => {}
+                _ => return .Chase { target: id }
+            }
+        }
+        .LoseEnemy => {
+            match state {
+                .Chase => return .Patrol { waypoint: 0 }
+                _ => {}
+            }
+        }
+        .Tick => {
+            match state {
+                .Idle => return .Patrol { waypoint: 0 }
+                .Patrol { waypoint } => return .Patrol { waypoint: (waypoint + 1) % 4 }
+                .Flee { ticks } => {
+                    if ticks > 1 {
+                        return .Flee { ticks: ticks - 1 }
+                    }
+                    return .Idle
+                }
+                .Chase => {}
+            }
+        }
+    }
+    return state
+}
+
+pub fn describe(state: State) str {
+    match state {
+        .Idle => return "idle"
+        .Patrol { waypoint } => return "patrol " + str(waypoint)
+        .Chase { target } => return "chase " + str(target)
+        .Flee { ticks } => return "flee " + str(ticks)
+    }
+}

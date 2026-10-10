@@ -1,0 +1,112 @@
+// t10: кодек правок мира.
+pub struct Edit {
+    x: i32
+    y: i32
+    z: i32
+    block: i32
+}
+
+pub enum DecodeError {
+    Truncated
+    BadValue
+    TrailingBytes
+}
+
+// Беззнаковый varint (LEB128).
+fn put_varint(out: &mut List[u8], v: u64) {
+    var n = v
+    while n >= 0x80 {
+        out.push(u8(n & 0x7f) | 0x80)
+        n = n >> 7
+    }
+    out.push(u8(n))
+}
+
+// zigzag: (n << 1) ^ (n >> 63).
+fn zigzag(n: i64) u64 {
+    return u64.wrap((n << 1) ^ (n >> 63))
+}
+
+pub fn encode(edits: []Edit) List[u8] {
+    var out: List[u8] = []
+    put_varint(&mut out, u64(len(edits)))
+    var px: i64 = 0
+    var py: i64 = 0
+    var pz: i64 = 0
+    for e in &edits {
+        let ex = i64(e.x)
+        let ey = i64(e.y)
+        let ez = i64(e.z)
+        put_varint(&mut out, zigzag(ex - px))
+        put_varint(&mut out, zigzag(ey - py))
+        put_varint(&mut out, zigzag(ez - pz))
+        put_varint(&mut out, u64.wrap(e.block))
+        px = ex
+        py = ey
+        pz = ez
+    }
+    return out
+}
+
+// Читает varint с позиции pos; не больше 10 байт.
+fn read_varint(bytes: []u8, pos: &mut int) DecodeError!u64 {
+    var v: u64 = 0
+    var shift: u64 = 0
+    for _ in 0..10 {
+        if pos >= len(bytes) {
+            fail .Truncated
+        }
+        let b = bytes[pos]
+        pos += 1
+        v = v | (u64(b & 0x7f) << shift)
+        if b < 0x80 {
+            return v
+        }
+        shift += 7
+    }
+    fail .BadValue
+}
+
+// Обратный zigzag и прибавление разности к предыдущей координате.
+fn apply_delta(prev: i64, raw: u64) DecodeError!i64 {
+    let d = i64(raw >> 1) ^ -i64(raw & 1)
+    if d < -0x1_0000_0000 || d > 0x1_0000_0000 {
+        fail .BadValue
+    }
+    let c = prev + d
+    if c < -2147483648 || c > 2147483647 {
+        fail .BadValue
+    }
+    return c
+}
+
+pub fn decode(bytes: []u8) DecodeError!List[Edit] {
+    var pos: int = 0
+    let count = try read_varint(bytes, &mut pos)
+    var edits: List[Edit] = []
+    var px: i64 = 0
+    var py: i64 = 0
+    var pz: i64 = 0
+    var i: u64 = 0
+    while i < count {
+        let vx = try read_varint(bytes, &mut pos)
+        let x = try apply_delta(px, vx)
+        let vy = try read_varint(bytes, &mut pos)
+        let y = try apply_delta(py, vy)
+        let vz = try read_varint(bytes, &mut pos)
+        let z = try apply_delta(pz, vz)
+        let blk = try read_varint(bytes, &mut pos)
+        if blk > 65535 {
+            fail .BadValue
+        }
+        edits.push(Edit { x: i32(x), y: i32(y), z: i32(z), block: i32(blk) })
+        px = x
+        py = y
+        pz = z
+        i += 1
+    }
+    if pos != len(bytes) {
+        fail .TrailingBytes
+    }
+    return edits
+}

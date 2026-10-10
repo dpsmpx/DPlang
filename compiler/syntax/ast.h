@@ -175,7 +175,9 @@ struct SliceExpr : Expr {  // `a[lo..hi]`, концы необязательны
 enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Variant };
 
 // Методы встроенных типов: List и str.
-enum class Method : uint8_t { Push, Pop, Insert, Remove, Clear, Sort, Contains, Trim, Find, StartsWith, Split };
+// Методы: List — Push…Contains, str — Trim…Split, Map (Р54) — Get, Keys и
+// Contains, Remove, Clear.
+enum class Method : uint8_t { Push, Pop, Insert, Remove, Clear, Sort, Contains, Trim, Find, StartsWith, Split, Get, Keys };
 
 struct CallExpr : Expr {
     static constexpr ExprKind Kind = ExprKind::Call;

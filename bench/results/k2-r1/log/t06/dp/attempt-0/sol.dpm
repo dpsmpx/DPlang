@@ -1,0 +1,12 @@
+// t06: заготовка — напишите тела функций по task.md.
+pub struct Quad {
+    x: i32
+    y: i32
+    w: i32
+    h: i32
+    block: i32
+}
+
+pub fn greedy_mesh(w: i32, h: i32, cells: []i32) List[Quad] {
+    // ...
+}

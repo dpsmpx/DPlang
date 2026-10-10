@@ -34,6 +34,7 @@ pub fn pool_create(p: &mut Pool, value: i32) !Handle {
     fail .Full
 }
 
+// Номер живого слота хэндла; нет значения — хэндл устарел.
 fn live(p: &Pool, h: Handle) ?int {
     if h.index < 0 || h.index >= len(p.slots) {
         return none

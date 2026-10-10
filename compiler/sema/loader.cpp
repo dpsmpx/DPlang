@@ -1,4 +1,5 @@
 // Загрузка модулей программы (docs/spec/core.md, раздел 3; Р46).
+#include <cstdlib>
 #include <map>
 
 #include "sema/sema.h"
@@ -118,9 +119,12 @@ private:
         }
         std::vector<std::string> places = {root_dir_ + name + ".dpm"};
         if (!opt_.stdlib_dir.empty()) places.push_back(opt_.stdlib_dir + "/" + name + ".dpm");
-        for (const std::string& p : places) {
+        for (size_t i = 0; i < places.size(); i++) {
             std::string text;
-            if (read(p, text)) return load(name, p, std::move(text));
+            if (!read(places[i], text)) continue;
+            ModuleInfo* m = load(name, places[i], std::move(text));
+            if (m && i == 1) m->stdlib = true;  // найден в стандартной библиотеке
+            return m;
         }
         // Путь библиотеки зависит от установки — в сообщении только её название.
         std::string looked = places[0] + (opt_.stdlib_dir.empty() ? "" : " and the standard library");
@@ -138,6 +142,20 @@ std::unique_ptr<Program> load_program(const std::string& root_path, const LoadOp
     Loader loader(*prog, opt, sources, diags);
     prog->root = loader.load_root(root_path);
     if (!prog->root) return nullptr;
+    // Главный модуль из каталога библиотеки (проверка самой библиотеки) —
+    // тоже модуль библиотеки. Только у файлов CLI: у чтения из памяти
+    // (worker в песочнице) каталога нет.
+    if (!opt.reader && !opt.stdlib_dir.empty()) {
+        char* lib = realpath(opt.stdlib_dir.c_str(), nullptr);
+        char* file = realpath(root_path.c_str(), nullptr);
+        if (lib && file) {
+            std::string d(file), l(lib);
+            size_t slash = d.find_last_of('/');
+            prog->root->stdlib = slash != std::string::npos && d.substr(0, slash) == l;
+        }
+        std::free(lib);
+        std::free(file);
+    }
     return prog;
 }
 

@@ -1,0 +1,102 @@
+// t09: заготовка — напишите тела функций по task.md.
+pub enum InvError {
+    Invalid
+    NotEnough
+}
+
+pub struct Inventory {
+    // поля — на ваш выбор
+    // items[i] — предмет ячейки i, counts[i] — сколько; 0 — ячейка пуста
+    items: List[i32]
+    counts: List[i32]
+}
+
+fn max_stack(item: i32) i32 {
+    if item < 100 {
+        return 64
+    }
+    return 1
+}
+
+pub fn inv_new(slots: i32) Inventory {
+    let z: i32 = 0
+    return Inventory { items: repeat(z, slots), counts: repeat(z, slots) }
+}
+
+pub fn inv_add(inv: &mut Inventory, item: i32, count: i32) InvError!i32 {
+    if count <= 0 || item < 1 {
+        fail InvError.Invalid
+    }
+    let cap = max_stack(item)
+    var left = count
+    let n = len(inv.counts)
+    for i in 0..n {
+        if left > 0 && inv.counts[i] > 0 && inv.items[i] == item && inv.counts[i] < cap {
+            let take = min(left, cap - inv.counts[i])
+            inv.counts[i] += take
+            left -= take
+        }
+    }
+    for i in 0..n {
+        if left > 0 && inv.counts[i] == 0 {
+            let take = min(left, cap)
+            inv.items[i] = item
+            inv.counts[i] = take
+            left -= take
+        }
+    }
+    return left
+}
+
+pub fn inv_total(inv: &Inventory, item: i32) i32 {
+    var t: i32 = 0
+    let n = len(inv.counts)
+    for i in 0..n {
+        if inv.counts[i] > 0 && inv.items[i] == item {
+            t += inv.counts[i]
+        }
+    }
+    return t
+}
+
+pub fn inv_remove(inv: &mut Inventory, item: i32, count: i32) InvError!void {
+    var t: i32 = 0
+    let n = len(inv.counts)
+    for i in 0..n {
+        if inv.counts[i] > 0 && inv.items[i] == item {
+            t += inv.counts[i]
+        }
+    }
+    if t < count {
+        fail InvError.NotEnough
+    }
+    var left = count
+    var j = n - 1
+    while j >= 0 && left > 0 {
+        if inv.counts[j] > 0 && inv.items[j] == item {
+            let take = min(left, inv.counts[j])
+            inv.counts[j] -= take
+            left -= take
+            if inv.counts[j] == 0 {
+                inv.items[j] = 0
+            }
+        }
+        j -= 1
+    }
+}
+
+pub fn inv_describe(inv: &Inventory) str {
+    var s = ""
+    let n = len(inv.counts)
+    for i in 0..n {
+        if i > 0 {
+            s += " "
+        }
+        if inv.counts[i] == 0 {
+            s += "-"
+        } else {
+            s += str(inv.items[i]) + ":" + str(inv.counts[i])
+        }
+    }
+    return s
+}

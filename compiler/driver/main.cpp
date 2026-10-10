@@ -1,9 +1,14 @@
-// Точка входа CLI `dplang` (Р15). Команды появляются по шагам v0.1
+// Точка входа CLI `dpl` (Р15). Команды появляются по шагам v0.1
 // (ROADMAP/IMPLEMENTATION.md); устройство — docs/compiler/cli.md.
 //
 // Коды выхода: 0 — успех; 1 — в программе есть ошибки (диагностика);
 // 2 — неверный вызов CLI; 3 — внутренняя ошибка компилятора; у worker —
 // ещё 4 (driver/worker.h).
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -14,6 +19,7 @@
 #include "api/compile.h"
 #include "backend_c/emit_c.h"
 #include "driver/big_stack.h"
+#include "driver/build.h"
 #include "driver/worker.h"
 #include "ir/dump.h"
 #include "ir/interp.h"
@@ -32,13 +38,18 @@ namespace {
 
 
 constexpr std::string_view kUsage =
-    "usage: dplang <command> [arguments]\n"
+    "usage: dpl <command> [arguments]\n"
     "\n"
     "commands:\n"
+    "  build [--release] [-o <path>] <file.dpm>\n"
+    "                   build a native program (C compiler: $CC or cc)\n"
     "  check [--format=json] <file.dpm>\n"
     "                   check a program and the modules it imports\n"
     "  explain <code>   explain a diagnostic code, e.g. E0101\n"
+    "  fmt [--check] <file.dpm>...\n"
+    "                   format files in place; --check only lists files that would change\n"
     "  help             show this help\n"
+    "  test <file.dpm>  run the @test functions of a program, each in its own process\n"
     "  --version        print the compiler version\n"
     "  worker ...       serve one request of the online service (see docs/service)\n"
     "\n"
@@ -49,7 +60,8 @@ constexpr std::string_view kUsage =
     "  debug summary <file.dpm> print the interface summaries of a program\n"
     "  debug types <file.dpm>   print the syntax tree of the main module with types\n"
     "  debug ir <file.dpm>      print the Core IR of a program\n"
-    "  debug run <file.dpm>     run a program in the reference interpreter\n"
+    "  debug run <file.dpm> [args...]\n"
+    "                           run a program in the reference interpreter\n"
     "  debug c <file.dpm>       print the C code of a program (C backend)\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
@@ -57,7 +69,7 @@ void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size
 int usage_error(std::string_view message) {
     put("error: ", stderr);
     put(message, stderr);
-    put("\nrun 'dplang help' to list the commands\n", stderr);
+    put("\nrun 'dpl help' to list the commands\n", stderr);
     return 2;
 }
 
@@ -140,8 +152,27 @@ std::string module_name(std::string_view path) {
     return std::string(dot == std::string_view::npos ? base : base.substr(0, dot));
 }
 
-// debug parse: дамп AST. Если ошибок нет — ещё и проверка круга: печать,
-// повторный разбор, тот же дамп, и печать печати не меняется.
+// Проверка печати (круг): печать разбирается без ошибок в то же дерево,
+// печать печати не меняется, комментарии те же (кроме места). Пусто —
+// печать верна; иначе — что нарушено (внутренняя ошибка).
+std::string check_printed(const dp::ast::Module& m, std::string_view source, const std::string& name,
+                          const std::string& printed) {
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    dp::FileId id = sources.add("<printed>", printed);
+    auto again = dp::parse_module(sources.file(id), id, name, diags);
+    if (diags.has_errors()) return "printed module does not parse:\n" + dp::render_text(diags.list(), sources) + printed;
+    if (dp::dump_module(*again) != dp::dump_module(m)) return "printed module parses differently:\n" + printed;
+    if (dp::print_module(*again, printed) != printed) return "printing is not idempotent";
+    auto a = dp::comment_texts(m, source), b = dp::comment_texts(*again, printed);
+    std::sort(a.begin(), a.end());
+    std::sort(b.begin(), b.end());
+    if (a != b) return "printed module loses or repeats comments:\n" + printed;
+    return "";
+}
+
+// debug parse: дамп AST. Если ошибок нет — ещё и проверка круга
+// (check_printed). debug print — печать после той же проверки.
 int cmd_debug_parse(const std::vector<std::string_view>& args, bool print) {
     if (args.size() != 1) return usage_error("debug parse and debug print take one file");
     dp::SourceMap sources;
@@ -150,40 +181,115 @@ int cmd_debug_parse(const std::vector<std::string_view>& args, bool print) {
     if (!load(args[0], sources, diags, id)) return finish(diags, sources);
     std::string name = module_name(args[0]);
     auto m = dp::parse_module(sources.file(id), id, name, diags);  // предел вложенности — по умолчанию
-    std::string dump = dp::dump_module(*m);
     if (!diags.has_errors()) {
         std::string printed = dp::print_module(*m, sources.file(id).text());
-        dp::Diagnostics again_diags;
-        dp::FileId id2 = sources.add("<printed>", printed);
-        auto again = dp::parse_module(sources.file(id2), id2, name, again_diags);
-        if (again_diags.has_errors()) {
-            return internal_error("printed module does not parse:\n" + dp::render_text(again_diags.list(), sources) +
-                                  printed);
-        }
-        if (dp::dump_module(*again) != dump) return internal_error("printed module parses differently:\n" + printed);
-        if (dp::print_module(*again, printed) != printed) return internal_error("printing is not idempotent");
+        std::string bad = check_printed(*m, sources.file(id).text(), name, printed);
+        if (!bad.empty()) return internal_error(bad);
         if (print) {
             put(printed);
             return 0;
         }
     }
-    if (!print) put(dump);
+    if (!print) put(dp::dump_module(*m));
     return finish(diags, sources);
 }
 
-// Каталог стандартной библиотеки: $DPLANG_STDLIB или stdlib/ репозитория
-// рядом с каталогом сборки (build/compiler/dplang → stdlib).
+// Записывает файл через временный рядом и переименование: при сбое
+// прежнее содержимое остаётся. Права — как у прежнего файла.
+bool write_file_replacing(const std::string& path, const std::string& text) {
+    struct stat st {};
+    mode_t mode = stat(path.c_str(), &st) == 0 ? (st.st_mode & 07777) : 0644;
+    std::string tmp = path + ".dpfmt.tmp";
+    int fd = open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, mode);
+    if (fd < 0) return false;
+    size_t done = 0;
+    while (done < text.size()) {
+        ssize_t n = write(fd, text.data() + done, text.size() - done);
+        if (n <= 0) {
+            close(fd);
+            unlink(tmp.c_str());
+            return false;
+        }
+        done += static_cast<size_t>(n);
+    }
+    if (close(fd) != 0 || rename(tmp.c_str(), path.c_str()) != 0) {
+        unlink(tmp.c_str());
+        return false;
+    }
+    return true;
+}
+
+// fmt: каноническая запись файлов (Р7) на месте. --check — ничего не
+// писать, а перечислить в stdout файлы, запись которых изменилась бы.
+// Файл с ошибками разбора не меняется; печать проходит ту же проверку
+// круга, что debug parse, до записи.
+int cmd_fmt(const std::vector<std::string_view>& args) {
+    bool check = false;
+    std::vector<std::string_view> files;
+    for (std::string_view a : args) {
+        if (a == "--check") check = true;
+        else if (a.substr(0, 2) == "--") return usage_error("unknown option '" + std::string(a) + "'");
+        else files.push_back(a);
+    }
+    if (files.empty()) return usage_error("fmt takes one or more files");
+    int code = 0;
+    for (std::string_view f : files) {
+        dp::SourceMap sources;
+        dp::Diagnostics diags;
+        dp::FileId id;
+        if (!load(f, sources, diags, id)) {
+            code = std::max(code, finish(diags, sources));
+            continue;
+        }
+        const std::string& text = sources.file(id).text();
+        std::string name = module_name(f);
+        auto m = dp::parse_module(sources.file(id), id, name, diags);
+        if (diags.has_errors()) {
+            code = std::max(code, finish(diags, sources));
+            continue;
+        }
+        std::string printed = dp::print_module(*m, text);
+        std::string bad = check_printed(*m, text, name, printed);
+        if (!bad.empty()) return internal_error(std::string(f) + ": " + bad);
+        if (printed == text) continue;
+        if (check) {
+            put(f);
+            put("\n");
+            code = std::max(code, 1);
+            continue;
+        }
+        if (!write_file_replacing(std::string(f), printed)) {
+            diags.error(dp::Code::E0003, "cannot write file '" + std::string(f) + "'");
+            code = std::max(code, finish(diags, sources));
+        }
+    }
+    return code;
+}
+
+// Каталог стандартной библиотеки: $DPL_STDLIB или stdlib/ репозитория
+// рядом с каталогом сборки (build/compiler/dpl → stdlib).
 std::string stdlib_dir(const char* argv0) {
-    if (const char* env = std::getenv("DPLANG_STDLIB")) return env;
+    if (const char* env = std::getenv("DPL_STDLIB")) return env;
     std::string exe = argv0 ? argv0 : "";
     size_t slash = exe.find_last_of('/');
     std::string dir = slash == std::string::npos ? "." : exe.substr(0, slash);
     return dir + "/../../stdlib";
 }
 
+// Каталог runtime: $DPL_RUNTIME или runtime/ репозитория рядом с
+// каталогом сборки (build/compiler/dpl → runtime).
+std::string runtime_dir(const char* argv0) {
+    if (const char* env = std::getenv("DPL_RUNTIME")) return env;
+    std::string exe = argv0 ? argv0 : "";
+    size_t slash = exe.find_last_of('/');
+    std::string dir = slash == std::string::npos ? "." : exe.substr(0, slash);
+    return dir + "/../../runtime";
+}
+
 // Окружение запуска, общее для команд.
 struct Cli {
     std::string stdlib;
+    std::string runtime;
 };
 
 // Загрузка и проверка программы. nullptr — главный модуль не прочитан
@@ -276,7 +382,7 @@ int cmd_debug_ir(const Cli& cli, const std::vector<std::string_view>& args) {
 // debug run: исполнение программы эталонным интерпретатором (Р43).
 // Код выхода — код программы (docs/ir/README.md, «Интерпретатор»).
 int cmd_debug_run(const Cli& cli, const std::vector<std::string_view>& args) {
-    if (args.size() != 1) return usage_error("debug run takes one file");
+    if (args.empty()) return usage_error("debug run takes a file and the program's arguments");
     dp::SourceMap sources;
     dp::Diagnostics diags;
     auto prog = check_program(cli, args[0], sources, diags);
@@ -285,7 +391,8 @@ int cmd_debug_run(const Cli& cli, const std::vector<std::string_view>& args) {
     auto ir = lower_program(*prog, sources);
     if (!ir) return 3;
     std::fflush(stdout);
-    dp::ir::RunResult r = dp::ir::run(*ir, sources);
+    std::vector<std::string> prog_args(args.begin() + 1, args.end());
+    dp::ir::RunResult r = dp::ir::run(*ir, sources, prog_args);
     std::fflush(stdout);
     if (r.internal) return internal_error(r.message);
     return r.exit_code;
@@ -307,6 +414,76 @@ int cmd_debug_c(const Cli& cli, const std::vector<std::string_view>& args) {
     return 0;
 }
 
+// build: нативная программа (docs/compiler/cli.md, «build»). Профиль
+// debug — по умолчанию, --release — с оптимизацией; проверки одни и те же
+// (Р11). Программа — -o путь или имя главного модуля в текущем каталоге.
+int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
+    dp::BuildOptions opt;
+    std::vector<std::string_view> files;
+    for (size_t i = 0; i < args.size(); i++) {
+        std::string_view a = args[i];
+        if (a == "--release") {
+            opt.profile = dp::Profile::Release;
+        } else if (a == "-o") {
+            if (i + 1 >= args.size()) return usage_error("-o needs a path");
+            opt.output = std::string(args[++i]);
+        } else if (a.substr(0, 1) == "-") {
+            return usage_error("unknown option '" + std::string(a) + "'");
+        } else {
+            files.push_back(a);
+        }
+    }
+    if (files.size() != 1) return usage_error("build takes one file");
+    if (opt.output.empty()) opt.output = module_name(files[0]);
+    const char* cc = std::getenv("CC");
+    opt.cc = cc && *cc ? cc : "cc";
+    opt.runtime_dir = cli.runtime;
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, files[0], sources, diags);
+    if (prog && !diags.has_errors() && !dp::sema::check_main(*prog, diags)) return finish(diags, sources);
+    if (!prog || diags.has_errors()) return finish(diags, sources);
+    auto ir = lower_program(*prog, sources);
+    if (!ir) return 3;
+    dp::backend_c::CResult c = dp::backend_c::emit_c(*ir, sources);
+    if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
+    return dp::build_native(c.code, opt);
+}
+
+// test: тесты программы (Р50, docs/compiler/cli.md, «test») — функции
+// @test всех модулей, кроме стандартной библиотеки, по порядку модулей
+// и объявлений; каждый — отдельным процессом, профиль test.
+int cmd_test(const Cli& cli, const std::vector<std::string_view>& args) {
+    std::vector<std::string_view> files;
+    for (std::string_view a : args) {
+        if (a.substr(0, 1) == "-") return usage_error("unknown option '" + std::string(a) + "'");
+        files.push_back(a);
+    }
+    if (files.size() != 1) return usage_error("test takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    auto prog = check_program(cli, files[0], sources, diags);
+    if (!prog || diags.has_errors()) return finish(diags, sources);
+    auto ir = lower_program(*prog, sources);
+    if (!ir) return 3;
+    std::vector<uint32_t> tests;
+    std::vector<std::string> names;
+    for (size_t i = 0; i < ir->fns.size(); i++) {
+        const dp::sema::FnDef* d = ir->fns[i].def;
+        if (!d || !d->test || d->module->stdlib) continue;
+        tests.push_back(static_cast<uint32_t>(i));
+        names.push_back(ir->fns[i].name);
+    }
+    dp::backend_c::CResult c = dp::backend_c::emit_c_tests(*ir, sources, tests);
+    if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
+    dp::BuildOptions opt;
+    const char* cc = std::getenv("CC");
+    opt.cc = cc && *cc ? cc : "cc";
+    opt.runtime_dir = cli.runtime;
+    put(dp::render_text(diags.list(), sources), stderr);  // предупреждения, если будут
+    return dp::run_tests(c.code, names, opt);
+}
+
 int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args.empty()) return usage_error("debug needs a subcommand");
     std::vector<std::string_view> rest(args.begin() + 1, args.end());
@@ -326,6 +503,7 @@ int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
 static int run_cli(int argc, char** argv) {
     Cli cli;
     cli.stdlib = stdlib_dir(argv[0]);
+    cli.runtime = runtime_dir(argv[0]);
     std::vector<std::string_view> args(argv + 1, argv + argc);
     if (args.empty()) return usage_error("no command given");
     std::string_view cmd = args[0];
@@ -335,13 +513,16 @@ static int run_cli(int argc, char** argv) {
         return 0;
     }
     if (cmd == "--version") {
-        put("dplang ");
+        put("dpl ");
         put(dp::kCompilerVersion);
         put("\n");
         return 0;
     }
     if (cmd == "explain") return cmd_explain(rest);
     if (cmd == "check") return cmd_check(cli, rest);
+    if (cmd == "fmt") return cmd_fmt(rest);
+    if (cmd == "build") return cmd_build(cli, rest);
+    if (cmd == "test") return cmd_test(cli, rest);
     if (cmd == "debug") return cmd_debug(cli, rest);
     return usage_error("unknown command '" + std::string(cmd) + "'");
 }

@@ -1,0 +1,62 @@
+// Драйвер t17 (скрыт от модели): тот же вывод, что у ref.cpp.
+import sol
+
+fn align_name(a: sol.Align) str {
+    match a {
+        .Left => return "Left"
+        .Right => return "Right"
+        .Center => return "Center"
+        .Justify => return "Justify"
+    }
+}
+
+fn show(title: str, text: str, width: i32, align: sol.Align) {
+    println("== " + title + ", width " + str(width) + ", " + align_name(align))
+    match sol.wrap(text, width, align) {
+        ok(lines) => {
+            if len(lines) == 0 {
+                println("(no lines)")
+            }
+            for line in &lines {
+                println("|" + line + "|")
+            }
+        }
+        err(e) => println("error BadWidth")
+    }
+}
+
+fn main() {
+    let fox = "The quick brown fox jumps over the lazy dog and keeps running far away."
+    let all: List[sol.Align] = [.Left, .Right, .Center, .Justify]
+    let widths: List[i32] = [10, 16, 21]
+    for w in &widths {
+        for a in &all {
+            show("fox", fox, w, a)
+        }
+    }
+    let paras = "\n   \nFirst paragraph here,\n  on two lines.\n\n\n    \nSecond   one\twith a tab.\n  \nx\n"
+    for a in &all {
+        show("paragraphs", paras, 12, a)
+    }
+    show("justify gaps", "a b c d", 10, .Justify)
+    show("justify gaps", "aa b c\nlast line", 9, .Justify)
+    show("justify gaps", "aa b c dd ee", 9, .Justify)
+    show("long words", "abcdef", 5, .Left)
+    show("long words", "abcdefghi", 5, .Left)
+    show("long words", "abcdefghij", 5, .Right)
+    show("long words", "xx abcdefghij yy zz", 5, .Justify)
+    show("long words", "xx abcdefghij yy zz", 5, .Center)
+    show("long words", "a supercalifragilisticexpialidocious word", 8, .Justify)
+    show("width 2", "abc de f", 2, .Left)
+    show("width 2", "abc de f", 2, .Justify)
+    show("exact", "four five sixx", 9, .Justify)
+    show("exact", "four five sixx", 14, .Right)
+    show("empty", "", 10, .Left)
+    show("empty", "   \n  \n", 10, .Justify)
+    show("bad width", fox, 1, .Left)
+    show("bad width", fox, 0, .Left)
+    show("bad width", fox, -5, .Center)
+    show("bad width", fox, 201, .Right)
+    show("wide", fox, 200, .Center)
+    show("wide", fox, 200, .Justify)
+}

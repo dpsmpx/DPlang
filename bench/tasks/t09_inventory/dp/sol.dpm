@@ -1,0 +1,96 @@
+pub enum InvError {
+    Invalid
+    NotEnough
+}
+
+pub struct Slot {
+    item: i32 = 0
+    count: i32 = 0
+}
+
+pub struct Inventory {
+    slots: List[Slot]
+}
+
+fn max_stack(item: i32) i32 {
+    if item < 100 {
+        return 64
+    }
+    return 1
+}
+
+pub fn inv_new(slots: i32) Inventory {
+    return Inventory { slots: repeat(Slot {}, slots) }
+}
+
+pub fn inv_add(inv: &mut Inventory, item: i32, count: i32) InvError!i32 {
+    if item < 1 || count <= 0 {
+        fail .Invalid
+    }
+    let cap = max_stack(item)
+    var left = count
+    for i in 0..len(inv.slots) {
+        if left > 0 && inv.slots[i].item == item && inv.slots[i].count < cap {
+            let put = min(cap - inv.slots[i].count, left)
+            inv.slots[i].count += put
+            left -= put
+        }
+    }
+    for i in 0..len(inv.slots) {
+        if left > 0 && inv.slots[i].item == 0 {
+            let put = min(cap, left)
+            inv.slots[i].item = item
+            inv.slots[i].count = put
+            left -= put
+        }
+    }
+    return left
+}
+
+pub fn inv_total(inv: &Inventory, item: i32) i32 {
+    var total: i32 = 0
+    for s in &inv.slots {
+        if s.item == item {
+            total += s.count
+        }
+    }
+    return total
+}
+
+pub fn inv_remove(inv: &mut Inventory, item: i32, count: i32) InvError!void {
+    if item < 1 || count <= 0 {
+        fail .Invalid
+    }
+    if inv_total(&inv, item) < count {
+        fail .NotEnough
+    }
+    var left = count
+    var i = len(inv.slots) - 1
+    while i >= 0 && left > 0 {
+        if inv.slots[i].item == item {
+            let take = min(inv.slots[i].count, left)
+            inv.slots[i].count -= take
+            left -= take
+            if inv.slots[i].count == 0 {
+                inv.slots[i].item = 0
+            }
+        }
+        i -= 1
+    }
+}
+
+pub fn inv_describe(inv: &Inventory) str {
+    var out = ""
+    for i in 0..len(inv.slots) {
+        if i > 0 {
+            out += " "
+        }
+        let s = inv.slots[i]
+        if s.item == 0 {
+            out += "-"
+        } else {
+            out += str(s.item) + ":" + str(s.count)
+        }
+    }
+    return out
+}

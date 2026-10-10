@@ -1,3 +1,4 @@
+// Фигуры: перечисление с данными, полный разбор match, плавающая точка.
 pub enum Shape {
     Circle { r: f64 }
     Rect { w: f64, h: f64 }
@@ -22,6 +23,7 @@ pub fn name(s: Shape) str {
     }
 }
 
+// Фигура с наибольшей площадью; нет значения для пустого списка.
 pub fn largest(shapes: []Shape) ?Shape {
     if len(shapes) == 0 {
         return none

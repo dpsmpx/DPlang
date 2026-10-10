@@ -28,6 +28,9 @@ private:
 
     // --- области и переменные
     std::vector<std::vector<Local*>> scopes_;
+    // Корни Map, которые обходит `for k in &m`: менять их в теле нельзя (Р54).
+    std::vector<Local*> frozen_;
+    bool frozen(const Local* l) const;
     uint32_t next_local_ = 0;
     int or_depth_ = 0;
 

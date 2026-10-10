@@ -1,0 +1,307 @@
+// t15: книга счетов с вложенными транзакциями.
+
+const BOUND: i64 = 1000000000000000
+const MAX_DEPTH: int = 8
+
+pub struct Account {
+    bal: i64
+    limit: i64
+}
+
+pub struct Ledger {
+    // открытые счета
+    accounts: Map[str, Account]
+    // снимки счетов на момент каждого begin
+    saved: List[Map[str, Account]]
+}
+
+pub fn ledger_new() Ledger {
+    return Ledger { accounts: [], saved: [] }
+}
+
+// Слова строки: разделитель — только пробел.
+fn words(line: str) List[str] {
+    var out: List[str] = []
+    let n = len(line)
+    var i = 0
+    while i < n {
+        if line[i] == ' ' {
+            i += 1
+            continue
+        }
+        var j = i
+        while j < n && line[j] != ' ' {
+            j += 1
+        }
+        out.push(line[i..j])
+        i = j
+    }
+    return out
+}
+
+fn is_name(w: str) bool {
+    let n = len(w)
+    if n < 1 || n > 16 {
+        return false
+    }
+    let first = w[0]
+    if first < 'a' || first > 'z' {
+        return false
+    }
+    for i in 1..n {
+        let c = w[i]
+        let good = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+        if !good {
+            return false
+        }
+    }
+    return true
+}
+
+fn parse_num(w: str) ?i64 {
+    let n = len(w)
+    if n < 1 || n > 18 {
+        return none
+    }
+    var v: i64 = 0
+    for i in 0..n {
+        let c = w[i]
+        if c < '0' || c > '9' {
+            return none
+        }
+        v = v * 10 + i64(c - '0')
+    }
+    return v
+}
+
+fn cmd_open(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 3 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    if let lim = parse_num(w[2]) {
+        let name = w[1]
+        if l.accounts.contains(name) {
+            return "error exists " + name
+        }
+        l.accounts[name] = Account { bal: 0, limit: lim }
+        return "ok"
+    }
+    return "error syntax"
+}
+
+fn cmd_deposit(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 3 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    if let amt = parse_num(w[2]) {
+        if amt == 0 {
+            return "error amount"
+        }
+        let name = w[1]
+        if !l.accounts.contains(name) {
+            return "error unknown " + name
+        }
+        var acc = l.accounts[name]
+        let nb = acc.bal + amt
+        if nb < -acc.limit {
+            return "error funds"
+        }
+        if nb > BOUND || nb < -BOUND {
+            return "error bound"
+        }
+        acc.bal = nb
+        l.accounts[name] = acc
+        return "ok " + str(nb)
+    }
+    return "error syntax"
+}
+
+fn cmd_withdraw(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 3 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    if let amt = parse_num(w[2]) {
+        if amt == 0 {
+            return "error amount"
+        }
+        let name = w[1]
+        if !l.accounts.contains(name) {
+            return "error unknown " + name
+        }
+        var acc = l.accounts[name]
+        let nb = acc.bal - amt
+        if nb < -acc.limit {
+            return "error funds"
+        }
+        if nb > BOUND || nb < -BOUND {
+            return "error bound"
+        }
+        acc.bal = nb
+        l.accounts[name] = acc
+        return "ok " + str(nb)
+    }
+    return "error syntax"
+}
+
+fn cmd_transfer(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 4 || !is_name(w[1]) || !is_name(w[2]) {
+        return "error syntax"
+    }
+    if let amt = parse_num(w[3]) {
+        if amt == 0 {
+            return "error amount"
+        }
+        let fname = w[1]
+        let tname = w[2]
+        if !l.accounts.contains(fname) {
+            return "error unknown " + fname
+        }
+        if !l.accounts.contains(tname) {
+            return "error unknown " + tname
+        }
+        if fname == tname {
+            return "error same"
+        }
+        let fee = max(amt / 100, 1)
+        var src = l.accounts[fname]
+        var dst = l.accounts[tname]
+        let nf = src.bal - (amt + fee)
+        let nt = dst.bal + amt
+        if nf < -src.limit {
+            return "error funds"
+        }
+        if nf > BOUND || nf < -BOUND {
+            return "error bound"
+        }
+        if nt > BOUND || nt < -BOUND {
+            return "error bound"
+        }
+        src.bal = nf
+        dst.bal = nt
+        l.accounts[fname] = src
+        l.accounts[tname] = dst
+        return "ok " + str(nf) + " " + str(nt)
+    }
+    return "error syntax"
+}
+
+fn cmd_balance(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 2 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    let name = w[1]
+    if !l.accounts.contains(name) {
+        return "error unknown " + name
+    }
+    return str(l.accounts[name].bal)
+}
+
+fn cmd_close(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 2 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    let name = w[1]
+    if !l.accounts.contains(name) {
+        return "error unknown " + name
+    }
+    if l.accounts[name].bal != 0 {
+        return "error nonzero"
+    }
+    _ = l.accounts.remove(name)
+    return "ok"
+}
+
+fn cmd_begin(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 1 {
+        return "error syntax"
+    }
+    if len(l.saved) >= MAX_DEPTH {
+        return "error depth"
+    }
+    let snap = l.accounts
+    l.saved.push(snap)
+    return "ok depth " + str(len(l.saved))
+}
+
+fn cmd_commit(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 1 {
+        return "error syntax"
+    }
+    if len(l.saved) == 0 {
+        return "error depth"
+    }
+    _ = l.saved.pop()
+    return "ok depth " + str(len(l.saved))
+}
+
+fn cmd_rollback(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 1 {
+        return "error syntax"
+    }
+    if len(l.saved) == 0 {
+        return "error depth"
+    }
+    if let back = l.saved.pop() {
+        l.accounts = back
+    }
+    return "ok depth " + str(len(l.saved))
+}
+
+fn cmd_report(l: &mut Ledger, w: List[str]) str {
+    if len(w) != 1 {
+        return "error syntax"
+    }
+    var names = l.accounts.keys()
+    if len(names) == 0 {
+        return "(empty)"
+    }
+    names.sort()
+    var out = ""
+    for i in 0..len(names) {
+        let nm = names[i]
+        if i > 0 {
+            out += " "
+        }
+        out += nm + ":" + str(l.accounts[nm].bal)
+    }
+    return out
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    let w = words(line)
+    if len(w) == 0 {
+        return "error syntax"
+    }
+    let cmd = w[0]
+    if cmd == "open" {
+        return cmd_open(&mut l, w)
+    }
+    if cmd == "deposit" {
+        return cmd_deposit(&mut l, w)
+    }
+    if cmd == "withdraw" {
+        return cmd_withdraw(&mut l, w)
+    }
+    if cmd == "transfer" {
+        return cmd_transfer(&mut l, w)
+    }
+    if cmd == "balance" {
+        return cmd_balance(&mut l, w)
+    }
+    if cmd == "close" {
+        return cmd_close(&mut l, w)
+    }
+    if cmd == "begin" {
+        return cmd_begin(&mut l, w)
+    }
+    if cmd == "commit" {
+        return cmd_commit(&mut l, w)
+    }
+    if cmd == "rollback" {
+        return cmd_rollback(&mut l, w)
+    }
+    if cmd == "report" {
+        return cmd_report(&mut l, w)
+    }
+    return "error syntax"
+}

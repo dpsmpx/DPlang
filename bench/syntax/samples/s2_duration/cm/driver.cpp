@@ -1,4 +1,4 @@
-// Драйвер образца s2 для переведённых вариантов DPlang.
+// Драйвер образца s2 для переведённых вариантов dpl.
 #include "cm_out.hpp"
 
 static void show(const char* text) {

@@ -1,0 +1,29 @@
+// t08: пересекающиеся пары AABB — перебор всех пар i < j.
+pub struct Box {
+    min_x: i32
+    min_y: i32
+    max_x: i32
+    max_y: i32
+}
+
+pub struct Pair {
+    i: i32
+    j: i32
+}
+
+fn overlaps(a: Box, b: Box) bool {
+    return a.min_x < b.max_x && b.min_x < a.max_x && a.min_y < b.max_y && b.min_y < a.max_y
+}
+
+pub fn overlapping_pairs(boxes: []Box) List[Pair] {
+    var out: List[Pair] = []
+    let n = len(boxes)
+    for i in 0..n {
+        for j in i + 1..n {
+            if overlaps(boxes[i], boxes[j]) {
+                out.push(Pair { i: i32(i), j: i32(j) })
+            }
+        }
+    }
+    return out
+}

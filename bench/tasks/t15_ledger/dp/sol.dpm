@@ -1,0 +1,219 @@
+// t15: эталон на dpl.
+const BOUND: i64 = 1000000000000000
+
+const MAX_DEPTH: i32 = 8
+
+pub struct Account {
+    name: str
+    balance: i64
+    limit: i64
+}
+
+pub struct Ledger {
+    // по возрастанию имени
+    accounts: List[Account]
+    // состояния на момент begin
+    saved: List[List[Account]]
+}
+
+pub fn ledger_new() Ledger {
+    return Ledger { accounts: [], saved: [] }
+}
+
+fn words(line: str) List[str] {
+    var out: List[str] = []
+    for w in &line.split(" ") {
+        if len(w) > 0 {
+            out.push(w)
+        }
+    }
+    return out
+}
+
+fn is_name(s: str) bool {
+    if len(s) == 0 || len(s) > 16 || s[0] < 'a' || s[0] > 'z' {
+        return false
+    }
+    for c in &s {
+        if !((c >= 'a' && c <= 'z') || is_digit(c) || c == '_') {
+            return false
+        }
+    }
+    return true
+}
+
+fn number(s: str) ?i64 {
+    if len(s) == 0 || len(s) > 18 {
+        return none
+    }
+    var out: i64 = 0
+    for c in &s {
+        if !is_digit(c) {
+            return none
+        }
+        out = out * 10 + i64(c - '0')
+    }
+    return out
+}
+
+fn find(l: &Ledger, name: str) i32 {
+    for i in 0..len(l.accounts) {
+        if l.accounts[i].name == name {
+            return i32(i)
+        }
+    }
+    return -1
+}
+
+fn report(l: &Ledger) str {
+    if len(l.accounts) == 0 {
+        return "(empty)"
+    }
+    var out = ""
+    for a in &l.accounts {
+        if len(out) > 0 {
+            out += " "
+        }
+        out += a.name + ":" + str(a.balance)
+    }
+    return out
+}
+
+fn transaction(l: &mut Ledger, cmd: str) str {
+    if cmd == "begin" {
+        if len(l.saved) == MAX_DEPTH {
+            return "error depth"
+        }
+        l.saved.push(l.accounts)
+    } else {
+        if let top = l.saved.pop() {
+            if cmd == "rollback" {
+                l.accounts = top
+            }
+        } else {
+            return "error depth"
+        }
+    }
+    return "ok depth " + str(len(l.saved))
+}
+
+fn open(l: &mut Ledger, name: str, limit: i64) str {
+    if find(&l, name) >= 0 {
+        return "error exists " + name
+    }
+    var at = 0
+    while at < len(l.accounts) && l.accounts[at].name < name {
+        at += 1
+    }
+    l.accounts.insert(at, Account { name, balance: 0, limit })
+    return "ok"
+}
+
+fn change(l: &mut Ledger, deposit: bool, name: str, amount: i64) str {
+    if amount == 0 {
+        return "error amount"
+    }
+    let i = find(&l, name)
+    if i < 0 {
+        return "error unknown " + name
+    }
+    let a = l.accounts[i]
+    var next = a.balance - amount
+    if deposit {
+        next = a.balance + amount
+    }
+    if next < -a.limit {
+        return "error funds"
+    }
+    if abs(next) > BOUND {
+        return "error bound"
+    }
+    l.accounts[i].balance = next
+    return "ok " + str(next)
+}
+
+fn transfer(l: &mut Ledger, from_name: str, to_name: str, amount: i64) str {
+    if amount == 0 {
+        return "error amount"
+    }
+    let from = find(&l, from_name)
+    if from < 0 {
+        return "error unknown " + from_name
+    }
+    let to = find(&l, to_name)
+    if to < 0 {
+        return "error unknown " + to_name
+    }
+    if from == to {
+        return "error same"
+    }
+    let fee = max(1, amount / 100)
+    let nf = l.accounts[from].balance - amount - fee
+    let nt = l.accounts[to].balance + amount
+    if nf < -l.accounts[from].limit {
+        return "error funds"
+    }
+    if abs(nf) > BOUND || abs(nt) > BOUND {
+        return "error bound"
+    }
+    l.accounts[from].balance = nf
+    l.accounts[to].balance = nt
+    return "ok " + str(nf) + " " + str(nt)
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    let w = words(line)
+    if len(w) == 0 {
+        return "error syntax"
+    }
+    let cmd = w[0]
+    let argc = len(w) - 1
+    if cmd == "begin" || cmd == "commit" || cmd == "rollback" || cmd == "report" {
+        if argc != 0 {
+            return "error syntax"
+        }
+        if cmd == "report" {
+            return report(&l)
+        }
+        return transaction(&mut l, cmd)
+    }
+    if cmd == "balance" || cmd == "close" {
+        if argc != 1 || !is_name(w[1]) {
+            return "error syntax"
+        }
+        let i = find(&l, w[1])
+        if i < 0 {
+            return "error unknown " + w[1]
+        }
+        if cmd == "balance" {
+            return str(l.accounts[i].balance)
+        }
+        if l.accounts[i].balance != 0 {
+            return "error nonzero"
+        }
+        _ = l.accounts.remove(i)
+        return "ok"
+    }
+    if cmd == "open" || cmd == "deposit" || cmd == "withdraw" {
+        if argc != 2 || !is_name(w[1]) {
+            return "error syntax"
+        }
+        if let amount = number(w[2]) {
+            if cmd == "open" {
+                return open(&mut l, w[1], amount)
+            }
+            return change(&mut l, cmd == "deposit", w[1], amount)
+        }
+        return "error syntax"
+    }
+    if cmd == "transfer" {
+        if argc != 3 || !is_name(w[1]) || !is_name(w[2]) {
+            return "error syntax"
+        }
+        if let amount = number(w[3]) {
+            return transfer(&mut l, w[1], w[2], amount)
+        }
+        return "error syntax"
+    }
+    return "error syntax"
+}

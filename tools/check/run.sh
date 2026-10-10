@@ -7,9 +7,9 @@
 # Вывод краткий: по строке на проверку; на красном — первые строки
 # сбоя. Полный журнал — build/check/run.log. Эталоны набора задач —
 # bench/run_refs.py; решения на вариантах синтаксиса —
-# bench/syntax/run_variants.py; обвязка опыта v0.0 —
-# bench/experiment.py selftest; компилятор и его тесты — tests/run.py
-# (docs/compiler/README.md).
+# bench/syntax/run_variants.py; компилятор и его тесты — tests/run.py
+# (docs/compiler/README.md); обвязка опыта — bench/experiment.py
+# selftest, после компилятора: ей нужен dpl.
 # ============================================================
 set -u
 
@@ -75,8 +75,9 @@ step "корень"          check_root
 step "скрипты"         check_scripts
 step "эталоны"         python3 "$ROOT/bench/run_refs.py"
 step "варианты"        python3 "$ROOT/bench/syntax/run_variants.py"
-step "обвязка"         python3 "$ROOT/bench/experiment.py" selftest
 step "компилятор"      python3 "$ROOT/tests/run.py"
+# Обвязке нужен собранный компилятор: язык dp опыта (bench/dp_check.py).
+step "обвязка"         python3 "$ROOT/bench/experiment.py" selftest
 
 if [ "$FAILED" -eq 0 ]; then
     echo "Итог: PASS ($TOTAL/$TOTAL). Журнал: build/check/run.log"

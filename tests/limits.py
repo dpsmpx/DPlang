@@ -2,7 +2,7 @@
 """Проход limits исполнителя tests/run.py: предел вложенности (E0002).
 
 Для каждой конструкции наибольшее принятое число уровней n ищется
-делением пополам по `dplang check`. На n все команды компилятора проходят
+делением пополам по `dpl check`. На n все команды компилятора проходят
 без падения (код 0 или 1, без внутренней ошибки и сообщений санитайзеров),
 на n + 1 — ровно одно сообщение E0002 и код 1. Устройство —
 docs/compiler/README.md, «Предел вложенности».
@@ -40,12 +40,12 @@ SEARCH_MAX = 1 << 12
 TIMEOUT = 120
 
 
-def run(dplang, args, src, tmp):
+def run(dpl, args, src, tmp):
     path = os.path.join(tmp, 'main.dpm')
     with open(path, 'w', encoding='utf-8') as f:
         f.write(src)
     try:
-        r = subprocess.run([dplang] + args + ['main.dpm'], capture_output=True, text=True, cwd=tmp,
+        r = subprocess.run([dpl] + args + ['main.dpm'], capture_output=True, text=True, cwd=tmp,
                            timeout=TIMEOUT, errors='backslashreplace')
     except subprocess.TimeoutExpired:
         return None
@@ -65,20 +65,20 @@ def broken(r):
     return None
 
 
-def check_case(name, dplang):
+def check_case(name, dpl):
     gen = CASES[name]
     with tempfile.TemporaryDirectory(prefix='dplimits-') as tmp:
         # Наибольшее n без E0002: n = 1 принимается, SEARCH_MAX — нет.
         lo, hi = 1, SEARCH_MAX
-        r = run(dplang, ['check'], gen(lo), tmp)
+        r = run(dpl, ['check'], gen(lo), tmp)
         if broken(r) or too_deep(r):
             return 'n = 1: ' + (broken(r) or 'E0002')
-        r = run(dplang, ['check'], gen(hi), tmp)
+        r = run(dpl, ['check'], gen(hi), tmp)
         if not too_deep(r):
             return f'n = {hi}: нет E0002: ' + (broken(r) or f'код {r.returncode}')
         while hi - lo > 1:
             mid = (lo + hi) // 2
-            r = run(dplang, ['check'], gen(mid), tmp)
+            r = run(dpl, ['check'], gen(mid), tmp)
             err = broken(r)
             if err:
                 return f'n = {mid}: {err}'
@@ -87,10 +87,10 @@ def check_case(name, dplang):
             else:
                 lo = mid
         for cmd in CASE_COMMANDS.get(name, COMMANDS):
-            err = broken(run(dplang, cmd, gen(lo), tmp))
+            err = broken(run(dpl, cmd, gen(lo), tmp))
             if err:
                 return f'n = {lo}, {" ".join(cmd)}: {err}'
-        r = run(dplang, ['check'], gen(hi), tmp)
+        r = run(dpl, ['check'], gen(hi), tmp)
         if not too_deep(r) or r.stderr.count('error[') != 1:
             return f'n = {hi}: ожидалось одно E0002:\n' + '\n'.join(r.stderr.splitlines()[:5])
     return None

@@ -1,8 +1,8 @@
 <!-- Сгенерировано bench/syntax/mkspec.py из bench/syntax/spec_template.md и bench/syntax/samples/; вручную не править. -->
 
-# DPlang, вариант C — краткая спецификация
+# dpl, вариант C — краткая спецификация
 
-Подмножество языка DPlang для опыта с синтаксисом (v0.0). Пишите решение
+Подмножество языка dpl для опыта с синтаксисом (v0.0). Пишите решение
 только тем, что описано здесь. Решение переводится в C++ и собирается с
 драйвером задачи; драйвер вызывает публичные функции и читает поля
 публичных структур по именам из заготовки. Ловушка — выход за границы,
@@ -29,7 +29,7 @@
 перечисления, константы, `import`. `pub` делает объявление видимым
 драйверу и другим модулям.
 
-```dplang
+```dpl
 pub struct Item {
     id i32
     count i32 = 1
@@ -90,7 +90,7 @@ pub fn reset(items mut List[Item]) {
 
 ## 4. Переменные
 
-```dplang
+```dpl
 fn demo(xs []i32) i64 {
     n := len(xs)
     var sum i64 = 0
@@ -150,7 +150,7 @@ fn demo(xs []i32) i64 {
 
 ## 6. Инструкции
 
-```dplang
+```dpl
 fn walk(path []Event) i32 {
     x := 0
     var hits List[i32] = []
@@ -194,7 +194,7 @@ fn walk(path []Event) i32 {
 
 ## 7. Ошибки
 
-```dplang
+```dpl
 pub enum ReadError {
     Empty
     TooLong
@@ -264,7 +264,7 @@ pub fn count_valid(names []str) i32 {
 
 ### s1_shapes
 
-```dplang
+```dpl
 // Фигуры: перечисление с данными, полный разбор match, плавающая точка.
 pub enum Shape {
     Circle { r f64 }
@@ -315,7 +315,7 @@ pub fn scale(s Shape, k f64) Shape {
 
 ### s2_duration
 
-```dplang
+```dpl
 // Разбор длительности «1h30m15s»: строки, байты, ошибки-значения, try.
 pub enum DurationError {
     Empty
@@ -391,7 +391,7 @@ pub fn format_duration(seconds i64) str {
 
 ### s3_bank
 
-```dplang
+```dpl
 // Счета и переводы: список структур, изменяемые ссылки, ошибки без
 // изменения состояния, разбор результата в match, заворачивающая
 // арифметика.

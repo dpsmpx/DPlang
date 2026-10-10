@@ -1,0 +1,83 @@
+// t04: пул с хэндлами и поколениями.
+pub struct Handle {
+    index: i32
+    generation: i32
+}
+
+pub enum PoolError {
+    Full
+}
+
+pub struct Pool {
+    values: List[i32]
+    gens: List[i32]
+    alive: List[bool]
+    cap: i32
+    live: i32
+}
+
+pub fn pool_new(capacity: i32) Pool {
+    var cap: i32 = capacity
+    if cap < 0 {
+        cap = 0
+    }
+    let zero: i32 = 0
+    let one: i32 = 1
+    return Pool {
+        values: repeat(zero, cap),
+        gens: repeat(one, cap),
+        alive: repeat(false, cap),
+        cap: cap,
+        live: zero,
+    }
+}
+
+pub fn pool_create(p: &mut Pool, value: i32) PoolError!Handle {
+    for i in 0..p.cap {
+        if !p.alive[i] {
+            p.alive[i] = true
+            p.values[i] = value
+            p.live += 1
+            return Handle { index: i, generation: p.gens[i] }
+        }
+    }
+    fail PoolError.Full
+}
+
+pub fn pool_get(p: &Pool, h: Handle) ?i32 {
+    if h.index < 0 || h.index >= p.cap {
+        return none
+    }
+    if !p.alive[h.index] || p.gens[h.index] != h.generation {
+        return none
+    }
+    return p.values[h.index]
+}
+
+pub fn pool_set(p: &mut Pool, h: Handle, value: i32) bool {
+    if h.index < 0 || h.index >= p.cap {
+        return false
+    }
+    if !p.alive[h.index] || p.gens[h.index] != h.generation {
+        return false
+    }
+    p.values[h.index] = value
+    return true
+}
+
+pub fn pool_destroy(p: &mut Pool, h: Handle) bool {
+    if h.index < 0 || h.index >= p.cap {
+        return false
+    }
+    if !p.alive[h.index] || p.gens[h.index] != h.generation {
+        return false
+    }
+    p.alive[h.index] = false
+    p.gens[h.index] += 1
+    p.live -= 1
+    return true
+}
+
+pub fn pool_count(p: &Pool) i32 {
+    return p.live
+}

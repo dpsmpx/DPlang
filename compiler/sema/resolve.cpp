@@ -68,6 +68,22 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
                 out = tt.list(type(n->args[0]));
                 break;
             }
+            if (k == TK::Map) {
+                if (n->args.size() != 2) {
+                    diags_.error(Code::E0314, node->span, "'Map' takes exactly two type arguments: Map[K, V]");
+                    break;
+                }
+                const sema::Type* key = type(n->args[0]);
+                const sema::Type* value = type(n->args[1]);
+                if (key->kind == TK::Error || value->kind == TK::Error) break;
+                if (!map_key_type(key)) {
+                    diags_.error(Code::E0424, n->args[0]->span,
+                                 "a Map key must be an integer, a bool or a str, found '" + type_name(key) + "'");
+                    break;
+                }
+                out = tt.map(key, value);
+                break;
+            }
             if (!n->args.empty()) {
                 diags_.error(Code::E0314, node->span, "type '" + n->name + "' takes no type arguments");
                 break;

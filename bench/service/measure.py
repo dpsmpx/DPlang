@@ -3,7 +3,7 @@
 
     python3 bench/service/measure.py [--save DIR] [--runs N]
 
-Нужна сборка Release: build/release/dplang (её делает tests/run.py).
+Нужна сборка Release: build/release/dpl (её делает tests/run.py).
 Что меряется (docs/service/README.md, «Замеры и числа профиля»):
 
 1. worker на одном запросе — время (стена, user, sys) и пиковая память
@@ -30,7 +30,7 @@ import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DPLANG = os.path.join(ROOT, 'build', 'release', 'dplang')
+DPL = os.path.join(ROOT, 'build', 'release', 'dpl')
 PROFILE = os.path.join(ROOT, 'service', 'config', 'online-v1.json')
 sys.path.insert(0, os.path.join(ROOT, 'tests'))
 import limits as limit_cases  # noqa: E402  конструкции прохода limits
@@ -94,7 +94,7 @@ def fill(make, lines, size):
 
 def deepest(make, cfg):
     """Наибольшая глубина make(n), которую worker принимает без E0002."""
-    argv = [DPLANG, 'worker'] + flags(cfg, cpu_seconds=30)
+    argv = [DPL, 'worker'] + flags(cfg, cpu_seconds=30)
 
     def ok(n):
         r = run_measured(argv, body(make(n)))
@@ -172,7 +172,7 @@ def outcome(r):
 
 def measure_inputs(cfg, srcs, runs):
     out = {}
-    base = [DPLANG, 'worker']
+    base = [DPL, 'worker']
     rs = [run_measured(base + ['--describe'], b'') for _ in range(runs)]
     out['describe'] = summarize(rs, 'ok', 0, 0)
     for name, src in srcs.items():
@@ -191,7 +191,7 @@ def summarize(rs, what, lines, size):
 
 
 def passes(cfg, srcs, **over):
-    argv = [DPLANG, 'worker'] + flags(cfg, cpu_seconds=30, **over)
+    argv = [DPL, 'worker'] + flags(cfg, cpu_seconds=30, **over)
     for src in srcs.values():
         r = run_measured(argv, body(src))
         if outcome(r).startswith(('exit', 'bad', 'limit_exceeded:memory')):
@@ -220,7 +220,7 @@ def measure_minimums(cfg, srcs):
 
 def measure_gateway(cfg, src, conc, total, clients):
     with tempfile.TemporaryDirectory(prefix='dpmeasure-') as tmp:
-        gw = service_tests.Gateway(tmp, DPLANG, 'real', queue__concurrency=conc, queue__length=clients * 2,
+        gw = service_tests.Gateway(tmp, DPL, 'real', queue__concurrency=conc, queue__length=clients * 2,
                                    queue__wait_ms=60000, rate_limit__per_ip_burst=total * 2,
                                    rate_limit__global_burst=total * 2)
         try:
@@ -256,8 +256,8 @@ def main():
     ap.add_argument('--save', help='каталог для measure.json и summary.md')
     ap.add_argument('--runs', type=int, default=5)
     a = ap.parse_args()
-    if not os.path.exists(DPLANG):
-        print('нет build/release/dplang: сначала python3 tests/run.py', file=sys.stderr)
+    if not os.path.exists(DPL):
+        print('нет build/release/dpl: сначала python3 tests/run.py', file=sys.stderr)
         return 2
     with open(PROFILE, encoding='utf-8') as f:
         cfg = json.load(f)

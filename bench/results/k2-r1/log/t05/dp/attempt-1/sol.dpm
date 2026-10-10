@@ -1,0 +1,22 @@
+// t05: случайность по ключам (splitmix64) и высоты рельефа.
+pub fn hash32(seed: u64, x: i32, y: i32) u32 {
+    let k = seed ^ (u64(u32.wrap(x)) << 32) ^ u64(u32.wrap(y))
+    var z = k +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    z = z ^ (z >> 31)
+    return u32(z >> 32)
+}
+
+fn raw(seed: u64, x: i32, y: i32) i32 {
+    return 32 + i32(hash32(seed, x, y) % 16)
+}
+
+pub fn height(seed: u64, x: i32, y: i32) i32 {
+    var s = raw(seed, x, y)
+    s += raw(seed, x +% 1, y)
+    s += raw(seed, x -% 1, y)
+    s += raw(seed, x, y +% 1)
+    s += raw(seed, x, y -% 1)
+    return s / 5
+}

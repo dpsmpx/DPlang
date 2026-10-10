@@ -36,7 +36,7 @@ std::string error_v1(std::string_view code, std::string_view message, std::strin
                      uint64_t max = 0);
 
 // Версии: {"api":"v1","compiler":{"version":…,"language":…}} — для
-// `dplang worker --describe` и /api/v1/info.
+// `dpl worker --describe` и /api/v1/info.
 std::string describe_v1();
 
 }  // namespace dp::api

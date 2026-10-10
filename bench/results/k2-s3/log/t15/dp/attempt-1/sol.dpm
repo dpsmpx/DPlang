@@ -1,0 +1,260 @@
+// t15: книга счетов с вложенными транзакциями.
+const BOUND: i64 = 1000000000000000
+const MAX_DEPTH: int = 8
+
+pub struct Account {
+    name: str
+    limit: i64
+    bal: i64
+}
+
+pub struct Snapshot {
+    accounts: List[Account]
+}
+
+pub struct Ledger {
+    // открытые счета по возрастанию имени
+    accounts: List[Account]
+    // состояние книги на момент каждого незавершённого begin
+    snaps: List[Snapshot]
+}
+
+pub fn ledger_new() Ledger {
+    return Ledger { accounts: [], snaps: [] }
+}
+
+// Слова строки: разделитель — один или несколько пробелов.
+fn words(line: str) List[str] {
+    var out: List[str] = []
+    let parts = line.split(" ")
+    for p in &parts {
+        if len(p) > 0 {
+            out.push(p)
+        }
+    }
+    return out
+}
+
+fn valid_name(s: str) bool {
+    let n = len(s)
+    if n < 1 || n > 16 {
+        return false
+    }
+    for i in 0..n {
+        let b = s[i]
+        if i == 0 {
+            if b < 'a' || b > 'z' {
+                return false
+            }
+        } else {
+            let good = (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_'
+            if !good {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+// Число из 1..18 цифр; иначе нет значения.
+fn parse_num(s: str) ?i64 {
+    let n = len(s)
+    if n < 1 || n > 18 {
+        return none
+    }
+    var v: i64 = 0
+    for i in 0..n {
+        let b = s[i]
+        if b < '0' || b > '9' {
+            return none
+        }
+        v = v * 10 + i64(b - '0')
+    }
+    return v
+}
+
+fn find(accts: &List[Account], name: str) int {
+    for i in 0..len(accts) {
+        if accts[i].name == name {
+            return i
+        }
+    }
+    return -1
+}
+
+fn fee_of(amt: i64) i64 {
+    let f = amt / 100
+    if f < 1 {
+        return 1
+    }
+    return f
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    let w = words(line)
+    if len(w) == 0 {
+        return "error syntax"
+    }
+    let cmd = w[0]
+    let argc = len(w) - 1
+    if cmd == "open" {
+        if argc != 2 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let lim = parse_num(w[2]) ?? -1
+        if lim < 0 {
+            return "error syntax"
+        }
+        let name = w[1]
+        if find(&l.accounts, name) >= 0 {
+            return "error exists " + name
+        }
+        var pos = 0
+        while pos < len(l.accounts) && l.accounts[pos].name < name {
+            pos += 1
+        }
+        l.accounts.insert(pos, Account { name: name, limit: lim, bal: 0 })
+        return "ok"
+    }
+    if cmd == "deposit" || cmd == "withdraw" {
+        if argc != 2 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let amt = parse_num(w[2]) ?? -1
+        if amt < 0 {
+            return "error syntax"
+        }
+        if amt == 0 {
+            return "error amount"
+        }
+        let name = w[1]
+        let i = find(&l.accounts, name)
+        if i < 0 {
+            return "error unknown " + name
+        }
+        var nb = l.accounts[i].bal
+        if cmd == "deposit" {
+            nb = nb + amt
+        } else {
+            nb = nb - amt
+        }
+        if nb < -l.accounts[i].limit {
+            return "error funds"
+        }
+        if abs(nb) > BOUND {
+            return "error bound"
+        }
+        l.accounts[i].bal = nb
+        return "ok " + str(nb)
+    }
+    if cmd == "transfer" {
+        if argc != 3 || !valid_name(w[1]) || !valid_name(w[2]) {
+            return "error syntax"
+        }
+        let amt = parse_num(w[3]) ?? -1
+        if amt < 0 {
+            return "error syntax"
+        }
+        if amt == 0 {
+            return "error amount"
+        }
+        let fi = find(&l.accounts, w[1])
+        if fi < 0 {
+            return "error unknown " + w[1]
+        }
+        let ti = find(&l.accounts, w[2])
+        if ti < 0 {
+            return "error unknown " + w[2]
+        }
+        if fi == ti {
+            return "error same"
+        }
+        let nf = l.accounts[fi].bal - amt - fee_of(amt)
+        if nf < -l.accounts[fi].limit {
+            return "error funds"
+        }
+        let nt = l.accounts[ti].bal + amt
+        if abs(nf) > BOUND {
+            return "error bound"
+        }
+        if abs(nt) > BOUND {
+            return "error bound"
+        }
+        l.accounts[fi].bal = nf
+        l.accounts[ti].bal = nt
+        return "ok " + str(nf) + " " + str(nt)
+    }
+    if cmd == "balance" {
+        if argc != 1 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let i = find(&l.accounts, w[1])
+        if i < 0 {
+            return "error unknown " + w[1]
+        }
+        return str(l.accounts[i].bal)
+    }
+    if cmd == "close" {
+        if argc != 1 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let i = find(&l.accounts, w[1])
+        if i < 0 {
+            return "error unknown " + w[1]
+        }
+        if l.accounts[i].bal != 0 {
+            return "error nonzero"
+        }
+        _ = l.accounts.remove(i)
+        return "ok"
+    }
+    if cmd == "begin" {
+        if argc != 0 {
+            return "error syntax"
+        }
+        if len(l.snaps) >= MAX_DEPTH {
+            return "error depth"
+        }
+        l.snaps.push(Snapshot { accounts: l.accounts })
+        return "ok depth " + str(len(l.snaps))
+    }
+    if cmd == "commit" {
+        if argc != 0 {
+            return "error syntax"
+        }
+        if len(l.snaps) == 0 {
+            return "error depth"
+        }
+        _ = l.snaps.pop()
+        return "ok depth " + str(len(l.snaps))
+    }
+    if cmd == "rollback" {
+        if argc != 0 {
+            return "error syntax"
+        }
+        let n = len(l.snaps)
+        if n == 0 {
+            return "error depth"
+        }
+        l.accounts = l.snaps[n - 1].accounts
+        _ = l.snaps.pop()
+        return "ok depth " + str(len(l.snaps))
+    }
+    if cmd == "report" {
+        if argc != 0 {
+            return "error syntax"
+        }
+        if len(l.accounts) == 0 {
+            return "(empty)"
+        }
+        var out = ""
+        for i in 0..len(l.accounts) {
+            if i > 0 {
+                out = out + " "
+            }
+            out = out + l.accounts[i].name + ":" + str(l.accounts[i].bal)
+        }
+        return out
+    }
+    return "error syntax"
+}

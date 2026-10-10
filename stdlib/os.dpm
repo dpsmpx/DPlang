@@ -1,0 +1,31 @@
+// Операционная система: аргументы программы и файлы (Р51;
+// docs/stdlib/README.md). Ввод-вывод — недетерминированный класс (Р12).
+
+// Ошибка ввода-вывода.
+pub enum IoError {
+    NotFound
+    PermissionDenied
+    InvalidUtf8
+    Other
+}
+
+// Аргументы программы без её имени, по порядку.
+pub fn args() List[str] {
+    var out: List[str] = []
+    for i in 0..__args_len() {
+        out.push(__arg(i))
+    }
+    return out
+}
+
+// Файл целиком. Текст должен быть UTF-8 — иначе InvalidUtf8.
+pub fn read_file(path: str) IoError!str {
+    var text = ""
+    match __read_file(path, &mut text) {
+        0 => return text
+        1 => fail .NotFound
+        2 => fail .PermissionDenied
+        3 => fail .InvalidUtf8
+        _ => fail .Other
+    }
+}

@@ -1,0 +1,249 @@
+// t15: книга счетов с вложенными транзакциями.
+pub struct Account {
+    name: str
+    limit: i64
+    bal: i64
+}
+
+pub struct Ledger {
+    // открытые счета
+    accts: List[Account]
+    // снимки счетов на момент каждого begin
+    stack: List[List[Account]]
+}
+
+const BOUND: i64 = 1000000000000000
+
+pub fn ledger_new() Ledger {
+    return Ledger { accts: [], stack: [] }
+}
+
+fn words(line: str) List[str] {
+    var out: List[str] = []
+    let parts = line.split(" ")
+    for p in &parts {
+        if len(p) > 0 {
+            out.push(p)
+        }
+    }
+    return out
+}
+
+fn valid_name(s: str) bool {
+    let n = len(s)
+    if n < 1 || n > 16 {
+        return false
+    }
+    var i = 0
+    while i < n {
+        let c = s[i]
+        let lower = c >= 'a' && c <= 'z'
+        let rest = lower || (c >= '0' && c <= '9') || c == '_'
+        if i == 0 && !lower {
+            return false
+        }
+        if !rest {
+            return false
+        }
+        i += 1
+    }
+    return true
+}
+
+// Число из 1..18 цифр; иначе -1.
+fn parse_num(s: str) i64 {
+    let n = len(s)
+    if n < 1 || n > 18 {
+        return -1
+    }
+    var v: i64 = 0
+    for c in &s {
+        if c < '0' || c > '9' {
+            return -1
+        }
+        v = v * 10 + i64(c - '0')
+    }
+    return v
+}
+
+fn find(accts: &List[Account], name: str) int {
+    var i = 0
+    while i < len(accts) {
+        if accts[i].name == name {
+            return i
+        }
+        i += 1
+    }
+    return -1
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    let w = words(line)
+    let argc = len(w)
+    if argc == 0 {
+        return "error syntax"
+    }
+    let cmd = w[0]
+    if cmd == "open" {
+        if argc != 3 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let lim = parse_num(w[2])
+        if lim < 0 {
+            return "error syntax"
+        }
+        if find(&l.accts, w[1]) >= 0 {
+            return "error exists " + w[1]
+        }
+        l.accts.push(Account { name: w[1], limit: lim, bal: 0 })
+        return "ok"
+    }
+    if cmd == "deposit" || cmd == "withdraw" {
+        if argc != 3 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let amt = parse_num(w[2])
+        if amt < 0 {
+            return "error syntax"
+        }
+        if amt == 0 {
+            return "error amount"
+        }
+        let i = find(&l.accts, w[1])
+        if i < 0 {
+            return "error unknown " + w[1]
+        }
+        let a = l.accts[i]
+        var nb = a.bal + amt
+        if cmd == "withdraw" {
+            nb = a.bal - amt
+            if nb < -a.limit {
+                return "error funds"
+            }
+        }
+        if abs(nb) > BOUND {
+            return "error bound"
+        }
+        l.accts[i].bal = nb
+        return "ok " + str(nb)
+    }
+    if cmd == "transfer" {
+        if argc != 4 || !valid_name(w[1]) || !valid_name(w[2]) {
+            return "error syntax"
+        }
+        let amt = parse_num(w[3])
+        if amt < 0 {
+            return "error syntax"
+        }
+        if amt == 0 {
+            return "error amount"
+        }
+        let fi = find(&l.accts, w[1])
+        if fi < 0 {
+            return "error unknown " + w[1]
+        }
+        let ti = find(&l.accts, w[2])
+        if ti < 0 {
+            return "error unknown " + w[2]
+        }
+        if fi == ti {
+            return "error same"
+        }
+        var fee = amt / 100
+        if fee < 1 {
+            fee = 1
+        }
+        let fa = l.accts[fi]
+        let ta = l.accts[ti]
+        let nf = fa.bal - amt - fee
+        let nt = ta.bal + amt
+        if nf < -fa.limit {
+            return "error funds"
+        }
+        if abs(nf) > BOUND {
+            return "error bound"
+        }
+        if abs(nt) > BOUND {
+            return "error bound"
+        }
+        l.accts[fi].bal = nf
+        l.accts[ti].bal = nt
+        return "ok " + str(nf) + " " + str(nt)
+    }
+    if cmd == "balance" {
+        if argc != 2 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let i = find(&l.accts, w[1])
+        if i < 0 {
+            return "error unknown " + w[1]
+        }
+        return str(l.accts[i].bal)
+    }
+    if cmd == "close" {
+        if argc != 2 || !valid_name(w[1]) {
+            return "error syntax"
+        }
+        let i = find(&l.accts, w[1])
+        if i < 0 {
+            return "error unknown " + w[1]
+        }
+        if l.accts[i].bal != 0 {
+            return "error nonzero"
+        }
+        l.accts.remove(i)
+        return "ok"
+    }
+    if cmd == "begin" {
+        if argc != 1 {
+            return "error syntax"
+        }
+        if len(l.stack) >= 8 {
+            return "error depth"
+        }
+        let snap = l.accts
+        l.stack.push(snap)
+        return "ok depth " + str(len(l.stack))
+    }
+    if cmd == "commit" {
+        if argc != 1 {
+            return "error syntax"
+        }
+        if len(l.stack) == 0 {
+            return "error depth"
+        }
+        l.stack.pop()
+        return "ok depth " + str(len(l.stack))
+    }
+    if cmd == "rollback" {
+        if argc != 1 {
+            return "error syntax"
+        }
+        if len(l.stack) == 0 {
+            return "error depth"
+        }
+        let top = len(l.stack) - 1
+        l.accts = l.stack[top]
+        l.stack.pop()
+        return "ok depth " + str(len(l.stack))
+    }
+    if cmd == "report" {
+        if argc != 1 {
+            return "error syntax"
+        }
+        if len(l.accts) == 0 {
+            return "(empty)"
+        }
+        var xs = l.accts
+        xs.sort()
+        var out = ""
+        for a in &xs {
+            if len(out) > 0 {
+                out += " "
+            }
+            out += a.name + ":" + str(a.bal)
+        }
+        return out
+    }
+    return "error syntax"
+}

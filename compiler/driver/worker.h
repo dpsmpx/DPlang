@@ -1,8 +1,8 @@
-// Режим `dplang worker` — процесс онлайн-сервиса для одного запроса
+// Режим `dpl worker` — процесс онлайн-сервиса для одного запроса
 // (Р49; docs/service/README.md, «Worker»).
 //
-//     dplang worker --describe
-//     dplang worker --request-bytes=N … --stack-bytes=N  < тело запроса
+//     dpl worker --describe
+//     dpl worker --request-bytes=N … --stack-bytes=N  < тело запроса
 //
 // Пределы — только из аргументов (их строит шлюз из профиля
 // service/config/online-v1.json); пользовательских данных в аргументах
