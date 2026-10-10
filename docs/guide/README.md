@@ -295,6 +295,92 @@ let m = min(a, b) + max(a, b) + abs(d)
 - Плавающие: `str(0.1)` — `0.1`, `str(1e16)` — `1e+16` (кратчайшая
   запись, Р48).
 
+## Чего в dpl нет и чем заменить
+
+| нет | вместо этого |
+|---|---|
+| методов у своих типов, `impl` | функции: `fn area(s: &Shape) int` |
+| обобщённых функций и своих обобщённых типов | отдельная функция на тип |
+| замыканий и лямбд | именованная функция |
+| кортежей | структура: `struct Pair { a: int, b: int }` |
+| `if` и `match` как выражения, `?:` | `var x = …`, затем присваивание в ветвях |
+| форматной строки | склейка: `"x=" + str(x)` |
+| типа символа | байт `u8`; текст — `str` |
+| `++`, `--`, `loop` | `i += 1`, `while true` |
+| изменяемых глобальных | `const` или параметр `&mut` |
+| исключений и `null` | `E!T` с `try`, `?T` с `none` |
+
+- `&` берётся только у переменной, поля или элемента. Результат вызова
+  сначала кладётся в `let`: `let d = f()`, затем `g(&d)`. Исключение —
+  обход: `for k in &m.keys()`.
+
+## Частые приёмы
+
+```dpl
+fn words(s: str) List[str] {             // split(" ") даёт "" между пробелами подряд
+    var out: List[str] = []
+    for w in &s.split(" ") {
+        if len(w) > 0 { out.push(w) }
+    }
+    return out
+}
+
+fn join(parts: []str, sep: str) str {
+    var out = ""
+    for i in 0..len(parts) {
+        if i > 0 { out += sep }
+        out += parts[i]
+    }
+    return out
+}
+
+fn index_of(xs: []str, v: str) ?int {
+    for i in 0..len(xs) {
+        if xs[i] == v { return i }
+    }
+    return none
+}
+```
+
+- Список из значений — литерал: `[x]`, `[a, b]`. `n` пробелов —
+  `for i in 0..n { s += " " }`.
+- `?T` сравнивается со значением: `peek(&p) == '+'`, `m.get(k) == 3`.
+- Счётчик: `counts[w] = (counts.get(w) ?? 0) + 1`.
+- Снимок и откат — копией: `let saved = state` … `state = saved`.
+  Стек снимков — `List[State]`, откат — `if let s = stack.pop() { state = s }`.
+- Разбор строки — структура с позицией и функции с `&mut`; ошибка —
+  `E!T` и `try`:
+
+```dpl
+struct Parser {
+    src: str
+    pos: int
+}
+
+fn peek(p: &Parser) ?u8 {
+    if p.pos < len(p.src) { return p.src[p.pos] }
+    return none
+}
+
+fn number(p: &mut Parser) ParseError!i64 {
+    let start = p.pos
+    while p.pos < len(p.src) && is_digit(p.src[p.pos]) { p.pos += 1 }
+    if p.pos == start { fail .Expected }
+    if let v = parse_int(p.src[start..p.pos]) { return v }
+    fail .TooBig                               // больше i64
+}
+
+fn sum(p: &mut Parser) ParseError!i64 {
+    var total = try number(&mut p)
+    while peek(&p) == '+' {
+        p.pos += 1
+        let n = try number(&mut p)
+        if let t = checked_add(total, n) { total = t } else { fail .TooBig }
+    }
+    return total
+}
+```
+
 ## Частые ошибки компилятора
 
 | код | что значит | как исправить |
