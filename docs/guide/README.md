@@ -63,34 +63,26 @@ b += 1
   Деление на 0 — ловушка.
 - Арифметика по модулю 2^N — `+%`, `-%`, `*%` и `T.wrap(x)`
   (`u32.wrap(-1)` — 4294967295). Сдвиги `<<`, `>>`, биты `& | ^ ~`.
-- Встроенной проверки «не переполнится ли» нет. Проверяют заранее:
+- Проверка без ловушки — `checked_add`, `checked_sub`, `checked_mul`,
+  `checked_div`, `checked_neg`: результат `?T`, `none` — если вне типа
+  (у `checked_div` — и при делителе 0).
 
 ```dpl
-const MAX: i64 = 9223372036854775807
-const MIN: i64 = -9223372036854775807 - 1
-
-// a + b, или none, если сумма вне i64
-fn add(a: i64, b: i64) ?i64 {
-    if (b > 0 && a > MAX - b) || (b < 0 && a < MIN - b) {
-        return none
+fn total(xs: []i64) ?i64 {
+    var sum: i64 = 0
+    for x in &xs {
+        if let s = checked_add(sum, x) {
+            sum = s
+        } else {
+            return none                  // переполнение — данные, не ловушка
+        }
     }
-    return a + b
+    return sum
 }
 
-// a * b, или none: умножение по модулю и обратная проверка делением
-fn mul(a: i64, b: i64) ?i64 {
-    if a == 0 || b == 0 {
-        return i64(0)
-    }
-    if (a == -1 && b == MIN) || (b == -1 && a == MIN) {
-        return none
-    }
-    let p = a *% b
-    if p / b != a {
-        return none
-    }
-    return p
-}
+let q = checked_div(a, b) ?? 0           // делитель 0 — none
+let m: i32 = 2147483647
+let bad = checked_mul(m, 2) == none      // true: вне i32
 ```
 
 ## Строки и байты

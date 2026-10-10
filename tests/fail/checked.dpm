@@ -1,0 +1,13 @@
+// spec: builtin.functions expr.call
+fn main() {
+    let f: f64 = 1.5
+    let u: u32 = 3
+    let s = "x"
+    _ = checked_add(f, f)
+    _ = checked_neg(u)
+    _ = checked_mul(s, 2)
+    _ = checked_div(1)
+    let x: i32 = 1
+    let y: i64 = 2
+    let z: i32 = checked_add(x, y) ?? 0
+}

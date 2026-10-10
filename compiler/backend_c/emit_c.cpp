@@ -944,6 +944,23 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             if (sema::is_float(t)) return "((" + ctype(t) + ")fabs((double)" + ops[0] + "))";
             return "((" + ctype(t) + ")dp_sabs((int64_t)" + ops[0] + ", " + bits(t) + ", " + tname(t) + ", " + loc_ + "))";
         }
+        case Intrinsic::CheckedAdd: case Intrinsic::CheckedSub: case Intrinsic::CheckedMul:
+        case Intrinsic::CheckedDiv: case Intrinsic::CheckedNeg: {
+            const Type* t = rv.type->elem;
+            bool sg = sema::is_signed(t);
+            const char* fn = rv.intrinsic == Intrinsic::CheckedAdd ? "add"
+                             : rv.intrinsic == Intrinsic::CheckedSub ? "sub"
+                             : rv.intrinsic == Intrinsic::CheckedMul ? "mul"
+                             : rv.intrinsic == Intrinsic::CheckedDiv ? "div" : "neg";
+            std::string cast = sg ? "(int64_t)" : "(uint64_t)";
+            std::string r = fresh("dp_r"), v = fresh("dp_v");
+            line(ctype(rv.type) + " " + r + " = {0};");
+            line(std::string(sg ? "int64_t " : "uint64_t ") + v + " = 0;");
+            std::string args = cast + ops[0] + (rv.intrinsic == Intrinsic::CheckedNeg ? "" : ", " + cast + ops[1]);
+            line(r + ".has = dp_try_" + (sg ? "s" : "u") + fn + "(" + args + ", " + bits(t) + ", &" + v + ");");
+            line("if (" + r + ".has) " + r + ".value = (" + ctype(t) + ")" + v + ";");
+            return r;
+        }
         case Intrinsic::ParseInt: {
             std::string r = fresh("dp_r");
             line(ctype(rv.type) + " " + r + " = {0};");

@@ -594,7 +594,10 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     c->builtin = b;
     auto bf = static_cast<BuiltinFn>(b);
     std::string name(kBuiltinFnNames[b]);
-    size_t want = bf == BuiltinFn::Repeat || bf == BuiltinFn::Min || bf == BuiltinFn::Max || bf == BuiltinFn::ReadFile
+    bool checked2 = bf == BuiltinFn::CheckedAdd || bf == BuiltinFn::CheckedSub || bf == BuiltinFn::CheckedMul ||
+                    bf == BuiltinFn::CheckedDiv;
+    size_t want = bf == BuiltinFn::Repeat || bf == BuiltinFn::Min || bf == BuiltinFn::Max || bf == BuiltinFn::ReadFile ||
+                          checked2
                       ? 2
                   : bf == BuiltinFn::ArgsLen ? 0
                                              : 1;
@@ -663,6 +666,25 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
             if (t->kind == TK::Error || (is_integer(t) && is_signed(t)) || is_float(t)) return t;
             error(Code::E0403, c->span, "'abs' needs a signed integer or a float, found '" + tn(t) + "'");
             return err();
+        }
+        case BuiltinFn::CheckedAdd: case BuiltinFn::CheckedSub: case BuiltinFn::CheckedMul:
+        case BuiltinFn::CheckedDiv: {
+            const Type* t = common(c->args[0], c->args[1], unwrap_hint(hint), c->span, name.c_str());
+            if (t->kind == TK::Error) return err();
+            if (!is_integer(t)) {
+                error(Code::E0403, c->span, "'" + name + "' needs integers, found '" + tn(t) + "'");
+                return err();
+            }
+            return tt_.optional(t);
+        }
+        case BuiltinFn::CheckedNeg: {
+            const Type* t = infer(c->args[0], unwrap_hint(hint));
+            if (t->kind == TK::Error) return err();
+            if (!is_integer(t) || !is_signed(t)) {
+                error(Code::E0403, c->span, "'checked_neg' needs a signed integer, found '" + tn(t) + "'");
+                return err();
+            }
+            return tt_.optional(t);
         }
         case BuiltinFn::ParseInt:
             check(c->args[0], prim(TK::Str));

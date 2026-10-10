@@ -162,7 +162,8 @@ private:
             "len",  "repeat", "min",   "max",    "abs",    "parse_int", "is_digit", "is_alpha",
             "is_space", "is_alnum", "print", "println", "eprintln", "push", "pop", "insert",
             "remove", "clear", "sort", "contains", "trim", "find", "starts_with", "split",
-            "__args_len", "__arg", "__read_file",
+            "__args_len", "__arg", "__read_file", "checked_add", "checked_sub", "checked_mul", "checked_div",
+            "checked_neg",
         };
         return names[static_cast<size_t>(k)];
     }

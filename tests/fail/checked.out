@@ -1,0 +1,17 @@
+--- stderr ---
+checked.dpm:6:9: error[E0403]: 'checked_add' needs integers, found 'f64'
+   6 |     _ = checked_add(f, f)
+     |         ^~~~~~~~~~~~~~~~~
+checked.dpm:7:9: error[E0403]: 'checked_neg' needs a signed integer, found 'u32'
+   7 |     _ = checked_neg(u)
+     |         ^~~~~~~~~~~~~~
+checked.dpm:8:9: error[E0401]: mismatched types 'str' and 'i64' in 'checked_mul'; convert one side explicitly
+   8 |     _ = checked_mul(s, 2)
+     |         ^~~~~~~~~~~~~~~~~
+checked.dpm:9:9: error[E0407]: 'checked_div' takes 2 arguments, found 1
+   9 |     _ = checked_div(1)
+     |         ^~~~~~~~~~~~~~
+checked.dpm:12:18: error[E0401]: expected 'i32', found 'i64'
+  12 |     let z: i32 = checked_add(x, y) ?? 0
+     |                  ^~~~~~~~~~~~~~~~~~~~~~
+[exit 1]

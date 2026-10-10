@@ -21,6 +21,8 @@ inline constexpr BuiltinType kBuiltinTypes[] = {
 
 enum class BuiltinFn : uint8_t {
     Len, Repeat, Min, Max, Abs, ParseInt, IsDigit, IsAlpha, IsSpace, IsAlnum, Assert, Print, Println, Eprintln,
+    // Проверяемая арифметика целых (Р53): ?T, none — вне типа (и делитель 0).
+    CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
     // Внутренние — только для модулей стандартной библиотеки (Р51): простые
     // типы, обёртки с нормальным API — в stdlib/os.dpm.
     ArgsLen,   // __args_len() i64 — число аргументов программы без её имени
@@ -31,7 +33,8 @@ enum class BuiltinFn : uint8_t {
 
 inline constexpr std::string_view kBuiltinFnNames[] = {
     "len", "repeat", "min", "max", "abs", "parse_int", "is_digit", "is_alpha", "is_space", "is_alnum", "assert",
-    "print", "println", "eprintln", "__args_len", "__arg", "__read_file",
+    "print", "println", "eprintln", "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_neg",
+    "__args_len", "__arg", "__read_file",
 };
 
 // Встроенная только для стандартной библиотеки.

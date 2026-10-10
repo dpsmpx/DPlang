@@ -599,6 +599,43 @@ private:
         return int_op(rv.bin, a.i, b.i, t, op_type(fr, rv.ops[1]));
     }
 
+    // Проверяемая арифметика (Р53): точный результат в типе t — true и r.
+    static bool checked(Intrinsic k, uint64_t a, uint64_t b, const Type* t, uint64_t& r) {
+        int bits = sema::int_bits(t);
+        if (sema::is_signed(t)) {
+            int64_t sa = static_cast<int64_t>(a), sb = static_cast<int64_t>(b), sr = 0;
+            int64_t min = bits >= 64 ? INT64_MIN : -static_cast<int64_t>(1ull << (bits - 1));
+            bool o = false;
+            switch (k) {
+                case Intrinsic::CheckedAdd: o = __builtin_add_overflow(sa, sb, &sr); break;
+                case Intrinsic::CheckedSub: o = __builtin_sub_overflow(sa, sb, &sr); break;
+                case Intrinsic::CheckedMul: o = __builtin_mul_overflow(sa, sb, &sr); break;
+                case Intrinsic::CheckedDiv:
+                    if (sb == 0 || (sa == min && sb == -1)) return false;
+                    sr = sa / sb;
+                    break;
+                default:  // CheckedNeg
+                    if (sa == min) return false;
+                    sr = -sa;
+                    break;
+            }
+            if (o || !fits_signed(sr, bits)) return false;
+            r = static_cast<uint64_t>(sr);
+            return true;
+        }
+        bool o = false;
+        switch (k) {
+            case Intrinsic::CheckedAdd: o = __builtin_add_overflow(a, b, &r); break;
+            case Intrinsic::CheckedSub: o = __builtin_sub_overflow(a, b, &r); break;
+            case Intrinsic::CheckedMul: o = __builtin_mul_overflow(a, b, &r); break;
+            default:  // CheckedDiv; checked_neg у беззнаковых не проходит проверку типов
+                if (b == 0) return false;
+                r = a / b;
+                break;
+        }
+        return !o && fits_unsigned(r, bits);
+    }
+
     Value int_op(BinKind k, uint64_t a, uint64_t b, const Type* t, const Type* bt) {
         bool sg = sema::is_signed(t);
         int bits = sema::int_bits(t);
@@ -844,6 +881,18 @@ private:
                     return Value{};
                 }
                 return int_value(canon(static_cast<uint64_t>(v < 0 ? -v : v), t));
+            }
+            case Intrinsic::CheckedAdd: case Intrinsic::CheckedSub: case Intrinsic::CheckedMul:
+            case Intrinsic::CheckedDiv: case Intrinsic::CheckedNeg: {
+                const Type* t = rv.type->elem;
+                Value out = seq_value(0);
+                uint64_t r = 0;
+                bool neg = rv.intrinsic == Intrinsic::CheckedNeg;
+                if (checked(rv.intrinsic, arg(0, s0).i, neg ? 0 : arg(1, s1).i, t, r)) {
+                    out.tag = 1;
+                    out.items.push_back(int_value(r));
+                }
+                return out;
             }
             case Intrinsic::ParseInt: {
                 int64_t v = 0;

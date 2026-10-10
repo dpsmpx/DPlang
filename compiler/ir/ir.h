@@ -111,6 +111,8 @@ enum class Intrinsic : uint8_t {
     // внутренние стандартной библиотеки (Р51): аргументы программы и файл;
     // у ReadFile place — строка для текста, ops[0] — путь, результат i32
     ArgsLen, ArgAt, ReadFile,
+    // проверяемая арифметика целых (Р53): результат ?T, none — вне типа
+    CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
 };
 
 enum class RvKind : uint8_t {

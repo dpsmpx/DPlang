@@ -154,6 +154,68 @@ static inline uint64_t dp_urem(uint64_t a, uint64_t b, const char* loc) {
     return a % b;
 }
 
+/* Проверяемая арифметика (Р53): true и *r — точный результат в типе
+ * ширины bits; false — вне типа или делитель 0. Ловушки нет. */
+static inline bool dp_try_sadd(int64_t a, int64_t b, int bits, int64_t* r) {
+    if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) return false;
+    int64_t x = a + b;
+    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_ssub(int64_t a, int64_t b, int bits, int64_t* r) {
+    if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) return false;
+    int64_t x = a - b;
+    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_smul(int64_t a, int64_t b, int bits, int64_t* r) {
+    bool o;
+    if (a > 0) o = b > 0 ? a > INT64_MAX / b : b < INT64_MIN / a;
+    else o = b > 0 ? a < INT64_MIN / b : (a != 0 && b < INT64_MAX / a);
+    if (o) return false;
+    int64_t x = a * b;
+    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_sdiv(int64_t a, int64_t b, int bits, int64_t* r) {
+    if (b == 0 || (a == dp_smin(bits) && b == -1)) return false;
+    *r = a / b;
+    return true;
+}
+static inline bool dp_try_sneg(int64_t a, int bits, int64_t* r) {
+    if (a == dp_smin(bits)) return false;
+    *r = -a;
+    return true;
+}
+static inline bool dp_try_uadd(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    uint64_t x = a + b;
+    if (x < a || x > dp_umax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_usub(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    (void)bits;
+    if (b > a) return false;
+    *r = a - b;
+    return true;
+}
+static inline bool dp_try_umul(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    if (a != 0 && b > UINT64_MAX / a) return false;
+    uint64_t x = a * b;
+    if (x > dp_umax(bits)) return false;
+    *r = x;
+    return true;
+}
+static inline bool dp_try_udiv(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    (void)bits;
+    if (b == 0) return false;
+    *r = a / b;
+    return true;
+}
+
 /* Сдвиги: счётчик — значение правого операнда (знаковое или нет). */
 _Noreturn void dp_bad_shift_s(int64_t n, const char* tname, const char* loc);
 _Noreturn void dp_bad_shift_u(uint64_t n, const char* tname, const char* loc);

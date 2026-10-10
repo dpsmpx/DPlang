@@ -45,6 +45,7 @@ threads, нет.
 | проверка | функции | сообщение |
 |---|---|---|
 | целые (`trap.int`) | `dp_sadd` … `dp_urem`, `dp_shift_count_*` | `integer overflow in '+' on 'i32'`, `division by zero`, `shift count N is out of range for 'T'` |
+| проверяемая арифметика (Р53) | `dp_try_sadd` … `dp_try_udiv` — без ловушки: `false`, если вне типа или делитель 0 | — |
 | преобразования (`trap.convert`) | `dp_cast_*` | `value V does not fit 'T'`, `NaN does not fit 'T'` |
 | индексы (`trap.index`) | `dp_check_index`, `dp_check_slice`, `dp_check_insert`, `dp_str_slice` | `index I is out of bounds for length N`, `slice A..B is out of bounds for length N`, `insert position I is out of bounds for length N`, `slice A..B of a str does not fall on character boundaries` |
 | встроенное (`trap.builtin`) | `dp_check_repeat`; `split` и `assert` — в сгенерированном коде | `repeat count N is negative`, `split separator is empty`, `assertion failed` |

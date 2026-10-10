@@ -722,8 +722,11 @@ private:
                     Intrinsic::Len,     Intrinsic::Repeat,  Intrinsic::Min,     Intrinsic::Max,     Intrinsic::Abs,
                     Intrinsic::ParseInt, Intrinsic::IsDigit, Intrinsic::IsAlpha, Intrinsic::IsSpace, Intrinsic::IsAlnum,
                     Intrinsic::Len,     Intrinsic::Print,   Intrinsic::Println, Intrinsic::Eprintln,
+                    Intrinsic::CheckedAdd, Intrinsic::CheckedSub, Intrinsic::CheckedMul, Intrinsic::CheckedDiv,
+                    Intrinsic::CheckedNeg,
                     Intrinsic::ArgsLen, Intrinsic::ArgAt,   Intrinsic::ReadFile,
                 };
+                static_assert(sizeof kMap / sizeof kMap[0] == static_cast<size_t>(sema::BuiltinFn::Count));
                 rv = intrinsic(kMap[c->builtin], c->type);
                 if (b == sema::BuiltinFn::ReadFile) {  // __read_file(path, &mut out): out — изменяемое место
                     rv.ops.push_back(rd(expr(args[0])));

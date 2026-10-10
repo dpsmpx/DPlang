@@ -204,6 +204,20 @@ private:
                 if (!t0 || !((integer(t0) && sema::is_signed(t0)) || sema::is_float(t0))) fail("abs of an unsigned value");
                 same(rv.type, t0, "result");
                 break;
+            case Intrinsic::CheckedAdd: case Intrinsic::CheckedSub: case Intrinsic::CheckedMul:
+            case Intrinsic::CheckedDiv:
+                args(2);
+                t0 = op(0);
+                if (!integer(t0)) fail("checked arithmetic on non-integers");
+                same(op(1), t0, "operand");
+                if (rv.type->kind != TK::Optional || rv.type->elem != t0) fail("checked arithmetic result is not ?T");
+                break;
+            case Intrinsic::CheckedNeg:
+                args(1);
+                t0 = op(0);
+                if (!integer(t0) || !sema::is_signed(t0)) fail("checked_neg of an unsigned value");
+                if (rv.type->kind != TK::Optional || rv.type->elem != t0) fail("checked_neg result is not ?T");
+                break;
             case Intrinsic::ParseInt:
                 args(1);
                 same(op(0), prim(TK::Str), "operand");
