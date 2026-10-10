@@ -212,7 +212,7 @@ DP_CODE(E0418, "invalid conversion",
 DP_CODE(E0419, "cannot iterate",
         "`for x in &xs` and `for x in &mut xs` iterate a `List`, `for x in &xs` also a slice or a `str` "
         "(bytes); `for i in a..b` counts over integers (spec: stmt.for). A collection is iterated through a "
-        "mark: `&xs`.")
+        "mark: `&xs`. A `Map` is iterated through its keys: `for k in &m.keys()` (spec: type.map).")
 DP_CODE(E0420, "break or continue outside a loop",
         "`break` and `continue` are only allowed inside `while` or `for` (spec: stmt.loop).")
 DP_CODE(E0421, "not a constant expression",
@@ -220,8 +220,9 @@ DP_CODE(E0421, "not a constant expression",
         "constants, operators and conversions `T(x)` (spec: decl.const, decision R42). Constants must not "
         "depend on each other in a cycle.")
 DP_CODE(E0422, "values of this type cannot be compared",
-        "`==` and `!=` work on all values except results `E!T`; `<`, `<=`, `>`, `>=` and `sort` need numbers, "
-        "`bool`, `str`, or structs, enums and lists of such values (spec: expr.compare).")
+        "`==` and `!=` work on all values except results `E!T` and `Map`; `<`, `<=`, `>`, `>=` and `sort` "
+        "need numbers, `bool`, `str`, or structs, enums and lists of such values (spec: expr.compare). A `Map` "
+        "key needs `<` too and must not contain `f32` or `f64`: `nan` has no order (spec: type.map).")
 DP_CODE(E0423, "type contains itself",
         "A struct or an enum cannot hold a value of its own type directly, also through `?T` or another "
         "struct: such a value would have no end (spec: type.recursive). Keep the nested values in a `List`.")
