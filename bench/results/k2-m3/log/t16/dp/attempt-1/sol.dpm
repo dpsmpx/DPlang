@@ -1,0 +1,394 @@
+// t16: калькулятор целых выражений с переменными.
+
+const T_NUM: i32 = 1
+const T_NAME: i32 = 2
+const T_OP: i32 = 3
+const T_END: i32 = 4
+const T_ERR: i32 = 5
+
+const N_NUM: i32 = 1
+const N_VAR: i32 = 2
+const N_NEG: i32 = 3
+const N_BIN: i32 = 4
+const N_SET: i32 = 5
+
+struct Tok {
+    kind: i32
+    // текст лексемы; у T_ERR — сообщение об ошибке
+    text: str
+    col: int
+    val: i64 = 0
+}
+
+struct Node {
+    kind: i32
+    op: str = ""
+    val: i64 = 0
+    name: str = ""
+    col: int = 0
+    a: int = -1
+    b: int = -1
+}
+
+struct Calc {
+    toks: List[Tok]
+    pos: int
+    nodes: List[Node]
+    stmts: List[int]
+    vars: Map[str, i64]
+    failed: bool
+    ecol: int
+    emsg: str
+}
+
+fn is_name_start(ch: u8) bool {
+    return (ch >= 'a' && ch <= 'z') || ch == '_'
+}
+
+fn is_name_ch(ch: u8) bool {
+    return is_name_start(ch) || is_digit(ch)
+}
+
+fn is_op_ch(ch: u8) bool {
+    return ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' || ch == '^' || ch == '(' || ch == ')' || ch == '=' || ch == ';'
+}
+
+// Лексемы строки до первой ошибки лексики (она — последняя лексема T_ERR);
+// без ошибки список кончается лексемой T_END.
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let ch = src[i]
+        if ch == ' ' {
+            i += 1
+            continue
+        }
+        if is_digit(ch) {
+            let nstart = i
+            var v: i64 = 0
+            var big = false
+            while i < n && is_digit(src[i]) {
+                if !big {
+                    let d = i64(src[i] - '0')
+                    if let m = checked_mul(v, 10) {
+                        if let s = checked_add(m, d) {
+                            v = s
+                        } else {
+                            big = true
+                        }
+                    } else {
+                        big = true
+                    }
+                }
+                i += 1
+            }
+            if big {
+                toks.push(Tok { kind: T_ERR, text: "number too large", col: nstart + 1 })
+                return toks
+            }
+            toks.push(Tok { kind: T_NUM, text: src[nstart..i], col: nstart + 1, val: v })
+            continue
+        }
+        if is_name_start(ch) {
+            let wstart = i
+            while i < n && is_name_ch(src[i]) {
+                i += 1
+            }
+            toks.push(Tok { kind: T_NAME, text: src[wstart..i], col: wstart + 1 })
+            continue
+        }
+        if is_op_ch(ch) {
+            toks.push(Tok { kind: T_OP, text: src[i..i + 1], col: i + 1 })
+            i += 1
+            continue
+        }
+        toks.push(Tok { kind: T_ERR, text: "unexpected character '" + src[i..i + 1] + "'", col: i + 1 })
+        return toks
+    }
+    toks.push(Tok { kind: T_END, text: "", col: n + 1 })
+    return toks
+}
+
+// Запоминает только первую ошибку.
+fn fail_at(c: &mut Calc, col: int, msg: str) {
+    if !c.failed {
+        c.failed = true
+        c.ecol = col
+        c.emsg = msg
+    }
+}
+
+// Текущая лексема; если её нельзя прочитать — это ошибка.
+fn cur(c: &mut Calc) Tok {
+    let t = c.toks[c.pos]
+    if t.kind == T_ERR {
+        fail_at(&mut c, t.col, t.text)
+    }
+    return t
+}
+
+fn at_op(c: &mut Calc, op: str) bool {
+    let t = cur(&mut c)
+    return t.kind == T_OP && t.text == op
+}
+
+fn add_node(c: &mut Calc, nd: Node) int {
+    c.nodes.push(nd)
+    return len(c.nodes) - 1
+}
+
+fn p_program(c: &mut Calc) {
+    let first = p_stmt(&mut c)
+    c.stmts.push(first)
+    while !c.failed && at_op(&mut c, ";") {
+        c.pos += 1
+        let next = p_stmt(&mut c)
+        c.stmts.push(next)
+    }
+    if c.failed {
+        return
+    }
+    let t = cur(&mut c)
+    if c.failed {
+        return
+    }
+    if t.kind != T_END {
+        fail_at(&mut c, t.col, "unexpected '" + t.text + "'")
+    }
+}
+
+fn p_stmt(c: &mut Calc) int {
+    let t = cur(&mut c)
+    if c.failed {
+        return 0
+    }
+    if t.kind == T_NAME {
+        let nx = c.toks[c.pos + 1]
+        if nx.kind == T_OP && nx.text == "=" {
+            c.pos += 2
+            let e = p_expr(&mut c)
+            return add_node(&mut c, Node { kind: N_SET, name: t.text, col: t.col, a: e })
+        }
+    }
+    return p_expr(&mut c)
+}
+
+fn p_expr(c: &mut Calc) int {
+    var left = p_term(&mut c)
+    while !c.failed && (at_op(&mut c, "+") || at_op(&mut c, "-")) {
+        let t = c.toks[c.pos]
+        c.pos += 1
+        let right = p_term(&mut c)
+        left = add_node(&mut c, Node { kind: N_BIN, op: t.text, col: t.col, a: left, b: right })
+    }
+    return left
+}
+
+fn p_term(c: &mut Calc) int {
+    var left = p_unary(&mut c)
+    while !c.failed && (at_op(&mut c, "*") || at_op(&mut c, "/") || at_op(&mut c, "%")) {
+        let t = c.toks[c.pos]
+        c.pos += 1
+        let right = p_unary(&mut c)
+        left = add_node(&mut c, Node { kind: N_BIN, op: t.text, col: t.col, a: left, b: right })
+    }
+    return left
+}
+
+fn p_unary(c: &mut Calc) int {
+    if c.failed {
+        return 0
+    }
+    if at_op(&mut c, "-") {
+        let t = c.toks[c.pos]
+        c.pos += 1
+        let e = p_unary(&mut c)
+        return add_node(&mut c, Node { kind: N_NEG, col: t.col, a: e })
+    }
+    return p_power(&mut c)
+}
+
+fn p_power(c: &mut Calc) int {
+    let base = p_atom(&mut c)
+    if !c.failed && at_op(&mut c, "^") {
+        let t = c.toks[c.pos]
+        c.pos += 1
+        let ex = p_unary(&mut c)
+        return add_node(&mut c, Node { kind: N_BIN, op: "^", col: t.col, a: base, b: ex })
+    }
+    return base
+}
+
+fn p_atom(c: &mut Calc) int {
+    if c.failed {
+        return 0
+    }
+    let t = cur(&mut c)
+    if c.failed {
+        return 0
+    }
+    if t.kind == T_NUM {
+        c.pos += 1
+        return add_node(&mut c, Node { kind: N_NUM, val: t.val, col: t.col })
+    }
+    if t.kind == T_NAME {
+        c.pos += 1
+        return add_node(&mut c, Node { kind: N_VAR, name: t.text, col: t.col })
+    }
+    if t.kind == T_OP && t.text == "(" {
+        c.pos += 1
+        let e = p_expr(&mut c)
+        if c.failed {
+            return 0
+        }
+        let r = cur(&mut c)
+        if c.failed {
+            return 0
+        }
+        if r.kind == T_OP && r.text == ")" {
+            c.pos += 1
+            return e
+        }
+        fail_at(&mut c, r.col, "expected ')'")
+        return 0
+    }
+    if t.kind == T_END {
+        fail_at(&mut c, t.col, "unexpected end")
+        return 0
+    }
+    fail_at(&mut c, t.col, "unexpected '" + t.text + "'")
+    return 0
+}
+
+// Точная степень; none — вне i64. e >= 0.
+fn ipow(b: i64, e: i64) ?i64 {
+    if e == 0 {
+        return 1
+    }
+    if b == 0 || b == 1 {
+        return b
+    }
+    if b == -1 {
+        if e % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    if e >= 64 {
+        return none
+    }
+    var acc: i64 = 1
+    var k: i64 = 0
+    while k < e {
+        if let m = checked_mul(acc, b) {
+            acc = m
+        } else {
+            return none
+        }
+        k += 1
+    }
+    return acc
+}
+
+fn apply(c: &mut Calc, op: str, col: int, x: i64, y: i64) i64 {
+    if op == "/" || op == "%" {
+        if y == 0 {
+            fail_at(&mut c, col, "division by zero")
+            return 0
+        }
+        if op == "%" {
+            if y == -1 {
+                return 0
+            }
+            return x % y
+        }
+    }
+    if op == "^" && y < 0 {
+        fail_at(&mut c, col, "negative exponent")
+        return 0
+    }
+    var r: ?i64 = none
+    if op == "+" {
+        r = checked_add(x, y)
+    }
+    if op == "-" {
+        r = checked_sub(x, y)
+    }
+    if op == "*" {
+        r = checked_mul(x, y)
+    }
+    if op == "/" {
+        r = checked_div(x, y)
+    }
+    if op == "^" {
+        r = ipow(x, y)
+    }
+    if let v = r {
+        return v
+    }
+    fail_at(&mut c, col, "overflow")
+    return 0
+}
+
+fn ev(c: &mut Calc, i: int) i64 {
+    if c.failed {
+        return 0
+    }
+    let nd = c.nodes[i]
+    if nd.kind == N_NUM {
+        return nd.val
+    }
+    if nd.kind == N_VAR {
+        if let got = c.vars.get(nd.name) {
+            return got
+        }
+        fail_at(&mut c, nd.col, "unknown variable '" + nd.name + "'")
+        return 0
+    }
+    if nd.kind == N_SET {
+        let sv = ev(&mut c, nd.a)
+        if c.failed {
+            return 0
+        }
+        c.vars[nd.name] = sv
+        return sv
+    }
+    if nd.kind == N_NEG {
+        let nv = ev(&mut c, nd.a)
+        if c.failed {
+            return 0
+        }
+        if let r = checked_neg(nv) {
+            return r
+        }
+        fail_at(&mut c, nd.col, "overflow")
+        return 0
+    }
+    let x = ev(&mut c, nd.a)
+    if c.failed {
+        return 0
+    }
+    let y = ev(&mut c, nd.b)
+    if c.failed {
+        return 0
+    }
+    return apply(&mut c, nd.op, nd.col, x, y)
+}
+
+pub fn calc(src: str) str {
+    var c = Calc { toks: lex(src), pos: 0, nodes: [], stmts: [], vars: [], failed: false, ecol: 0, emsg: "" }
+    p_program(&mut c)
+    var last: i64 = 0
+    var k = 0
+    while !c.failed && k < len(c.stmts) {
+        let root = c.stmts[k]
+        last = ev(&mut c, root)
+        k += 1
+    }
+    if c.failed {
+        return "error at " + str(c.ecol) + ": " + c.emsg
+    }
+    return str(last)
+}

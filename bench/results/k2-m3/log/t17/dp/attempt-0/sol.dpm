@@ -1,0 +1,15 @@
+// t17: заготовка — напишите тела функций по task.md.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    // ...
+}
