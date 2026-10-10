@@ -235,7 +235,10 @@ private:
                 expr(c->value);
                 break;
             }
-            case ItemKind::Import: out += "import " + it->name; break;
+            case ItemKind::Import:
+                for (const Attr& a : static_cast<const ImportItem*>(it)->attrs) out += "@" + a.name + " ";
+                out += "import " + it->name;
+                break;
             case ItemKind::Error: break;
         }
     }

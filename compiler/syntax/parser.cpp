@@ -370,7 +370,8 @@ private:
         }
         if (!attrs.empty()) {
             if (auto* f = as<FnItem>(it)) f->attrs = std::move(attrs);
-            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function");
+            else if (auto* im = as<ImportItem>(it)) im->attrs = std::move(attrs);
+            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function or an import");
         }
         it->pub = pub;
         it->span = span_from(begin);

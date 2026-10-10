@@ -313,6 +313,17 @@ dp_str dp_arg(int64_t i, const char* loc);
  * 3 InvalidUtf8, 4 Other — и *out не меняется. Файл больше предела
  * буфера — ловушка «out of memory». */
 int32_t dp_read_file(dp_str path, dp_str* out, const char* loc);
+/* Канонический NaN класса D (Р56): положительный тихий, без полезной
+ * нагрузки; остальные значения — как есть. */
+static inline double dp_canon_f64(double x) {
+    union { uint64_t u; double d; } c = {UINT64_C(0x7ff8000000000000)};
+    return x != x ? c.d : x;
+}
+static inline float dp_canon_f32(float x) {
+    union { uint32_t u; float f; } c = {UINT32_C(0x7fc00000)};
+    return x != x ? c.f : x;
+}
+
 /* Открывает файл для чтения байтов по пути в UTF-8 (порт платформы:
  * runtime/linux, runtime/windows). NULL — нет; errno — причина. */
 FILE* dp_os_open_read(const char* path);

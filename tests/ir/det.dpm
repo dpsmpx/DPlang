@@ -1,0 +1,17 @@
+// spec: module.det trap.float
+// Р56: в функции класса D после каждой операции с плавающими — canon;
+// в обычной функции его нет.
+@det
+fn mix(a: f64, b: f32) f64 {
+    var x = a * 2.0 + f64(b)
+    x -= 1.5
+    return max(-x, abs(a))
+}
+
+fn plain(a: f64) f64 {
+    return a * 2.0
+}
+
+fn main() {
+    println(str(mix(1.0, 2.0)) + " " + str(plain(3.0)))
+}

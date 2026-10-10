@@ -89,6 +89,7 @@ public:
         const FnItem* node = def.node;
         f_.def = &def;
         f_.name = def.module->name + "." + def.name;
+        f_.det = sema::is_det(def);
         f_.ret = def.ret;
         for (size_t i = 0; i < def.params.size(); i++) {
             const sema::ParamDef& p = def.params[i];
@@ -192,12 +193,37 @@ private:
     }
 
     void inst(InstKind k, Place dst, Rvalue rv, Span span) {
+        bool canon = k == InstKind::Assign && f_.det && makes_float(rv);
         Inst i;
         i.kind = k;
-        i.dst = std::move(dst);
+        i.dst = dst;
         i.rv = std::move(rv);
         i.span = span;
         f_.blocks[cur_].insts.push_back(std::move(i));
+        if (!canon) return;
+        // Класс D: NaN после операции — канонический (Р56).
+        Inst c;
+        c.kind = InstKind::Assign;
+        c.dst = dst;
+        c.rv = make(RvKind::Unary, f_.blocks[cur_].insts.back().rv.type);
+        c.rv.un = UnKind::Canon;
+        c.rv.ops.push_back(copy(std::move(dst)));
+        c.span = span;
+        f_.blocks[cur_].insts.push_back(std::move(c));
+    }
+
+    // Операция, которая может дать NaN с битами процессора: арифметика,
+    // смена знака, приведение к плавающему, abs, min и max плавающих.
+    static bool makes_float(const Rvalue& rv) {
+        if (!rv.type || !sema::is_float(rv.type)) return false;
+        switch (rv.kind) {
+            case RvKind::Binary: return true;
+            case RvKind::Unary: return rv.un == UnKind::Neg;
+            case RvKind::Cast: return true;
+            case RvKind::Intrinsic:
+                return rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min || rv.intrinsic == Intrinsic::Max;
+            default: return false;
+        }
     }
 
     void assign(Place dst, Rvalue rv, Span span) { inst(InstKind::Assign, std::move(dst), std::move(rv), span); }

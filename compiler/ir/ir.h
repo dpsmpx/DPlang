@@ -94,7 +94,9 @@ enum class BinKind : uint8_t {
     Concat,                             // склейка str
 };
 
-enum class UnKind : uint8_t { Neg, Not, BitNot };
+// Canon — NaN становится каноническим NaN, остальное — как есть (Р56);
+// только у плавающих, понижение ставит его в коде класса D.
+enum class UnKind : uint8_t { Neg, Not, BitNot, Canon };
 
 enum class CastKind : uint8_t {
     Widen,  // неявное расширение без потерь: целое, f32 → f64
@@ -208,6 +210,7 @@ struct Function {
     uint32_t param_count = 0;
     const Type* ret = nullptr;  // Void — без результата
     std::vector<Block> blocks;  // вход — блок 0
+    bool det = false;           // класс D (Р55): после операций с плавающими — canon (Р56)
 };
 
 struct Program {

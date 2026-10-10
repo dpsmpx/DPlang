@@ -1,6 +1,6 @@
 // spec: module.test module.import
 // Тесты двух модулей, без main: сначала модуль, который импортируют.
-import shapes
+@det import shapes
 
 @det
 @test

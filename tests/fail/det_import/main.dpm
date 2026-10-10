@@ -1,0 +1,20 @@
+// spec: module.det
+@det import world
+@test import world2
+@det @det import world3
+import os
+
+@det
+fn tick(n: i64) i64 {
+    println("tick")
+    let a = os.args()
+    return world.step(n) + helper(n)
+}
+
+fn helper(n: i64) i64 {
+    return n
+}
+
+fn main() {
+    println(str(tick(1)))
+}

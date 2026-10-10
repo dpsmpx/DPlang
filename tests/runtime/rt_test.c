@@ -82,6 +82,34 @@ static void unit_int(void) {
     CHECK(dp_sshr(5, 1) == 2 && dp_sshr(INT64_MAX, 62) == 1 && dp_sshr(-5, 1) == -3);
 }
 
+/* Р56: канонический NaN — положительный тихий без полезной нагрузки;
+ * прочие значения, включая -0.0 и бесконечности, не меняются. */
+static uint64_t bits64(double x) {
+    uint64_t b;
+    memcpy(&b, &x, sizeof b);
+    return b;
+}
+
+static uint32_t bits32(float x) {
+    uint32_t b;
+    memcpy(&b, &x, sizeof b);
+    return b;
+}
+
+static void unit_canon(void) {
+    uint64_t neg_nan64 = UINT64_C(0xfff8000000000001);
+    uint32_t neg_nan32 = UINT32_C(0xffc00001);
+    double n64;
+    float n32;
+    memcpy(&n64, &neg_nan64, sizeof n64);
+    memcpy(&n32, &neg_nan32, sizeof n32);
+    CHECK(bits64(dp_canon_f64(n64)) == UINT64_C(0x7ff8000000000000));
+    CHECK(bits32(dp_canon_f32(n32)) == UINT32_C(0x7fc00000));
+    CHECK(bits64(dp_canon_f64(-0.0)) == bits64(-0.0) && dp_canon_f64(1.5) == 1.5);
+    CHECK(dp_canon_f64(-INFINITY) == -INFINITY && dp_canon_f32(INFINITY) == INFINITY);
+    CHECK(bits32(dp_canon_f32(-0.0f)) == bits32(-0.0f) && dp_canon_f32(2.5f) == 2.5f);
+}
+
 static void unit_convert(void) {
     CHECK(dp_cast_s_to_s(-128, 8, "i8", LOC) == -128 && dp_cast_s_to_s(127, 8, "i8", LOC) == 127);
     CHECK(dp_cast_s_to_s(INT64_MIN, 64, "i64", LOC) == INT64_MIN);
@@ -314,6 +342,7 @@ static const char* entry_deep(void) {
 int main(int argc, char** argv) {
     if (argc == 2 && !strcmp(argv[1], "unit")) {
         unit_int();
+        unit_canon();
         unit_convert();
         unit_str();
         unit_index_memory();

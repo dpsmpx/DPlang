@@ -396,6 +396,7 @@ private:
                 same(t, a, "result");
                 bool ok = rv.un == UnKind::Not      ? a->kind == TK::Bool
                           : rv.un == UnKind::BitNot ? integer(a)
+                          : rv.un == UnKind::Canon  ? sema::is_float(a)
                                                     : (integer(a) && sema::is_signed(a)) || sema::is_float(a);
                 if (!ok) fail("invalid unary operand");
                 break;
