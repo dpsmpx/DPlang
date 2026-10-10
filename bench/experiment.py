@@ -30,7 +30,7 @@ dpl (dp — настоящий компилятор v0.1), зная язык т�
   чтобы досчитать токены или отчёт в другой сессии;
 - selftest — проверка самой обвязки (шаг «обвязка» в tools/check/run.sh).
 
-    python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A] [--series]
+    python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A] [--series] [--doc spec|guide]
     python3 bench/experiment.py check DIR
     python3 bench/experiment.py session RUN TASK|series LANG --tokens N [--tool-uses K] [--seconds S]
     python3 bench/experiment.py usage RUN TASK|series LANG --transcript FILE
@@ -79,6 +79,11 @@ TITLE = {'cpp': 'C++', 'A': 'dpl, вариант A', 'B': 'dpl, вариант B
 # Спецификация для языка dp: docs/spec/core.md с первого раздела.
 SPEC_DP = os.path.join(ROOT, 'docs', 'spec', 'core.md')
 SPEC_DP_TITLE = "# Спецификация dpl (ядро v0.1)"
+# Вместо спецификации задание может нести краткое руководство (--doc guide):
+# приёмы с примерами, docs/guide/README.md.
+GUIDE_DP = os.path.join(ROOT, 'docs', 'guide', 'README.md')
+DOCS = ('spec', 'guide')
+DOC_WORD = {'spec': 'спецификации', 'guide': 'руководству'}
 ATTEMPTS = 5
 RUN_TIMEOUT = 20
 COUNT_MODEL = 'claude-opus-5-5'
@@ -279,14 +284,15 @@ def cxx_line(flags):
     return f'`{os.path.basename(run_refs.CXX)} {base}`{san}'
 
 
-def prompt(task, lang, sandbox, attempts, flags, start):
+def prompt(task, lang, sandbox, attempts, flags, start, doc='spec'):
     exe = os.path.join(BENCH, 'experiment.py')
     dp = is_dp(lang)
     files = ', '.join(f'`src/{n}`' for n in start)
     lines = [
         f'# Задача {task.id} на {TITLE[lang]}', '',
         'Задание опыта: написать код по постановке'
-        + (', зная язык только по спецификации в конце этого файла.' if dp else '.'), '',
+        + (f', зная язык только по {DOC_WORD[doc] if lang == "dp" else "спецификации"} в конце этого файла.'
+           if dp else '.'), '',
         '## Правила', '',
         f'- Работай только в папке `{sandbox}`: читай этот файл и `src/`, правь файлы в `src/`. '
         'Других файлов не открывай, по диску и в сети не ищи.',
@@ -341,12 +347,15 @@ def prompt(task, lang, sandbox, attempts, flags, start):
         spec = re.sub(r'\A<!--.*?-->\n+', '', spec, flags=re.S)
         text += '\n' + demote(spec)
     elif lang == 'dp':
-        text += '\n' + demote(dp_spec())
+        text += '\n' + demote(dp_spec(doc))
     return text
 
 
-def dp_spec():
-    """Спецификация языка dp для задания: docs/spec/core.md с раздела 1."""
+def dp_spec(doc='spec'):
+    """Документ языка dp для задания: docs/spec/core.md с раздела 1 или
+    краткое руководство docs/guide/README.md целиком."""
+    if doc == 'guide':
+        return read(GUIDE_DP)
     body = read(SPEC_DP)
     return SPEC_DP_TITLE + '\n\n' + body[body.index('\n## 1.') + 1:]
 
@@ -382,11 +391,12 @@ def read_files(d):
     return {n: read(os.path.join(d, n)) for n in sorted(os.listdir(d)) if os.path.isfile(os.path.join(d, n))}
 
 
-def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, quiet=False, series=False):
+def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, quiet=False, series=False,
+            doc='spec'):
     run_dir = os.path.join(work_dir(), run)
     flags = build_flags()
     common = {'run': run, 'commit': git_commit(), 'cxx': cxx_version(), 'flags': flags,
-              'attempts_max': attempts, 'agent_model': agent_model}
+              'attempts_max': attempts, 'agent_model': agent_model, 'doc': doc}
     made = []
     in_series = {lang: [] for lang in langs}
     for task in tasks:
@@ -401,7 +411,7 @@ def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, q
                     shutil.rmtree(d)
             start = task.files(lang, 'start')
             snapshot(start, os.path.join(sandbox, 'src'))
-            text = prompt(task, lang, sandbox, attempts, flags, start)
+            text = prompt(task, lang, sandbox, attempts, flags, start, doc)
             if series:
                 in_series[lang].append((task, sandbox, text))
                 text = (f'# Задача {task.id} на {TITLE[lang]} — часть серии\n\nЗадание — в '
@@ -417,7 +427,7 @@ def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, q
             if not items:
                 continue
             path, meta_path = series_paths(run_dir, lang)
-            text = series_prompt(items, lang, attempts)
+            text = series_prompt(items, lang, attempts, doc)
             write(path, text)
             write(meta_path[:-len('.json')] + '.PROMPT.md', text)
             meta = dict(common, lang=lang, tasks=[t.id for t, _, _ in items],
@@ -441,7 +451,8 @@ def prepare(run, tasks, langs, attempts=ATTEMPTS, agent_model='', force=False, q
 # Серия (Р-17): один субагент решает по очереди несколько задач в одной
 # сессии; спецификация читается один раз. Задание серии — RUN/series/LANG/
 # PROMPT.md, его копия и расход сессии — в RUN/_log/_series-LANG.*.
-SPEC_MARK = '\n' + demote(SPEC_DP_TITLE).rstrip('\n') + '\n'
+DOC_MARKS = ['\n' + demote(SPEC_DP_TITLE).rstrip('\n') + '\n',
+             '\n' + demote(read(GUIDE_DP).splitlines()[0]).rstrip('\n') + '\n']
 
 
 def series_paths(run_dir, lang):
@@ -452,12 +463,13 @@ def series_paths(run_dir, lang):
 def task_part(text):
     """Часть задания ячейки от раздела «Код» до спецификации."""
     body = text[text.index('## Код\n'):]
-    if SPEC_MARK in body:
-        body = body[:body.index(SPEC_MARK)]
+    for mark in DOC_MARKS:
+        if mark in body:
+            body = body[:body.index(mark)]
     return body.rstrip('\n') + '\n'
 
 
-def series_prompt(items, lang, attempts):
+def series_prompt(items, lang, attempts, doc='spec'):
     """Задание серии: правила один раз, задачи по порядку, спецификация один раз."""
     exe = os.path.join(BENCH, 'experiment.py')
     dp = is_dp(lang)
@@ -467,7 +479,8 @@ def series_prompt(items, lang, attempts):
     lines = [
         f'# Серия из {n} задач на {TITLE[lang]}', '',
         f'Задание опыта: решить по очереди {n} задач в одной работе'
-        + (', зная язык только по спецификации в конце этого файла.' if dp else '.'), '',
+        + (f', зная язык только по {DOC_WORD[doc] if lang == "dp" else "спецификации"} в конце этого файла.'
+           if dp else '.'), '',
         '## Правила', '',
         '- Задачи решаются по порядку, следующая — после того, как кончилась предыдущая. У каждой '
         'задачи своя папка (в её разделе): читай этот файл и `src/` папки задачи, правь файлы в её '
@@ -485,7 +498,7 @@ def series_prompt(items, lang, attempts):
         text += (f'\n## Задача {k} из {n}: {task.id}\n\nПапка — `{sandbox}`. Проверка:\n\n'
                  f'      python3 {exe} check {sandbox}\n\n' + demote(task_part(cell_text)))
     if lang == 'dp':
-        text += '\n' + demote(dp_spec())
+        text += '\n' + demote(dp_spec(doc))
     elif is_proto(lang):
         spec = read(mkspec.out_path(lang))
         text += '\n' + demote(re.sub(r'\A<!--.*?-->\n+', '', spec, flags=re.S))
@@ -1216,6 +1229,10 @@ def selftest_series(tmp):
                 fails.append(f'серия {lang}: правила не один раз')
             if p.count('[lex.source]') != (1 if lang == 'dp' else 0):
                 fails.append(f'серия {lang}: спецификация не один раз')
+        prepare('series-guide', tasks[:1], ['dp'], attempts=2, quiet=True, series=True, doc='guide')
+        g = read(series_paths(os.path.join(work_dir(), 'series-guide'), 'dp')[0])
+        if read(GUIDE_DP).splitlines()[0][2:] not in g or '[lex.source]' in g or 'по руководству' not in g:
+            fails.append('серия с руководством: в задании нет руководства или осталась спецификация')
         sandbox, _ = cell_paths(run_dir, 't15', 'dp')
         snapshot(tasks[0].files('dp', 'ref'), os.path.join(sandbox, 'src'))
         rc = check(sandbox)
@@ -1280,6 +1297,7 @@ def main(argv):
     p.add_argument('--agent-model', default='')
     p.add_argument('--force', action='store_true')
     p.add_argument('--series', action='store_true')
+    p.add_argument('--doc', choices=DOCS, default='spec')
     p = sub.add_parser('check')
     p.add_argument('dir')
     p = sub.add_parser('session')
@@ -1312,7 +1330,7 @@ def main(argv):
             bad = [x for x in langs if x not in LANGS]
             if bad:
                 raise HarnessError(f'неизвестный язык: {", ".join(bad)} (есть: {", ".join(LANGS)})')
-            prepare(a.run, tasks, langs, a.attempts, a.agent_model, a.force, series=a.series)
+            prepare(a.run, tasks, langs, a.attempts, a.agent_model, a.force, series=a.series, doc=a.doc)
             return 0
         if a.cmd == 'check':
             return check(a.dir)

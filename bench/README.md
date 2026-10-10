@@ -155,6 +155,9 @@ python3 bench/experiment.py selftest           # шаг «обвязка» в to
 - Расход всей сессии записывает `session RUN series LANG --tokens …` в
   `RUN/_log/_series-LANG.json`. Копия задания серии лежит рядом, в
   `_series-LANG.PROMPT.md`.
+- `prepare --doc guide` даёт dpl вместо спецификации ядра краткое
+  руководство `docs/guide/README.md` (приёмы с примерами); выбор
+  записывается в `meta.json` (`doc`).
 - `report` добавляет раздел «Серии». В нём задание серии в символах и
   расход сессии на одну принятую задачу — главная мера целей
   (`GOAL.md`, раздел 2) при нескольких изменениях на сессию.

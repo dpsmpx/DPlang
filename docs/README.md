@@ -13,6 +13,7 @@
 | узнать, что ещё не решено | `direction/OPEN_DECISIONS.md` |
 | понять архитектуру toolchain | `design/ARCHITECTURE.md` |
 | понять устройство языка | спецификация ядра `spec/core.md` (пишется в v0.1), за ней — проект `design/LANGUAGE.md` |
+| быстро начать писать на dpl | краткое руководство с приёмами `guide/README.md` (нормативна спецификация) |
 | найти компонент в коде | `design/ARCHITECTURE.md`, раздел 10; затем `compiler/README.md` (устройство компилятора), `compiler/cli.md` (команды `dpl`), `ir/README.md` (Core IR, понижение, верификатор, интерпретатор), `compiler/backend_c.md` (C-бэкенд), `runtime/README.md` (runtime) и `stdlib/README.md` (стандартная библиотека) |
 | понять контракт для потребителя | `policy/COMPATIBILITY.md`, `policy/DETERMINISM.md`, спецификация |
 | внести изменение | `../CLAUDE.md` (обязательный минимум), `policy/ENGINEERING.md` |
