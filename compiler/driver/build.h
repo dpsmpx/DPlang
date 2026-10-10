@@ -45,6 +45,7 @@ struct BuildOptions {
     const Target* target = nullptr;  // nullptr — хост
     std::string cc;           // компилятор C цели (main.cpp: cc_for)
     std::string runner;       // запуск тестов цели; пусто — напрямую
+    std::vector<std::string> links;  // библиотеки C программы (`@link`, Р59)
 };
 
 // Компилятор C для цели: у хоста — $CC или cc; у других — $DPL_CROSS_CC,

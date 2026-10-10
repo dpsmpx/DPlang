@@ -1,0 +1,32 @@
+--- stderr ---
+ffi.dpm:4:26: error[E0326]: parameter 'xs' of C function 'takes_list' has type 'List[i32]', which cannot cross to C (spec: ffi.types)
+   4 | extern fn takes_list(xs: List[i32]) i32
+     |                          ^~~~~~~~~
+ffi.dpm:5:24: error[E0326]: C function 'gives_list' returns 'List[u8]', which cannot cross from C (spec: ffi.types)
+   5 | extern fn gives_list() List[u8]
+     |                        ^~~~~~~~
+ffi.dpm:6:25: error[E0326]: parameter 's' of C function 'takes_ref' has type 'str', which cannot cross to C (spec: ffi.types)
+   6 | extern fn takes_ref(s: &str) i32
+     |                         ^~~
+ffi.dpm:10:11: error[E0326]: field 'name' of '@c' struct 'Bad' has type 'str', which has no C layout; use integers, floats, bool, 'extern type' or '@c' structs
+  10 |     name: str
+     |           ^~~
+ffi.dpm:14:1: error[E0319]: '@link' names the C library of an 'extern fn'
+  14 | @link("m")
+     | ^~~~~~~~~~
+ffi.dpm:18:1: error[E0319]: an 'extern fn' cannot be '@det': C code is outside dpl
+  18 | @det
+     | ^~~~
+ffi.dpm:21:1: error[E0319]: '@link' needs a library name: @link("SDL3")
+  21 | @link
+     | ^~~~~
+ffi.dpm:25:8: error[E0319]: '@linear' is not supported yet
+  25 | struct Res {
+     |        ^~~
+ffi.dpm:29:1: error[E0319]: unknown attribute '@c'
+  29 | @c
+     | ^~
+ffi.dpm:34:13: error[E0405]: type 'Handle' is not a value
+  34 |     let h = Handle
+     |             ^~~~~~
+[exit 1]

@@ -96,19 +96,22 @@ public:
             case ItemKind::Fn: {
                 auto* f = static_cast<const FnItem*>(it);
                 std::string attrs;
-                for (const Attr& a : f->attrs) attrs += " @" + a.name;
-                line(d, "Fn " + f->name + pub + attrs);
+                for (const Attr& a : f->attrs) attrs += " " + a.text();
+                line(d, std::string(f->is_extern ? "ExternFn " : "Fn ") + f->name + pub + attrs);
                 for (const Param& p : f->params) {
                     std::string mode = p.mode == ParamMode::Mut ? "&mut " : p.mode == ParamMode::Ref ? "&" : "";
                     line(d + 1, "Param " + p.name + " " + mode + type_text(p.type));
                 }
                 if (f->ret) line(d + 1, "Ret " + type_text(f->ret));
-                block(f->body, d + 1);
+                if (!f->is_extern) block(f->body, d + 1);
                 break;
             }
+            case ItemKind::ExternType: line(d, "ExternType " + it->name + pub); break;
             case ItemKind::Struct: {
                 auto* s = static_cast<const StructItem*>(it);
-                line(d, "Struct " + s->name + pub);
+                std::string attrs;
+                for (const Attr& a : s->attrs) attrs += " " + a.text();
+                line(d, "Struct " + s->name + pub + attrs);
                 for (const FieldDecl& f : s->fields) field(f, d + 1);
                 break;
             }

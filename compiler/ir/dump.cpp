@@ -16,7 +16,7 @@ public:
     Dumper(const Program& p, const Function& f, const SourceMap& sources) : p_(p), f_(f), sources_(sources) {}
 
     std::string run() {
-        out_ += "fn " + f_.name + "(";
+        out_ += std::string(f_.is_extern ? "extern fn " : "fn ") + f_.name + "(";
         for (uint32_t i = 0; i < f_.param_count; i++) {
             const Local& l = f_.locals[i];
             if (i) out_ += ", ";
@@ -28,6 +28,10 @@ public:
         out_ += ")";
         if (f_.ret && f_.ret->kind != TK::Void) out_ += " " + type(f_.ret);
         if (f_.det) out_ += " det";
+        if (f_.is_extern) {
+            out_ += " = " + f_.c_name + "\n";
+            return out_;
+        }
         out_ += "\n";
         for (size_t i = f_.param_count; i < f_.locals.size(); i++) {
             const Local& l = f_.locals[i];

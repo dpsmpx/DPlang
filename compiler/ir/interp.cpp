@@ -473,6 +473,10 @@ private:
     void call(Frame& fr, const Rvalue& rv) {
         if (frames_.size() >= kMaxFrames) return trap("stack overflow: calls are nested too deeply");
         const Function& g = p_.fns[rv.fn];
+        if (g.is_extern) {  // Р59: интерпретатор исполняет только dpl
+            return internal("cannot call C function '" + g.c_name +
+                            "': the reference interpreter runs only dpl code; build the program with 'dpl build'");
+        }
         Frame nf;
         nf.fn = rv.fn;
         nf.locals.resize(g.locals.size());

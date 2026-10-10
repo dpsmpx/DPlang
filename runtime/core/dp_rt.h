@@ -324,6 +324,14 @@ static inline float dp_canon_f32(float x) {
     return x != x ? c.f : x;
 }
 
+/* --- строки на границе C (Р59) */
+
+/* Копия s с нулём в конце для функции C; освобождается dp_free после
+ * вызова. Байт 0 внутри s — ловушка: C увидел бы только начало строки. */
+char* dp_str_to_c(dp_str s, const char* loc);
+/* Строка C из функции fn — копия в str. NULL и не UTF-8 — ловушка. */
+dp_str dp_str_from_c(const char* p, const char* fn, const char* loc);
+
 /* Открывает файл для чтения байтов по пути в UTF-8 (порт платформы:
  * runtime/linux, runtime/windows). NULL — нет; errno — причина. */
 FILE* dp_os_open_read(const char* path);

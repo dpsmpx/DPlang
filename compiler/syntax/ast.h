@@ -483,7 +483,7 @@ struct ErrorStmt : Stmt {
 
 // --- объявления
 
-enum class ItemKind : uint8_t { Fn, Struct, Enum, Const, Import, Error };
+enum class ItemKind : uint8_t { Fn, Struct, Enum, Const, Import, ExternType, Error };
 
 struct Item : Node {
     ItemKind kind;
@@ -496,6 +496,10 @@ struct Item : Node {
 struct Attr {
     std::string name;
     Span span;
+    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59)
+    std::string arg;       // значение строки
+    std::string arg_src;   // запись в исходнике, с кавычками
+    std::string text() const { return "@" + name + (has_arg ? "(" + arg_src + ")" : ""); }
 };
 
 enum class ParamMode : uint8_t { Value, Ref, Mut };
@@ -516,6 +520,7 @@ struct FnItem : Item {
     std::vector<Param> params;
     Type* ret = nullptr;  // nullptr — без результата
     Block* body = nullptr;
+    bool is_extern = false;  // `extern fn` — функция C без тела (Р59)
 };
 
 struct FieldDecl {
@@ -529,6 +534,7 @@ struct FieldDecl {
 struct StructItem : Item {
     static constexpr ItemKind Kind = ItemKind::Struct;
     StructItem() : Item(Kind) {}
+    std::vector<Attr> attrs;  // `@c`, `@linear` (Р59)
     std::vector<FieldDecl> fields;
 };
 
@@ -558,6 +564,11 @@ struct ImportItem : Item {  // name — имя модуля
     static constexpr ItemKind Kind = ItemKind::Import;
     ImportItem() : Item(Kind) {}
     std::vector<Attr> attrs;  // `@det import m` — модуль класса D (Р55)
+};
+
+struct ExternTypeItem : Item {  // `extern type Name` — непрозрачный тип C (Р59)
+    static constexpr ItemKind Kind = ItemKind::ExternType;
+    ExternTypeItem() : Item(Kind) {}
 };
 
 struct ErrorItem : Item {

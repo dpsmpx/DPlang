@@ -345,6 +345,17 @@ private:
             a.name = expect_ident(s);
             a.span = Span{id_, at_tok.begin, s.end};
             if (failed_) return nullptr;
+            if (eat(TokKind::LParen)) {  // `@link("SDL3")`
+                if (!at(TokKind::Str)) {
+                    expected("a string argument");
+                    return nullptr;
+                }
+                a.has_arg = true;
+                a.arg_src = std::string(text_of(bump()));
+                a.arg = string_literal_value(a.arg_src);
+                if (!expect(TokKind::RParen)) return nullptr;
+                a.span.end = prev_end_;
+            }
             attrs.push_back(a);
             skip_newlines();
         }
@@ -357,6 +368,7 @@ private:
         Item* it = nullptr;
         switch (peek()) {
             case TokKind::KwFn: it = fn_item(); break;
+            case TokKind::KwExtern: it = extern_item(); break;
             case TokKind::KwStruct: it = struct_item(); break;
             case TokKind::KwEnum: it = enum_item(); break;
             case TokKind::KwConst: it = const_item(); break;
@@ -365,21 +377,41 @@ private:
                 it = import_item();
                 break;
             default:
-                expected("declaration (fn, struct, enum, const or import)");
+                expected("declaration (fn, struct, enum, const, import or extern)");
                 return nullptr;
         }
+        if (!it) return nullptr;
         if (!attrs.empty()) {
             if (auto* f = as<FnItem>(it)) f->attrs = std::move(attrs);
             else if (auto* im = as<ImportItem>(it)) im->attrs = std::move(attrs);
-            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function or an import");
+            else if (auto* st = as<StructItem>(it)) st->attrs = std::move(attrs);
+            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function, a struct or an import");
         }
         it->pub = pub;
         it->span = span_from(begin);
         return it;
     }
 
-    Item* fn_item() {
+    // `extern fn f(...) T` без тела или `extern type Name` (Р59).
+    Item* extern_item() {
+        bump();  // extern
+        if (at(TokKind::KwFn)) {
+            auto* f = static_cast<FnItem*>(fn_item(/*is_extern=*/true));
+            return f;
+        }
+        if (at(TokKind::Ident) && text_of(toks_[idx()]) == "type") {
+            bump();
+            auto* t = m_.make<ExternTypeItem>();
+            t->name = expect_ident(t->name_span);
+            return t;
+        }
+        expected("'fn' or 'type' after 'extern'");
+        return nullptr;
+    }
+
+    Item* fn_item(bool is_extern = false) {
         auto* f = m_.make<FnItem>();
+        f->is_extern = is_extern;
         bump();  // fn
         f->name = expect_ident(f->name_span);
         if (!expect(TokKind::LParen)) return f;
@@ -392,6 +424,10 @@ private:
             if (!failed_) expect(TokKind::RParen);
         }
         if (failed_) return f;
+        if (is_extern) {  // без тела: тип результата — до конца строки
+            if (!at(TokKind::Newline) && !at(TokKind::Eof)) f->ret = type();
+            return f;
+        }
         if (!at(TokKind::LBrace)) f->ret = type();
         if (failed_) return f;
         f->body = block();

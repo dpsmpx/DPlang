@@ -10,6 +10,7 @@
 // освобождать ещё не заполненное или уже отданное (move) значение можно.
 #include "ir/lower.h"
 
+#include <algorithm>
 #include <map>
 
 #include "sema/builtins.h"
@@ -100,6 +101,11 @@ public:
             if (i < node->params.size() && node->params[i].local) locals_[node->params[i].local] = l;
         }
         f_.param_count = static_cast<uint32_t>(def.params.size());
+        if (def.is_extern) {  // функция C (Р59): только сигнатура
+            f_.is_extern = true;
+            f_.c_name = def.name;
+            return;
+        }
         if (def.ret->kind != TK::Void) ret_ = add_local(def.ret, LocalKind::Temp, "");
         cur_ = new_block();
         scopes_.emplace_back();
@@ -1339,6 +1345,10 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
     }
     out->fns.resize(order.size());
     for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, out->fns[i]).run(*order[i]);
+    for (const sema::FnDef* f : order) {
+        if (!f->is_extern || f->link.empty()) continue;
+        if (std::find(out->links.begin(), out->links.end(), f->link) == out->links.end()) out->links.push_back(f->link);
+    }
     return out;
 }
 

@@ -38,10 +38,10 @@ CR — ошибка E0108. Конец строки значим: он завер
 
 ```
 fn struct enum const import pub let var if else while for in match
-return break continue defer fail try parallel none true false mut
+return break continue defer fail try parallel none true false mut extern
 ```
 
-Зарезервированы на будущее (E0109): `unsafe extern errdefer`. Слова
+Зарезервированы на будущее (E0109): `unsafe errdefer`. Слова
 `some`, `ok`, `err` — не ключевые: они значат особое только в образцах
 `match` (раздел 6).
 
@@ -103,8 +103,10 @@ return break continue defer fail try parallel none true false mut
 
 ```
 module   = { item NL } .
-item     = { "@" ident NL } [ "pub" ] ( fn | struct | enum | const ) | "import" ident .
+item     = { attr NL } [ "pub" ] ( fn | struct | enum | const | extern ) | { attr } "import" ident .
+attr     = "@" ident [ "(" string ")" ] .
 fn       = "fn" ident "(" [ param { "," param } [ "," ] ] ")" [ type ] block .
+extern   = "extern" ( "fn" ident "(" [ param { "," param } [ "," ] ] ")" [ type ] | "type" ident ) .
 param    = ident ":" [ "&" [ "mut" ] ] type .
 struct   = "struct" ident "{" { field SEP } "}" .
 field    = ident ":" type [ "=" expr ] .
@@ -158,10 +160,11 @@ inits    = [ ident [ ":" expr ] { "," ident [ ":" expr ] } [ "," ] ] .
 `const`, `import`. Они идут по одному на строке.
 - `pub` делает объявление видимым другим модулям (раздел 3); у `import`
   его нет (E0206).
-- Атрибут `@имя` стоит перед функцией или перед `import` (E0205):
+- Атрибут `@имя` стоит перед функцией, структурой или `import` (E0205):
   `@det fn` и `@det import m` — класс детерминированного кода
-  (module.det), `@test fn` — тест (module.test). Другой атрибут и повтор
-  атрибута — E0319; `@test import` — E0205.
+  (module.det), `@test fn` — тест (module.test), `@link("lib")` перед
+  `extern fn`, `@c` и `@linear` перед структурой (раздел 11). Другой
+  атрибут и повтор атрибута — E0319; `@test import` — E0205.
 - Поля структуры и варианты перечисления — по одному на строке или через
   запятую.
 
@@ -714,3 +717,42 @@ failed`; `repeat(v, n)` с отрицательным `n` и `s.split("")` — �
   где `E.V` — вариант ошибки. Тела `defer` выполняются, как при любом
   возврате;
 - `101` — ловушка.
+
+## 11. Функции C (FFI)
+
+**[ffi.extern]** Функция C объявляется строкой без тела (Р59):
+`extern fn SDL_Init(flags: u32) bool`. Имя — символ C. Библиотека —
+атрибут `@link("SDL3")` перед объявлением; без него — библиотека C цели.
+`extern fn` не бывает `@det` и `@test` (E0319); её нельзя вызвать из
+класса D (module.det). Непрозрачный тип C — `extern type SDL_Window`: его
+значение — дескриптор без операций, кроме `==` и `!=`; создать его в dpl
+нельзя, только получить из функции C.
+
+**[ffi.types]** Через границу C проходят (иначе E0326):
+
+| в dpl | в C |
+|---|---|
+| целые, `f32`, `f64`, `bool` | `int8_t` … `uint64_t`, `float`, `double`, `bool` |
+| `extern type H` | указатель; результат NULL — ловушка |
+| `?H` | указатель или NULL — `none` |
+| структура `@c` | структура C по значению |
+| параметр `str` | копия с нулём в конце на время вызова; байт 0 внутри — ловушка |
+| результат `str`, `?str` | копия строки C; NULL — ловушка или `none`; не UTF-8 — ловушка |
+| параметр `[]T` | `const T*` — указатель на элементы |
+| параметр `&T`, `&mut T` | `const T*`, `T*` — указатель на значение |
+| параметр `&mut List[T]` | `T*` — указатель на элементы для записи |
+
+`T` в указателях — тип с видом в C: число, `bool`, дескриптор или
+структура `@c`. Длину буфера функция C получает отдельным параметром, как
+в её объявлении. Вызов функции C с неверной сигнатурой — за пределами
+гарантий dpl: объявление должно совпадать с C.
+
+**[ffi.c]** Структура `@c` раскладывается как структура C: поля по
+порядку, выравнивание C. В ней только типы с видом в C (E0326).
+Раскладка остальных структур — дело реализации (класс I,
+`docs/policy/DETERMINISM.md`).
+
+**[ffi.linear]** `@linear` — линейный тип ресурса (Р57): его значение
+закрывается ровно один раз. Проверка — следующим шагом v0.2; до неё
+`@linear` — ошибка E0319.
+

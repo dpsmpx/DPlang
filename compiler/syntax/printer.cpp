@@ -190,9 +190,9 @@ private:
                 auto* f = static_cast<const FnItem*>(it);
                 for (size_t i = 0; i < f->attrs.size(); i++) {
                     if (i) pad(0);
-                    out += "@" + f->attrs[i].name + "\n";
+                    out += f->attrs[i].text() + "\n";
                 }
-                out += pub + "fn " + f->name + "(";
+                out += pub + (f->is_extern ? "extern fn " : "fn ") + f->name + "(";
                 for (size_t i = 0; i < f->params.size(); i++) {
                     const Param& p = f->params[i];
                     if (i) out += ", ";
@@ -203,12 +203,15 @@ private:
                 }
                 out += ")";
                 if (f->ret) out += " " + type_text(f->ret);
+                if (!f->body) break;  // extern fn — без тела
                 out += " ";
                 block(f->body, 0);
                 break;
             }
+            case ItemKind::ExternType: out += pub + "extern type " + it->name; break;
             case ItemKind::Struct: {
                 auto* s = static_cast<const StructItem*>(it);
+                for (const Attr& a : s->attrs) out += a.text() + "\n";
                 out += pub + "struct " + s->name + " {";
                 Lines l{1, LinesMode::Lines};
                 after_open(brace_after(s->name_span.end, s->span.end), l);

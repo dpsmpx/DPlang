@@ -57,7 +57,7 @@ DP_KEYWORD(KwFalse, "false")
 DP_KEYWORD(KwMut, "mut")
 
 DP_RESERVED(KwUnsafe, "unsafe")
-DP_RESERVED(KwExtern, "extern")
+DP_KEYWORD(KwExtern, "extern")
 DP_RESERVED(KwErrdefer, "errdefer")
 
 DP_PUNCT(ShlEq, "<<=")

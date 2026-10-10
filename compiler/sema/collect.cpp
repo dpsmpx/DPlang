@@ -19,6 +19,12 @@ public:
         for (auto& m : prog_.modules) declare(*m);
         for (auto& m : prog_.modules) signatures(*m);
         for (StructDef& d : prog_.structs) {
+            if (d.node && d.c) c_struct(d);
+        }
+        for (FnDef& f : prog_.fns) {
+            if (f.node && f.is_extern) c_signature(f);
+        }
+        for (StructDef& d : prog_.structs) {
             if (!d.node) continue;
             std::vector<const void*> path;
             if (contains(prog_.types.struct_type(&d), &d, path, true)) {
@@ -98,6 +104,16 @@ private:
                     d.node = static_cast<EnumItem*>(it);
                     s.kind = SymKind::Enum;
                     s.en = &d;
+                    break;
+                }
+                case ItemKind::ExternType: {
+                    HandleDef& d = prog_.handles.emplace_back();
+                    d.name = it->name;
+                    d.module = &m;
+                    d.pub = it->pub;
+                    d.span = it->name_span;
+                    s.kind = SymKind::Handle;
+                    s.hd = &d;
                     break;
                 }
                 case ItemKind::Const: {
@@ -214,6 +230,12 @@ private:
                                  "public " + what + " uses private type '" + t->edef->name + "'");
                 }
                 break;
+            case TK::Handle:
+                if (!t->hdef->pub) {
+                    diags_.error(Code::E0309, node->span,
+                                 "public " + what + " uses private type '" + t->hdef->name + "'");
+                }
+                break;
             default: break;
         }
     }
@@ -244,7 +266,69 @@ private:
     }
 
     void struct_sig(Resolver& r, StructDef& d) {
+        for (const Attr& a : d.node->attrs) {
+            bool* flag = a.name == "c" ? &d.c : a.name == "linear" ? &d.linear : nullptr;
+            if (!flag) {
+                diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "' for a struct; use '@c' or '@linear'");
+            } else if (*flag) {
+                diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' is given twice");
+            } else if (a.has_arg) {
+                diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' takes no argument");
+            }
+            if (flag) *flag = true;
+        }
+        if (d.linear) {  // проверка линейности — шаг 5б v0.2
+            diags_.error(Code::E0319, d.node->name_span, "'@linear' is not supported yet");
+        }
         fields(r, d.node->fields, d.fields, d.pub, "struct");
+    }
+
+    // `@c` (Р59): поля — типы с видом в C; проверка — когда поля всех структур известны.
+    void c_struct(const StructDef& d) {
+        for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
+            const FieldDef& f = d.fields[i];
+            if (f.type && f.type->kind != TK::Error && !c_value_type(f.type)) {
+                diags_.error(Code::E0326, d.node->fields[i].type->span,
+                             "field '" + f.name + "' of '@c' struct '" + d.name + "' has type '" + type_name(f.type, d.module) +
+                                 "', which has no C layout; use integers, floats, bool, 'extern type' or '@c' structs");
+            }
+        }
+    }
+
+    // Тип параметра функции C (Р59): значение с видом в C; str — строка
+    // с нулём в конце; []T — указатель на элементы; &T, &mut T — указатель;
+    // &mut List[T] — указатель на элементы для записи; ?H — дескриптор или NULL.
+    bool c_param(const sema::Type* t, ParamMode mode) {
+        if (!t || t->kind == TK::Error) return true;
+        if (mode == ParamMode::Value) {
+            return c_value_type(t) || t->kind == TK::Str || (t->kind == TK::Slice && c_value_type(t->elem)) ||
+                   (t->kind == TK::Optional && t->elem->kind == TK::Handle);
+        }
+        return c_value_type(t) || (mode == ParamMode::Mut && t->kind == TK::List && c_value_type(t->elem));
+    }
+
+    // Типы функции C — когда известны `@c` всех структур.
+    void c_signature(const FnDef& f) {
+        const FnItem* n = f.node;
+        for (size_t i = 0; i < f.params.size() && i < n->params.size(); i++) {
+            const ParamDef& p = f.params[i];
+            if (!c_param(p.type, p.mode)) {
+                diags_.error(Code::E0326, n->params[i].type->span,
+                             "parameter '" + p.name + "' of C function '" + f.name + "' has type '" +
+                                 type_name(p.type, f.module) + "', which cannot cross to C (spec: ffi.types)");
+            }
+        }
+        if (!c_result(f.ret)) {
+            diags_.error(Code::E0326, n->ret ? n->ret->span : f.span,
+                         "C function '" + f.name + "' returns '" + type_name(f.ret, f.module) +
+                             "', which cannot cross from C (spec: ffi.types)");
+        }
+    }
+
+    bool c_result(const sema::Type* t) {
+        if (!t || t->kind == TK::Error || t->kind == TK::Void) return true;
+        if (c_value_type(t) || t->kind == TK::Str) return true;
+        return t->kind == TK::Optional && (t->elem->kind == TK::Str || t->elem->kind == TK::Handle);
     }
 
     void enum_sig(Resolver& r, EnumDef& d) {
@@ -288,12 +372,30 @@ private:
 
     void fn_sig(Resolver& r, FnDef& f) {
         const FnItem* n = f.node;
+        f.is_extern = n->is_extern;
+        bool linked = false;
         for (const Attr& a : n->attrs) {
+            if (a.name == "link") {  // `@link("lib")` — только у `extern fn` (Р59)
+                if (!n->is_extern) {
+                    diags_.error(Code::E0319, a.span, "'@link' names the C library of an 'extern fn'");
+                } else if (!a.has_arg || a.arg.empty()) {
+                    diags_.error(Code::E0319, a.span, "'@link' needs a library name: @link(\"SDL3\")");
+                } else if (linked) {
+                    diags_.error(Code::E0319, a.span, "attribute '@link' is given twice");
+                }
+                linked = true;
+                f.link = a.arg;
+                continue;
+            }
             bool& flag = a.name == "det" ? f.det : f.test;
             if (a.name != "det" && a.name != "test") {
                 diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "'");
             } else if (flag) {
                 diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' is given twice");
+            } else if (n->is_extern) {
+                diags_.error(Code::E0319, a.span, "an 'extern fn' cannot be '@" + a.name + "': C code is outside dpl");
+            } else if (a.has_arg) {
+                diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' takes no argument");
             }
             if (a.name == "det" || a.name == "test") flag = true;
         }

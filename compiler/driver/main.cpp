@@ -475,6 +475,7 @@ int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
     if (!ir) return 3;
     dp::backend_c::CResult c = dp::backend_c::emit_c(*ir, sources);
     if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
+    opt.links = c.links;
     return dp::build_native(c.code, opt);
 }
 
@@ -514,6 +515,7 @@ int cmd_test(const Cli& cli, const std::vector<std::string_view>& args) {
     if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
     finish_options(cli, opt);
     put(dp::render_text(diags.list(), sources), stderr);  // предупреждения, если будут
+    opt.links = c.links;
     return dp::run_tests(c.code, names, opt);
 }
 

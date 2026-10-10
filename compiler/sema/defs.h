@@ -31,6 +31,8 @@ struct StructDef {
     std::string name;
     const ModuleInfo* module = nullptr;
     bool pub = false;
+    bool c = false;       // `@c`: раскладка C (Р59)
+    bool linear = false;  // `@linear`: значение закрывается ровно один раз (Р57)
     Span span;
     std::vector<FieldDef> fields;
     const ast::StructItem* node = nullptr;
@@ -79,6 +81,8 @@ struct FnDef {
     bool pub = false;
     bool det = false;   // @det (Р12)
     bool test = false;  // @test (Р50)
+    bool is_extern = false;  // `extern fn` — функция C (Р59): тела нет
+    std::string link;        // `@link("lib")` — библиотека C; пусто — библиотека C по умолчанию
     Span span;
     std::vector<ParamDef> params;
     const Type* ret = nullptr;  // Void — без результата
@@ -121,7 +125,15 @@ struct Local {
     uint32_t id = 0;         // номер в функции
 };
 
-enum class SymKind : uint8_t { Fn, Struct, Enum, Const, Module };
+// `extern type Name` — непрозрачный тип C (Р59).
+struct HandleDef {
+    std::string name;
+    const ModuleInfo* module = nullptr;
+    bool pub = false;
+    Span span;
+};
+
+enum class SymKind : uint8_t { Fn, Struct, Enum, Const, Module, Handle };
 
 struct Symbol {
     SymKind kind = SymKind::Fn;
@@ -130,6 +142,7 @@ struct Symbol {
     EnumDef* en = nullptr;
     ConstDef* cn = nullptr;
     ModuleInfo* mod = nullptr;
+    HandleDef* hd = nullptr;
     Span span;  // объявление или import
 };
 
@@ -159,6 +172,7 @@ struct Program {
     std::deque<EnumDef> enums;
     std::deque<FnDef> fns;
     std::deque<ConstDef> consts;
+    std::deque<HandleDef> handles;
     std::deque<Local> locals;
 };
 

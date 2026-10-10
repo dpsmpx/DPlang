@@ -153,6 +153,12 @@ DP_CODE(E0323, "invalid test function",
         "A function marked `@test` takes no parameters and returns nothing or `E!void` (`!void`): "
         "`dpl test` calls it with no arguments and checks that it returns without a trap or an error "
         "(spec: module.test).")
+DP_CODE(E0326, "type cannot cross to C",
+        "A C function (`extern fn`, decision R59) takes and returns only types with a C form (spec: "
+        "ffi.types): integers, floats, `bool`, an `extern type` handle and `@c` structs of these; a `str` "
+        "(passed as a zero-terminated copy, returned as a UTF-8 copy), `[]T` (a pointer to the elements), "
+        "`&T` and `&mut T` (pointers), `&mut List[T]` (a pointer to writable elements) and `?H` for a "
+        "handle that may be NULL. A `@c` struct holds only types with a C form.")
 DP_CODE(E0401, "mismatched types",
         "The value has a different type than the place it goes to (spec: type.conv). Only lossless "
         "conversions are implicit: a narrower integer to a wider one that holds all its values, `f32` to "

@@ -72,6 +72,7 @@ void Checker::struct_defaults(StructDef& s) {
 }
 
 void Checker::fn(FnDef& f) {
+    if (f.is_extern) return;  // функция C: тела нет (Р59)
     fn_ = &f;
     next_local_ = 0;
     flow_ = Flow{};
