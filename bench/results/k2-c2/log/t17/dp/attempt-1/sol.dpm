@@ -1,0 +1,185 @@
+// t17: перенос и выравнивание текста.
+pub enum Align {
+    Left
+    Right
+    Center
+    Justify
+}
+
+pub enum WrapError {
+    BadWidth
+}
+
+fn spaces(n: int) str {
+    var s = ""
+    var k: int = 0
+    while k < n {
+        s += " "
+        k += 1
+    }
+    return s
+}
+
+// Строки текста, разделённые '\n'.
+fn split_lines(text: str) List[str] {
+    var lines: List[str] = []
+    var start: int = 0
+    let n = len(text)
+    for i in 0..n {
+        if text[i] == '\n' {
+            lines.push(text[start..i])
+            start = i + 1
+        }
+    }
+    lines.push(text[start..])
+    return lines
+}
+
+// Слова строки: разделитель — только пробел.
+fn split_words(line: str) List[str] {
+    var words: List[str] = []
+    var i: int = 0
+    let n = len(line)
+    while i < n {
+        if line[i] == ' ' {
+            i += 1
+            continue
+        }
+        var j = i
+        while j < n && line[j] != ' ' {
+            j += 1
+        }
+        words.push(line[i..j])
+        i = j
+    }
+    return words
+}
+
+// Жадное заполнение строк абзаца; строка — список слов.
+fn fill(words: List[str], wd: int) List[List[str]] {
+    var lines: List[List[str]] = []
+    var cur: List[str] = []
+    var curlen: int = 0
+    let cut = wd - 1
+    for i in 0..len(words) {
+        let word = words[i]
+        let wl = len(word)
+        if wl > wd {
+            if len(cur) > 0 {
+                lines.push(cur)
+                cur = []
+            }
+            var rest = word
+            while len(rest) > wd {
+                var piece: List[str] = []
+                piece.push(rest[..cut] + "-")
+                lines.push(piece)
+                rest = rest[cut..]
+            }
+            cur = []
+            cur.push(rest)
+            curlen = len(rest)
+        } else {
+            if len(cur) == 0 {
+                cur.push(word)
+                curlen = wl
+            } else {
+                if curlen + 1 + wl <= wd {
+                    cur.push(word)
+                    curlen += 1 + wl
+                } else {
+                    lines.push(cur)
+                    cur = []
+                    cur.push(word)
+                    curlen = wl
+                }
+            }
+        }
+    }
+    if len(cur) > 0 {
+        lines.push(cur)
+    }
+    return lines
+}
+
+fn render(ws: List[str], wd: int, align: Align, last: bool) str {
+    var s = ""
+    for i in 0..len(ws) {
+        if i > 0 {
+            s += " "
+        }
+        s += ws[i]
+    }
+    let sl = len(s)
+    var out = s
+    match align {
+        .Left => {
+            out = s
+        }
+        .Right => {
+            out = spaces(wd - sl) + s
+        }
+        .Center => {
+            out = spaces((wd - sl) / 2) + s
+        }
+        .Justify => {
+            if !last && len(ws) >= 2 {
+                let gaps = len(ws) - 1
+                let extra = wd - sl
+                let each = extra / gaps
+                let rem = extra % gaps
+                var t = ""
+                for g in 0..len(ws) {
+                    if g > 0 {
+                        var sp = 1 + each
+                        if g - 1 < rem {
+                            sp += 1
+                        }
+                        t += spaces(sp)
+                    }
+                    t += ws[g]
+                }
+                out = t
+            }
+        }
+    }
+    return out
+}
+
+pub fn wrap(text: str, width: i32, align: Align) WrapError!List[str] {
+    if width < 2 || width > 200 {
+        fail .BadWidth
+    }
+    let wd: int = int(width)
+    let lines = split_lines(text)
+    var paras: List[List[str]] = []
+    var curp: List[str] = []
+    for li in 0..len(lines) {
+        let ws = split_words(lines[li])
+        if len(ws) == 0 {
+            if len(curp) > 0 {
+                paras.push(curp)
+                curp = []
+            }
+        } else {
+            for wi in 0..len(ws) {
+                curp.push(ws[wi])
+            }
+        }
+    }
+    if len(curp) > 0 {
+        paras.push(curp)
+    }
+    var out: List[str] = []
+    for pi in 0..len(paras) {
+        if pi > 0 {
+            out.push("")
+        }
+        let plines = fill(paras[pi], wd)
+        let np = len(plines)
+        for k in 0..np {
+            out.push(render(plines[k], wd, align, k == np - 1))
+        }
+    }
+    return out
+}

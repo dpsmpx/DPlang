@@ -1,0 +1,398 @@
+// t16: калькулятор целых выражений с переменными.
+// Разбор и вычисление — за один проход: первая ошибка разбора важнее
+// любой ошибки вычисления, а вычисление идёт в порядке разбора.
+
+enum Kind {
+    Num
+    Name
+    Op
+    Bad
+    End
+}
+
+struct Tok {
+    kind: Kind
+    // текст лексемы; у Bad — сообщение об ошибке
+    text: str
+    col: int
+    val: i64
+}
+
+struct P {
+    toks: List[Tok]
+    pos: int
+    perr: bool
+    pcol: int
+    pmsg: str
+    eerr: bool
+    ecol: int
+    emsg: str
+    names: List[str]
+    vals: List[i64]
+}
+
+fn name_start(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn name_char(c: u8) bool {
+    return name_start(c) || is_digit(c)
+}
+
+fn is_opch(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+// Лексемы до первой ошибки лексики (она — последняя, Bad) или до конца (End).
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+        } else if is_digit(c) {
+            var j = i
+            var v: i64 = 0
+            var big = false
+            while j < n && is_digit(src[j]) {
+                let d = i64(src[j] - '0')
+                if let m = checked_mul(v, 10) {
+                    if let s = checked_add(m, d) {
+                        v = s
+                    } else {
+                        big = true
+                    }
+                } else {
+                    big = true
+                }
+                j += 1
+            }
+            if big {
+                toks.push(Tok { kind: .Bad, text: "number too large", col: i + 1, val: 0 })
+                return toks
+            }
+            toks.push(Tok { kind: .Num, text: src[i..j], col: i + 1, val: v })
+            i = j
+        } else if name_start(c) {
+            var e = i
+            while e < n && name_char(src[e]) {
+                e += 1
+            }
+            toks.push(Tok { kind: .Name, text: src[i..e], col: i + 1, val: 0 })
+            i = e
+        } else if is_opch(c) {
+            toks.push(Tok { kind: .Op, text: src[i..i + 1], col: i + 1, val: 0 })
+            i += 1
+        } else {
+            toks.push(Tok { kind: .Bad, text: "unexpected character '" + src[i..i + 1] + "'", col: i + 1, val: 0 })
+            return toks
+        }
+    }
+    toks.push(Tok { kind: .End, text: "", col: n + 1, val: 0 })
+    return toks
+}
+
+fn peek(p: &mut P) Tok {
+    return p.toks[p.pos]
+}
+
+fn is_op(t: Tok, s: str) bool {
+    return t.kind == .Op && t.text == s
+}
+
+fn perror(p: &mut P, col: int, msg: str) {
+    if !p.perr {
+        p.perr = true
+        p.pcol = col
+        p.pmsg = msg
+    }
+}
+
+fn eerror(p: &mut P, col: int, msg: str) {
+    if !p.eerr {
+        p.eerr = true
+        p.ecol = col
+        p.emsg = msg
+    }
+}
+
+// Лексема t не может стоять здесь.
+fn unexpected(p: &mut P, t: Tok) {
+    if t.kind == .Bad {
+        perror(&mut p, t.col, t.text)
+    } else if t.kind == .End {
+        perror(&mut p, t.col, "unexpected end")
+    } else {
+        perror(&mut p, t.col, "unexpected '" + t.text + "'")
+    }
+}
+
+fn ovf(p: &mut P, col: int, r: ?i64) i64 {
+    if let v = r {
+        return v
+    }
+    eerror(&mut p, col, "overflow")
+    return 0
+}
+
+fn ipow(p: &mut P, col: int, a: i64, b: i64) i64 {
+    if b < 0 {
+        eerror(&mut p, col, "negative exponent")
+        return 0
+    }
+    if b == 0 {
+        return 1
+    }
+    if a == 0 || a == 1 {
+        return a
+    }
+    if a == -1 {
+        if b % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    if b >= 64 {
+        eerror(&mut p, col, "overflow")
+        return 0
+    }
+    var r: i64 = 1
+    var k: i64 = 0
+    while k < b {
+        if let m = checked_mul(r, a) {
+            r = m
+        } else {
+            eerror(&mut p, col, "overflow")
+            return 0
+        }
+        k += 1
+    }
+    return r
+}
+
+// Бинарный оператор t над a и b.
+fn apply(p: &mut P, t: Tok, a: i64, b: i64) i64 {
+    if p.eerr {
+        return 0
+    }
+    let op = t.text
+    if op == "+" {
+        return ovf(&mut p, t.col, checked_add(a, b))
+    }
+    if op == "-" {
+        return ovf(&mut p, t.col, checked_sub(a, b))
+    }
+    if op == "*" {
+        return ovf(&mut p, t.col, checked_mul(a, b))
+    }
+    if op == "/" {
+        if b == 0 {
+            eerror(&mut p, t.col, "division by zero")
+            return 0
+        }
+        return ovf(&mut p, t.col, checked_div(a, b))
+    }
+    if op == "%" {
+        if b == 0 {
+            eerror(&mut p, t.col, "division by zero")
+            return 0
+        }
+        if b == -1 {
+            return 0
+        }
+        return a % b
+    }
+    if op == "^" {
+        return ipow(&mut p, t.col, a, b)
+    }
+    return 0
+}
+
+fn find_var(p: &mut P, name: str) int {
+    for i in 0..len(p.names) {
+        if p.names[i] == name {
+            return i
+        }
+    }
+    return -1
+}
+
+fn set_var(p: &mut P, name: str, v: i64) {
+    let i = find_var(&mut p, name)
+    if i >= 0 {
+        p.vals[i] = v
+    } else {
+        p.names.push(name)
+        p.vals.push(v)
+    }
+}
+
+fn atom(p: &mut P) i64 {
+    let t = peek(&mut p)
+    if t.kind == .Num {
+        p.pos += 1
+        return t.val
+    }
+    if t.kind == .Name {
+        p.pos += 1
+        if p.eerr {
+            return 0
+        }
+        let idx = find_var(&mut p, t.text)
+        if idx < 0 {
+            eerror(&mut p, t.col, "unknown variable '" + t.text + "'")
+            return 0
+        }
+        return p.vals[idx]
+    }
+    if is_op(t, "(") {
+        p.pos += 1
+        let v = expr(&mut p)
+        if p.perr {
+            return 0
+        }
+        let c = peek(&mut p)
+        if is_op(c, ")") {
+            p.pos += 1
+            return v
+        }
+        if c.kind == .Bad {
+            unexpected(&mut p, c)
+        } else {
+            perror(&mut p, c.col, "expected ')'")
+        }
+        return 0
+    }
+    unexpected(&mut p, t)
+    return 0
+}
+
+fn power(p: &mut P) i64 {
+    let base = atom(&mut p)
+    if p.perr {
+        return 0
+    }
+    let t = peek(&mut p)
+    if is_op(t, "^") {
+        p.pos += 1
+        let e = unary(&mut p)
+        if p.perr {
+            return 0
+        }
+        return apply(&mut p, t, base, e)
+    }
+    return base
+}
+
+fn unary(p: &mut P) i64 {
+    let t = peek(&mut p)
+    if is_op(t, "-") {
+        p.pos += 1
+        let v = unary(&mut p)
+        if p.perr {
+            return 0
+        }
+        if p.eerr {
+            return 0
+        }
+        return ovf(&mut p, t.col, checked_neg(v))
+    }
+    return power(&mut p)
+}
+
+fn term(p: &mut P) i64 {
+    var acc = unary(&mut p)
+    if p.perr {
+        return 0
+    }
+    var going = true
+    while going {
+        let t = peek(&mut p)
+        if is_op(t, "*") || is_op(t, "/") || is_op(t, "%") {
+            p.pos += 1
+            let r = unary(&mut p)
+            if p.perr {
+                return 0
+            }
+            acc = apply(&mut p, t, acc, r)
+        } else {
+            going = false
+        }
+    }
+    return acc
+}
+
+fn expr(p: &mut P) i64 {
+    var acc = term(&mut p)
+    if p.perr {
+        return 0
+    }
+    var going = true
+    while going {
+        let t = peek(&mut p)
+        if is_op(t, "+") || is_op(t, "-") {
+            p.pos += 1
+            let r = term(&mut p)
+            if p.perr {
+                return 0
+            }
+            acc = apply(&mut p, t, acc, r)
+        } else {
+            going = false
+        }
+    }
+    return acc
+}
+
+fn stmt(p: &mut P) i64 {
+    let t = peek(&mut p)
+    if t.kind == .Name {
+        let t2 = p.toks[p.pos + 1]
+        if is_op(t2, "=") {
+            p.pos += 2
+            let v = expr(&mut p)
+            if p.perr {
+                return 0
+            }
+            if !p.eerr {
+                set_var(&mut p, t.text, v)
+            }
+            return v
+        }
+    }
+    return expr(&mut p)
+}
+
+fn program(p: &mut P) i64 {
+    var last = stmt(&mut p)
+    if p.perr {
+        return 0
+    }
+    while is_op(peek(&mut p), ";") {
+        p.pos += 1
+        last = stmt(&mut p)
+        if p.perr {
+            return 0
+        }
+    }
+    let t = peek(&mut p)
+    if t.kind != .End {
+        unexpected(&mut p, t)
+        return 0
+    }
+    return last
+}
+
+pub fn calc(src: str) str {
+    var p = P { toks: lex(src), pos: 0, perr: false, pcol: 0, pmsg: "", eerr: false, ecol: 0, emsg: "", names: [], vals: [] }
+    let v = program(&mut p)
+    if p.perr {
+        return "error at " + str(p.pcol) + ": " + p.pmsg
+    }
+    if p.eerr {
+        return "error at " + str(p.ecol) + ": " + p.emsg
+    }
+    return str(v)
+}

@@ -1,0 +1,26 @@
+{
+ "run": "k2-c3",
+ "commit": "7484ef62118ff8d7b774ca6afa8aa32823a3bc78",
+ "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+ "flags": [
+  "-std=c++20",
+  "-O1",
+  "-pthread",
+  "-Wall",
+  "-Wextra",
+  "-Werror",
+  "-fno-exceptions",
+  "-fno-rtti",
+  "-fsanitize=address,undefined",
+  "-fno-sanitize-recover=all"
+ ],
+ "attempts_max": 5,
+ "agent_model": "claude-opus-5-5",
+ "doc": "guide",
+ "task": "t18_scheduler_fix",
+ "id": "t18",
+ "lang": "dp",
+ "kind": "fix",
+ "series": true,
+ "created": "2026-10-10T07:10:11"
+}
