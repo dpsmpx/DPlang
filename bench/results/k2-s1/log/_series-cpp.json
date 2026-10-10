@@ -29,5 +29,172 @@
   "total_tokens": 91479,
   "tool_uses": 20,
   "seconds": 255.8
+ },
+ "usage": {
+  "base": 45488,
+  "prompt": 11253,
+  "work": 33576,
+  "final": 90317,
+  "calls": 20,
+  "steps": [
+   {
+    "context": 45488,
+    "read": 0,
+    "wrote": 0,
+    "tools": []
+   },
+   {
+    "context": 56741,
+    "read": 20045,
+    "wrote": 74,
+    "tools": [
+     "Read"
+    ]
+   },
+   {
+    "context": 57199,
+    "read": 451,
+    "wrote": 185,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 61041,
+    "read": 162,
+    "wrote": 6124,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 61658,
+    "read": 199,
+    "wrote": 220,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 61842,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 62189,
+    "read": 328,
+    "wrote": 185,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 72249,
+    "read": 162,
+    "wrote": 10459,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 73094,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 73521,
+    "read": 526,
+    "wrote": 185,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 76598,
+    "read": 162,
+    "wrote": 5244,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 77116,
+    "read": 275,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 77430,
+    "read": 162,
+    "wrote": 339,
+    "tools": [
+     "Edit"
+    ]
+   },
+   {
+    "context": 77907,
+    "read": 23,
+    "wrote": 173,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 79889,
+    "read": 3956,
+    "wrote": 200,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 82094,
+    "read": 1408,
+    "wrote": 990,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 82326,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 86082,
+    "read": 7494,
+    "wrote": 257,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 89961,
+    "read": 85,
+    "wrote": 7063,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 90317,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   }
+  ]
  }
 }

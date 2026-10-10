@@ -19,6 +19,8 @@ dpl (dp — настоящий компилятор v0.1), зная язык т�
   RUN/series/LANG/PROMPT.md;
 - session — записать расход сессии субагента (из итога инструмента Agent;
   у серии — TASK = series);
+- usage — разложить расход по транскрипту субагента: обвязка, задание,
+  работа; по шагам — контекст, прочитанное и написанное (только числа);
 - tokens — точный счёт токенов API Claude (count_tokens, ключ
   ANTHROPIC_API_KEY): прочитано на входе, прочитано диагностик, написано,
   итоговое решение;
@@ -31,6 +33,7 @@ dpl (dp — настоящий компилятор v0.1), зная язык т�
     python3 bench/experiment.py prepare RUN [--tasks t01,t05] [--langs cpp,A] [--series]
     python3 bench/experiment.py check DIR
     python3 bench/experiment.py session RUN TASK|series LANG --tokens N [--tool-uses K] [--seconds S]
+    python3 bench/experiment.py usage RUN TASK|series LANG --transcript FILE
     python3 bench/experiment.py tokens RUN [--model M]
     python3 bench/experiment.py report RUN [--save]
     python3 bench/experiment.py restore RUN [--force]
@@ -808,6 +811,67 @@ def cells(run_dir):
     return sorted(out, key=lambda c: (c[0], order.get(c[1], 9)))
 
 
+def transcript_steps(path):
+    """Шаги сессии субагента по его транскрипту (JSONL инструмента Agent):
+    контекст при каждом вызове модели и сколько символов перед ним прочитано
+    (результаты инструментов) и написано (текст и входы инструментов).
+    Содержимое не сохраняется — только числа и имена инструментов."""
+    rows, seen = [], set()
+    read_n = wrote_n = 0
+    names = []
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            o = json.loads(line)
+            m = o.get('message') or {}
+            if o.get('type') == 'assistant':
+                if m.get('id') not in seen:
+                    seen.add(m.get('id'))
+                    u = m.get('usage') or {}
+                    ctx = u.get('input_tokens', 0) + u.get('cache_creation_input_tokens', 0) + \
+                        u.get('cache_read_input_tokens', 0)
+                    rows.append({'context': ctx, 'read': read_n, 'wrote': wrote_n, 'tools': names})
+                    read_n = wrote_n = 0
+                    names = []
+                for b in m.get('content') or []:
+                    if b.get('type') == 'tool_use':
+                        wrote_n += len(json.dumps(b.get('input', {}), ensure_ascii=False))
+                        names.append(b.get('name'))
+                    elif b.get('type') == 'text':
+                        wrote_n += len(b.get('text', ''))
+            elif o.get('type') == 'user' and isinstance(m.get('content'), list):
+                for b in m['content']:
+                    if b.get('type') == 'tool_result':
+                        c = b.get('content')
+                        read_n += len(c) if isinstance(c, str) else \
+                            sum(len(x.get('text', '')) for x in c or [] if isinstance(x, dict))
+    return rows
+
+
+def usage(run, task_id, lang, transcript):
+    """Разложение расхода сессии по транскрипту: обвязка субагента (контекст
+    первого вызова), задание (рост контекста после его чтения) и работа
+    (остальное: прочитанный код, вывод проверок, написанное и рассуждения)."""
+    rows = transcript_steps(transcript)
+    if len(rows) < 2:
+        raise HarnessError(f'{transcript}: в транскрипте меньше двух вызовов модели')
+    base, after_prompt, final = rows[0]['context'], rows[1]['context'], rows[-1]['context']
+    data = {'base': base, 'prompt': after_prompt - base, 'work': final - after_prompt, 'final': final,
+            'calls': len(rows), 'steps': rows}
+    if task_id == 'series':
+        path = series_paths(os.path.join(work_dir(), run), lang)[1]
+    else:
+        _, log = cell_paths(os.path.join(work_dir(), run), find_task(task_id).id, lang)
+        path = os.path.join(log, 'meta.json')
+    if not os.path.exists(path):
+        raise HarnessError(f'нет журнала {path}')
+    meta = json.loads(read(path))
+    meta['usage'] = data
+    write(path, json.dumps(meta, ensure_ascii=False, indent=1) + '\n')
+    print(f'{run} {task_id} {lang}: обвязка {base}, задание {data["prompt"]}, работа {data["work"]}, '
+          f'итог {final} (вызовов {len(rows)})')
+    return 0
+
+
 def tokens(run, model=COUNT_MODEL):
     run_dir = os.path.join(work_dir(), run)
     counter = TokenCounter(model, os.path.join(work_dir(), 'token_cache.json'))
@@ -951,7 +1015,9 @@ def series_rows(run_dir, rows):
         cells_ = [r for r in rows if r['lang'] == lang and r['task'] in meta['tasks']]
         sess = (meta.get('session') or {}).get('total_tokens')
         acc = sum(1 for r in cells_ if r['status'] == ACCEPTED)
+        use = meta.get('usage') or {}
         out.append({'lang': lang, 'tasks': meta['tasks'], 'accepted': acc,
+                    'prompt_tokens': use.get('prompt'), 'work_tokens': use.get('work'),
                     'first_try': sum(r['first_try'] for r in cells_),
                     'prompt': len(read(meta_path[:-len('.json')] + '.PROMPT.md')),
                     'written': sum(r['chars']['written'] for r in cells_),
@@ -967,13 +1033,16 @@ def render_series(run_dir, rows):
     lines = ['', '## Серии (Р-17)', '',
              'Один субагент на язык решает задачи по очереди в одной сессии; спецификация читается один '
              'раз. «Задание» — символы задания серии; «сессия» — расход всей сессии по итогу инструмента '
-             'Agent; «на изменение» — сессия на одну принятую задачу.', '',
-             '| язык | задачи | принято | с первой попытки | задание | написано | решение | сессия | на изменение |',
-             '|---|---|---|---|---|---|---|---|---|']
+             'Agent; «на изменение» — сессия на одну принятую задачу. По транскрипту (команда `usage`): '
+             '«задание, ток.» — рост контекста от чтения задания, «работа, ток.» — весь рост после него '
+             '(прочитанный код, вывод проверок, написанное и рассуждения).', '',
+             '| язык | задачи | принято | с первой попытки | задание | написано | решение | сессия | на изменение '
+             '| задание, ток. | работа, ток. |',
+             '|---|---|---|---|---|---|---|---|---|---|---|']
     for r in sr:
         lines.append(f'| {TITLE[r["lang"]]} | {", ".join(r["tasks"])} | {r["accepted"]} из {len(r["tasks"])} | '
                      f'{r["first_try"]} | {r["prompt"]} | {r["written"]} | {r["final"]} | {r["session"] or "—"} | '
-                     f'{r["per_change"] or "—"} |')
+                     f'{r["per_change"] or "—"} | {r["prompt_tokens"] or "—"} | {r["work_tokens"] or "—"} |')
     return '\n'.join(lines) + '\n'
 
 
@@ -1220,6 +1289,11 @@ def main(argv):
     p.add_argument('--tokens', type=int, required=True)
     p.add_argument('--tool-uses', type=int)
     p.add_argument('--seconds', type=float)
+    p = sub.add_parser('usage')
+    p.add_argument('run')
+    p.add_argument('task')
+    p.add_argument('lang', choices=LANGS)
+    p.add_argument('--transcript', required=True)
     p = sub.add_parser('tokens')
     p.add_argument('run')
     p.add_argument('--model', default=COUNT_MODEL)
@@ -1245,6 +1319,8 @@ def main(argv):
         if a.cmd == 'session':
             session(a.run, a.task, a.lang, a.tokens, a.tool_uses, a.seconds)
             return 0
+        if a.cmd == 'usage':
+            return usage(a.run, a.task, a.lang, a.transcript)
         if a.cmd == 'tokens':
             return tokens(a.run, a.model)
         if a.cmd == 'report':

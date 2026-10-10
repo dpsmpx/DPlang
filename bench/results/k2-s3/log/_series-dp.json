@@ -29,5 +29,148 @@
   "total_tokens": 125451,
   "tool_uses": 17,
   "seconds": 400.5
+ },
+ "usage": {
+  "base": 45487,
+  "prompt": 26272,
+  "work": 52547,
+  "final": 124306,
+  "calls": 17,
+  "steps": [
+   {
+    "context": 45487,
+    "read": 0,
+    "wrote": 0,
+    "tools": []
+   },
+   {
+    "context": 71759,
+    "read": 50990,
+    "wrote": 73,
+    "tools": [
+     "Read"
+    ]
+   },
+   {
+    "context": 72386,
+    "read": 643,
+    "wrote": 226,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 82695,
+    "read": 161,
+    "wrote": 6721,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 83160,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 83468,
+    "read": 239,
+    "wrote": 166,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 102557,
+    "read": 161,
+    "wrote": 10112,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 104121,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 104494,
+    "read": 381,
+    "wrote": 166,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 109250,
+    "read": 161,
+    "wrote": 3597,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 109482,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 111583,
+    "read": 4224,
+    "wrote": 182,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 114490,
+    "read": 1444,
+    "wrote": 907,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 114939,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 118068,
+    "read": 6330,
+    "wrote": 179,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 124019,
+    "read": 302,
+    "wrote": 5795,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 124306,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "Bash"
+    ]
+   }
+  ]
  }
 }

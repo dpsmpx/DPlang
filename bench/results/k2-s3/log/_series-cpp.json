@@ -29,5 +29,148 @@
   "total_tokens": 91484,
   "tool_uses": 17,
   "seconds": 239.1
+ },
+ "usage": {
+  "base": 45488,
+  "prompt": 11240,
+  "work": 33684,
+  "final": 90412,
+  "calls": 17,
+  "steps": [
+   {
+    "context": 45488,
+    "read": 0,
+    "wrote": 0,
+    "tools": []
+   },
+   {
+    "context": 56728,
+    "read": 20045,
+    "wrote": 74,
+    "tools": [
+     "Read"
+    ]
+   },
+   {
+    "context": 57182,
+    "read": 451,
+    "wrote": 181,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 61212,
+    "read": 162,
+    "wrote": 6111,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 61654,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 61997,
+    "read": 328,
+    "wrote": 181,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 71855,
+    "read": 162,
+    "wrote": 11386,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 72823,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 73246,
+    "read": 526,
+    "wrote": 181,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 75923,
+    "read": 162,
+    "wrote": 4706,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 76281,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 78254,
+    "read": 3956,
+    "wrote": 184,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 81181,
+    "read": 2907,
+    "wrote": 974,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 81418,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 85156,
+    "read": 7494,
+    "wrote": 233,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 90033,
+    "read": 509,
+    "wrote": 7126,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 90412,
+    "read": 23,
+    "wrote": 167,
+    "tools": [
+     "Bash"
+    ]
+   }
+  ]
  }
 }
