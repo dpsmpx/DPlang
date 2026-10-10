@@ -1,0 +1,110 @@
+// spec: type.map type.recursive expr.literal stmt.for memory.values builtin.functions builtin.methods trap.index
+struct Account {
+    name: str
+    bal: i64
+    tags: List[str]
+}
+
+struct Dir {
+    files: Map[str, i64]
+    sub: Map[str, Dir]
+}
+
+fn deposit(m: &mut Map[str, Account], name: str, amount: i64) {
+    if !m.contains(name) {
+        m[name] = Account{name: name, bal: 0, tags: []}
+    }
+    m[name].bal += amount
+}
+
+fn size(d: &Dir) i64 {
+    var t: i64 = 0
+    for f in &d.files {
+        t += d.files[f]
+    }
+    for s in &d.sub {
+        t += size(&d.sub[s])
+    }
+    return t
+}
+
+fn show(m: &Map[str, i64]) str {
+    var s = "{"
+    for k in &m {
+        if len(s) > 1 {
+            s += ", "
+        }
+        s += k + ": " + str(m[k])
+    }
+    return s + "}"
+}
+
+fn main() {
+    var accs: Map[str, Account] = []
+    deposit(&mut accs, "bob", 5)
+    deposit(&mut accs, "ann", 7)
+    deposit(&mut accs, "bob", 10)
+    accs["ann"].tags.push("vip")
+    for k in &accs {
+        println(k + " " + str(accs[k].bal) + " " + str(len(accs[k].tags)))
+    }
+
+    var m: Map[str, i64] = []
+    m["c"] = 3
+    m["a"] = 1
+    m["b"] = 2
+    m["a"] = 10
+    println(show(&m) + " len " + str(len(m)))
+    let gone = m.remove("c")
+    let none_ = m.remove("zzz")
+    m["c"] = 30
+    println(show(&m) + " " + str(gone ?? -1) + " " + str(none_ ?? -1))
+    println(str(m.get("b") ?? -1) + " " + str(m.get("q") ?? -1) + " " + str(m.contains("a")) + " " + str(m.contains("q")))
+
+    var copy = m
+    copy["a"] += 1
+    copy["new"] = 0
+    println(show(&m) + " / " + show(&copy))
+
+    let ks = m.keys()
+    for k in &ks {
+        m[k] *= 2
+    }
+    println(show(&m))
+    m.clear()
+    println(show(&m) + " " + str(len(m)))
+
+    var ints: Map[i32, str] = []
+    for i in 0..10000 {
+        ints[i32(i) * 7] = str(i)
+    }
+    var removed = 0
+    for i in 0..10000 {
+        if i % 3 == 0 {
+            if let s = ints.remove(i32(i) * 7) {
+                removed += 1
+            }
+        }
+    }
+    println(str(len(ints)) + " " + str(removed) + " " + ints[7] + " " + ints[69986] + " " + str(ints.contains(0)))
+
+    var flags: Map[bool, i32] = []
+    flags[true] = 1
+    flags[false] = 2
+    flags[true] += 5
+    println(str(flags[true]) + " " + str(flags[false]) + " " + str(len(flags)))
+
+    var root = Dir{files: [], sub: []}
+    root.files["a"] = 1
+    root.sub["x"] = Dir{files: [], sub: []}
+    root.sub["x"].files["b"] = 20
+    root.sub["x"].sub["y"] = Dir{files: [], sub: []}
+    root.sub["x"].sub["y"].files["c"] = 300
+    println(str(size(&root)))
+
+    var grid: Map[i64, Map[i64, i32]] = []
+    grid[1] = []
+    grid[1][2] = 5
+    grid[1][2] += 1
+    println(str(grid[1][2]) + " " + str(len(grid[1])))
+}

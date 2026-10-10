@@ -174,7 +174,7 @@ private:
                 path.pop_back();
                 return found;
             }
-            default: return false;  // List и срез хранят элементы отдельно
+            default: return false;  // List, Map и срез хранят элементы отдельно
         }
     }
 
@@ -189,6 +189,10 @@ private:
             case TK::Result:
                 public_type(node, t->elem, what);
                 public_type(node, t->err, what);
+                break;
+            case TK::Map:
+                public_type(node, t->key, what);
+                public_type(node, t->elem, what);
                 break;
             case TK::Struct:
                 if (!t->sdef->pub) {

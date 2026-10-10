@@ -200,7 +200,11 @@ void Checker::assign_stmt(AssignStmt* a) {
             Local* l = n->res.local;
             n->type = l->type;
             check(a->value, l->type);
-            if (!l->mutable_) {
+            if (frozen(l)) {
+                error(Code::E0412, n->span, "cannot assign to '" + l->name +
+                                                "' while 'for ... in &' iterates over its Map; iterate over a copy "
+                                                "of the keys: 'for k in &m.keys()'");
+            } else if (!l->mutable_) {
                 error(Code::E0412, n->span, "cannot assign to '" + l->name + "': it is not declared with 'var'");
             }
             if (flow_.init.size() > l->id) flow_.init[l->id] = 1;
@@ -303,6 +307,11 @@ void Checker::for_stmt(ForStmt* s) {
         } else if (t->kind == TK::List) {
             elem = t->elem;
             if (s->mode == ForMode::Mut) mutable_place(s->iter, "mutate");
+        } else if (t->kind == TK::Map) {  // Р54: ключи по порядку вставки
+            elem = t->key;
+            if (s->mode == ForMode::Mut) {
+                error(Code::E0419, s->iter->span, "keys of a Map cannot be changed; iterate with 'for k in &m'");
+            }
         } else if (t->kind == TK::Slice || t->kind == TK::Str) {
             elem = t->kind == TK::Str ? prim(TK::U8) : t->elem;
             if (s->mode == ForMode::Mut) {
@@ -317,9 +326,13 @@ void Checker::for_stmt(ForStmt* s) {
     push_scope();
     s->local = declare(s->var, s->var_span, elem, s->mode == ForMode::Mut, is_ref, true);
     if (s->local && is_ref) s->local->alias_of = root_local(s->iter);  // элемент xs — корень xs (Р44)
+    // Обход Map: менять отображение в теле нельзя (Р54) — корень замораживается.
+    Local* frozen_root = s->iter && s->iter->type && s->iter->type->kind == TK::Map ? root_local(s->iter) : nullptr;
+    if (frozen_root) frozen_.push_back(frozen_root);
     loops_.emplace_back();
     block(s->body);
     loops_.pop_back();
+    if (frozen_root) frozen_.pop_back();
     pop_scope();
     // Тело могло не выполниться ни разу.
     flow_ = before;

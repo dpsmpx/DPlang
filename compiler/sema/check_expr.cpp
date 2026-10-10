@@ -65,7 +65,8 @@ constexpr MethodInfo kMethods[] = {
     {"push", Method::Push},   {"pop", Method::Pop},           {"insert", Method::Insert},
     {"remove", Method::Remove}, {"clear", Method::Clear},     {"sort", Method::Sort},
     {"contains", Method::Contains}, {"trim", Method::Trim},   {"find", Method::Find},
-    {"starts_with", Method::StartsWith}, {"split", Method::Split},
+    {"starts_with", Method::StartsWith}, {"split", Method::Split}, {"get", Method::Get},
+    {"keys", Method::Keys},
 };
 
 }  // namespace
@@ -125,6 +126,7 @@ bool Checker::equatable(const Type* t) {
     switch (t->kind) {
         case TK::Result: case TK::Void: return false;
         case TK::List: case TK::Slice: case TK::Optional: return equatable(t->elem);
+        case TK::Map: return false;  // Р54: отображения не сравниваются
         case TK::Struct:
             for (const FieldDef& f : t->sdef->fields) {
                 if (!equatable(f.type)) return false;
@@ -635,8 +637,9 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     switch (bf) {
         case BuiltinFn::Len: {
             const Type* t = infer(c->args[0], nullptr);
-            if (t->kind != TK::List && t->kind != TK::Slice && t->kind != TK::Str && t->kind != TK::Error) {
-                error(Code::E0401, c->args[0]->span, "'len' needs a List, a slice or a str, found '" + tn(t) + "'");
+            if (t->kind != TK::List && t->kind != TK::Slice && t->kind != TK::Str && t->kind != TK::Map &&
+                t->kind != TK::Error) {
+                error(Code::E0401, c->args[0]->span, "'len' needs a List, a slice, a Map or a str, found '" + tn(t) + "'");
             }
             return prim(TK::I64);
         }
@@ -720,10 +723,13 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     for (const MethodInfo& m : kMethods) {
         if (f->name == m.name) mi = &m;
     }
-    bool list = t->kind == TK::List, slice = t->kind == TK::Slice, str = t->kind == TK::Str;
+    bool list = t->kind == TK::List, slice = t->kind == TK::Slice, str = t->kind == TK::Str, map = t->kind == TK::Map;
     bool list_method = mi && mi->m <= Method::Contains;
-    bool str_method = mi && mi->m >= Method::Trim;
-    if (!mi || (list_method && !list && !slice) || (str_method && !str)) {
+    bool str_method = mi && mi->m >= Method::Trim && mi->m <= Method::Split;
+    bool map_method = mi && (mi->m == Method::Get || mi->m == Method::Keys || mi->m == Method::Contains ||
+                             mi->m == Method::Remove || mi->m == Method::Clear);
+    bool ok = mi && (map ? map_method : (list_method && (list || slice)) || (str_method && str));
+    if (!ok) {
         error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
         for (Expr* a : c->args) infer(a, nullptr);
         return err();
@@ -733,7 +739,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     size_t arity = 0;
     switch (mi->m) {
         case Method::Push: case Method::Contains: case Method::Remove: case Method::Find: case Method::StartsWith:
-        case Method::Split:
+        case Method::Split: case Method::Get:
             arity = 1;
             break;
         case Method::Insert: arity = 2; break;
@@ -745,7 +751,8 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         for (Expr* a : c->args) infer(a, nullptr);
         return err();
     }
-    bool mutating = list_method && mi->m != Method::Contains;
+    bool mutating = map ? (mi->m == Method::Remove || mi->m == Method::Clear)
+                        : list_method && mi->m != Method::Contains;
     if (mutating) {
         if (slice) {
             error(Code::E0412, f->name_span, "slices are read-only; '" + f->name + "' needs a List");
@@ -754,6 +761,16 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         }
     }
     const Type* elem = t->elem;
+    if (map) {
+        switch (mi->m) {
+            case Method::Get: check(c->args[0], t->key); return tt_.optional(elem);
+            case Method::Contains: check(c->args[0], t->key); return prim(TK::Bool);
+            case Method::Remove: check(c->args[0], t->key); return tt_.optional(elem);
+            case Method::Clear: return prim(TK::Void);
+            case Method::Keys: return tt_.list(t->key);
+            default: return err();
+        }
+    }
     switch (mi->m) {
         case Method::Push: check(c->args[0], elem); return prim(TK::Void);
         case Method::Pop: return tt_.optional(elem);
@@ -774,6 +791,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         case Method::Find: check(c->args[0], prim(TK::Str)); return tt_.optional(prim(TK::I64));
         case Method::StartsWith: check(c->args[0], prim(TK::Str)); return prim(TK::Bool);
         case Method::Split: check(c->args[0], prim(TK::Str)); return tt_.list(prim(TK::Str));
+        case Method::Get: case Method::Keys: break;
     }
     return err();
 }
@@ -948,6 +966,16 @@ const Type* Checker::variant_lit(VariantLitExpr* v, const Type* hint) {
 
 const Type* Checker::list_lit(ListLitExpr* l, const Type* hint) {
     const Type* h = unwrap_hint(hint);
+    if (h && h->kind == TK::Error) {  // тип уже с ошибкой: без второго сообщения
+        for (Expr* x : l->items) infer(x, nullptr);
+        return err();
+    }
+    if (h && h->kind == TK::Map) {  // Р54: у Map литерал — только пустой
+        if (l->items.empty()) return h;
+        error(Code::E0401, l->span, "a Map literal must be empty: '[]'; add entries with m[k] = v");
+        for (Expr* x : l->items) infer(x, nullptr);
+        return err();
+    }
     const Type* elem = h && (h->kind == TK::List || h->kind == TK::Slice) ? h->elem : nullptr;
     if (l->items.empty()) {
         if (!elem) {
@@ -971,6 +999,10 @@ const Type* Checker::list_lit(ListLitExpr* l, const Type* hint) {
 
 const Type* Checker::index_expr(IndexExpr* i) {
     const Type* t = infer(i->object, nullptr);
+    if (t->kind == TK::Map) {  // Р54: m[k] — значение ключа
+        check(i->index, t->key);
+        return t->elem;
+    }
     const Type* k = infer(i->index, prim(TK::I64));
     if (k->kind != TK::Error) {
         if (!is_integer(k)) error(Code::E0401, i->index->span, "index must be an integer, found '" + tn(k) + "'");
@@ -998,6 +1030,9 @@ const Type* Checker::slice_expr(SliceExpr* s) {
     switch (t->kind) {
         case TK::List: case TK::Slice: return tt_.slice(t->elem);
         case TK::Str: return prim(TK::Str);
+        case TK::Map:
+            error(Code::E0403, s->object->span, "a Map cannot be sliced; read values with m[k]");
+            return err();
         case TK::Error: return err();
         default:
             error(Code::E0401, s->object->span, "cannot slice '" + tn(t) + "'; slicing needs a List, a slice or a str");
@@ -1092,6 +1127,12 @@ bool Checker::mutable_place(Expr* e, const char* why) {
             return false;
         }
         Local* l = n->res.local;
+        if (frozen(l)) {
+            error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name +
+                                            "' while 'for ... in &' iterates over its Map; iterate over a copy "
+                                            "of the keys: 'for k in &m.keys()'");
+            return false;
+        }
         if (l->mutable_) return true;
         std::string reason = l->is_param ? (l->is_ref ? "it is a '&' parameter; make it '&mut'"
                                                       : "it is a value parameter; take it as '&mut' to change it")
@@ -1114,6 +1155,14 @@ bool Checker::mutable_place(Expr* e, const char* why) {
         return mutable_place(i->object, why);
     }
     error(Code::E0412, e->span, std::string("cannot ") + why + " this expression; it is not a variable, field or element");
+    return false;
+}
+
+bool Checker::frozen(const Local* l) const {
+    const Local* r = l->alias_of ? l->alias_of : l;
+    for (const Local* f : frozen_) {
+        if (f == r) return true;
+    }
     return false;
 }
 

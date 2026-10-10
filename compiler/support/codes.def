@@ -225,6 +225,9 @@ DP_CODE(E0422, "values of this type cannot be compared",
 DP_CODE(E0423, "type contains itself",
         "A struct or an enum cannot hold a value of its own type directly, also through `?T` or another "
         "struct: such a value would have no end (spec: type.recursive). Keep the nested values in a `List`.")
+DP_CODE(E0424, "invalid Map key type",
+        "A Map key must be an integer, a bool or a str (spec: type.map, decision R54). Floats are not keys "
+        "because `nan` is not equal to itself; for a struct or an enum, key by an integer or a str field.")
 
 // --- E05xx: поток, ошибки, ссылки (docs/spec/core.md, разделы 6–8)
 

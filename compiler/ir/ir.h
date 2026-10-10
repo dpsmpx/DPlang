@@ -45,6 +45,8 @@ enum class ProjKind : uint8_t {
     Unwrap,       // значение ?T (есть — проверено раньше)
     ResultValue,  // значение E!T при успехе
     ResultError,  // ошибка E!T
+    MapKey,       // ключ Map в позиции index — переменная i64; вне границ — ловушка; только чтение (Р54)
+    MapValue,     // значение Map по ключу из переменной index; нет ключа — ловушка (Р54)
 };
 
 struct Proj {
@@ -113,6 +115,10 @@ enum class Intrinsic : uint8_t {
     ArgsLen, ArgAt, ReadFile,
     // проверяемая арифметика целых (Р53): результат ?T, none — вне типа
     CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
+    // Map (Р54). Изменяющие — получатель-место: MapSet (ops: ключ, значение;
+    // вставка или замена), MapRemove (ключ → ?V), MapClear. Читающие —
+    // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K]).
+    MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys,
 };
 
 enum class RvKind : uint8_t {
@@ -123,6 +129,7 @@ enum class RvKind : uint8_t {
     MakeStruct,   // ops — поля по порядку объявления
     MakeVariant,  // variant; ops — данные по порядку объявления
     MakeList,     // ops — элементы; type — List[T]
+    MakeMap,      // пустое Map[K, V] (Р54); операндов нет
     MakeSome,     // ops[0]
     MakeNone,
     MakeOk,       // ops[0]; у E!void операндов нет
@@ -213,7 +220,7 @@ struct Program {
 
 // Тип места: тип переменной после проекций; nullptr — путь не подходит к типу.
 const Type* place_type(const Program& p, const Function& f, const Place& pl);
-// Значение типа владеет памятью (внутри есть List или str) и требует drop.
+// Значение типа владеет памятью (внутри есть List, Map или str) и требует drop.
 bool needs_drop(const Type* t);
 // Тип операнда.
 const Type* operand_type(const Program& p, const Function& f, const Operand& op);

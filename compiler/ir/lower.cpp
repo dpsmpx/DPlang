@@ -419,6 +419,12 @@ private:
         }
         auto* i = static_cast<const IndexExpr*>(e);
         Place base = object(i->object, fresh);
+        if (i->object->type->kind == TK::Map) {  // m[k]: ключ во временном (Р54)
+            const Type* kt = i->object->type->key;
+            uint32_t key = temp(kt);
+            assign(local(key), use(rd(expr(i->index)), kt), i->index->span);
+            return proj(std::move(base), ProjKind::MapValue, key);
+        }
         uint32_t idx = temp(prim(TK::I64));
         assign(local(idx), use(rd(expr(i->index)), prim(TK::I64)), i->index->span);
         return proj(std::move(base), ProjKind::Index, idx);
@@ -483,6 +489,7 @@ private:
             case ExprKind::VariantLit: return variant_lit(static_cast<const VariantLitExpr*>(e));
             case ExprKind::ListLit: {
                 auto* l = static_cast<const ListLitExpr*>(e);
+                if (e->type->kind == TK::Map) return to_temp(make(RvKind::MakeMap, e->type), e->span);
                 Rvalue rv = make(RvKind::MakeList, e->type);
                 std::vector<const Expr*> items(l->items.begin(), l->items.end());
                 rv.ops = exprs(items);
@@ -744,6 +751,27 @@ private:
             case CallKind::Method: {
                 auto* f = static_cast<const FieldExpr*>(c->callee);
                 Method m = c->method;
+                if (f->object->type->kind == TK::Map) {  // методы Map (Р54)
+                    bool changes = m == Method::Remove || m == Method::Clear;
+                    rv = intrinsic(m == Method::Get        ? Intrinsic::MapGet
+                                   : m == Method::Contains ? Intrinsic::MapContains
+                                   : m == Method::Remove   ? Intrinsic::MapRemove
+                                   : m == Method::Clear    ? Intrinsic::MapClear
+                                                           : Intrinsic::MapKeys,
+                                   c->type);
+                    if (changes) {
+                        bool fresh = false;
+                        rv.place = lvalue(f->object, fresh);
+                        rv.has_place = true;
+                        rv.ops = exprs(args);
+                    } else {
+                        std::vector<const Expr*> all{f->object};
+                        all.insert(all.end(), args.begin(), args.end());
+                        rv.ops = exprs(all);
+                    }
+                    for (Operand& o : rv.ops) o = rd(std::move(o));
+                    return true;
+                }
                 bool mutating = m < Method::Contains;
                 static constexpr Intrinsic kMap[] = {
                     Intrinsic::ListPush,  Intrinsic::ListPop,  Intrinsic::ListInsert,    Intrinsic::ListRemove,
@@ -900,6 +928,24 @@ private:
             pop_scope(a->span);
             return;
         }
+        auto* mi = as<const IndexExpr>(strip_parens(a->target));
+        if (a->op == AssignOp::Set && mi && mi->object->type->kind == TK::Map) {
+            // `m[k] = v` вставляет ключ или заменяет значение (Р54): место
+            // отображения и ключ — до значения (expr.order).
+            bool mfresh = false;
+            Place m = object(mi->object, mfresh);
+            const Type* kt = mi->object->type->key;
+            uint32_t key = temp(kt);
+            assign(local(key), use(rd(expr(mi->index)), kt), mi->index->span);
+            Rvalue rv = intrinsic(Intrinsic::MapSet, prim(TK::Void));
+            rv.place = std::move(m);
+            rv.has_place = true;
+            rv.ops.push_back(copy(local(key)));
+            rv.ops.push_back(expr(a->value));
+            eval(std::move(rv), a->span);
+            pop_scope(a->span);
+            return;
+        }
         bool fresh = false;
         Place p = lvalue(a->target, fresh);
         const Type* t = place_type(out_, f_, p);
@@ -1025,7 +1071,8 @@ private:
             Operand c = to_temp(bin(BinKind::Lt, copy(local(k)), n, prim(TK::Bool)), s->var_span);
             branch(c, body, done, s->var_span);
             cur_ = body;
-            if (s->local) aliases_[s->local] = proj(base, ProjKind::Index, k);
+            ProjKind pk = s->iter->type->kind == TK::Map ? ProjKind::MapKey : ProjKind::Index;  // Map — ключи (Р54)
+            if (s->local) aliases_[s->local] = proj(base, pk, k);
             loops_.push_back(Loop{done, step, scopes_.size()});
             block(s->body);
             loops_.pop_back();

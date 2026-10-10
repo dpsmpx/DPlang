@@ -54,6 +54,7 @@ private:
         const Type* t = f_.locals[pl.local].type;
         for (size_t i = 0; i < pl.proj.size() && t; i++) {
             if (pl.proj[i].kind == ProjKind::Index && (t->kind == TK::Slice || t->kind == TK::Str)) return false;
+            if (pl.proj[i].kind == ProjKind::MapKey) return false;  // ключ Map только читается
             Place prefix{pl.local, std::vector<Proj>(pl.proj.begin(), pl.proj.begin() + static_cast<long>(i) + 1)};
             t = place_type(p_, f_, prefix);
         }
@@ -172,6 +173,29 @@ private:
         return t;
     }
 
+    const Type* map_receiver(const Rvalue& rv) {
+        if (!rv.has_place) {
+            fail("map method without a receiver");
+            return nullptr;
+        }
+        const Type* t = place(rv.place);
+        if (!t || t->kind != TK::Map) {
+            fail("map method on a non-Map");
+            return nullptr;
+        }
+        if (!writable(rv.place)) fail("map method on a read-only place");
+        return t;
+    }
+
+    // Читающий метод Map: первый операнд — Map.
+    const Type* map_operand(const Type* t) {
+        if (t && t->kind != TK::Map) {
+            fail("map method on a non-Map");
+            return nullptr;
+        }
+        return t;
+    }
+
     void intrinsic(const Rvalue& rv) {
         auto op = [&](size_t i, bool stored = false) -> const Type* {
             return i < rv.ops.size() ? operand(rv.ops[i], stored) : nullptr;
@@ -182,7 +206,9 @@ private:
             case Intrinsic::Len:
                 args(1);
                 t0 = op(0);
-                if (t0 && t0->kind != TK::List && t0->kind != TK::Slice && t0->kind != TK::Str) fail("len of a non-sequence");
+                if (t0 && t0->kind != TK::List && t0->kind != TK::Slice && t0->kind != TK::Str && t0->kind != TK::Map) {
+                    fail("len of a non-sequence");
+                }
                 same(rv.type, prim(TK::I64), "result");
                 break;
             case Intrinsic::Repeat:
@@ -267,6 +293,40 @@ private:
                 else if (t0) same(op(1), t0->elem, "operand");
                 same(rv.type, prim(TK::Bool), "result");
                 break;
+            case Intrinsic::MapSet:
+                args(2);
+                if (const Type* m = map_receiver(rv)) {
+                    same(op(0), m->key, "operand");
+                    same(op(1, true), m->elem, "operand");
+                }
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            case Intrinsic::MapRemove:
+                args(1);
+                if (const Type* m = map_receiver(rv)) {
+                    same(op(0), m->key, "operand");
+                    if (rv.type->kind != TK::Optional || rv.type->elem != m->elem) fail("remove result is not ?V");
+                }
+                break;
+            case Intrinsic::MapClear:
+                args(0);
+                map_receiver(rv);
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            case Intrinsic::MapGet: case Intrinsic::MapContains:
+                args(2);
+                if (const Type* m = map_operand(op(0))) {
+                    same(op(1), m->key, "operand");
+                    if (rv.intrinsic == Intrinsic::MapContains) same(rv.type, prim(TK::Bool), "result");
+                    else if (rv.type->kind != TK::Optional || rv.type->elem != m->elem) fail("get result is not ?V");
+                }
+                break;
+            case Intrinsic::MapKeys:
+                args(1);
+                if (const Type* m = map_operand(op(0))) {
+                    if (rv.type->kind != TK::List || rv.type->elem != m->key) fail("keys result is not List[K]");
+                }
+                break;
             case Intrinsic::StrTrim:
                 args(1);
                 same(op(0), prim(TK::Str), "operand");
@@ -314,7 +374,9 @@ private:
         if (rv.has_place && rv.intrinsic != Intrinsic::ListPush && rv.intrinsic != Intrinsic::ListPop &&
             rv.intrinsic != Intrinsic::ReadFile &&
             rv.intrinsic != Intrinsic::ListInsert && rv.intrinsic != Intrinsic::ListRemove &&
-            rv.intrinsic != Intrinsic::ListClear && rv.intrinsic != Intrinsic::ListSort) {
+            rv.intrinsic != Intrinsic::ListClear && rv.intrinsic != Intrinsic::ListSort &&
+            rv.intrinsic != Intrinsic::MapSet && rv.intrinsic != Intrinsic::MapRemove &&
+            rv.intrinsic != Intrinsic::MapClear) {
             fail("receiver place on a method that only reads");
         }
     }
@@ -358,6 +420,10 @@ private:
             case RvKind::MakeList:
                 if (t->kind != TK::List) return fail("list value of a non-List type");
                 for (size_t i = 0; i < rv.ops.size(); i++) stored(i, t->elem);
+                break;
+            case RvKind::MakeMap:
+                if (t->kind != TK::Map) return fail("map value of a non-Map type");
+                count(rv, 0);
                 break;
             case RvKind::MakeSome:
                 if (t->kind != TK::Optional) return fail("some of a non-optional type");

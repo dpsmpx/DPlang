@@ -1,0 +1,31 @@
+// spec: type.map stmt.for expr.literal builtin.methods
+struct P {
+    x: i32
+}
+
+fn mutate(m: &mut Map[str, i32]) {
+    m["z"] = 0
+}
+
+fn main() {
+    var a: Map[f64, i32] = []
+    var b: Map[P, i32] = []
+    var c: Map[str] = []
+    var d: Map[str, i32] = ["x"]
+    var m: Map[str, i32] = []
+    let e = m == m
+    let f = m[1..2]
+    let g = m[3]
+    for k in &mut m {
+    }
+    for k in &m {
+        m["q"] = 1
+        m.clear()
+        let r = m.remove("q")
+        mutate(&mut m)
+        m = []
+        println(k + str(m[k]))
+    }
+    m.push(1)
+    let h = len(m) + m.get(1)
+}

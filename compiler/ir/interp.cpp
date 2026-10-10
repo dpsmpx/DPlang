@@ -82,6 +82,19 @@ const Value& seq_at(const Value& v, size_t i) {
     return v.k == Value::K::Slice ? v.base->items[static_cast<size_t>(v.lo) + i] : v.items[i];
 }
 
+// Map (Р54) — Seq с парами по порядку вставки: items[2i] — ключ, items[2i + 1] —
+// значение. Ключ — целое, bool или str: сравнение без типа. Поиск — перебором:
+// интерпретатор только для тестов (Р43).
+bool key_equal(const Value& a, const Value& b) { return a.k == b.k && (a.k == Value::K::Str ? a.s == b.s : a.i == b.i); }
+
+// Позиция пары ключа в Map или -1.
+int64_t map_find(const Value& m, const Value& key) {
+    for (size_t i = 0; i + 1 < m.items.size(); i += 2) {
+        if (key_equal(m.items[i], key)) return static_cast<int64_t>(i / 2);
+    }
+    return -1;
+}
+
 // Место: значение или байт строки.
 struct Ref {
     Value* v = nullptr;
@@ -358,6 +371,34 @@ private:
                     }
                     r.v = &v.items[pr.sub];
                     break;
+                case ProjKind::MapKey: {
+                    const Value& iv = fr.locals[pr.index];
+                    int64_t i = static_cast<int64_t>(iv.i);
+                    size_t n = v.items.size() / 2;
+                    if (iv.k != Value::K::Int || v.k != Value::K::Seq) {
+                        internal("key position of a non-Map");
+                        return Ref{};
+                    }
+                    if (i < 0 || static_cast<uint64_t>(i) >= n) {
+                        trap("index " + std::to_string(i) + " is out of bounds for length " + std::to_string(n));
+                        return Ref{};
+                    }
+                    r.v = &v.items[2 * static_cast<size_t>(i)];
+                    break;
+                }
+                case ProjKind::MapValue: {
+                    if (v.k != Value::K::Seq) {
+                        internal("value of a non-Map");
+                        return Ref{};
+                    }
+                    int64_t i = map_find(v, fr.locals[pr.index]);
+                    if (i < 0) {
+                        trap("key is not in the map");
+                        return Ref{};
+                    }
+                    r.v = &v.items[2 * static_cast<size_t>(i) + 1];
+                    break;
+                }
                 case ProjKind::Unwrap: case ProjKind::ResultValue: case ProjKind::ResultError: {
                     uint32_t want = pr.kind == ProjKind::ResultValue ? 0 : 1;
                     if (v.k != Value::K::Seq || v.tag != want || v.items.empty()) {
@@ -544,6 +585,7 @@ private:
                 if (v.items.size() > kMaxLen) trap("out of memory");
                 return v;
             }
+            case RvKind::MakeMap: return seq_value(0);
             case RvKind::SliceOf: return slice(fr, rv);
             case RvKind::Intrinsic: return intrinsic(fr, rv);
             case RvKind::Tag: case RvKind::IsSome: case RvKind::IsOk: {
@@ -846,8 +888,24 @@ private:
         switch (rv.intrinsic) {
             case Intrinsic::Len: {
                 const Value& a = arg(0, s0);
+                if (op_type(fr, rv.ops[0])->kind == TK::Map) return int_value(a.items.size() / 2);
                 return int_value(a.k == Value::K::Str ? a.s.size() : seq_len(a));
             }
+            case Intrinsic::MapGet: case Intrinsic::MapContains: {
+                const Value& m = arg(0, s0);
+                int64_t i = map_find(m, arg(1, s1));
+                if (rv.intrinsic == Intrinsic::MapContains) return bool_value(i >= 0);
+                Value out = seq_value(i >= 0 ? 1 : 0);
+                if (i >= 0) out.items.push_back(m.items[2 * static_cast<size_t>(i) + 1]);
+                return out;
+            }
+            case Intrinsic::MapKeys: {
+                const Value& m = arg(0, s0);
+                Value out = seq_value(0);
+                for (size_t i = 0; i < m.items.size(); i += 2) out.items.push_back(m.items[i]);
+                return out;
+            }
+            case Intrinsic::MapSet: case Intrinsic::MapRemove: case Intrinsic::MapClear: return map_method(fr, rv, ops);
             case Intrinsic::Repeat: {
                 const Value& n = arg(1, s1);
                 const Type* nt = op_type(fr, rv.ops[1]);
@@ -1017,6 +1075,46 @@ private:
             *r.v = str_value(std::move(text));
         }
         return int_value(static_cast<uint64_t>(code));
+    }
+
+    Value map_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place);
+        if (stop_) return Value{};
+        if (r.byte >= 0 || r.v->k != Value::K::Seq) {
+            internal("map method on a non-Map");
+            return Value{};
+        }
+        std::vector<Value>& items = r.v->items;
+        switch (rv.intrinsic) {
+            case Intrinsic::MapSet: {
+                int64_t i = map_find(*r.v, ops[0]);
+                if (i >= 0) {
+                    items[2 * static_cast<size_t>(i) + 1] = std::move(ops[1]);
+                    return Value{};
+                }
+                if (items.size() / 2 >= kMaxLen) {
+                    trap("out of memory");
+                    return Value{};
+                }
+                items.push_back(std::move(ops[0]));
+                items.push_back(std::move(ops[1]));
+                return Value{};
+            }
+            case Intrinsic::MapRemove: {
+                int64_t i = map_find(*r.v, ops[0]);
+                Value out = seq_value(i >= 0 ? 1 : 0);
+                if (i >= 0) {
+                    auto at = items.begin() + 2 * i;
+                    out.items.push_back(std::move(at[1]));
+                    items.erase(at, at + 2);
+                }
+                return out;
+            }
+            case Intrinsic::MapClear: items.clear(); return Value{};
+            default: break;
+        }
+        internal("unknown intrinsic");
+        return Value{};
     }
 
     Value list_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {

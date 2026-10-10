@@ -259,6 +259,25 @@ static inline void dp_str_drop(dp_str* s) {
 dp_str dp_str_concat(dp_str a, dp_str b, const char* loc);
 bool dp_str_eq(dp_str a, dp_str b);
 bool dp_str_lt(dp_str a, dp_str b); /* по байтам без знака */
+
+/* Хэш ключа Map (Р54): без случайной соли. Порядок обхода Map — порядок
+ * вставки, от хэша он не зависит; хэш нужен только для поиска. */
+static inline uint64_t dp_hash_u64(uint64_t x) {
+    x ^= x >> 33;
+    x *= UINT64_C(0xff51afd7ed558ccd);
+    x ^= x >> 33;
+    x *= UINT64_C(0xc4ceb9fe1a85ec53);
+    x ^= x >> 33;
+    return x;
+}
+static inline uint64_t dp_hash_str(dp_str s) {
+    uint64_t h = UINT64_C(14695981039346656037);
+    for (int64_t i = 0; i < s.len; i++) {
+        h ^= s.ptr[i];
+        h *= UINT64_C(1099511628211);
+    }
+    return h;
+}
 uint8_t dp_str_at(dp_str s, int64_t i, const char* loc);
 dp_str dp_str_slice(dp_str s, int64_t lo, int64_t hi, const char* loc);
 dp_str dp_str_sub(dp_str s, int64_t lo, int64_t hi); /* без проверок: границы уже верны */

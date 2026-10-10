@@ -1,0 +1,4 @@
+1
+--- stderr ---
+trap_map_key.dpm:6:5: trap: key is not in the map
+[exit 101]
