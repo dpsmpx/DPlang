@@ -82,6 +82,7 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 | `f32`, `f64` | `float`, `double` |
 | `str` | `dp_str { ptr, len }` — владеет байтами UTF-8; пустая — `{NULL, 0}` |
 | `List[T]` | `{ T* ptr; int64_t len; int64_t cap; }` — владеет элементами |
+| `Map[K, V]` | `{ K* keys; V* vals; int64_t len, cap; int64_t* slots; int64_t nslots; }` — пары в порядке вставки и хэш-индекс (раздел 4) |
 | `[]T` (срез) | `{ T* ptr; int64_t len; }` — представление, не владеет |
 | `?T` | `{ bool has; T value; }` |
 | `E!T` | `{ bool is_err; T value; E err; }`; у `E!void` поля `value` нет |
@@ -117,7 +118,17 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 - `dp_drop__<запись>` и `dp_copy__<запись>` — у типов с памятью
   (`ir::needs_drop`): освобождение и глубокая копия;
 - методы `List[T]` — `push`, `pop`, `insert`, `remove`, `clear`, `sort`,
-  `contains`, `repeat`, `split` (у `List[str]`).
+  `contains`, `repeat`, `split` (у `List[str]`);
+- методы `Map[K, V]` (Р54) — `dp_mfind`, `dp_mset`, `dp_mvalue`, `dp_mkey`,
+  `dp_mget`, `dp_mcontains`, `dp_mremove`, `dp_mclear`, `dp_mkeys`.
+
+`Map` хранит ключи и значения в массивах в порядке вставки: обход идёт по
+ним и от хэша не зависит. Поиск — открытая адресация по индексу `slots`
+(позиция + 1, 0 — пусто; размер — степень двойки, заполнен не больше
+чем наполовину). Хэш — `dp_hash_u64` у целых и `bool`, `dp_hash_str`
+(FNV-1a) у `str`, без случайной соли (`docs/runtime/README.md`).
+Вставка, замена и поиск — O(1) в среднем; `remove` сдвигает пары и
+строит индекс заново — O(n), зато порядок остальных сохраняется.
 
 `push` удваивает ёмкость (с 4). Удвоение сверх предела буфера
 (`docs/runtime/README.md`) заменяется ростом на один элемент: ловушка
