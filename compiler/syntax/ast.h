@@ -367,7 +367,17 @@ struct Block : Node {
     std::vector<Stmt*> stmts;
 };
 
-struct LetStmt : Stmt {  // `let x = e`, `var x: T = e`
+// Поле разбора `let S { f, g: x } = v` (Р60).
+struct LetField {
+    std::string field;   // имя поля S
+    Span field_span;
+    std::string name;    // имя переменной; `_` — поле не нужно
+    Span name_span;
+    int index = -1;      // номер поля в S (после проверки)
+    sema::Local* local = nullptr;
+};
+
+struct LetStmt : Stmt {  // `let x = e`, `var x: T = e`, разбор `let S { f, g: x } = v`
     static constexpr StmtKind Kind = StmtKind::Let;
     LetStmt() : Stmt(Kind) {}
     bool is_var = false;
@@ -376,6 +386,10 @@ struct LetStmt : Stmt {  // `let x = e`, `var x: T = e`
     Type* type = nullptr;
     Expr* value = nullptr;
     sema::Local* local = nullptr;
+    // Разбор (Р60): name — имя структуры S, fields — поля.
+    bool destructure = false;
+    std::vector<LetField> fields;
+    const sema::StructDef* sdef = nullptr;  // S (после проверки)
 };
 
 enum class AssignOp : uint8_t { Set, Add, Sub, Mul, Div, Rem, BitAnd, BitOr, BitXor, Shl, Shr };
@@ -458,10 +472,11 @@ struct ContinueStmt : Stmt {
     ContinueStmt() : Stmt(Kind) {}
 };
 
-struct DeferStmt : Stmt {
+struct DeferStmt : Stmt {  // `defer s`; `errdefer s` — только при выходе с ошибкой (Р60)
     static constexpr StmtKind Kind = StmtKind::Defer;
     DeferStmt() : Stmt(Kind) {}
     Stmt* body = nullptr;  // BlockStmt или простая инструкция
+    bool on_error = false;  // errdefer
 };
 
 struct FailStmt : Stmt {  // `fail e`

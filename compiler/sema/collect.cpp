@@ -24,6 +24,7 @@ public:
         for (FnDef& f : prog_.fns) {
             if (f.node && f.is_extern) c_signature(f);
         }
+        linear_placement();
         for (StructDef& d : prog_.structs) {
             if (!d.node) continue;
             std::vector<const void*> path;
@@ -277,10 +278,58 @@ private:
             }
             if (flag) *flag = true;
         }
-        if (d.linear) {  // проверка линейности — шаг 5б v0.2
-            diags_.error(Code::E0319, d.node->name_span, "'@linear' is not supported yet");
-        }
         fields(r, d.node->fields, d.fields, d.pub, "struct");
+    }
+
+    // Где лежат линейные значения (Р60, E0514): поле — только у `@linear`,
+    // не в List, Map, срезе и данных варианта. Проверка — когда `@linear`
+    // всех структур известен.
+    void linear_placement() {
+        auto container = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m) {
+            if (node && linear_in_container(t)) {
+                diags_.error(Code::E0514, node->span,
+                             "'" + type_name(t, m) + "' holds a '@linear' value in a List, a Map or a slice; "
+                             "keep resources in variables or fields of a '@linear' struct");
+            }
+        };
+        for (StructDef& d : prog_.structs) {
+            if (!d.node) continue;
+            for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
+                const ast::Type* node = d.node->fields[i].type;
+                if (linear_type(d.fields[i].type) && !d.linear) {
+                    diags_.error(Code::E0514, node->span,
+                                 "field '" + d.fields[i].name + "' holds a '@linear' value; mark struct '" + d.name +
+                                     "' '@linear' too");
+                }
+                container(node, d.fields[i].type, d.module);
+            }
+        }
+        for (EnumDef& d : prog_.enums) {
+            if (!d.node) continue;
+            for (size_t v = 0; v < d.variants.size() && v < d.node->variants.size(); v++) {
+                const VariantDecl& vd = d.node->variants[v];
+                auto payload = [&](const ast::Type* node, const sema::Type* t) {
+                    if (linear_type(t)) {
+                        diags_.error(Code::E0514, node->span,
+                                     "variant '" + vd.name + "' cannot hold a '@linear' value; use a '@linear' struct");
+                    }
+                    container(node, t, d.module);
+                };
+                for (size_t k = 0; k < d.variants[v].types.size() && k < vd.types.size(); k++) {
+                    payload(vd.types[k], d.variants[v].types[k]);
+                }
+                for (size_t k = 0; k < d.variants[v].fields.size() && k < vd.fields.size(); k++) {
+                    payload(vd.fields[k].type, d.variants[v].fields[k].type);
+                }
+            }
+        }
+        for (FnDef& f : prog_.fns) {
+            if (!f.node) continue;
+            for (size_t i = 0; i < f.params.size() && i < f.node->params.size(); i++) {
+                container(f.node->params[i].type, f.params[i].type, f.module);
+            }
+            container(f.node->ret, f.ret, f.module);
+        }
     }
 
     // `@c` (Р59): поля — типы с видом в C; проверка — когда поля всех структур известны.

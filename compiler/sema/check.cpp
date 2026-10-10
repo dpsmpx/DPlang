@@ -142,6 +142,10 @@ void Checker::stmt(Stmt* s) {
         case StmtKind::Continue: loop_jump(s, false); break;
         case StmtKind::Defer: {
             auto* d = static_cast<DeferStmt*>(s);
+            if (d->on_error && fn_ && (!fn_->ret || fn_->ret->kind != TK::Result)) {
+                error(Code::E0505, d->span, "'errdefer' runs when the function returns an error; '" + fn_->name +
+                                                "' cannot fail: use 'defer'");
+            }
             Flow saved = flow_;
             defer_depth_++;
             std::vector<Loop> saved_loops;
@@ -158,6 +162,7 @@ void Checker::stmt(Stmt* s) {
 }
 
 void Checker::let_stmt(LetStmt* l) {
+    if (l->destructure) return destructure(l);
     const Type* t = nullptr;
     if (l->type) {
         t = r_.type(l->type);
@@ -184,7 +189,55 @@ void Checker::let_stmt(LetStmt* l) {
             }
         }
     }
+    if (t && linear_in_container(t)) {
+        error(Code::E0514, l->type ? l->type->span : l->name_span,
+              "'" + tn(t) + "' holds a '@linear' value in a List, a Map or a slice; keep resources in variables");
+    }
     l->local = declare(l->name, l->name_span, t, l->is_var, false, l->value != nullptr);
+}
+
+// Разбор `let S { f, g: x } = v` (Р60): только `@linear` и в модуле S.
+void Checker::destructure(LetStmt* l) {
+    const Symbol* sym = r_.lookup(l->name);
+    StructDef* d = sym && sym->kind == SymKind::Struct ? sym->st : nullptr;
+    if (!d) {
+        error(Code::E0515, l->name_span, "'" + l->name + "' is not a struct of this module; destructuring needs one");
+        if (l->value) infer(l->value, nullptr);
+        return;
+    }
+    if (!d->linear) {
+        error(Code::E0515, l->name_span, "only a '@linear' struct is destructured; read the fields of '" + d->name +
+                                             "' with 'v.f'");
+    } else if (d->module != &m_) {
+        error(Code::E0515, l->name_span, "'" + d->name + "' is destructured only in module '" + d->module->name +
+                                             "' that declares it; close it with that module's functions");
+    }
+    l->sdef = d;
+    if (l->value) check(l->value, tt_.struct_type(d));
+    std::vector<char> seen(d->fields.size(), 0);
+    for (LetField& f : l->fields) {
+        int idx = -1;
+        for (size_t i = 0; i < d->fields.size(); i++) {
+            if (d->fields[i].name == f.field) idx = static_cast<int>(i);
+        }
+        if (idx < 0) {
+            error(Code::E0406, f.field_span, "struct '" + d->name + "' has no field '" + f.field + "'");
+            continue;
+        }
+        if (seen[static_cast<size_t>(idx)]) {
+            error(Code::E0515, f.field_span, "field '" + f.field + "' is listed twice");
+            continue;
+        }
+        seen[static_cast<size_t>(idx)] = 1;
+        f.index = idx;
+        f.local = declare(f.name, f.name_span, d->fields[static_cast<size_t>(idx)].type, l->is_var, false, true);
+    }
+    for (size_t i = 0; i < d->fields.size(); i++) {
+        if (!seen[i]) {
+            error(Code::E0515, l->name_span, "field '" + d->fields[i].name + "' is missing; list every field of '" +
+                                                 d->name + "', '" + d->fields[i].name + ": _' to skip it");
+        }
+    }
 }
 
 void Checker::assign_stmt(AssignStmt* a) {
@@ -419,7 +472,12 @@ bool check_main(Program& prog, Diagnostics& diags) {
 
 void check(Program& prog, Diagnostics& diags) {
     for (auto& m : prog.modules) infer_errors(prog, *m, diags);
-    for (auto& m : prog.modules) Checker(prog, *m, diags).run();
+    for (auto& m : prog.modules) {
+        size_t before = diags.error_count();
+        Checker(prog, *m, diags).run();
+        // Линейность — по дереву без ошибок, чтобы не множить сообщения.
+        if (diags.error_count() == before) check_linear(prog, *m, diags);
+    }
 }
 
 }  // namespace dp::sema

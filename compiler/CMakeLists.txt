@@ -32,6 +32,7 @@ add_library(dpcore STATIC
     sema/check_expr.cpp
     sema/check_pat.cpp
     sema/errinfer.cpp
+    sema/linear.cpp
     sema/collect.cpp
     sema/loader.cpp
     sema/resolve.cpp

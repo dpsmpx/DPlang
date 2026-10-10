@@ -20,13 +20,10 @@ ffi.dpm:18:1: error[E0319]: an 'extern fn' cannot be '@det': C code is outside d
 ffi.dpm:21:1: error[E0319]: '@link' needs a library name: @link("SDL3")
   21 | @link
      | ^~~~~
-ffi.dpm:25:8: error[E0319]: '@linear' is not supported yet
-  25 | struct Res {
-     |        ^~~
-ffi.dpm:29:1: error[E0319]: unknown attribute '@c'
-  29 | @c
+ffi.dpm:24:1: error[E0319]: unknown attribute '@c'
+  24 | @c
      | ^~
-ffi.dpm:34:13: error[E0405]: type 'Handle' is not a value
-  34 |     let h = Handle
+ffi.dpm:29:13: error[E0405]: type 'Handle' is not a value
+  29 |     let h = Handle
      |             ^~~~~~
 [exit 1]

@@ -21,11 +21,6 @@ extern fn det_c(x: i32) i32
 @link
 extern fn no_lib()
 
-@linear
-struct Res {
-    h: Handle
-}
-
 @c
 fn wrong_place() {
 }

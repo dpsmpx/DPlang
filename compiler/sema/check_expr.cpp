@@ -128,6 +128,7 @@ bool Checker::equatable(const Type* t) {
         case TK::List: case TK::Slice: case TK::Optional: return equatable(t->elem);
         case TK::Map: return false;  // Р54: отображения не сравниваются
         case TK::Struct:
+            if (t->sdef->linear) return false;  // Р60: линейные значения не сравниваются
             for (const FieldDef& f : t->sdef->fields) {
                 if (!equatable(f.type)) return false;
             }
@@ -151,6 +152,7 @@ bool Checker::ordered(const Type* t) {
         case TK::Error: case TK::Bool: case TK::Str: return true;
         case TK::List: case TK::Slice: return ordered(t->elem);
         case TK::Struct:
+            if (t->sdef->linear) return false;  // Р60
             for (const FieldDef& f : t->sdef->fields) {
                 if (!ordered(f.type)) return false;
             }

@@ -70,6 +70,24 @@ bool contains_slice(const Type* t) {
     return contains_slice(t->elem) || contains_slice(t->err) || contains_slice(t->key);
 }
 
+bool linear_type(const Type* t) {
+    if (!t) return false;
+    if (t->kind == TK::Struct) return t->sdef->linear;
+    if (t->kind == TK::Optional || t->kind == TK::Result) return linear_type(t->elem);
+    return false;
+}
+
+bool linear_in_container(const Type* t) {
+    if (!t) return false;
+    switch (t->kind) {
+        case TK::List: case TK::Slice: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Map: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Optional: return linear_in_container(t->elem);
+        case TK::Result: return linear_in_container(t->elem) || linear_in_container(t->err);
+        default: return false;
+    }
+}
+
 bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str); }
 
 bool c_value_type(const Type* t) {

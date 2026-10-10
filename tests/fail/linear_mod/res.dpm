@@ -1,0 +1,12 @@
+@linear
+pub struct Handle {
+    id: int
+}
+
+pub fn open() Handle {
+    return Handle { id: 1 }
+}
+
+pub fn close(h: Handle) {
+    let Handle { id: _ } = h
+}

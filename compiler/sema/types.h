@@ -78,6 +78,11 @@ bool contains_slice(const Type* t);
 // Тип годится в ключ Map (Р54): целое, bool или str.
 bool map_key_type(const Type* t);
 
+// Линейный тип (Р60): структура `@linear`, ?T и E!T с линейным T.
+bool linear_type(const Type* t);
+// Линейное значение в List, Map или срезе где-либо в типе (E0514, Р60).
+bool linear_in_container(const Type* t);
+
 // Значение типа переходит границу C как есть (Р59): целое, плавающее,
 // bool, дескриптор `extern type`, структура `@c` из таких.
 bool c_value_type(const Type* t);

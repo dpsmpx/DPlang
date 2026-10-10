@@ -82,7 +82,7 @@ bool is_stmt_start(TokKind k) {
     switch (k) {
         case TokKind::KwLet: case TokKind::KwVar: case TokKind::KwIf: case TokKind::KwWhile: case TokKind::KwFor:
         case TokKind::KwParallel: case TokKind::KwMatch: case TokKind::KwReturn: case TokKind::KwBreak:
-        case TokKind::KwContinue: case TokKind::KwDefer: case TokKind::KwFail: return true;
+        case TokKind::KwContinue: case TokKind::KwDefer: case TokKind::KwErrdefer: case TokKind::KwFail: return true;
         default: return false;
     }
 }
@@ -692,9 +692,9 @@ private:
             }
             case TokKind::KwBreak: bump(); s = m_.make<BreakStmt>(); break;
             case TokKind::KwContinue: bump(); s = m_.make<ContinueStmt>(); break;
-            case TokKind::KwDefer: {
-                bump();
+            case TokKind::KwDefer: case TokKind::KwErrdefer: {
                 auto* d = m_.make<DeferStmt>();
+                d->on_error = bump().kind == TokKind::KwErrdefer;
                 d->body = at(TokKind::LBrace) ? block_stmt() : stmt();
                 s = d;
                 break;
@@ -717,6 +717,27 @@ private:
         auto* l = m_.make<LetStmt>();
         l->is_var = bump().kind == TokKind::KwVar;
         l->name = expect_ident(l->name_span);
+        if (!failed_ && at(TokKind::LBrace)) {  // разбор `let S { f, g: x } = v` (Р60)
+            l->destructure = true;
+            bump();
+            NlScope nl(*this, true);
+            while (!at(TokKind::RBrace) && !failed_) {
+                LetField f;
+                f.field = expect_ident(f.field_span);
+                f.name = f.field;
+                f.name_span = f.field_span;
+                if (eat(TokKind::Colon)) f.name = expect_ident(f.name_span);
+                l->fields.push_back(f);
+                if (!eat(TokKind::Comma)) break;
+            }
+            if (!failed_) expect(TokKind::RBrace);
+            if (failed_) return l;
+            if (expect(TokKind::Eq)) {
+                skip_newlines();
+                l->value = expr(false);
+            }
+            return l;
+        }
         if (eat(TokKind::Colon)) l->type = type();
         if (failed_) return l;
         if (eat(TokKind::Eq)) {

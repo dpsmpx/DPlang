@@ -297,6 +297,15 @@ private:
             case StmtKind::Let: {
                 auto* l = static_cast<const LetStmt*>(s);
                 out += std::string(l->is_var ? "var " : "let ") + l->name;
+                if (l->destructure) {
+                    out += " {";
+                    for (size_t i = 0; i < l->fields.size(); i++) {
+                        const LetField& f = l->fields[i];
+                        out += (i ? ", " : " ") + f.field;
+                        if (f.name != f.field) out += ": " + f.name;
+                    }
+                    out += l->fields.empty() ? "}" : " }";
+                }
                 if (l->type) out += ": " + type_text(l->type);
                 if (l->value) {
                     out += " = ";
@@ -365,7 +374,12 @@ private:
             }
             case StmtKind::Break: out += "break"; break;
             case StmtKind::Continue: out += "continue"; break;
-            case StmtKind::Defer: out += "defer "; stmt(static_cast<const DeferStmt*>(s)->body, d); break;
+            case StmtKind::Defer: {
+                auto* df = static_cast<const DeferStmt*>(s);
+                out += df->on_error ? "errdefer " : "defer ";
+                stmt(df->body, d);
+                break;
+            }
             case StmtKind::Fail: out += "fail "; expr(static_cast<const FailStmt*>(s)->value); break;
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block, d); break;
             case StmtKind::Error: break;

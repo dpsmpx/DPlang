@@ -173,7 +173,10 @@ public:
         switch (s->kind) {
             case StmtKind::Let: {
                 auto* l = static_cast<const LetStmt*>(s);
-                line(d, std::string(l->is_var ? "Var " : "Let ") + l->name + (l->type ? ": " + type_text(l->type) : ""));
+                std::string fs;
+                for (const LetField& f : l->fields) fs += " " + f.field + (f.name != f.field ? ":" + f.name : "");
+                line(d, std::string(l->is_var ? "Var " : "Let ") + l->name + (l->destructure ? " {" + fs + " }" : "") +
+                            (l->type ? ": " + type_text(l->type) : ""));
                 if (l->value) expr(l->value, d + 1);
                 break;
             }
@@ -235,7 +238,12 @@ public:
             }
             case StmtKind::Break: line(d, "Break"); break;
             case StmtKind::Continue: line(d, "Continue"); break;
-            case StmtKind::Defer: line(d, "Defer"); stmt(static_cast<const DeferStmt*>(s)->body, d + 1); break;
+            case StmtKind::Defer: {
+                auto* df = static_cast<const DeferStmt*>(s);
+                line(d, df->on_error ? "Errdefer" : "Defer");
+                stmt(df->body, d + 1);
+                break;
+            }
             case StmtKind::Fail: line(d, "Fail"); expr(static_cast<const FailStmt*>(s)->value, d + 1); break;
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block, d); break;
             case StmtKind::Error: line(d, "ErrorStmt"); break;
