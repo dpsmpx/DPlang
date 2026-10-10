@@ -140,5 +140,13 @@ fn moved_into_result() E!Res {
     return wrap(r)
 }
 
+fn through_ref(r: &Res) {
+    close(r)
+}
+
+fn replace_ref(r: &mut Res) {
+    r = open(18)
+}
+
 fn main() {
 }

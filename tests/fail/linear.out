@@ -50,4 +50,10 @@ linear.dpm:133:9: error[E0512]: 'r' is already closed or moved, but 'errdefer' w
 linear.dpm:140:5: error[E0512]: 'r' is already closed or moved, but 'errdefer' would close it again if the function returns an error here
  140 |     return wrap(r)
      |     ^~~~~~~~~~~~~~
+linear.dpm:144:11: error[E0513]: 'r' is a reference: its resource belongs to the caller and cannot be closed or moved here
+ 144 |     close(r)
+     |           ^
+linear.dpm:148:5: error[E0513]: 'r' is a reference: the caller's resource cannot be replaced
+ 148 |     r = open(18)
+     |     ^
 [exit 1]

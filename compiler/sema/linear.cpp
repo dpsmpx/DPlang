@@ -332,8 +332,10 @@ private:
         }
         expr(a->target, Use::Borrow);
         if (a->target->type && linear_type(a->target->type)) {
-            error(Code::E0513, a->target->span, "a '@linear' field cannot be replaced; destructure the struct with "
-                                                "'let S { ... } = v'");
+            error(Code::E0513, a->target->span,
+                  n ? "'" + n->name + "' is a reference: the caller's resource cannot be replaced"
+                    : std::string("a '@linear' field cannot be replaced; destructure the struct with "
+                                  "'let S { ... } = v'"));
         }
         expr(a->value, Use::Consume);
     }
@@ -443,7 +445,14 @@ private:
         switch (e->kind) {
             case ExprKind::Name: {
                 auto* n = static_cast<NameExpr*>(e);
-                if (n->res.kind != ResKind::Local || !tracked(n->res.local)) return;
+                if (n->res.kind != ResKind::Local) return;
+                const Local* l = n->res.local;
+                if (lin && use == Use::Consume && l && l->is_ref) {  // копия из-под ссылки закрыла бы чужой ресурс
+                    error(Code::E0513, n->span, "'" + l->name + "' is a reference: its resource belongs to the "
+                                                "caller and cannot be closed or moved here");
+                    return;
+                }
+                if (!tracked(l)) return;
                 if (use == Use::Consume) consume(n->res.local, n->span);
                 else borrow(n->res.local, n->span);
                 return;
