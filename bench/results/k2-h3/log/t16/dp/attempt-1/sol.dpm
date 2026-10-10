@@ -1,0 +1,435 @@
+// t16: калькулятор целых выражений с переменными.
+
+// виды лексем
+const T_NUM: i32 = 0
+const T_NAME: i32 = 1
+const T_OP: i32 = 2
+const T_END: i32 = 3
+const T_ERR: i32 = 4
+
+// виды узлов
+const K_NUM: i32 = 0
+const K_VAR: i32 = 1
+const K_ASSIGN: i32 = 2
+const K_NEG: i32 = 3
+const K_BIN: i32 = 4
+
+struct Tok {
+    kind: i32
+    // текст лексемы; у T_ERR — сообщение
+    text: str
+    val: i64
+    col: int
+}
+
+struct Node {
+    kind: i32
+    op: str
+    val: i64
+    name: str
+    a: int
+    b: int
+    col: int
+}
+
+struct Parser {
+    toks: List[Tok]
+    pos: int
+    nodes: List[Node]
+    stmts: List[int]
+    err: bool = false
+    err_col: int = 0
+    err_msg: str = ""
+}
+
+struct Eval {
+    nodes: List[Node]
+    vars: Map[str, i64]
+    err: bool = false
+    err_col: int = 0
+    err_msg: str = ""
+}
+
+fn is_op(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+            continue
+        }
+        if c >= '0' && c <= '9' {
+            let nstart = i
+            var v: i64 = 0
+            var big = false
+            while i < n && src[i] >= '0' && src[i] <= '9' {
+                if !big {
+                    let d = i64(src[i] - '0')
+                    if let m = checked_mul(v, 10) {
+                        if let s2 = checked_add(m, d) {
+                            v = s2
+                        } else {
+                            big = true
+                        }
+                    } else {
+                        big = true
+                    }
+                }
+                i += 1
+            }
+            if big {
+                toks.push(Tok { kind: T_ERR, text: "number too large", val: 0, col: nstart + 1 })
+                toks.push(Tok { kind: T_END, text: "", val: 0, col: n + 1 })
+                return toks
+            }
+            toks.push(Tok { kind: T_NUM, text: src[nstart..i], val: v, col: nstart + 1 })
+            continue
+        }
+        if (c >= 'a' && c <= 'z') || c == '_' {
+            let wstart = i
+            while i < n && ((src[i] >= 'a' && src[i] <= 'z') || (src[i] >= '0' && src[i] <= '9') || src[i] == '_') {
+                i += 1
+            }
+            toks.push(Tok { kind: T_NAME, text: src[wstart..i], val: 0, col: wstart + 1 })
+            continue
+        }
+        if is_op(c) {
+            toks.push(Tok { kind: T_OP, text: src[i..i + 1], val: 0, col: i + 1 })
+            i += 1
+            continue
+        }
+        toks.push(Tok { kind: T_ERR, text: "unexpected character '" + src[i..i + 1] + "'", val: 0, col: i + 1 })
+        toks.push(Tok { kind: T_END, text: "", val: 0, col: n + 1 })
+        return toks
+    }
+    toks.push(Tok { kind: T_END, text: "", val: 0, col: n + 1 })
+    return toks
+}
+
+fn set_err(p: &mut Parser, col: int, msg: str) {
+    if !p.err {
+        p.err = true
+        p.err_col = col
+        p.err_msg = msg
+    }
+}
+
+// Ошибка у текущей лексемы: она не может стоять здесь.
+fn unexpected(p: &mut Parser) {
+    let t = p.toks[p.pos]
+    if t.kind == T_ERR {
+        set_err(&mut p, t.col, t.text)
+        return
+    }
+    if t.kind == T_END {
+        set_err(&mut p, t.col, "unexpected end")
+        return
+    }
+    set_err(&mut p, t.col, "unexpected '" + t.text + "'")
+}
+
+fn at_op(p: &Parser, s: str) bool {
+    let t = p.toks[p.pos]
+    return t.kind == T_OP && t.text == s
+}
+
+fn add_node(p: &mut Parser, kind: i32, op: str, val: i64, name: str, a: int, b: int, col: int) int {
+    p.nodes.push(Node { kind, op, val, name, a, b, col })
+    return len(p.nodes) - 1
+}
+
+fn parse_program(p: &mut Parser) {
+    while true {
+        let s = parse_stmt(&mut p)
+        if p.err {
+            return
+        }
+        p.stmts.push(s)
+        if at_op(&p, ";") {
+            p.pos += 1
+            continue
+        }
+        let t = p.toks[p.pos]
+        if t.kind == T_END {
+            return
+        }
+        unexpected(&mut p)
+        return
+    }
+}
+
+fn parse_stmt(p: &mut Parser) int {
+    let t = p.toks[p.pos]
+    if t.kind == T_NAME && p.pos + 1 < len(p.toks) {
+        let t2 = p.toks[p.pos + 1]
+        if t2.kind == T_OP && t2.text == "=" {
+            p.pos += 2
+            let e = parse_expr(&mut p)
+            if p.err {
+                return 0
+            }
+            return add_node(&mut p, K_ASSIGN, "", 0, t.text, e, 0, t.col)
+        }
+    }
+    return parse_expr(&mut p)
+}
+
+fn parse_expr(p: &mut Parser) int {
+    var left = parse_term(&mut p)
+    if p.err {
+        return 0
+    }
+    while at_op(&p, "+") || at_op(&p, "-") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        let right = parse_term(&mut p)
+        if p.err {
+            return 0
+        }
+        left = add_node(&mut p, K_BIN, t.text, 0, "", left, right, t.col)
+    }
+    return left
+}
+
+fn parse_term(p: &mut Parser) int {
+    var left = parse_unary(&mut p)
+    if p.err {
+        return 0
+    }
+    while at_op(&p, "*") || at_op(&p, "/") || at_op(&p, "%") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        let right = parse_unary(&mut p)
+        if p.err {
+            return 0
+        }
+        left = add_node(&mut p, K_BIN, t.text, 0, "", left, right, t.col)
+    }
+    return left
+}
+
+fn parse_unary(p: &mut Parser) int {
+    if at_op(&p, "-") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        let e = parse_unary(&mut p)
+        if p.err {
+            return 0
+        }
+        return add_node(&mut p, K_NEG, "-", 0, "", e, 0, t.col)
+    }
+    return parse_power(&mut p)
+}
+
+fn parse_power(p: &mut Parser) int {
+    let a = parse_atom(&mut p)
+    if p.err {
+        return 0
+    }
+    if at_op(&p, "^") {
+        let t = p.toks[p.pos]
+        p.pos += 1
+        let e = parse_unary(&mut p)
+        if p.err {
+            return 0
+        }
+        return add_node(&mut p, K_BIN, "^", 0, "", a, e, t.col)
+    }
+    return a
+}
+
+fn parse_atom(p: &mut Parser) int {
+    let t = p.toks[p.pos]
+    if t.kind == T_NUM {
+        p.pos += 1
+        return add_node(&mut p, K_NUM, "", t.val, "", 0, 0, t.col)
+    }
+    if t.kind == T_NAME {
+        p.pos += 1
+        return add_node(&mut p, K_VAR, "", 0, t.text, 0, 0, t.col)
+    }
+    if t.kind == T_OP && t.text == "(" {
+        p.pos += 1
+        let e = parse_expr(&mut p)
+        if p.err {
+            return 0
+        }
+        let t2 = p.toks[p.pos]
+        if t2.kind == T_OP && t2.text == ")" {
+            p.pos += 1
+            return e
+        }
+        if t2.kind == T_ERR {
+            set_err(&mut p, t2.col, t2.text)
+            return 0
+        }
+        set_err(&mut p, t2.col, "expected ')'")
+        return 0
+    }
+    unexpected(&mut p)
+    return 0
+}
+
+fn eset(e: &mut Eval, col: int, msg: str) {
+    if !e.err {
+        e.err = true
+        e.err_col = col
+        e.err_msg = msg
+    }
+}
+
+fn ipow(base: i64, ex: i64) ?i64 {
+    if ex == 0 {
+        return 1
+    }
+    if base == 0 {
+        return 0
+    }
+    if base == 1 {
+        return 1
+    }
+    if base == -1 {
+        if ex % 2 == 0 {
+            return 1
+        }
+        return -1
+    }
+    if ex > 63 {
+        return none
+    }
+    var r: i64 = 1
+    var k: i64 = 0
+    while k < ex {
+        if let m = checked_mul(r, base) {
+            r = m
+        } else {
+            return none
+        }
+        k += 1
+    }
+    return r
+}
+
+fn binop(e: &mut Eval, op: str, x: i64, y: i64, col: int) i64 {
+    if op == "+" {
+        if let r1 = checked_add(x, y) {
+            return r1
+        }
+        eset(&mut e, col, "overflow")
+        return 0
+    }
+    if op == "-" {
+        if let r2 = checked_sub(x, y) {
+            return r2
+        }
+        eset(&mut e, col, "overflow")
+        return 0
+    }
+    if op == "*" {
+        if let r3 = checked_mul(x, y) {
+            return r3
+        }
+        eset(&mut e, col, "overflow")
+        return 0
+    }
+    if op == "/" {
+        if y == 0 {
+            eset(&mut e, col, "division by zero")
+            return 0
+        }
+        if let r4 = checked_div(x, y) {
+            return r4
+        }
+        eset(&mut e, col, "overflow")
+        return 0
+    }
+    if op == "%" {
+        if y == 0 {
+            eset(&mut e, col, "division by zero")
+            return 0
+        }
+        if y == -1 {
+            return 0
+        }
+        return x % y
+    }
+    // "^"
+    if y < 0 {
+        eset(&mut e, col, "negative exponent")
+        return 0
+    }
+    if let r5 = ipow(x, y) {
+        return r5
+    }
+    eset(&mut e, col, "overflow")
+    return 0
+}
+
+fn ev(e: &mut Eval, i: int) i64 {
+    let nd = e.nodes[i]
+    if nd.kind == K_NUM {
+        return nd.val
+    }
+    if nd.kind == K_VAR {
+        if let v = e.vars.get(nd.name) {
+            return v
+        }
+        eset(&mut e, nd.col, "unknown variable '" + nd.name + "'")
+        return 0
+    }
+    if nd.kind == K_ASSIGN {
+        let av = ev(&mut e, nd.a)
+        if e.err {
+            return 0
+        }
+        e.vars[nd.name] = av
+        return av
+    }
+    if nd.kind == K_NEG {
+        let nv = ev(&mut e, nd.a)
+        if e.err {
+            return 0
+        }
+        if let r = checked_neg(nv) {
+            return r
+        }
+        eset(&mut e, nd.col, "overflow")
+        return 0
+    }
+    let lv = ev(&mut e, nd.a)
+    if e.err {
+        return 0
+    }
+    let rv = ev(&mut e, nd.b)
+    if e.err {
+        return 0
+    }
+    return binop(&mut e, nd.op, lv, rv, nd.col)
+}
+
+pub fn calc(src: str) str {
+    let toks = lex(src)
+    let nodes0: List[Node] = []
+    let stmts0: List[int] = []
+    var p = Parser { toks, pos: 0, nodes: nodes0, stmts: stmts0 }
+    parse_program(&mut p)
+    if p.err {
+        return "error at " + str(p.err_col) + ": " + p.err_msg
+    }
+    let vars0: Map[str, i64] = []
+    var e = Eval { nodes: p.nodes, vars: vars0 }
+    var last: i64 = 0
+    for k in 0..len(p.stmts) {
+        last = ev(&mut e, p.stmts[k])
+        if e.err {
+            return "error at " + str(e.err_col) + ": " + e.err_msg
+        }
+    }
+    return str(last)
+}

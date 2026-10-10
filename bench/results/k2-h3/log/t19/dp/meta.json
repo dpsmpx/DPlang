@@ -1,0 +1,26 @@
+{
+ "run": "k2-h3",
+ "commit": "75d679e03633d001450cc83a76743d9ebb53604a",
+ "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+ "flags": [
+  "-std=c++20",
+  "-O1",
+  "-pthread",
+  "-Wall",
+  "-Wextra",
+  "-Werror",
+  "-fno-exceptions",
+  "-fno-rtti",
+  "-fsanitize=address,undefined",
+  "-fno-sanitize-recover=all"
+ ],
+ "attempts_max": 5,
+ "agent_model": "",
+ "doc": "guide",
+ "task": "t19_refactor_shop",
+ "id": "t19",
+ "lang": "dp",
+ "kind": "refactor",
+ "series": true,
+ "created": "2026-10-10T11:46:27"
+}

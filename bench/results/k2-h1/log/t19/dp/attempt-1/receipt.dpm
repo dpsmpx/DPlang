@@ -1,0 +1,37 @@
+// Модуль receipt (после рефакторинга): итог и чек.
+import cart
+import catalog
+import money
+
+// Сумма строк price * qty минус скидка: (сумма * процент) / 100 с
+// отбрасыванием дробной части.
+pub fn receipt_total(k: &cart.Cart, c: &catalog.Catalog) i64 {
+    var sum: i64 = 0
+    for i in 0..len(k.lines) {
+        sum += catalog.catalog_price(&c, k.lines[i].item) * i64(k.lines[i].qty)
+    }
+    return sum - sum * i64(k.discount_percent) / 100
+}
+
+// Строки чека: по строке на строку корзины "CODE xQTY SUM"; если скидка
+// не 0 — "discount P% -X"; затем "total T". Пустая корзина — одна строка
+// "empty".
+pub fn receipt(k: &cart.Cart, c: &catalog.Catalog) List[str] {
+    if len(k.lines) == 0 {
+        return ["empty"]
+    }
+    var out: List[str] = []
+    var sum: i64 = 0
+    for i in 0..len(k.lines) {
+        let ln = k.lines[i]
+        let line = catalog.catalog_price(&c, ln.item) * i64(ln.qty)
+        sum += line
+        out.push(catalog.catalog_code(&c, ln.item) + " x" + str(ln.qty) + " " + money.fmt_money(line))
+    }
+    let total = receipt_total(&k, &c)
+    if k.discount_percent != 0 {
+        out.push("discount " + str(k.discount_percent) + "% " + money.fmt_money(total - sum))
+    }
+    out.push("total " + money.fmt_money(total))
+    return out
+}

@@ -1,0 +1,278 @@
+// t15: книга счетов с вложенными транзакциями.
+
+// Состояние книги: балансы и кредитные лимиты открытых счетов.
+pub struct Book {
+    bal: Map[str, i64]
+    lim: Map[str, i64]
+}
+
+pub struct Ledger {
+    book: Book
+    // снимки книги на момент каждого незавершённого begin
+    stack: List[Book]
+}
+
+const MAX_DEPTH: int = 8
+const BOUND: i64 = 1000000000000000
+
+pub fn ledger_new() Ledger {
+    let b = Book { bal: [], lim: [] }
+    return Ledger { book: b, stack: [] }
+}
+
+fn words(s: str) List[str] {
+    var out: List[str] = []
+    for w in &s.split(" ") {
+        if len(w) > 0 {
+            out.push(w)
+        }
+    }
+    return out
+}
+
+fn is_name(w: str) bool {
+    let n = len(w)
+    if n < 1 || n > 16 {
+        return false
+    }
+    for i in 0..n {
+        let c = w[i]
+        var good = c >= 'a' && c <= 'z'
+        if i > 0 && ((c >= '0' && c <= '9') || c == '_') {
+            good = true
+        }
+        if !good {
+            return false
+        }
+    }
+    return true
+}
+
+// Число от 1 до 18 цифр; иначе -1.
+fn parse_num(w: str) i64 {
+    let n = len(w)
+    if n < 1 || n > 18 {
+        return -1
+    }
+    var v: i64 = 0
+    for c in &w {
+        if c < '0' || c > '9' {
+            return -1
+        }
+        v = v * 10 + i64(c - '0')
+    }
+    return v
+}
+
+fn do_open(l: &mut Ledger, w: &List[str]) str {
+    if len(w) != 3 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    let lim = parse_num(w[2])
+    if lim < 0 {
+        return "error syntax"
+    }
+    let name = w[1]
+    if l.book.bal.contains(name) {
+        return "error exists " + name
+    }
+    l.book.bal[name] = 0
+    l.book.lim[name] = lim
+    return "ok"
+}
+
+fn do_deposit(l: &mut Ledger, w: &List[str]) str {
+    if len(w) != 3 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    let amt = parse_num(w[2])
+    if amt < 0 {
+        return "error syntax"
+    }
+    if amt == 0 {
+        return "error amount"
+    }
+    let name = w[1]
+    if !l.book.bal.contains(name) {
+        return "error unknown " + name
+    }
+    let nb = l.book.bal[name] + amt
+    if nb < -l.book.lim[name] {
+        return "error funds"
+    }
+    if abs(nb) > BOUND {
+        return "error bound"
+    }
+    l.book.bal[name] = nb
+    return "ok " + str(nb)
+}
+
+fn do_withdraw(l: &mut Ledger, w: &List[str]) str {
+    if len(w) != 3 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    let amt = parse_num(w[2])
+    if amt < 0 {
+        return "error syntax"
+    }
+    if amt == 0 {
+        return "error amount"
+    }
+    let name = w[1]
+    if !l.book.bal.contains(name) {
+        return "error unknown " + name
+    }
+    let nb = l.book.bal[name] - amt
+    if nb < -l.book.lim[name] {
+        return "error funds"
+    }
+    if abs(nb) > BOUND {
+        return "error bound"
+    }
+    l.book.bal[name] = nb
+    return "ok " + str(nb)
+}
+
+fn do_transfer(l: &mut Ledger, w: &List[str]) str {
+    if len(w) != 4 || !is_name(w[1]) || !is_name(w[2]) {
+        return "error syntax"
+    }
+    let amt = parse_num(w[3])
+    if amt < 0 {
+        return "error syntax"
+    }
+    if amt == 0 {
+        return "error amount"
+    }
+    let fa = w[1]
+    let ta = w[2]
+    if !l.book.bal.contains(fa) {
+        return "error unknown " + fa
+    }
+    if !l.book.bal.contains(ta) {
+        return "error unknown " + ta
+    }
+    if fa == ta {
+        return "error same"
+    }
+    var fee = amt / 100
+    if fee < 1 {
+        fee = 1
+    }
+    let nf = l.book.bal[fa] - (amt + fee)
+    let nt = l.book.bal[ta] + amt
+    if nf < -l.book.lim[fa] {
+        return "error funds"
+    }
+    if nt < -l.book.lim[ta] {
+        return "error funds"
+    }
+    if abs(nf) > BOUND {
+        return "error bound"
+    }
+    if abs(nt) > BOUND {
+        return "error bound"
+    }
+    l.book.bal[fa] = nf
+    l.book.bal[ta] = nt
+    return "ok " + str(nf) + " " + str(nt)
+}
+
+fn do_balance(l: &mut Ledger, w: &List[str]) str {
+    if len(w) != 2 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    let name = w[1]
+    if !l.book.bal.contains(name) {
+        return "error unknown " + name
+    }
+    return str(l.book.bal[name])
+}
+
+fn do_close(l: &mut Ledger, w: &List[str]) str {
+    if len(w) != 2 || !is_name(w[1]) {
+        return "error syntax"
+    }
+    let name = w[1]
+    if !l.book.bal.contains(name) {
+        return "error unknown " + name
+    }
+    if l.book.bal[name] != 0 {
+        return "error nonzero"
+    }
+    _ = l.book.bal.remove(name)
+    _ = l.book.lim.remove(name)
+    return "ok"
+}
+
+fn do_report(l: &mut Ledger) str {
+    var names: List[str] = []
+    for k in &l.book.bal {
+        names.push(k)
+    }
+    if len(names) == 0 {
+        return "(empty)"
+    }
+    names.sort()
+    var out = ""
+    for i in 0..len(names) {
+        if i > 0 {
+            out += " "
+        }
+        out += names[i] + ":" + str(l.book.bal[names[i]])
+    }
+    return out
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    let w = words(line)
+    if len(w) == 0 {
+        return "error syntax"
+    }
+    let cmd = w[0]
+    if cmd == "open" {
+        return do_open(&mut l, &w)
+    }
+    if cmd == "deposit" {
+        return do_deposit(&mut l, &w)
+    }
+    if cmd == "withdraw" {
+        return do_withdraw(&mut l, &w)
+    }
+    if cmd == "transfer" {
+        return do_transfer(&mut l, &w)
+    }
+    if cmd == "balance" {
+        return do_balance(&mut l, &w)
+    }
+    if cmd == "close" {
+        return do_close(&mut l, &w)
+    }
+    if cmd == "begin" || cmd == "commit" || cmd == "rollback" || cmd == "report" {
+        if len(w) != 1 {
+            return "error syntax"
+        }
+    } else {
+        return "error syntax"
+    }
+    if cmd == "report" {
+        return do_report(&mut l)
+    }
+    if cmd == "begin" {
+        if len(l.stack) >= MAX_DEPTH {
+            return "error depth"
+        }
+        let saved = l.book
+        l.stack.push(saved)
+        return "ok depth " + str(len(l.stack))
+    }
+    if len(l.stack) == 0 {
+        return "error depth"
+    }
+    if let snap = l.stack.pop() {
+        if cmd == "rollback" {
+            l.book = snap
+        }
+    }
+    return "ok depth " + str(len(l.stack))
+}
