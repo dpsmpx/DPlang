@@ -1,4 +1,4 @@
-// Драйвер образца s3 для переведённых вариантов DPlang.
+// Драйвер образца s3 для переведённых вариантов dpl.
 #include "cm_out.hpp"
 
 static void check(const char* what, cm::Result<void> r) {

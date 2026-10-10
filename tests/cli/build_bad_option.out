@@ -1,4 +1,4 @@
 --- stderr ---
 error: unknown option '--debug'
-run 'dplang help' to list the commands
+run 'dpl help' to list the commands
 [exit 2]

@@ -9,7 +9,7 @@
 # bench/run_refs.py; решения на вариантах синтаксиса —
 # bench/syntax/run_variants.py; компилятор и его тесты — tests/run.py
 # (docs/compiler/README.md); обвязка опыта — bench/experiment.py
-# selftest, после компилятора: ей нужен dplang.
+# selftest, после компилятора: ей нужен dpl.
 # ============================================================
 set -u
 

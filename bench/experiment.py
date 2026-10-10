@@ -2,16 +2,16 @@
 """Измерительная обвязка опыта (v0.0, шаг 0.2, Р35; v0.1, шаг 13).
 
 Модель (субагент с чистым контекстом) решает задачу эталонного набора на
-C++, на варианте синтаксиса DPlang (A, B, C — прототип v0.0) или на
-DPlang (dp — настоящий компилятор v0.1), зная язык только по
+C++, на варианте синтаксиса dpl (A, B, C — прототип v0.0) или на
+dpl (dp — настоящий компилятор v0.1), зная язык только по
 спецификации. Обвязка:
 
 - prepare — песочница задания: PROMPT.md (правила, постановка, у t13 —
-  целевой интерфейс, у DPlang — спецификация варианта) и начальный код в
+  целевой интерфейс, у dpl — спецификация варианта) и начальный код в
   src/ (заготовка, код с ошибками или модули до рефакторинга — в записи
   варианта); драйвер и ожидаемый вывод в песочницу не попадают;
 - check — единственная проверка, доступная модели: перевод прототипом
-  (варианты) или компилятор DPlang (dp, bench/dp_check.py), сборка со
+  (варианты) или компилятор dpl (dp, bench/dp_check.py), сборка со
   скрытым драйвером, запуск, сверка с ожидаемым; итог — класс и первая
   ошибка; каждая попытка и снимок кода — в журнал;
 - session — записать расход сессии субагента (из итога инструмента Agent);
@@ -32,7 +32,7 @@ DPlang (dp — настоящий компилятор v0.1), зная язык 
     python3 bench/experiment.py restore RUN [--force]
     python3 bench/experiment.py selftest
 
-Прогоны лежат в $DPLANG_EXP_WORK или build/experiment/. Подробно —
+Прогоны лежат в $DPL_EXP_WORK или build/experiment/. Подробно —
 bench/README.md.
 """
 import argparse
@@ -67,18 +67,18 @@ import run_refs  # noqa: E402
 
 LANGS = ('cpp', 'A', 'B', 'C', 'dp')
 PROTO = ('A', 'B', 'C')
-TITLE = {'cpp': 'C++', 'A': 'DPlang, вариант A', 'B': 'DPlang, вариант B', 'C': 'DPlang, вариант C',
-         'dp': 'DPlang'}
+TITLE = {'cpp': 'C++', 'A': 'dpl, вариант A', 'B': 'dpl, вариант B', 'C': 'dpl, вариант C',
+         'dp': 'dpl'}
 # Спецификация для языка dp: docs/spec/core.md с первого раздела.
 SPEC_DP = os.path.join(ROOT, 'docs', 'spec', 'core.md')
-SPEC_DP_TITLE = "# Спецификация DPlang (ядро v0.1)"
+SPEC_DP_TITLE = "# Спецификация dpl (ядро v0.1)"
 ATTEMPTS = 5
 RUN_TIMEOUT = 20
 COUNT_MODEL = 'claude-opus-5-5'
 MARK = '// --- driver ---'
 ACCEPTED = 'принято'
 # Классы итога проверки. «прототип» и «компилятор» — сбой переводчика или
-# компилятора DPlang, а не решения: такие попытки разбираются вручную.
+# компилятора dpl, а не решения: такие попытки разбираются вручную.
 CLASSES = ('разбор', 'перевод', 'сборка', 'интерфейс', 'ловушка', 'время', 'вывод', 'прототип', 'компилятор',
            ACCEPTED)
 SRC_EXT = {'cpp': ('.cpp', '.hpp', '.h'), 'proto': ('.cm',), 'dp': ('.dpm',)}
@@ -101,11 +101,11 @@ def write(path, text):
 
 
 def work_dir():
-    return os.environ.get('DPLANG_EXP_WORK') or os.path.join(ROOT, 'build', 'experiment')
+    return os.environ.get('DPL_EXP_WORK') or os.path.join(ROOT, 'build', 'experiment')
 
 
 def is_dp(lang):
-    """Язык — DPlang: вариант прототипа или настоящий (dp)."""
+    """Язык — dpl: вариант прототипа или настоящий (dp)."""
     return lang != 'cpp'
 
 
@@ -220,7 +220,7 @@ class Task:
 
 
 def dp_interface(text):
-    """Открытый интерфейс модуля DPlang в каноническом виде (dplang fmt):
+    """Открытый интерфейс модуля dpl в каноническом виде (dpl fmt):
     импорты и pub-объявления с комментариями над ними; тела функций — `// ...`."""
     lines = text.splitlines()
     out, pending, i = [], [], 0
@@ -286,7 +286,7 @@ def prompt(task, lang, sandbox, attempts, flags, start):
         '- Компилятор и другие программы сам не запускай. Проверка — только командой', '',
         f'      python3 {exe} check {sandbox}', '',
         '  Она ' + {'proto': 'переводит код прототипом языка в C++, собирает его',
-                    'dp': 'собирает код компилятором DPlang',
+                    'dp': 'собирает код компилятором dpl',
                     'cpp': 'собирает его'}[ext_key(lang)]
         + ' со скрытым драйвером, запускает и сравнивает вывод с ожидаемым; '
         'печатает «принято» или первую ошибку.',
@@ -325,7 +325,7 @@ def prompt(task, lang, sandbox, attempts, flags, start):
     text = '\n'.join(lines) + '\n' + demote(read(os.path.join(task.path, 'task.md')))
     iface = task.interface(lang)
     if iface:
-        fence = 'dplang' if dp else 'cpp'
+        fence = 'dpl' if dp else 'cpp'
         text += '\n## Целевой интерфейс\n'
         for name, body in iface.items():
             text += f'\n`{name}`:\n\n```{fence}\n{body}```\n'
@@ -435,7 +435,7 @@ def plain(stderr, build_dir):
 
 
 def generated_fn(code_lines, line):
-    """Функция DPlang, в переведённом коде которой стоит строка line (с 1)."""
+    """Функция dpl, в переведённом коде которой стоит строка line (с 1)."""
     for k in range(min(line, len(code_lines)) - 1, -1, -1):
         m = FN_HEAD.match(code_lines[k])
         if m:
@@ -893,7 +893,7 @@ def selftest_cell(task, lang, sandbox, tmp, flags):
     if is_proto(lang) and f'вариант {lang} — краткая спецификация' not in p:
         fails.append(f'{tag}: в PROMPT.md нет спецификации варианта')
     if lang == 'dp' and (SPEC_DP_TITLE not in p or '[lex.source]' not in p):
-        fails.append(f'{tag}: в PROMPT.md нет спецификации DPlang')
+        fails.append(f'{tag}: в PROMPT.md нет спецификации dpl')
     if lang == 'dp' and task.kind == 'refactor' and '// ...' not in p:
         fails.append(f'{tag}: в PROMPT.md нет целевого интерфейса')
     start = read_files(os.path.join(sandbox, 'src'))
@@ -914,7 +914,7 @@ def selftest_cell(task, lang, sandbox, tmp, flags):
 
 
 def selftest_stub_cpp(task, tmp):
-    """Заготовка C++ собирается с драйвером (без тел) и называет те же функции, что заготовка DPlang."""
+    """Заготовка C++ собирается с драйвером (без тел) и называет те же функции, что заготовка dpl."""
     stub = os.path.join(task.path, 'stub.cpp')
     if not os.path.exists(stub):
         return []
@@ -996,12 +996,12 @@ def selftest_restore(tmp, task, texts):
 
 def selftest():
     tasks = all_tasks()
-    if not os.path.exists(dp_check.dplang()):
-        print(f'обвязка: нет компилятора {dp_check.dplang()} — сначала python3 tests/run.py')
+    if not os.path.exists(dp_check.dpl()):
+        print(f'обвязка: нет компилятора {dp_check.dpl()} — сначала python3 tests/run.py')
         return 1
-    saved = os.environ.get('DPLANG_EXP_WORK')
+    saved = os.environ.get('DPL_EXP_WORK')
     with tempfile.TemporaryDirectory() as tmp:
-        os.environ['DPLANG_EXP_WORK'] = os.path.join(tmp, 'work')
+        os.environ['DPL_EXP_WORK'] = os.path.join(tmp, 'work')
         flags = build_flags()
         sandboxes = prepare('self', tasks, LANGS, quiet=True)
         jobs = [(t, lang, s) for (t, lang), s in zip([(t, lang) for t in tasks for lang in t.langs()], sandboxes)]
@@ -1010,9 +1010,9 @@ def selftest():
             results += list(pool.map(lambda t: selftest_stub_cpp(t, tmp), tasks))
         results.append(selftest_log(tmp))
     if saved is None:
-        del os.environ['DPLANG_EXP_WORK']
+        del os.environ['DPL_EXP_WORK']
     else:
-        os.environ['DPLANG_EXP_WORK'] = saved
+        os.environ['DPL_EXP_WORK'] = saved
     fails = [f for r in results for f in r]
     if fails:
         print('обвязка: сбоев ' + str(len(fails)))

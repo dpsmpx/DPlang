@@ -3,10 +3,10 @@
 Чёрный ящик по HTTP: каждый тест запускает свой шлюз (service/gateway.py,
 порт 0) с тестовым профилем — копией service/config/online-v1.json с
 заменёнными значениями — и шлёт сырые запросы через сокет. Worker —
-настоящий `dplang worker` сборки Release или поддельный (FAKES ниже):
+настоящий `dpl worker` сборки Release или поддельный (FAKES ниже):
 падение, зависание с потомком, поток вывода, мусор, медленный — для
 очереди и предела конкурентности. Эти тесты — приёмка будущего шлюза на
-DPlang (docs/service/README.md, «Шлюз»).
+dpl (docs/service/README.md, «Шлюз»).
 
 Время в тестах — только с большим запасом: таймаут 300 мс проверяется
 ожиданием 1,5 с, очередь — worker-ом, который спит секунду.
@@ -77,7 +77,7 @@ sys.stdin.read()
 class Gateway:
     """Шлюз с тестовым профилем; worker — путь или имя подделки."""
 
-    def __init__(self, tmp, release_dplang, worker='real', cwd=None, **overrides):
+    def __init__(self, tmp, release_dpl, worker='real', cwd=None, **overrides):
         self.tmp = tmp
         self.marks = os.path.join(tmp, 'marks')
         os.makedirs(self.marks, exist_ok=True)
@@ -95,7 +95,7 @@ class Gateway:
         cfg_path = os.path.join(tmp, 'profile.json')
         with open(cfg_path, 'w', encoding='utf-8') as f:
             json.dump(cfg, f)
-        worker_path = release_dplang if worker == 'real' else self.fake(worker)
+        worker_path = release_dpl if worker == 'real' else self.fake(worker)
         if cwd:  # путь к worker-у — относительный, от cwd шлюза
             worker_path = os.path.relpath(worker_path, cwd)
         self.log_path = os.path.join(tmp, 'gateway.log')
@@ -638,7 +638,7 @@ def t_log_private(gw):
 def t_metrics(gw):
     gw.post(request(''))
     r = gw.get('/metrics', port=gw.metrics_port)
-    if r[0] != 200 or b'dplang_requests_total{code="result"} 1' not in r[2]:
+    if r[0] != 200 or b'dpl_requests_total{code="result"} 1' not in r[2]:
         return f'метрики {r[0]} {r[2][:300]!r}'
     if gw.get('/metrics')[0] != 404:
         return 'метрики на адресе API'
@@ -655,7 +655,7 @@ def t_survives(gw):
     return expect(gw.get('/api/v1/info'), 200) or expect(gw.post(request('fn main() {\n}\n')), 200)
 
 
-def t_config_strict(tmp, release_dplang):
+def t_config_strict(tmp, release_dpl):
     """Неверный профиль — отказ запуска с кодом 2, а не тихое значение."""
     with open(PROFILE, encoding='utf-8') as f:
         cfg = json.load(f)
@@ -673,28 +673,28 @@ def t_config_strict(tmp, release_dplang):
         path = os.path.join(tmp, 'bad.json')
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(c, f)
-        r = subprocess.run([sys.executable, '-I', GATEWAY, '--config', path, '--worker', release_dplang, '--listen',
+        r = subprocess.run([sys.executable, '-I', GATEWAY, '--config', path, '--worker', release_dpl, '--listen',
                             '127.0.0.1:0'], capture_output=True, text=True, timeout=30)
         if r.returncode != 2 or 'error:' not in r.stderr:
             return f'{what}: код {r.returncode}: {r.stderr[-200:]}'
     with open(os.path.join(tmp, 'dup.json'), 'w', encoding='utf-8') as f:
         f.write('{"profile": "a", "profile": "b"}')
     r = subprocess.run([sys.executable, '-I', GATEWAY, '--config', os.path.join(tmp, 'dup.json'), '--worker',
-                        release_dplang, '--listen', '127.0.0.1:0'], capture_output=True, text=True, timeout=30)
+                        release_dpl, '--listen', '127.0.0.1:0'], capture_output=True, text=True, timeout=30)
     return None if r.returncode == 2 else f'повторный ключ: код {r.returncode}'
 
 
-def t_worker_relative_path(tmp, release_dplang):
+def t_worker_relative_path(tmp, release_dpl):
     """Относительный --worker, как в docs/service/README.md: worker
     запускается из временного каталога, и путь должен остаться верным."""
-    gw = Gateway(tmp, release_dplang, cwd=ROOT)
+    gw = Gateway(tmp, release_dpl, cwd=ROOT)
     try:
         return expect(gw.post(request('fn main() {\n}\n')), 200)
     finally:
         gw.stop()
 
 
-def t_profile_shipped(tmp, release_dplang):
+def t_profile_shipped(tmp, release_dpl):
     """Поставляемый профиль: запуск выключен (Р49), шлюз с ним стартует."""
     with open(PROFILE, encoding='utf-8') as f:
         cfg = json.load(f)
@@ -702,7 +702,7 @@ def t_profile_shipped(tmp, release_dplang):
         return 'available в поставляемом профиле должно быть false до решения автора (Р49)'
     if cfg['cors']['origins'] != ['https://dpsmpx.com']:
         return f'cors.origins {cfg["cors"]["origins"]}'
-    gw = Gateway(tmp, release_dplang, available=False)
+    gw = Gateway(tmp, release_dpl, available=False)
     try:
         return t_unavailable(gw)
     finally:
@@ -758,7 +758,7 @@ GATEWAY_CASES = {
     'metrics': (t_metrics, 'real', {}),
     'survives': (t_survives, 'real', {}),
 }
-# Тесты без готового шлюза: (tmp, release_dplang) → сбой или None.
+# Тесты без готового шлюза: (tmp, release_dpl) → сбой или None.
 PLAIN_CASES = {
     'config_strict': t_config_strict,
     'profile_shipped': t_profile_shipped,
@@ -767,13 +767,13 @@ PLAIN_CASES = {
 CASES = sorted(GATEWAY_CASES) + sorted(PLAIN_CASES)
 
 
-def check_case(name, release_dplang):
+def check_case(name, release_dpl):
     tmp = tempfile.mkdtemp(prefix='dpservice-')
     try:
         if name in PLAIN_CASES:
-            return PLAIN_CASES[name](tmp, release_dplang)
+            return PLAIN_CASES[name](tmp, release_dpl)
         fn, worker, overrides = GATEWAY_CASES[name]
-        gw = Gateway(tmp, release_dplang, worker, **overrides)
+        gw = Gateway(tmp, release_dpl, worker, **overrides)
         try:
             err = fn(gw)
         finally:

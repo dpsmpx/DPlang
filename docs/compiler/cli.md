@@ -1,4 +1,4 @@
-# CLI `dplang`
+# CLI `dpl`
 
 Описание устройства командной строки компилятора v0.1
 (`ROADMAP/IMPLEMENTATION.md`, шаг 10; команды — Р15). Код —
@@ -8,7 +8,7 @@
 ## 1. Общее
 
 ```
-dplang <команда> [аргументы]
+dpl <команда> [аргументы]
 ```
 
 | команда | что делает |
@@ -40,8 +40,8 @@ dplang <команда> [аргументы]
 | переменная | для чего | по умолчанию |
 |---|---|---|
 | `CC` | компилятор C для `build` и `test` | `cc` |
-| `DPLANG_RUNTIME` | каталог runtime (`core/`, `linux/`) | `runtime/` репозитория рядом со сборкой: `<каталог dplang>/../../runtime` |
-| `DPLANG_STDLIB` | каталог стандартной библиотеки | `<каталог dplang>/../../stdlib` |
+| `DPL_RUNTIME` | каталог runtime (`core/`, `linux/`) | `runtime/` репозитория рядом со сборкой: `<каталог dpl>/../../runtime` |
+| `DPL_STDLIB` | каталог стандартной библиотеки | `<каталог dpl>/../../stdlib` |
 | `TMPDIR` | временный каталог сборки | `/tmp` |
 
 ## 2. `check`
@@ -85,7 +85,7 @@ Runtime связывается статически (Р43): его исходн�
 |---|---|---|
 | `debug` | по умолчанию | `-O0 -g` |
 | `release` | `--release` | `-O2` |
-| `test` | `dplang test` | `-O0 -g` и `-fsanitize=address,undefined -fno-sanitize-recover=all`, если компилятор C их умеет |
+| `test` | `dpl test` | `-O0 -g` и `-fsanitize=address,undefined -fno-sanitize-recover=all`, если компилятор C их умеет |
 
 Общие флаги — `-std=c11 -ffp-contract=off -fno-strict-aliasing -w -lm
 -pthread` (зачем — `docs/compiler/backend_c.md`, раздел 2). Предупреждения
@@ -101,7 +101,7 @@ Runtime связывается статически (Р43): его исходн�
 ## 4. `test`
 
 Тест — функция с атрибутом `@test` без параметров, с результатом `void`
-или `E!void` (Р50, `docs/spec/core.md`, module.test). `dplang test`
+или `E!void` (Р50, `docs/spec/core.md`, module.test). `dpl test`
 1. проверяет программу; `main` не нужна;
 2. собирает все тесты программы, кроме тестов стандартной библиотеки, в
    одну программу в профиле `test`;
@@ -126,7 +126,7 @@ test result: FAILED. 1 passed; 1 failed
 - Тест прошёл, если процесс завершился с кодом 0.
 - Вывод прошедшего теста не показывается. У упавшего — его stdout, затем
   stderr: ловушка (`trap.def`) или `error: test failed with E.V`.
-- Код выхода `dplang test`: 0 — все прошли (и когда тестов нет), 1 — упал
+- Код выхода `dpl test`: 0 — все прошли (и когда тестов нет), 1 — упал
   хотя бы один.
 - Предела времени у теста пока нет: зависший тест вешает команду
   (`TODO.md`).
@@ -162,7 +162,7 @@ E0003.
 
 ## 6. `explain`
 
-`dplang explain E0401` печатает код, заголовок и объяснение из реестра
+`dpl explain E0401` печатает код, заголовок и объяснение из реестра
 диагностики (`compiler/support/codes.def`). Неизвестный код — код
 выхода 2.
 
@@ -174,11 +174,11 @@ E0003.
 | `check --format=json` и схема | набор `diag`, каждый снимок проверяется по `diagnostics.schema.json` (`tests/schema.py`) |
 | `fmt` | набор `fmt`: файл правится в копии, ожидаемое — текст после `fmt`, вывод и код; второй прогон `--check` ничего не находит |
 | `build` | проход `build`: каждая программа набора `run` собирается в профилях `debug` и `release` и совпадает с эталонным интерпретатором |
-| `test` | набор `test`: отчёт `dplang test`; тесты отказа E0323 — набор `fail` |
+| `test` | набор `test`: отчёт `dpl test`; тесты отказа E0323 — набор `fail` |
 
 ## 8. Отладочные команды
 
-`dplang debug lex|parse|print|summary|types|ir|run|c <file.dpm>` — для
+`dpl debug lex|parse|print|summary|types|ir|run|c <file.dpm>` — для
 тестов компилятора; формат вывода не стабилен (S2). `debug run` —
 эталонный интерпретатор (Р43: только для тестов), `debug c` —
 сгенерированный C. Описание — `docs/compiler/README.md`.

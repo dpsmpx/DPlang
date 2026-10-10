@@ -259,7 +259,7 @@ def _compare(got, want, what):
     return f'{what}: ' + '; '.join(problems) if problems else None
 
 
-def _floats(dplang, native, native_dir):
+def _floats(dpl, native, native_dir):
     values = float_values()
     want = [format_float(v, f32) for v, f32 in values]
     for (v, f32), w in zip(values, want):
@@ -269,7 +269,7 @@ def _floats(dplang, native, native_dir):
     with open(src, 'w', encoding='utf-8') as f:
         f.write(floats_program(values))
     expected = '\n'.join(want) + '\n'
-    p = _run([dplang, 'debug', 'run', 'floats.dpm'], cwd=native_dir)
+    p = _run([dpl, 'debug', 'run', 'floats.dpm'], cwd=native_dir)
     if p is None or p.returncode != 0:
         return f'интерпретатор: код {p.returncode if p else "timeout"}: {(p.stderr if p else "")[:300]}'
     if p.stdout != expected:
@@ -294,7 +294,7 @@ def _first_diff(values, want, stdout):
     return f'расхождений {len(bad)}; первое — {"f32" if f32 else "f64"} {v!r}: {g!r}, ожидалось {w!r}'
 
 
-def check_case(name, dplang, native, native_dir):
+def check_case(name, dpl, native, native_dir):
     """native(src.dpm, exe) — собирает нативную программу; None — успех."""
     exe = os.path.join(native_dir, 'rt_test.bin')
     if name == 'unit':
@@ -305,7 +305,7 @@ def check_case(name, dplang, native, native_dir):
             return f'код {p.returncode}:\n' + '\n'.join((p.stderr or p.stdout).splitlines()[:20])
         return None
     if name == 'floats':
-        return _floats(dplang, native, native_dir)
+        return _floats(dpl, native, native_dir)
     kind, case = name.split('/', 1)
     if kind == 'trap':
         want = TRAPS[case]

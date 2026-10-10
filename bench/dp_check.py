@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Проверка решения задачи набора на настоящем компиляторе DPlang (v0.1, шаг 13).
+"""Проверка решения задачи набора на настоящем компиляторе dpl (v0.1, шаг 13).
 
 Решение — модули .dpm (имя файла — имя модуля). Рядом кладётся скрытый
 драйвер задачи `main.dpm` из bench/tasks/<задача>/dp/, программа
-собирается `dplang build`, запускается и её вывод сверяется с ожидаемым:
+собирается `dpl build`, запускается и её вывод сверяется с ожидаемым:
 dp/expected.txt, если он есть, иначе expected.txt задачи.
 
 Итог — класс и сообщение (классы — как у bench/experiment.py):
@@ -19,7 +19,7 @@ dp/expected.txt, если он есть, иначе expected.txt задачи.
   сбой обвязки, а не решения, — разбирается вручную;
 - принято.
 
-Компилятор — $DPLANG или build/compiler/dplang. Модуль служит и проверке
+Компилятор — $DPL или build/compiler/dpl. Модуль служит и проверке
 обвязки (bench/experiment.py, язык dp), и проходу bench в tests/run.py.
 """
 import os
@@ -36,8 +36,8 @@ HEAD = re.compile(r'^(?P<file>[^:\s][^:]*):(?P<line>\d+):(?P<col>\d+): error\[(?
 MODULE_FILE = re.compile(r'^[a-z_][a-z0-9_]*\.dpm$')
 
 
-def dplang():
-    return os.environ.get('DPLANG') or os.path.join(ROOT, 'build', 'compiler', 'dplang')
+def dpl():
+    return os.environ.get('DPL') or os.path.join(ROOT, 'build', 'compiler', 'dpl')
 
 
 def read(path):
@@ -93,7 +93,7 @@ def compare(want, got):
 def evaluate(files, driver_text, want, build_dir, compiler=None):
     """Собирает файлы решения (имя → текст) с драйвером в build_dir,
     запускает и сверяет с want: (класс, сообщение)."""
-    compiler = compiler or dplang()
+    compiler = compiler or dpl()
     for name in files:
         if name == DRIVER:
             return 'разбор', f'имя {DRIVER} занято драйвером: переименуйте модуль'

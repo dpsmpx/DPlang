@@ -1,4 +1,4 @@
 --- stderr ---
 error: build takes one file
-run 'dplang help' to list the commands
+run 'dpl help' to list the commands
 [exit 2]

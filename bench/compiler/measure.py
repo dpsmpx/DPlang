@@ -5,7 +5,7 @@ docs/policy/BENCHMARKS.md): время и память `check`, время сб�
 
     python3 bench/compiler/measure.py [--runs 10] [--save NAME]
 
-Компилятор — сборка Release (build/release/dplang; её собирает
+Компилятор — сборка Release (build/release/dpl; её собирает
 tests/run.py). --save — данные и отчёт в bench/results/NAME/
 (measure.json, summary.md). Без --save — отчёт в stdout.
 """
@@ -20,7 +20,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DPLANG = os.path.join(ROOT, 'build', 'release', 'dplang')
+DPL = os.path.join(ROOT, 'build', 'release', 'dpl')
 EXAMPLE = os.path.join(ROOT, 'examples', 'tomlcheck')
 
 
@@ -130,7 +130,7 @@ def environment():
     commit = subprocess.run(['git', '-C', ROOT, 'rev-parse', '--short', 'HEAD'], capture_output=True,
                             text=True).stdout.strip()
     return {'cpu': cpu, 'cpus': os.cpu_count(), 'os': platform.platform(), 'cc': cc[0] if cc else '?',
-            'commit': commit, 'compiler': 'build/release/dplang (Release)'}
+            'commit': commit, 'compiler': 'build/release/dpl (Release)'}
 
 
 def loc():
@@ -162,8 +162,8 @@ def main():
     ap.add_argument('--runs', type=int, default=10)
     ap.add_argument('--save')
     a = ap.parse_args()
-    if not os.path.exists(DPLANG):
-        print('нет build/release/dplang: сначала python3 tests/run.py')
+    if not os.path.exists(DPL):
+        print('нет build/release/dpl: сначала python3 tests/run.py')
         return 1
     data = {'env': environment(), 'runs': a.runs, 'check': [], 'scaling': [], 'build': [], 'load': [], 'loc': loc()}
     tmp = tempfile.mkdtemp(prefix='dpmeasure-')
@@ -181,7 +181,7 @@ def main():
         if name.endswith('.dpm'):
             progs.append(('tests/run/' + name, run_dir, name, lines_of(os.path.join(run_dir, name))))
     for label, cwd, name, n in progs:
-        m = measure([DPLANG, 'check', name], a.runs, cwd)
+        m = measure([DPL, 'check', name], a.runs, cwd)
         data['check'].append({'input': label, 'lines': n, **m})
 
     # check: рост размера модуля
@@ -189,14 +189,14 @@ def main():
         path = os.path.join(tmp, f'scaled{copies}.dpm')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(scaled_module(copies))
-        m = measure([DPLANG, 'check', os.path.basename(path)], a.runs, tmp)
+        m = measure([DPL, 'check', os.path.basename(path)], a.runs, tmp)
         data['scaling'].append({'copies': copies, 'lines': lines_of(path), **m})
 
     # сборка примера: debug c (фронтенд и бэкенд) и полная сборка в профилях
-    data['build'].append({'what': 'debug c', **measure([DPLANG, 'debug', 'c', 'main.dpm'], a.runs, EXAMPLE)})
+    data['build'].append({'what': 'debug c', **measure([DPL, 'debug', 'c', 'main.dpm'], a.runs, EXAMPLE)})
     for prof in ('debug', 'release'):
         exe = os.path.join(tmp, 'tomlcheck_' + prof)
-        argv = [DPLANG, 'build'] + (['--release'] if prof == 'release' else []) + ['-o', exe, 'main.dpm']
+        argv = [DPL, 'build'] + (['--release'] if prof == 'release' else []) + ['-o', exe, 'main.dpm']
         data['build'].append({'what': f'build {prof}', **measure(argv, max(3, a.runs // 2), EXAMPLE)})
 
     # первая нагрузка: tomlcheck на большом файле — нативно (release) и интерпретатором
@@ -208,7 +208,7 @@ def main():
         f.write(big_toml(200, 50))
     exe = os.path.join(tmp, 'tomlcheck_release')
     for label, argv, path in [('native release', [exe], big), ('native release', [exe], small),
-                              ('interpreter (debug run, Release)', [DPLANG, 'debug', 'run', 'main.dpm'], small)]:
+                              ('interpreter (debug run, Release)', [DPL, 'debug', 'run', 'main.dpm'], small)]:
         m = measure(argv + [path], max(3, a.runs // 2), EXAMPLE)
         data['load'].append({'what': label, 'file_lines': lines_of(path), 'file_mb': os.path.getsize(path) / 2**20, **m})
 
@@ -256,7 +256,7 @@ def summary(d):
             '| что | стена, мс (медиана / макс.) | CPU, мс | maxrss, МБ | код |', '|---|---|---|---|---|']
     for b in d['build']:
         out.append(row(b, b['what']))
-    out += ['', 'CPU и память `build` — вместе с компилятором C: он дочерний процесс `dplang`.', '',
+    out += ['', 'CPU и память `build` — вместе с компилятором C: он дочерний процесс `dpl`.', '',
             '## Первая нагрузка: `tomlcheck` на большом файле', '',
             '| исполнение | строк файла | МБ | стена, мс (медиана / макс.) | CPU, мс | maxrss, МБ | код |',
             '|---|---|---|---|---|---|---|']

@@ -1,4 +1,4 @@
-/* Runtime DPlang: ядро без зависимости от платформы (docs/runtime/README.md).
+/* Runtime dpl: ядро без зависимости от платформы (docs/runtime/README.md).
  * Тексты ловушек совпадают с эталонным интерпретатором
  * (compiler/ir/interp.cpp): различающие тесты сравнивают вывод байт в байт. */
 #include "dp_rt.h"

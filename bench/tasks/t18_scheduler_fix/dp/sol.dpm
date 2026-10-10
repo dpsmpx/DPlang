@@ -1,4 +1,4 @@
-// t18: эталон на DPlang.
+// t18: эталон на dpl.
 pub struct Event {
     at: i64
     priority: i32

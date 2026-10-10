@@ -16,18 +16,18 @@ runtime, с которым собирается результат, — `runtime
 вывод нативной программы с его выводом байт в байт: stdout, stderr и код
 выхода, включая текст и место ловушки.
 
-Программу собирает `dplang build` (`docs/compiler/cli.md`, раздел 3). Вручную
+Программу собирает `dpl build` (`docs/compiler/cli.md`, раздел 3). Вручную
 то же, со строгими флагами прохода `native`:
 
 ```sh
-dplang debug c prog.dpm > prog.c
+dpl debug c prog.dpm > prog.c
 cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
    -Wall -Wextra -Wpedantic -Werror -Wno-infinite-recursion \
    -I runtime/core prog.c runtime/core/dp_rt.c runtime/linux/dp_entry.c \
    -lm -pthread -o prog
 ```
 
-`dplang debug c` выходит с кодом 0 и печатает C в stdout. Код 1 — у
+`dpl debug c` выходит с кодом 0 и печатает C в stdout. Код 1 — у
 программы ошибки, диагностика та же, что у `check`. Код 3 — внутренняя
 ошибка: в IR есть конструкция, которую бэкенд не умеет перевести.
 
@@ -66,7 +66,7 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 | `-ffp-contract=off` | без слияния в FMA (`docs/policy/DETERMINISM.md`) |
 | `-fno-strict-aliasing` | запас: бэкенд не нарушает правил алиасинга, но если ошибётся, поведение останется предсказуемым |
 | `-Wall -Wextra -Wpedantic -Werror` | сгенерированный код — без предупреждений |
-| `-Wno-infinite-recursion` | рекурсия без выхода — законная программа DPlang: она остановится ловушкой «stack overflow», а gcc считает её ошибкой при `-Werror` |
+| `-Wno-infinite-recursion` | рекурсия без выхода — законная программа dpl: она остановится ловушкой «stack overflow», а gcc считает её ошибкой при `-Werror` |
 | `-lm -pthread` | `math.h`; поток `main` (`docs/runtime/README.md`) |
 
 В тестах к ним добавляются `-fsanitize=address,undefined
@@ -74,7 +74,7 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 
 ## 3. Типы
 
-| DPlang | C |
+| dpl | C |
 |---|---|
 | `bool` | `bool` |
 | `i8`, `i16`, `i32`, `i64`, `int` | `int8_t` … `int64_t`; `int` — `int64_t` |
@@ -88,7 +88,7 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 | `struct S` | поля `f_<имя>`; у пустой структуры — `char dp_empty` |
 | `enum E` | `{ uint32_t tag; union { struct { p0; p1; … } v_<Вариант>; … } u; }`; объединения нет, если данных нет ни у одного варианта |
 
-Имена в C строятся из имён DPlang: в них только латиница, цифры и `_`
+Имена в C строятся из имён dpl: в них только латиница, цифры и `_`
 (`lex.ident`). Имя модуля и имя в нём пишутся с длиной впереди: `a` и
 `__x` дают `1a3__x`, `a__` и `x` — `3a__1x`. Без длин оба дали бы одно
 имя C. Запись типа однозначна: по ней восстанавливается тип.
@@ -146,7 +146,7 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 ## 6. Функции, ловушки, вход
 
 - Функция — `static` с пометкой `DP_FN`: функция без вызовов — законная
-  программа DPlang и не даёт предупреждения. Блоки IR — метки `bbN:`
+  программа dpl и не даёт предупреждения. Блоки IR — метки `bbN:`
   (только у целей переходов), инструкция — блок `{ … }` со своими
   временными, перед ним `#line` с местом инструкции в исходнике.
 - Глубина вызовов (`trap.memory`): функция увеличивает `dp_depth` на
@@ -166,7 +166,7 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 Проход `native` в `tests/run.py` (`docs/compiler/README.md`, «Тесты»).
 Каждая программа набора `run`:
 
-1. переводится `dplang debug c`;
+1. переводится `dpl debug c`;
 2. собирается с runtime компилятором C (`$CC` или `cc`) с флагами
    раздела 2 и санитайзерами, если они есть;
 3. запускается в каталоге набора.

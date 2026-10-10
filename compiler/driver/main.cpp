@@ -1,4 +1,4 @@
-// Точка входа CLI `dplang` (Р15). Команды появляются по шагам v0.1
+// Точка входа CLI `dpl` (Р15). Команды появляются по шагам v0.1
 // (ROADMAP/IMPLEMENTATION.md); устройство — docs/compiler/cli.md.
 //
 // Коды выхода: 0 — успех; 1 — в программе есть ошибки (диагностика);
@@ -38,7 +38,7 @@ namespace {
 
 
 constexpr std::string_view kUsage =
-    "usage: dplang <command> [arguments]\n"
+    "usage: dpl <command> [arguments]\n"
     "\n"
     "commands:\n"
     "  build [--release] [-o <path>] <file.dpm>\n"
@@ -69,7 +69,7 @@ void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size
 int usage_error(std::string_view message) {
     put("error: ", stderr);
     put(message, stderr);
-    put("\nrun 'dplang help' to list the commands\n", stderr);
+    put("\nrun 'dpl help' to list the commands\n", stderr);
     return 2;
 }
 
@@ -266,20 +266,20 @@ int cmd_fmt(const std::vector<std::string_view>& args) {
     return code;
 }
 
-// Каталог стандартной библиотеки: $DPLANG_STDLIB или stdlib/ репозитория
-// рядом с каталогом сборки (build/compiler/dplang → stdlib).
+// Каталог стандартной библиотеки: $DPL_STDLIB или stdlib/ репозитория
+// рядом с каталогом сборки (build/compiler/dpl → stdlib).
 std::string stdlib_dir(const char* argv0) {
-    if (const char* env = std::getenv("DPLANG_STDLIB")) return env;
+    if (const char* env = std::getenv("DPL_STDLIB")) return env;
     std::string exe = argv0 ? argv0 : "";
     size_t slash = exe.find_last_of('/');
     std::string dir = slash == std::string::npos ? "." : exe.substr(0, slash);
     return dir + "/../../stdlib";
 }
 
-// Каталог runtime: $DPLANG_RUNTIME или runtime/ репозитория рядом с
-// каталогом сборки (build/compiler/dplang → runtime).
+// Каталог runtime: $DPL_RUNTIME или runtime/ репозитория рядом с
+// каталогом сборки (build/compiler/dpl → runtime).
 std::string runtime_dir(const char* argv0) {
-    if (const char* env = std::getenv("DPLANG_RUNTIME")) return env;
+    if (const char* env = std::getenv("DPL_RUNTIME")) return env;
     std::string exe = argv0 ? argv0 : "";
     size_t slash = exe.find_last_of('/');
     std::string dir = slash == std::string::npos ? "." : exe.substr(0, slash);
@@ -513,7 +513,7 @@ static int run_cli(int argc, char** argv) {
         return 0;
     }
     if (cmd == "--version") {
-        put("dplang ");
+        put("dpl ");
         put(dp::kCompilerVersion);
         put("\n");
         return 0;

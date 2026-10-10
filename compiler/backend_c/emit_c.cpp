@@ -55,7 +55,7 @@ bool is_composite(const Type* t) {
     }
 }
 
-// Имя DPlang в имени C — с длиной впереди: «a» и «__x» дают 1a3__x, а
+// Имя dpl в имени C — с длиной впереди: «a» и «__x» дают 1a3__x, а
 // «a__» и «x» — 3a__1x; без длины оба дали бы одно имя.
 std::string lp(const std::string& s) { return std::to_string(s.size()) + s; }
 
@@ -177,7 +177,7 @@ public:
     CResult run() {
         for (const Function& f : p_.fns) collect(f);
         std::string out;
-        out += "// Сгенерировано C-бэкендом DPlang — не править.\n";
+        out += "// Сгенерировано C-бэкендом dpl — не править.\n";
         out += "#include <math.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n#include \"dp_rt.h\"\n\n";
         out += strings();
         out += type_decls();

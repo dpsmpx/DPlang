@@ -89,7 +89,7 @@ class Gateway:
     def __init__(self, cfg, worker_path, describe, clock=time.monotonic, log=None):
         self.cfg = cfg
         self.argv = [worker_path, 'worker'] + config.worker_flags(cfg)
-        self.describe = describe  # {"api": "v1", "compiler": {...}} от `dplang worker --describe`
+        self.describe = describe  # {"api": "v1", "compiler": {...}} от `dpl worker --describe`
         self.limiter = RateLimiter(cfg['rate_limit'], clock)
         self.admission = Admission(cfg['queue'])
         self.connections = 0
@@ -176,7 +176,7 @@ class Gateway:
 
     def account(self, req, peer, reply, start):
         code = reply.code or ('ok' if reply.status < 300 else 'error')
-        self.metrics.inc('dplang_requests_total', code=code)
+        self.metrics.inc('dpl_requests_total', code=code)
         entry = {
             'event': 'request',
             'client': hashlib.sha256(self.salt + peer.encode()).hexdigest()[:16],
@@ -259,7 +259,7 @@ class Gateway:
         except QueueTimeout:
             return self.error('queue_timeout', 'the compiler is busy; retry later',
                               extra_headers=[('Retry-After', '1')])
-        self.metrics.inc('dplang_worker_runs_total', kind=outcome.kind)
+        self.metrics.inc('dpl_worker_runs_total', kind=outcome.kind)
         return self.from_worker(outcome)
 
     def from_worker(self, o):
@@ -301,9 +301,9 @@ class Gateway:
         try:
             req = await read_head(reader, self.cfg['http'])
             if req is not None and req.method == 'GET' and req.path == '/metrics':
-                gauges = {'dplang_queue_active': self.admission.active,
-                          'dplang_queue_waiting': self.admission.waiting,
-                          'dplang_connections': self.connections}
+                gauges = {'dpl_queue_active': self.admission.active,
+                          'dpl_queue_waiting': self.admission.waiting,
+                          'dpl_connections': self.connections}
                 writer.write(response(200, self.metrics.text(gauges),
                                       [('Content-Type', 'text/plain; version=0.0.4')]))
             elif req is not None:

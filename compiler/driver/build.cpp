@@ -1,4 +1,4 @@
-// `dplang build` и `dplang test`: сборка сгенерированного C с runtime
+// `dpl build` и `dpl test`: сборка сгенерированного C с runtime
 // (docs/compiler/cli.md; флаги — docs/compiler/backend_c.md, раздел 2).
 #include "driver/build.h"
 
@@ -52,7 +52,7 @@ std::string read_all(const std::string& path) {
     return out;
 }
 
-// Исполняет argv; stdout и stderr — в файлы (пусто — как у dplang).
+// Исполняет argv; stdout и stderr — в файлы (пусто — как у dpl).
 // Результат: код выхода, 128 + сигнал или -errno, если запустить нельзя.
 int spawn_wait(std::vector<std::string> argv, const std::string& out_file = "", const std::string& err_file = "") {
     std::vector<char*> cargv;
@@ -80,7 +80,7 @@ class TempDir {
 public:
     TempDir() {
         const char* tmpdir = std::getenv("TMPDIR");
-        std::string tmpl = std::string(tmpdir && *tmpdir ? tmpdir : "/tmp") + "/dplang-build-XXXXXX";
+        std::string tmpl = std::string(tmpdir && *tmpdir ? tmpdir : "/tmp") + "/dpl-build-XXXXXX";
         std::vector<char> d(tmpl.begin(), tmpl.end());
         d.push_back('\0');
         if (mkdtemp(d.data())) path = d.data();
@@ -111,7 +111,7 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
     std::string core = opt.runtime_dir + "/core";
     std::string platform = opt.runtime_dir + "/linux";
     if (!exists(core + "/dp_rt.h") || !exists(core + "/dp_rt.c") || !exists(platform + "/dp_entry.c")) {
-        say("error: the DPlang runtime is not found in '" + opt.runtime_dir + "'; set DPLANG_RUNTIME\n");
+        say("error: the dpl runtime is not found in '" + opt.runtime_dir + "'; set DPL_RUNTIME\n");
         return 2;
     }
     if (tmp.path.empty()) return 2;

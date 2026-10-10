@@ -1,4 +1,4 @@
-usage: dplang <command> [arguments]
+usage: dpl <command> [arguments]
 
 commands:
   build [--release] [-o <path>] <file.dpm>

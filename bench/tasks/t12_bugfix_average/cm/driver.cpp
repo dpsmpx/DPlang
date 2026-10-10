@@ -1,4 +1,4 @@
-// Драйвер t12 для переведённых вариантов DPlang (тот же вывод, что у ref.cpp).
+// Драйвер t12 для переведённых вариантов dpl (тот же вывод, что у ref.cpp).
 #include "cm_out.hpp"
 
 static void run(const std::vector<int32_t>& v, int32_t w) {

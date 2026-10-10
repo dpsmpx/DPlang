@@ -1,4 +1,4 @@
-// Драйвер t06 для переведённых вариантов DPlang (тот же вывод, что у ref.cpp).
+// Драйвер t06 для переведённых вариантов dpl (тот же вывод, что у ref.cpp).
 #include "cm_out.hpp"
 
 static void run(int32_t w, int32_t h, const std::vector<int32_t>& cells) {

@@ -1,4 +1,4 @@
-// `dplang build` и `dplang test`: нативная программа из C-кода бэкенда,
+// `dpl build` и `dpl test`: нативная программа из C-кода бэкенда,
 // runtime и компилятора C (docs/compiler/cli.md, «build» и «test»).
 #pragma once
 

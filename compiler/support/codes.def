@@ -1,6 +1,6 @@
 // Реестр кодов диагностики (Р15, Р47; docs/compiler/diagnostics.md).
 //
-// DP_CODE(код, краткое название, объяснение для `dplang explain`).
+// DP_CODE(код, краткое название, объяснение для `dpl explain`).
 // Тексты — по-английски (Р47). Код, однажды выпущенный, не меняет
 // смысла; удалённый код не переиспользуется. У каждого кода — хотя бы
 // один тест отказа (docs/policy/TESTING.md, правило 4).
@@ -21,8 +21,8 @@ DP_CODE(E0002, "nesting is too deep",
 // --- E01xx: лексика (docs/spec/core.md, раздел 1)
 
 DP_CODE(E0003, "cannot write file",
-        "The compiler could not write a file it was asked to produce: `dplang fmt` writes the formatted "
-        "source back, `dplang build` writes the program. Check that the directory exists and is writable. "
+        "The compiler could not write a file it was asked to produce: `dpl fmt` writes the formatted "
+        "source back, `dpl build` writes the program. Check that the directory exists and is writable. "
         "The file is left as it was.")
 DP_CODE(E0101, "invalid UTF-8",
         "Source files must be valid UTF-8 (spec: lex.source). The marked bytes do not form a valid UTF-8 "
@@ -109,7 +109,7 @@ DP_CODE(E0309, "private type in a public signature",
         "Other modules could not name that type. Mark the type `pub` or keep the declaration private.")
 DP_CODE(E0310, "name already defined",
         "A local variable, parameter, loop variable or pattern binding reuses a name that is already defined "
-        "in this function's enclosing scopes (spec: module.local). DPlang has no shadowing of local names; pick "
+        "in this function's enclosing scopes (spec: module.local). dpl has no shadowing of local names; pick "
         "another name.")
 DP_CODE(E0311, "module has no such item",
         "The module named before the dot has no declaration with this name (spec: module.lookup).")
@@ -132,7 +132,7 @@ DP_CODE(E0318, "duplicate member",
         "A struct has two fields, an enum two variants, a variant two fields or a function two parameters "
         "with the same name (spec: module.scope).")
 DP_CODE(E0319, "unknown attribute",
-        "DPlang v0.1 has two attributes, both before a function: `@det` marks deterministic code and "
+        "dpl v0.1 has two attributes, both before a function: `@det` marks deterministic code and "
         "`@test` marks a test (spec: syntax.item, module.test). Each is written once.")
 DP_CODE(E0320, "not a struct",
         "A struct literal `S { ... }` needs a struct or a record enum variant before the `{` "
@@ -149,7 +149,7 @@ DP_CODE(E0322, "missing or invalid `main`",
 
 DP_CODE(E0323, "invalid test function",
         "A function marked `@test` takes no parameters and returns nothing or `E!void` (`!void`): "
-        "`dplang test` calls it with no arguments and checks that it returns without a trap or an error "
+        "`dpl test` calls it with no arguments and checks that it returns without a trap or an error "
         "(spec: module.test).")
 DP_CODE(E0401, "mismatched types",
         "The value has a different type than the place it goes to (spec: type.conv). Only lossless "

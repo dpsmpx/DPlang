@@ -1,7 +1,7 @@
-# tomlcheck — первая программа на DPlang
+# tomlcheck — первая программа на dpl
 
 Проверка файлов подмножества TOML (`ROADMAP/IMPLEMENTATION.md`, v0.1,
-шаг 12). Программа целиком на DPlang. Она проверяет язык на настоящей
+шаг 12). Программа целиком на dpl. Она проверяет язык на настоящей
 задаче: модули, перечисления с данными, `match`, ошибки и `try`, строки,
 `List`, стандартная библиотека (`os`, Р51) и тесты `@test` (Р50).
 
@@ -39,7 +39,7 @@
 ## Запуск
 
 ```sh
-dplang build -o tomlcheck examples/tomlcheck/main.dpm
+dpl build -o tomlcheck examples/tomlcheck/main.dpm
 ./tomlcheck config.toml other.toml
 ```
 
@@ -57,11 +57,11 @@ dplang build -o tomlcheck examples/tomlcheck/main.dpm
 ## Проверки
 
 Проход `example` в `tests/run.py` (`docs/compiler/cli.md`, раздел 7):
-- `example/tomlcheck/test` — `dplang test main.dpm`: семь тестов разбора и
+- `example/tomlcheck/test` — `dpl test main.dpm`: семь тестов разбора и
   отчёта под ASan и UBSan, ожидаемое — `expected/test.out`;
 - `example/tomlcheck/run` — запуск эталонным интерпретатором на
   `samples/`, ожидаемое — `expected/run.out`;
-- `example/tomlcheck/build` — `dplang build --release` и тот же запуск:
+- `example/tomlcheck/build` — `dpl build --release` и тот же запуск:
   вывод нативной программы совпадает с интерпретатором;
 - `example/tomlcheck/fmt` — исходники в каноническом виде
-  (`dplang fmt --check`).
+  (`dpl fmt --check`).

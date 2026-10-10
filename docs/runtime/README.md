@@ -1,4 +1,4 @@
-# Runtime DPlang
+# Runtime dpl
 
 Описание устройства runtime v0.1 (`ROADMAP/IMPLEMENTATION.md`,
 шаги 8–9). Runtime — библиотека на C11, с которой собирается
@@ -102,7 +102,7 @@ threads, нет.
 
 Сгенерированный `main(argc, argv)` C запоминает аргументы
 (`dp_set_args`, для `os.args`) и вызывает `dp_run(dp_entry)`. У сборки
-тестов (`dplang test`, Р50) вход другой: `программа N` исполняет тест
+тестов (`dpl test`, Р50) вход другой: `программа N` исполняет тест
 номер N через `dp_run_test`, аргументов программы у теста нет, а ошибка
 пишется как `error: test failed with E.V`.
 

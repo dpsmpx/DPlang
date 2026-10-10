@@ -1,7 +1,7 @@
 """Проходы worker и sandbox исполнителя tests/run.py: онлайн-сервис (Р49).
 
 worker — золотые тесты контракта v1: тело запроса tests/worker/X.json
-идёт в stdin `dplang worker`, ожидаемое — X.out рядом (stdout, stderr,
+идёт в stdin `dpl worker`, ожидаемое — X.out рядом (stdout, stderr,
 код выхода — как у наборов run.py). Пределы — PROFILE ниже, маленькие,
 чтобы граница каждого была в тесте; X.args рядом заменяет их по одному
 (`--diagnostics=3`). Каждый тест прогоняется дважды: ответы совпадают
@@ -39,17 +39,17 @@ PROBE_FORBIDDEN = ['open', 'creat', 'socket', 'unix_socket', 'execve', 'fork', '
                    'mprotect_exec', 'ptrace', 'kill', 'getpid', 'x32']
 
 
-def worker_argv(dplang, overrides=()):
+def worker_argv(dpl, overrides=()):
     limits = dict(PROFILE)
     for o in overrides:
         name, _, value = o.lstrip('-').partition('=')
         if name not in limits:
             raise ValueError(f'неизвестный предел {o}')
         limits[name] = int(value)
-    return [dplang, 'worker'] + [f'--{k}={v}' for k, v in limits.items()]
+    return [dpl, 'worker'] + [f'--{k}={v}' for k, v in limits.items()]
 
 
-def run_worker(dplang, path):
+def run_worker(dpl, path):
     args_path = path[:-len('.json')] + '.args'
     overrides = []
     if os.path.exists(args_path):
@@ -58,7 +58,7 @@ def run_worker(dplang, path):
     with open(path, 'rb') as f:
         body = f.read()
     try:
-        r = subprocess.run(worker_argv(dplang, overrides), input=body, capture_output=True, timeout=TIMEOUT)
+        r = subprocess.run(worker_argv(dpl, overrides), input=body, capture_output=True, timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout.decode('utf-8', 'backslashreplace')
@@ -69,10 +69,10 @@ def run_worker(dplang, path):
     return out
 
 
-def worker_case(path, dplang, bless):
+def worker_case(path, dpl, bless):
     """Сбой или None. Ответ сверяется с X.out; два прогона совпадают."""
-    got = run_worker(dplang, path)
-    again = run_worker(dplang, path)
+    got = run_worker(dpl, path)
+    again = run_worker(dpl, path)
     if got != again:
         return 'два прогона дали разные ответы'
     exp_path = path[:-len('.json')] + '.out'

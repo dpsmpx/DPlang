@@ -1,4 +1,4 @@
-// t15: эталон на DPlang.
+// t15: эталон на dpl.
 const BOUND: i64 = 1000000000000000
 
 const MAX_DEPTH: i32 = 8

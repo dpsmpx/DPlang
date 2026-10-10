@@ -1,4 +1,4 @@
-// t17: эталон на DPlang.
+// t17: эталон на dpl.
 pub enum Align {
     Left
     Right

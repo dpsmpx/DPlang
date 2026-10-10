@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:dplang:diagnostics:1",
-  "title": "DPlang diagnostics, version 1",
-  "description": "Output of `dplang check --format=json` (docs/compiler/cli.md). Diagnostics are sorted by file, position and code.",
+  "$id": "urn:dpl:diagnostics:1",
+  "title": "dpl diagnostics, version 1",
+  "description": "Output of `dpl check --format=json` (docs/compiler/cli.md). Diagnostics are sorted by file, position and code.",
   "type": "object",
   "required": ["diagnostics"],
   "additionalProperties": false,

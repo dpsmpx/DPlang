@@ -1,4 +1,4 @@
-/* Runtime DPlang: ядро (docs/runtime/README.md).
+/* Runtime dpl: ядро (docs/runtime/README.md).
  *
  * Контракт с C-бэкендом (compiler/backend_c/): сгенерированный C
  * подключает этот заголовок и линкуется с dp_rt.c. Всё здесь — C11 с
@@ -21,12 +21,12 @@
  * округляется до своего типа. Промежуточная точность сверх типа (x87)
  * дала бы другие биты — такая цель не поддерживается. */
 #if !defined(FLT_EVAL_METHOD) || FLT_EVAL_METHOD != 0
-#error "DPlang runtime requires FLT_EVAL_METHOD == 0"
+#error "dpl runtime requires FLT_EVAL_METHOD == 0"
 #endif
 
 /* Вспомогательные функции сгенерированного кода: на тип и на список их
  * много, и не все нужны программе — без предупреждений о неиспользуемых.
- * DP_FN — функция программы: DPlang не запрещает функцию без вызовов. */
+ * DP_FN — функция программы: dpl не запрещает функцию без вызовов. */
 #if defined(__GNUC__) || defined(__clang__)
 #define DP_INLINE static inline __attribute__((unused))
 #define DP_FN static __attribute__((unused))
@@ -65,7 +65,7 @@ extern int64_t dp_depth;
 /* --- целые: проверенная арифметика (trap.int)
  *
  * Знаковые типы считаются в int64_t, беззнаковые — в uint64_t; bits —
- * ширина типа DPlang, tname — его имя в сообщении ('i32', 'int').
+ * ширина типа dpl, tname — его имя в сообщении ('i32', 'int').
  * Результат лежит в диапазоне типа, и сгенерированный код приводит его
  * к своему типу без потерь. */
 

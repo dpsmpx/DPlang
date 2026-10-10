@@ -121,7 +121,7 @@ def load(path):
 
 
 def worker_flags(cfg):
-    """Аргументы `dplang worker` из профиля: --request-bytes=262144 …"""
+    """Аргументы `dpl worker` из профиля: --request-bytes=262144 …"""
     flags = []
     for section in WORKER_SECTIONS:
         for k, v in cfg[section].items():

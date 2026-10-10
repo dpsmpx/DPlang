@@ -1,4 +1,4 @@
-// Драйвер t10 для переведённых вариантов DPlang (тот же вывод, что у ref.cpp).
+// Драйвер t10 для переведённых вариантов dpl (тот же вывод, что у ref.cpp).
 #include "cm_out.hpp"
 
 static void hex(const std::vector<uint8_t>& b) {

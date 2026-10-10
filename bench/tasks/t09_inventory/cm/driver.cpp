@@ -1,4 +1,4 @@
-// Драйвер t09 для переведённых вариантов DPlang (тот же вывод, что у ref.cpp).
+// Драйвер t09 для переведённых вариантов dpl (тот же вывод, что у ref.cpp).
 #include "cm_out.hpp"
 
 static void add(Inventory& inv, int32_t item, int32_t count) {

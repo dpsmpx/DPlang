@@ -1,10 +1,10 @@
 """Запуск шлюза онлайн-компилятора.
 
     python3 service/gateway.py --config service/config/online-v1.json \\
-        --worker build/release/dplang --listen 127.0.0.1:8080 \\
+        --worker build/release/dpl --listen 127.0.0.1:8080 \\
         [--metrics-listen 127.0.0.1:9100]
 
-При запуске шлюз спрашивает у worker-а версии (`dplang worker
+При запуске шлюз спрашивает у worker-а версии (`dpl worker
 --describe`) и проверяет профиль; ошибка — код 2 и сообщение. Журнал —
 строки JSON в stderr; первая — адреса, на которых шлюз слушает (порт 0 —
 любой свободный, его назовёт журнал). SIGTERM и SIGINT — остановка.
@@ -69,9 +69,9 @@ async def serve(args, cfg, info):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog='gateway', description='DPlang online compiler gateway (API v1)')
+    ap = argparse.ArgumentParser(prog='gateway', description='dpl online compiler gateway (API v1)')
     ap.add_argument('--config', required=True, help='service profile, e.g. service/config/online-v1.json')
-    ap.add_argument('--worker', required=True, help='dplang binary of the release build')
+    ap.add_argument('--worker', required=True, help='dpl binary of the release build')
     ap.add_argument('--listen', required=True, type=parse_address, help='HOST:PORT of the API')
     ap.add_argument('--metrics-listen', type=parse_address, help='HOST:PORT of /metrics (keep it private)')
     args = ap.parse_args(argv)
