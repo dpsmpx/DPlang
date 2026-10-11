@@ -115,7 +115,8 @@ SUITES = {
     'ir': ('.dpm', DPL, lambda name, path: ['debug', 'ir', name]),
     'run': ('.dpm', DPL, lambda name, path: ['debug', 'run', name] + program_args(path)),
     'fmt': ('.dpm', DPL, lambda name, path: ['fmt', name]),
-    'test': ('.dpm', DPL, lambda name, path: ['test', name]),
+    # X.args рядом — флаги команды (например, --timeout).
+    'test': ('.dpm', DPL, lambda name, path: ['test'] + program_args(path) + [name]),
     # Функции C (Р59): программа собирается `dpl build` и запускается —
     # интерпретатор C не вызывает (build_pass_one).
     'ffi': ('.dpm', DPL, lambda name, path: ['check', name]),

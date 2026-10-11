@@ -38,6 +38,9 @@ const Target* find_target(std::string_view name);
 // Имена целей через запятую — для сообщений.
 std::string target_names();
 
+// Предел времени на тест у `dpl test` по умолчанию, секунды (--timeout).
+constexpr uint32_t kDefaultTestTimeout = 60;
+
 struct BuildOptions {
     std::string output;       // путь программы (build)
     Profile profile = Profile::Debug;
@@ -46,6 +49,7 @@ struct BuildOptions {
     std::string cc;           // компилятор C цели (main.cpp: cc_for)
     std::string runner;       // запуск тестов цели; пусто — напрямую
     std::vector<std::string> links;  // библиотеки C программы (`@link`, Р59)
+    uint32_t test_timeout = kDefaultTestTimeout;  // test: предел секунд на тест; 0 — без предела
 };
 
 // Компилятор C для цели: у хоста — $CC или cc; у других — $DPL_CROSS_CC,

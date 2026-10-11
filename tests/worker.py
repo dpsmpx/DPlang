@@ -4,7 +4,8 @@ worker — золотые тесты контракта v1: тело запро�
 идёт в stdin `dpl worker`, ожидаемое — X.out рядом (stdout, stderr,
 код выхода — как у наборов run.py). Пределы — PROFILE ниже, маленькие,
 чтобы граница каждого была в тесте; X.args рядом заменяет их по одному
-(`--diagnostics=3`). Каждый тест прогоняется дважды: ответы совпадают
+(`--diagnostics=3`); `--test-burn=cpu|memory` в X.args — worker тратит
+ресурс до предела процесса. Каждый тест прогоняется дважды: ответы совпадают
 байт в байт (детерминизм, docs/service/README.md, «Контракт»).
 
 sandbox — пробник песочницы dpsandbox_probe: разрешённое `ok` работает,
@@ -41,12 +42,16 @@ PROBE_FORBIDDEN = ['open', 'creat', 'socket', 'unix_socket', 'execve', 'fork', '
 
 def worker_argv(dpl, overrides=()):
     limits = dict(PROFILE)
+    extra = []
     for o in overrides:
         name, _, value = o.lstrip('-').partition('=')
+        if name == 'test-burn':  # не предел: worker тратит CPU или память (worker.cpp)
+            extra.append(o)
+            continue
         if name not in limits:
             raise ValueError(f'неизвестный предел {o}')
         limits[name] = int(value)
-    return [dpl, 'worker'] + [f'--{k}={v}' for k, v in limits.items()]
+    return [dpl, 'worker'] + [f'--{k}={v}' for k, v in limits.items()] + extra
 
 
 def run_worker(dpl, path):

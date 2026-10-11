@@ -58,12 +58,20 @@ def _strings(n):
     return 'fn main() {\n' + ''.join(f'    println("s{i}")\n' for i in range(n)) + '}\n'
 
 
+def _try_chain(n):
+    """f0 → try f1 → … → fail: вывод типа ошибки (было по проходу на функцию)."""
+    fns = ''.join(f'fn f{i}() !i32 {{\n    return try f{i + 1}()\n}}\n\n' for i in range(n - 1))
+    return (f'enum E {{\n    X\n}}\n\n{fns}fn f{n - 1}() !i32 {{\n    fail .X\n}}\n\n'
+            'fn main() {\n    _ = f0()\n}\n')
+
+
 # Масштаб: имя → (исходник, команда, ожидаемый код, предел секунд под ASan).
 SCALE = {
     'chain': (_chain(20000), ['check'], 0, 30),
     'diamond': (_diamond(64), ['check'], 0, 10),
     'cycle': (_cycle(5000), ['check'], 1, 30),
     'strings': (_strings(40000), ['debug', 'ir'], 0, 5),
+    'try_chain': (_try_chain(8000), ['check'], 0, 10),
 }
 
 # Команды на наибольшем принятом n: все проходы компилятора.

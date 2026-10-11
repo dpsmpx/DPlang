@@ -5,7 +5,8 @@
 заменёнными значениями — и шлёт сырые запросы через сокет. Worker —
 настоящий `dpl worker` сборки Release или поддельный (FAKES ниже):
 падение, зависание с потомком, поток вывода, мусор, медленный — для
-очереди и предела конкурентности. Эти тесты — приёмка будущего шлюза на
+очереди и предела конкурентности. `burn:cpu` и `burn:memory` — настоящий
+worker с `--test-burn`: он сам ставит пределы и упирается в них. Эти тесты — приёмка будущего шлюза на
 dpl (docs/service/README.md, «Шлюз»).
 
 Время в тестах — только с большим запасом: таймаут 300 мс проверяется
@@ -95,7 +96,12 @@ class Gateway:
         cfg_path = os.path.join(tmp, 'profile.json')
         with open(cfg_path, 'w', encoding='utf-8') as f:
             json.dump(cfg, f)
-        worker_path = release_dpl if worker == 'real' else self.fake(worker)
+        if worker == 'real':
+            worker_path = release_dpl
+        elif worker.startswith('burn:'):
+            worker_path = self.burn(release_dpl, worker[len('burn:'):])
+        else:
+            worker_path = self.fake(worker)
         if cwd:  # путь к worker-у — относительный, от cwd шлюза
             worker_path = os.path.relpath(worker_path, cwd)
         self.log_path = os.path.join(tmp, 'gateway.log')
@@ -116,6 +122,16 @@ class Gateway:
         if self.port is None:
             self.stop()
             raise RuntimeError('шлюз не запустился: ' + self.log_text()[-500:])
+
+    def burn(self, release_dpl, what):
+        """Настоящий worker с --test-burn=what (кроме --describe при запуске шлюза)."""
+        path = os.path.join(self.tmp, f'burn_{what}')
+        dpl = os.path.abspath(release_dpl)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(f'#!/bin/sh\nif [ "$2" = "--describe" ]; then exec "{dpl}" "$@"; fi\n'
+                    f'exec "{dpl}" "$@" --test-burn={what}\n')
+        os.chmod(path, 0o700)
+        return path
 
     def fake(self, name):
         base, _, arg = name.partition(':')
@@ -322,11 +338,11 @@ def t_limit_nesting(gw):
 
 
 def t_memory_bomb(gw):
-    """Удвоение строки в константах: worker упирается в RLIMIT_AS (TODO.md).
-    Время до предела — в основном обнуление страниц ядром, оно растёт с
-    пределом памяти: здесь предел 256 МБ и запас CPU."""
-    src = 'const C0: str = "ab"\n' + ''.join(f'const C{i}: str = C{i - 1} + C{i - 1}\n' for i in range(1, 48))
-    r = gw.post(request(src))
+    """Worker тратит память (--test-burn=memory) и упирается в RLIMIT_AS:
+    ответ — limit_exceeded. Время до предела — в основном обнуление
+    страниц ядром, оно растёт с пределом памяти: здесь 256 МБ и запас CPU.
+    Бомбы-константы больше нет: их держит бюджет ([decl.const])."""
+    r = gw.post(request('fn main() {\n}\n'))
     if err := expect(r, 422, 'limit_exceeded'):
         return err
     lim = body_json(r[2])['error'].get('limit', {})
@@ -334,10 +350,10 @@ def t_memory_bomb(gw):
 
 
 def t_cpu_bomb(gw):
-    """«Ромб» из структур — экспоненциальная проверка E0423 (TODO.md):
-    worker убивает предел CPU, шлюз отвечает compile_timeout."""
-    src = ''.join(f'struct S{i} {{ a: S{i + 1}, b: S{i + 1} }}\n' for i in range(60)) + 'struct S60 { x: i32 }\n'
-    r = gw.post(request(src))
+    """Worker тратит CPU (--test-burn=cpu): его убивает предел CPU, шлюз
+    отвечает compile_timeout. «Ромб» из структур больше не бомба: E0423
+    проверяется за линейное время."""
+    r = gw.post(request('fn main() {\n}\n'))
     if err := expect(r, 422, 'compile_timeout'):
         return err
     lim = body_json(r[2])['error'].get('limit', {})
@@ -718,8 +734,8 @@ GATEWAY_CASES = {
     'unsupported_language': (t_unsupported_language, 'real', {}),
     'limit_source': (t_limit_source, 'real', {}),
     'limit_nesting': (t_limit_nesting, 'real', {}),
-    'memory_bomb': (t_memory_bomb, 'real', {'worker__memory_bytes': 256 << 20, 'worker__cpu_seconds': 5}),
-    'cpu_bomb': (t_cpu_bomb, 'real', {'worker__cpu_seconds': 1}),
+    'memory_bomb': (t_memory_bomb, 'burn:memory', {'worker__memory_bytes': 256 << 20, 'worker__cpu_seconds': 5}),
+    'cpu_bomb': (t_cpu_bomb, 'burn:cpu', {'worker__cpu_seconds': 1}),
     'info': (t_info, 'real', {}),
     'unavailable': (t_unavailable, 'real', {'available': False}),
     'security_headers': (t_security_headers, 'real', {}),

@@ -1,8 +1,8 @@
 // Вывод типа ошибки непубличных функций `!T` (Р41; docs/spec/core.md,
 // раздел 7). Источники ошибок функции — её `fail` и `try`; каждый даёт
 // множество возможных перечислений, тип ошибки — их общее единственное.
-// Функции, вызывающие друг друга через `try`, решаются итерациями до
-// неподвижной точки.
+// Функции, вызывающие друг друга через `try`, решаются по готовности:
+// функция — после всех, кого она ждёт; цикл `try` не решается.
 #include <map>
 #include <set>
 
@@ -240,43 +240,49 @@ void infer_errors(Program& prog, ModuleInfo& m, Diagnostics& diags) {
         fns.push_back(s->fn);
         src[s->fn] = std::move(c.sources);
     }
+    // Функция решается, когда известны все функции её `try` (ждёт их);
+    // решённая будит ждущих её. Каждая функция считается один раз, когда
+    // ждать больше нечего: время линейно по числу источников.
     std::map<const FnDef*, const EnumDef*> known;
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        for (FnDef* f : fns) {
-            if (known.count(f)) continue;
-            EnumSet acc;
-            bool first = true, waiting = false, unknown = false;
-            for (const Source& s : src[f]) {
-                EnumSet cur = s.enums;
-                if (s.unknown) {
-                    unknown = true;
-                    continue;
-                }
-                if (s.callee) {
-                    auto k = known.find(s.callee);
-                    if (k == known.end()) {
-                        waiting = true;
-                        continue;
-                    }
-                    cur = {k->second};
-                }
-                if (first) {
-                    acc = cur;
-                    first = false;
-                } else {
-                    EnumSet both;
-                    for (const EnumDef* e : acc) {
-                        if (cur.count(e)) both.insert(e);
-                    }
-                    acc = both;
-                }
+    std::map<const FnDef*, std::vector<FnDef*>> users;  // функция → ждущие её
+    std::map<const FnDef*, size_t> pending;              // сколько разных функций ещё ждёт
+    std::vector<FnDef*> ready;
+    for (FnDef* f : fns) {
+        std::set<const FnDef*> callees;
+        for (const Source& s : src[f]) {
+            if (s.callee && !s.unknown) callees.insert(s.callee);
+        }
+        for (const FnDef* c : callees) users[c].push_back(f);
+        pending[f] = callees.size();
+        if (callees.empty()) ready.push_back(f);
+    }
+    for (size_t next = 0; next < ready.size(); next++) {
+        FnDef* f = ready[next];
+        EnumSet acc;
+        bool first = true, unknown = false;
+        for (const Source& s : src[f]) {
+            EnumSet cur = s.enums;
+            if (s.unknown) {
+                unknown = true;
+                continue;
             }
-            if (waiting || unknown || first || acc.size() != 1) continue;
-            known[f] = *acc.begin();
-            f->ret = prog.types.result(prog.types.enum_type(*acc.begin()), f->ret->elem);
-            changed = true;
+            if (s.callee) cur = {known.at(s.callee)};
+            if (first) {
+                acc = cur;
+                first = false;
+            } else {
+                EnumSet both;
+                for (const EnumDef* e : acc) {
+                    if (cur.count(e)) both.insert(e);
+                }
+                acc = both;
+            }
+        }
+        if (unknown || first || acc.size() != 1) continue;
+        known[f] = *acc.begin();
+        f->ret = prog.types.result(prog.types.enum_type(*acc.begin()), f->ret->elem);
+        for (FnDef* u : users[f]) {
+            if (--pending[u] == 0) ready.push_back(u);
         }
     }
     for (FnDef* f : fns) {

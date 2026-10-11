@@ -108,6 +108,14 @@
 `dpl worker --describe` печатает версии: шлюз спрашивает их при
 запуске.
 
+**Проверка пределов.** `--test-burn=cpu` или `--test-burn=memory` — только
+для тестов: после песочницы worker вместо компиляции тратит CPU или
+память, пока его не остановит `RLIMIT_CPU` или `RLIMIT_AS`. Известных
+входов, которые сделали бы это сами, в компиляторе нет: вычисления
+констант ограничены бюджетом (`docs/spec/core.md`, [decl.const]),
+проверка E0423 линейна. Шлюз флаг не передаёт; тесты подставляют его
+обёрткой над `build/release/dpl` (`worker/limit_*`, `service/*_bomb`).
+
 **Сборка.** Worker — только сборка Release без санитайзеров
 (`build/release/dpl`): ASan делает системные вызовы вне списка
 песочницы и резервирует адресов больше любого `RLIMIT_AS`. В сборке с
@@ -202,7 +210,7 @@ python3 -I service/gateway.py --config service/config/online-v1.json \
 | `limits.nesting` | 256 | человеку хватает; стек на ней — 3 МБ |
 | `limits.diagnostics` | 100 | больше на странице не читают |
 | `limits.output_bytes` | 262 144 | 100 сообщений — около 30 КБ, запас |
-| `worker.memory_bytes` | 268 435 456 | `RLIMIT_AS`: нужно 26 МБ, запас около 10×; «бомба памяти» упирается в предел за 0,35 с CPU |
+| `worker.memory_bytes` | 268 435 456 | `RLIMIT_AS`: нужно 26 МБ, запас около 10×; worker с `--test-burn=memory` упирается в предел за 0,13 с |
 | `worker.cpu_seconds` | 2 | худший законный вход — 0,5–0,6 с CPU, запас 3× |
 | `worker.stack_bytes` | 16 777 216 | наименьший рабочий стек — 3 МБ, запас 5× |
 | `run.timeout_ms` | 4 000 | вдвое больше предела CPU: ожидание ввода-вывода и нагрузка |
@@ -222,8 +230,8 @@ python3 -I service/gateway.py --config service/config/online-v1.json \
 | угроза | мера | проверка |
 |---|---|---|
 | исходник, роняющий компилятор переполнением стека | предел вложенности E0002 (`nesting`), стек потока, предел строк | `limits`, `worker/limit_nesting*`, `service/limit_nesting` |
-| исходник, съедающий память (константы без бюджета, `TODO.md`) | `RLIMIT_AS`, готовый ответ `limit_exceeded` | `worker/limit_memory`, `service/memory_bomb` |
-| исходник, вешающий компилятор (E0423 на «ромбе», `TODO.md`) | `RLIMIT_CPU`, таймаут по часам, `SIGKILL` группы | `service/cpu_bomb`, `service/worker_hang` |
+| исходник, съедающий память | бюджет вычисления констант ([decl.const]); `RLIMIT_AS`, готовый ответ `limit_exceeded` | `fail/const_budget`; `worker/limit_memory`, `service/memory_bomb` (`--test-burn`) |
+| исходник, вешающий компилятор | линейные проверки графа объявлений; `RLIMIT_CPU`, таймаут по часам, `SIGKILL` группы | `limits/scale/*`; `worker/limit_cpu`, `service/cpu_bomb` (`--test-burn`), `service/worker_hang` |
 | уязвимость компилятора, исполнение кода | seccomp: нет сети, файлов, процессов, `exec`, исполняемой памяти | `sandbox` (13 действий), `service/worker_env` |
 | огромный вход | `request_bytes` до чтения тела (413), `source_bytes`, `lines`, `identifier_bytes` (422) | `service/payload_too_large`, `worker/limit_*` |
 | огромный ответ | `diagnostics`, `output_bytes` в worker-е; `stdout_bytes` в шлюзе | `worker/truncated_*`, `service/worker_flood` |
@@ -262,9 +270,12 @@ x86-64) — `bench/results/service-2026-10-07/summary.md`:
   программа — 3 мс, программа у предела строк (1981 строка) — 8 мс, с
   46 ошибками — столько же; пиковая память — 15 МБ везде;
 - **худшие законные входы у предела строк:** цепочка 2000 структур —
-  0,5 с CPU (проверка E0423 около n³, `TODO.md`), цепочка констант —
+  0,5 с CPU (проверка E0423 около n³), цепочка констант —
   14 мс, цепочка функций с `try` — 21 мс; наибольшая принятая
-  вложенность каждой конструкции прохода `limits` — до 5 мс;
+  вложенность каждой конструкции прохода `limits` — до 5 мс. С 11
+  октября E0423 и вывод типа ошибки линейны: та же цепочка структур —
+  15 мс, 8000 функций с `try` — 60 мс (`build/release`); пределы профиля
+  остаются с запасом, перезамер — при пересмотре профиля;
 - **наименьшие рабочие пределы:** стек — 3 МБ, `RLIMIT_AS` — 26 МБ при
   стеке 16 МБ;
 - **шлюз по HTTP**, программа у предела: 98, 209 и 306 запросов/с при
