@@ -10,6 +10,8 @@
 // ловушки срабатывают в том же порядке, что у интерпретатора.
 #include "backend_c/emit_c.h"
 
+#include "support/c_names.h"
+
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -1590,9 +1592,11 @@ std::string Emitter::header() {
             fn_defs += cfn_typedef(t, n, hct);
         }
     };
+    // Имя dpl — слово C: с `_` в конце (`int` → `int_`).
+    auto c_word = [](const std::string& s) { return is_c_keyword(s) ? s + "_" : s; };
     auto struct_name = [&](const Type* t) {
         const sema::StructDef* d = t->sdef;
-        return name_count[d->name] > 1 ? d->module->name + "_" + d->name : d->name;
+        return c_word(name_count[d->name] > 1 ? d->module->name + "_" + d->name : d->name);
     };
     hct = [&](const Type* t) -> std::string {
         if (t->kind == TK::Struct) return "struct " + struct_name(t);
@@ -1619,13 +1623,17 @@ std::string Emitter::header() {
     if (!fn_defs.empty()) out += fn_defs + "\n";
     for (const Type* t : structs) {
         out += "struct " + struct_name(t) + " {\n";
-        for (const sema::FieldDef& fd : t->sdef->fields) out += "    " + hct(fd.type) + " " + fd.name + ";\n";
+        for (const sema::FieldDef& fd : t->sdef->fields) out += "    " + hct(fd.type) + " " + c_word(fd.name) + ";\n";
         out += "};\n\n";
     }
     for (const Function* f : exported) {
         out += c_result_type(f->ret, hct) + " " + f->c_name + "(";
+        std::set<std::string> used;
         for (uint32_t i = 0; i < f->param_count; i++) {
-            out += (i ? ", " : "") + c_param_type(mode_of(f->locals[i]), f->locals[i].type, hct) + " " + f->locals[i].name;
+            // `_` и повтор имени C не примет: тогда — a<номер>.
+            std::string pn = c_word(f->locals[i].name);
+            if (pn.empty() || pn == "_" || !used.insert(pn).second) pn = "a" + std::to_string(i);
+            out += (i ? ", " : "") + c_param_type(mode_of(f->locals[i]), f->locals[i].type, hct) + " " + pn;
         }
         out += std::string(f->param_count == 0 ? "void" : "") + ");\n";
     }

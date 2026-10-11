@@ -7,6 +7,7 @@
 
 #include "sema/builtins.h"
 #include "sema/resolve.h"
+#include "support/c_names.h"
 #include "sema/sema.h"
 #include "syntax/ast_dump.h"
 
@@ -474,12 +475,6 @@ private:
     // совпадают с `extern fn`, словами C (их не объявить в заголовке),
     // `main` и символами runtime (`dp_…`).
     void export_symbols() {
-        static const char* const kKeywords[] = {
-            "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum",
-            "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return",
-            "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void",
-            "volatile", "while", "alignas", "alignof", "bool", "true", "false", "nullptr", "static_assert",
-            "thread_local", "typeof", "constexpr"};
         std::map<std::string, const FnDef*> taken;
         for (FnDef& f : prog_.fns) {
             if (f.node && f.is_extern) taken.emplace(f.name, &f);
@@ -487,8 +482,7 @@ private:
         for (FnDef& f : prog_.fns) {
             if (!f.node || !f.exported) continue;
             const std::string& s = f.export_name;
-            bool keyword = false;
-            for (const char* k : kKeywords) keyword = keyword || s == k;
+            bool keyword = is_c_keyword(s);
             if (keyword || s == "main" || s.rfind("dp_", 0) == 0) {
                 diags_.error(Code::E0327, f.export_span,
                              "C symbol '" + s + "' is reserved" +
