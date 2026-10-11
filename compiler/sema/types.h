@@ -9,6 +9,12 @@
 #include <map>
 #include <string>
 #include <tuple>
+#include <utility>
+#include <vector>
+
+namespace dp::ast {
+enum class ParamMode : uint8_t;
+}
 
 namespace dp::sema {
 
@@ -31,6 +37,16 @@ enum class TK : uint8_t {
     Struct,
     Enum,
     Handle,    // `extern type` — непрозрачный дескриптор C (Р59); hdef
+    CFn,       // `extern fn(T) R` — указатель на функцию C (Р61); sig
+};
+
+struct Type;
+
+// Сигнатура типа `extern fn(...)`: режимы и типы параметров, результат
+// (Void — без результата). Имена параметров в тип не входят (Р61).
+struct CFnSig {
+    std::vector<std::pair<ast::ParamMode, const Type*>> params;
+    const Type* ret = nullptr;
 };
 
 struct Type {
@@ -41,6 +57,7 @@ struct Type {
     const StructDef* sdef = nullptr;
     const EnumDef* edef = nullptr;
     const HandleDef* hdef = nullptr;
+    const CFnSig* sig = nullptr;  // CFn
 };
 
 class TypeTable {
@@ -56,6 +73,7 @@ public:
     const Type* struct_type(const StructDef* d) { return make(TK::Struct, nullptr, nullptr, d, nullptr); }
     const Type* enum_type(const EnumDef* d) { return make(TK::Enum, nullptr, nullptr, nullptr, d); }
     const Type* handle(const HandleDef* d) { return make(TK::Handle, nullptr, nullptr, nullptr, nullptr, nullptr, d); }
+    const Type* cfn(const CFnSig& sig);
 
 private:
     const Type* make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e,
@@ -64,6 +82,8 @@ private:
     const Type* prims_[static_cast<size_t>(TK::Str) + 1] = {};
     std::map<std::tuple<int, const void*, const void*, const void*, const void*, const void*, const void*>, const Type*>
         interned_;
+    std::deque<CFnSig> sigs_;
+    std::map<std::pair<std::vector<std::pair<int, const Type*>>, const Type*>, const Type*> cfns_;
 };
 
 struct ModuleInfo;
@@ -86,6 +106,12 @@ bool linear_in_container(const Type* t);
 // Значение типа переходит границу C как есть (Р59): целое, плавающее,
 // bool, дескриптор `extern type`, структура `@c` из таких.
 bool c_value_type(const Type* t);
+
+// Тип параметра обратного вызова `extern fn(...)` и функции `@export`
+// (Р61): по значению — вид в C, str, ?H, ?extern fn; по ссылке — вид в C.
+bool export_param(const Type* t, ast::ParamMode mode);
+// Результат там же: нет результата, вид в C, ?H, ?extern fn.
+bool export_result(const Type* t);
 
 bool is_integer(const Type* t);
 bool is_signed(const Type* t);

@@ -211,6 +211,12 @@ private:
                 push(K::Type, r->value, d);
                 break;
             }
+            case TypeKind::Fn: {
+                auto* f = static_cast<const FnType*>(t);
+                for (const FnType::Param& p : f->params) push(K::Type, p.type, d);
+                push(K::Type, f->ret, d);
+                break;
+            }
             case TypeKind::Error: break;
         }
     }

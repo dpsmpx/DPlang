@@ -133,9 +133,11 @@ DP_CODE(E0318, "duplicate member",
         "A struct has two fields, an enum two variants, a variant two fields or a function two parameters "
         "with the same name (spec: module.scope).")
 DP_CODE(E0319, "unknown attribute",
-        "dpl has two attributes: `@det` marks deterministic code — a function or, before an import, the "
-        "imported module — and `@test` marks a test function (spec: syntax.item, module.det, module.test). "
-        "Each is written once.")
+        "dpl has these attributes: `@det` marks deterministic code — a function or, before an import, the "
+        "imported module; `@test` marks a test function; `@link(\"lib\")` names the C library of an "
+        "`extern fn`; `@export` or `@export(\"name\")` makes a dpl function callable from C; `@c` and "
+        "`@linear` mark a struct (spec: syntax.item, module.det, module.test, section 11). Each is "
+        "written once, only where it applies.")
 DP_CODE(E0320, "not a struct",
         "A struct literal `S { ... }` needs a struct or a record enum variant before the `{` "
         "(spec: expr.struct).")
@@ -158,7 +160,16 @@ DP_CODE(E0326, "type cannot cross to C",
         "ffi.types): integers, floats, `bool`, an `extern type` handle and `@c` structs of these; a `str` "
         "(passed as a zero-terminated copy, returned as a UTF-8 copy), `[]T` (a pointer to the elements), "
         "`&T` and `&mut T` (pointers), `&mut List[T]` (a pointer to writable elements) and `?H` for a "
-        "handle that may be NULL. A `@c` struct holds only types with a C form.")
+        "handle that may be NULL. A `@c` struct holds only types with a C form. A function C calls - an "
+        "`@export fn` or a callback type `extern fn(T) R` (decision R61, spec: ffi.export, ffi.fn) - takes "
+        "values with a C form, `str`, `?H`, `?extern fn(...)` and `&T`, `&mut T` of a C form, and returns a "
+        "value with a C form, `?H`, `?extern fn(...)` or nothing: C has no `E!T`, and a `str` it would have "
+        "to free.")
+DP_CODE(E0327, "C symbol is taken",
+        "An `@export fn` (decision R61) is a global C symbol: by default the function name, or the name "
+        "in `@export(\"name\")`. Two exported functions of one program cannot share a symbol, nor can an "
+        "exported function and an `extern fn`. C keywords (the C header could not declare them), `main` "
+        "and names starting with `dp_` (the dpl runtime) are reserved (spec: ffi.export).")
 DP_CODE(E0401, "mismatched types",
         "The value has a different type than the place it goes to (spec: type.conv). Only lossless "
         "conversions are implicit: a narrower integer to a wider one that holds all its values, `f32` to "

@@ -441,6 +441,20 @@ dp_str dp_str_from_c(const char* p, const char* fn, const char* loc) {
     return s;
 }
 
+dp_str dp_str_from_c_arg(const char* p, const char* param, const char* fn, const char* loc) {
+    if (!p) dp_trapf(loc, "C passed NULL instead of a string as '%s' of '%s'", param, fn);
+    size_t n = strlen(p);
+    if (!dp_utf8_valid((const uint8_t*)p, (int64_t)n)) {
+        dp_trapf(loc, "C passed a string that is not UTF-8 as '%s' of '%s'", param, fn);
+    }
+    dp_str s = {0};
+    if (n == 0) return s;
+    s.ptr = (uint8_t*)dp_alloc((int64_t)n, 1, loc);
+    memcpy(s.ptr, p, n);
+    s.len = (int64_t)n;
+    return s;
+}
+
 int32_t dp_read_file(dp_str path, dp_str* out, const char* loc) {
     /* Путь — строка C: байт 0 внутри пути не называет никакого файла. */
     if (path.len > 0 && memchr(path.ptr, 0, (size_t)path.len)) return 1;

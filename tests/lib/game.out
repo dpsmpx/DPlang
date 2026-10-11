@@ -1,0 +1,11 @@
+5
+25
+hello, world
+5
+6 8
+42
+1 0
+3 -1
+--- stderr ---
+main.dpm:57:14: trap: division by zero
+[exit 101]

@@ -42,7 +42,7 @@ bool has_effect(const Expr* e) {
     switch (e->kind) {
         case ExprKind::Call: {
             auto* c = static_cast<const CallExpr*>(e);
-            if (c->call == CallKind::Fn) return true;
+            if (c->call == CallKind::Fn || c->call == CallKind::Ptr) return true;
             if (c->call == CallKind::Method && c->method != Method::Contains && c->method < Method::Trim) return true;
             if (auto* f = as<const FieldExpr>(c->callee); f && has_effect(f->object)) return true;
             return any_effect(c->args);
@@ -107,6 +107,10 @@ public:
             f_.is_extern = true;
             f_.c_name = def.name;
             return;
+        }
+        if (def.exported) {  // функцию зовёт C (Р61)
+            f_.exported = true;
+            f_.c_name = def.export_name;
         }
         if (def.ret->kind != TK::Void) ret_ = add_local(def.ret, LocalKind::Temp, "");
         cur_ = new_block();
@@ -485,12 +489,14 @@ private:
             case ExprKind::Name: {
                 auto* n = static_cast<const NameExpr*>(e);
                 if (n->res.kind == ResKind::Const) return const_operand(n->res.cn->value, n->res.cn->type, e->span);
+                if (n->res.kind == ResKind::Fn) return fn_operand(n->res.fn, e->type);
                 bool fresh = false;
                 return copy(lvalue(e, fresh));
             }
             case ExprKind::Field: {
                 auto* f = static_cast<const FieldExpr*>(e);
                 if (f->res.kind == ResKind::Const) return const_operand(f->res.cn->value, f->res.cn->type, e->span);
+                if (f->res.kind == ResKind::Fn) return fn_operand(f->res.fn, e->type);
                 if (f->res.kind == ResKind::Variant) {
                     Rvalue rv = make(RvKind::MakeVariant, e->type);
                     rv.variant = f->res.index;
@@ -533,6 +539,15 @@ private:
             case ExprKind::Ref: case ExprKind::Error: break;
         }
         return cbool(false);  // проверка типов не пропускает сюда
+    }
+
+    // Функция `@export` как значение (Р61): константа-адрес.
+    Operand fn_operand(const sema::FnDef* def, const Type* t) {
+        Operand o;
+        o.c.kind = Const::Kind::Fn;
+        o.c.fn = fns_.at(def);
+        o.c.type = t;
+        return o;
     }
 
     Operand const_operand(const sema::ConstValue& v, const Type* t, Span span) {
@@ -730,9 +745,14 @@ private:
     bool call(const CallExpr* c, Rvalue& rv) {
         std::vector<const Expr*> args(c->args.begin(), c->args.end());
         switch (c->call) {
-            case CallKind::Fn: {
-                rv = make(RvKind::Call, c->fn->ret);
-                rv.fn = fns_.at(c->fn);
+            case CallKind::Fn: case CallKind::Ptr: {
+                if (c->call == CallKind::Fn) {
+                    rv = make(RvKind::Call, c->fn->ret);
+                    rv.fn = fns_.at(c->fn);
+                } else {  // через указатель (Р61): значение вызываемого — первым
+                    rv = make(RvKind::CallPtr, c->callee->type->sig->ret);
+                    rv.ops.push_back(rd(expr(c->callee)));
+                }
                 for (size_t i = 0; i < args.size(); i++) {
                     Arg a;
                     if (auto* r = as<const RefExpr>(args[i])) {

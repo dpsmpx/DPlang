@@ -131,7 +131,7 @@ bool Checker::literal_like(const Expr* e) const {
 bool Checker::type_prop(const Type* t, bool ord, size_t& low) {
     switch (t->kind) {
         case TK::Error: return true;
-        case TK::Void: case TK::Result: case TK::Map: return false;  // Р54: отображения не сравниваются
+        case TK::Void: case TK::Result: case TK::Map: case TK::CFn: return false;  // указатель C (Р61) не сравнивается  // Р54: отображения не сравниваются
         case TK::Bool: case TK::Str: return true;
         case TK::List: case TK::Slice: return type_prop(t->elem, ord, low);
         case TK::Optional: return !ord && type_prop(t->elem, ord, low);  // ?T не упорядочен
@@ -282,9 +282,7 @@ const Type* Checker::name_expr(NameExpr* n) {
             if (c.module == &m_) const_value(c);
             return c.type ? c.type : err();
         }
-        case ResKind::Fn:
-            error(Code::E0405, n->span, "function '" + n->name + "' is not a value; call it: " + n->name + "(...)");
-            return err();
+        case ResKind::Fn: return fn_value(*n->res.fn, n->span);
         case ResKind::BuiltinFn:
             error(Code::E0405, n->span, "built-in '" + n->name + "' is not a value; call it: " + n->name + "(...)");
             return err();
@@ -316,9 +314,7 @@ const Type* Checker::field_expr(FieldExpr* f, const Type* /*hint*/) {
             if (c.module == &m_) const_value(c);
             return c.type ? c.type : err();
         }
-        case ResKind::Fn:
-            error(Code::E0405, f->span, "function '" + f->name + "' is not a value; call it");
-            return err();
+        case ResKind::Fn: return fn_value(*f->res.fn, f->span);
         case ResKind::Struct: case ResKind::Enum:
             error(Code::E0405, f->span, "type '" + f->name + "' is not a value");
             return err();
@@ -510,7 +506,10 @@ const Type* Checker::call(CallExpr* c, const Type* hint) {
             case ResKind::None:
                 for (Expr* a : c->args) infer(a, nullptr);
                 return err();
-            case ResKind::Local: case ResKind::Const: case ResKind::Enum: case ResKind::Module:
+            case ResKind::Local:
+                if (n->res.local->type->kind == TK::CFn) return ptr_call(c, *n->res.local);
+                [[fallthrough]];
+            case ResKind::Const: case ResKind::Enum: case ResKind::Module:
                 error(Code::E0409, c->callee->span, "'" + n->name + "' is not a function");
                 for (Expr* a : c->args) infer(a, nullptr);
                 return err();
@@ -578,9 +577,51 @@ const Type* Checker::user_call(CallExpr* c, const FnDef& f) {
         for (Expr* a : c->args) infer(a, nullptr);
         return f.ret ? f.ret : err();
     }
+    check_args(c, f.params);
+    ref_args(c, f.params);
+    return f.ret ? f.ret : err();
+}
+
+const Type* Checker::fn_value(const FnDef& f, Span span) {
+    if (!f.exported) {
+        error(Code::E0405, span, "function '" + f.name + "' is not a value; call it: " + f.name +
+                                     "(...), or mark it '@export' to pass it to C");
+        return err();
+    }
+    CFnSig sig;
+    for (const ParamDef& p : f.params) sig.params.emplace_back(p.mode, p.type);
+    sig.ret = f.ret ? f.ret : prim(TK::Void);
+    return tt_.cfn(sig);
+}
+
+// Вызов через указатель на функцию (Р61): это вызов C — не из класса D.
+const Type* Checker::ptr_call(CallExpr* c, const Local& callee) {
+    c->call = CallKind::Ptr;
+    infer(c->callee, nullptr);  // чтение переменной: тип и определённая инициализация
+    const CFnSig& sig = *callee.type->sig;
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, c->span, "'" + callee.name + "' calls C through a pointer; '" + fn_->name +
+                                        "' is class D and cannot call C");
+    }
+    if (c->args.size() != sig.params.size()) {
+        error(Code::E0407, c->span, "'" + callee.name + "' takes " + std::to_string(sig.params.size()) + " argument" +
+                                        (sig.params.size() == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
+        for (Expr* a : c->args) infer(a, nullptr);
+        return sig.ret;
+    }
+    std::vector<ParamDef> params;
+    for (size_t i = 0; i < sig.params.size(); i++) {
+        params.push_back(ParamDef{"#" + std::to_string(i + 1), sig.params[i].first, sig.params[i].second, callee.span});
+    }
+    check_args(c, params);
+    ref_args(c, params);
+    return sig.ret;
+}
+
+void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
     for (size_t i = 0; i < c->args.size(); i++) {
         Expr* a = c->args[i];
-        const ParamDef& p = f.params[i];
+        const ParamDef& p = params[i];
         auto* r = as<RefExpr>(a);
         if (p.mode == ParamMode::Value) {
             if (r) {
@@ -617,8 +658,6 @@ const Type* Checker::user_call(CallExpr* c, const FnDef& f) {
             error(Code::E0401, r->operand->span, "expected '" + tn(p.type) + "', found '" + tn(t) + "'");
         }
     }
-    ref_args(c, f.params);
-    return f.ret ? f.ret : err();
 }
 
 const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {

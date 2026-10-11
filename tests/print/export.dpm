@@ -1,0 +1,36 @@
+// spec: ffi.export ffi.fn
+// Печать @export и типа extern fn(...) в параметре, результате, поле,
+// переменной и ?T (Р61).
+extern type Ctx
+
+extern fn qsort(base: &mut List[i32], n: u64, size: u64, cmp: extern fn(&i32, &i32) i32)
+
+@c
+struct Hooks {
+    on_tick: extern fn(Ctx, f32)
+    on_key: extern fn(Ctx, i32) bool
+}
+
+@export("dpl_cmp")
+fn cmp(a: &i32, b: &i32) i32 {
+    return a - b
+}
+
+@export
+fn pick(hooks: Hooks, fallback: ?extern fn(Ctx, f32)) ?extern fn(Ctx, f32) {
+    let f: ?extern fn(Ctx, f32) = hooks.on_tick
+    if let g = fallback {
+        return g
+    }
+    return f
+}
+
+fn main() {
+    let c: extern fn(&i32, &mut i32) = noop
+    var xs: List[i32] = [3, 1, 2]
+    qsort(&mut xs, 3, 4, cmp)
+}
+
+@export
+fn noop(a: &i32, b: &mut i32) {
+}

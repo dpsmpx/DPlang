@@ -31,6 +31,19 @@ const Type* TypeTable::make(TK k, const Type* elem, const Type* err, const Struc
     return &t;
 }
 
+const Type* TypeTable::cfn(const CFnSig& sig) {
+    std::vector<std::pair<int, const Type*>> params;
+    for (const auto& [mode, t] : sig.params) params.emplace_back(static_cast<int>(mode), t);
+    auto key = std::make_pair(std::move(params), sig.ret);
+    auto it = cfns_.find(key);
+    if (it != cfns_.end()) return it->second;
+    Type& t = store_.emplace_back();
+    t.kind = TK::CFn;
+    t.sig = &sigs_.emplace_back(sig);
+    cfns_.emplace(std::move(key), &t);
+    return &t;
+}
+
 std::string type_name(const Type* t, const ModuleInfo* from) {
     if (!t) return "?";
     switch (t->kind) {
@@ -60,6 +73,16 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
             return from && t->edef->module != from ? t->edef->module->name + "." + t->edef->name : t->edef->name;
         case TK::Handle:
             return from && t->hdef->module != from ? t->hdef->module->name + "." + t->hdef->name : t->hdef->name;
+        case TK::CFn: {
+            std::string s = "extern fn(";
+            for (size_t i = 0; i < t->sig->params.size(); i++) {
+                const auto& [mode, p] = t->sig->params[i];
+                s += std::string(i ? ", " : "") +
+                     (mode == ast::ParamMode::Ref ? "&" : mode == ast::ParamMode::Mut ? "&mut " : "") +
+                     type_name(p, from);
+            }
+            return s + ")" + (t->sig->ret->kind == TK::Void ? "" : " " + type_name(t->sig->ret, from));
+        }
     }
     return "?";
 }
@@ -92,12 +115,28 @@ bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::
 
 bool c_value_type(const Type* t) {
     if (!t) return false;
-    if (is_numeric(t) || t->kind == TK::Bool || t->kind == TK::Handle) return true;
+    if (is_numeric(t) || t->kind == TK::Bool || t->kind == TK::Handle || t->kind == TK::CFn) return true;
     if (t->kind != TK::Struct || !t->sdef->c) return false;
     for (const FieldDef& f : t->sdef->fields) {
         if (!c_value_type(f.type)) return false;
     }
     return true;
+}
+
+// ?H и ?extern fn — указатель или NULL.
+static bool nullable_pointer(const Type* t) {
+    return t->kind == TK::Optional && (t->elem->kind == TK::Handle || t->elem->kind == TK::CFn);
+}
+
+bool export_param(const Type* t, ast::ParamMode mode) {
+    if (!t || t->kind == TK::Error) return true;
+    if (mode != ast::ParamMode::Value) return c_value_type(t);
+    return c_value_type(t) || t->kind == TK::Str || nullable_pointer(t);
+}
+
+bool export_result(const Type* t) {
+    if (!t || t->kind == TK::Error || t->kind == TK::Void) return true;
+    return c_value_type(t) || nullable_pointer(t);
 }
 
 bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }

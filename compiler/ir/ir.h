@@ -64,11 +64,13 @@ struct Place {
 // --- операнды
 
 struct Const {
-    enum class Kind : uint8_t { Int, Float, Bool, Str } kind = Kind::Int;
+    // Fn — адрес функции `@export` (fn) как значение `extern fn(...)` (Р61).
+    enum class Kind : uint8_t { Int, Float, Bool, Str, Fn } kind = Kind::Int;
     uint64_t i = 0;  // целое: биты значения, знаковое — с расширением знака
     double f = 0;    // f32 — уже округлено до f32
     bool b = false;
     uint32_t str = 0;  // номер строки в таблице программы
+    uint32_t fn = 0;   // Fn — номер функции в программе
     const Type* type = nullptr;
 };
 
@@ -137,6 +139,7 @@ enum class RvKind : uint8_t {
     MakeErr,      // ops[0] — значение перечисления ошибок
     SliceOf,      // place[ops[0]..ops[1]], без ops[1] — до конца; у List и среза — срез, у str — копия строки
     Call,         // fn; args
+    CallPtr,      // ops[0] — значение `extern fn(...)`; args (Р61)
     Intrinsic,    // intrinsic; ops; у изменяющего метода List — place
     Tag,          // номер варианта значения place (u32)
     IsSome,       // у place (?T) есть значение
@@ -212,7 +215,8 @@ struct Function {
     std::vector<Block> blocks;  // вход — блок 0
     bool det = false;           // класс D (Р55): после операций с плавающими — canon (Р56)
     bool is_extern = false;     // функция C (Р59): блоков нет, имя символа — c_name
-    std::string c_name;         // символ C у extern
+    std::string c_name;         // символ C у extern и у экспортируемой
+    bool exported = false;      // `@export` (Р61): у C-бэкенда — обёртка под символом c_name
 };
 
 struct Program {

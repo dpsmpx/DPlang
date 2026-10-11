@@ -83,6 +83,9 @@ struct FnDef {
     bool test = false;  // @test (Р50)
     bool is_extern = false;  // `extern fn` — функция C (Р59): тела нет
     std::string link;        // `@link("lib")` — библиотека C; пусто — библиотека C по умолчанию
+    bool exported = false;   // `@export` (Р61): функцию зовёт C под именем export_name
+    std::string export_name;
+    Span export_span;        // атрибут `@export` — для сообщений о символе
     Span span;
     std::vector<ParamDef> params;
     const Type* ret = nullptr;  // Void — без результата
@@ -174,6 +177,15 @@ struct Program {
     std::deque<ConstDef> consts;
     std::deque<HandleDef> handles;
     std::deque<Local> locals;
+    // `extern fn(...)` в сигнатурах проверяется, когда известны `@c` всех
+    // структур (collect); до того — в очереди.
+    bool c_layout_known = false;
+    struct PendingCFn {
+        const ast::FnType* node;
+        const Type* type;
+        const ModuleInfo* module;
+    };
+    std::vector<PendingCFn> pending_cfn;
 };
 
 }  // namespace dp::sema

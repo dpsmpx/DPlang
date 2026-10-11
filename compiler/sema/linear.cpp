@@ -525,6 +525,15 @@ private:
                 }
                 return;
             }
+            case CallKind::Ptr: {  // через `extern fn(...)` (Р61): режимы — по сигнатуре типа
+                expr(c->callee, Use::Read);
+                const sema::CFnSig* sig = c->callee->type && c->callee->type->kind == TK::CFn ? c->callee->type->sig : nullptr;
+                for (size_t i = 0; i < c->args.size(); i++) {
+                    bool by_ref = sig && i < sig->params.size() && sig->params[i].first != ParamMode::Value;
+                    expr(c->args[i], by_ref ? Use::Borrow : Use::Consume);
+                }
+                return;
+            }
             case CallKind::Method:
                 if (f) expr(f->object, Use::Borrow);
                 for (Expr* a : c->args) expr(a, Use::Consume);

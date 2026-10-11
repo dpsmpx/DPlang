@@ -370,6 +370,16 @@ std::string type_text(const Type* t) {
             auto* r = static_cast<const ResultType*>(t);
             return (r->error ? type_text(r->error) : "") + "!" + type_text(r->value);
         }
+        case TypeKind::Fn: {
+            auto* f = static_cast<const FnType*>(t);
+            std::string s = "extern fn(";
+            for (size_t i = 0; i < f->params.size(); i++) {
+                const FnType::Param& p = f->params[i];
+                s += std::string(i ? ", " : "") + (p.mode == ParamMode::Ref ? "&" : p.mode == ParamMode::Mut ? "&mut " : "") +
+                     type_text(p.type);
+            }
+            return s + ")" + (f->ret ? " " + type_text(f->ret) : "");
+        }
         case TypeKind::Error: return "<error>";
     }
     return "?";
