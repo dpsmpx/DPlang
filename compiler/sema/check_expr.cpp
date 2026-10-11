@@ -155,7 +155,7 @@ bool Checker::type_prop(const Type* t, bool ord, size_t& low) {
         if (r && !type_prop(p, ord, my_low)) r = false;
     };
     if (t->kind == TK::Struct) {
-        if (t->sdef->linear) r = false;  // Р60: линейные значения не сравниваются
+        if (t->sdef->linear || t->sdef->union_) r = false;  // Р60: линейные; Р62: у объединения — байты
         for (const FieldDef& f : t->sdef->fields) part(f.type);
     } else {
         for (const VariantDef& v : t->edef->variants) {
@@ -979,6 +979,10 @@ const Type* Checker::struct_lit(StructLitExpr* s) {
     if (p && p->kind == ResKind::Struct) {
         s->res = *p;
         field_inits(s->fields, p->st->fields, true, s->span, "struct '" + p->st->name + "'", p->st->c);
+        if (p->st->union_ && s->fields.size() > 1) {  // Р62: у объединения — одно поле
+            error(Code::E0413, s->fields[1].name_span, "a '@union' literal sets one field; '" + p->st->name +
+                                                           "' shares the memory of its fields");
+        }
         return tt_.struct_type(p->st);
     }
     if (p && p->kind == ResKind::Variant) {

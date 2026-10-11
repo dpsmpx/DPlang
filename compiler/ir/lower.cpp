@@ -720,6 +720,12 @@ private:
         }
         Rvalue rv = make(RvKind::MakeStruct, s->type);
         rv.ops = field_values(s->fields, s->res.st->fields, s->span);
+        if (s->res.st->union_ && !s->fields.empty()) {  // Р62: заданное поле объединения — его номер + 1
+            const auto& fs = s->res.st->fields;
+            for (size_t k = 0; k < fs.size(); k++) {
+                if (fs[k].name == s->fields[0].name) rv.variant = static_cast<uint32_t>(k + 1);
+            }
+        }
         return to_temp(std::move(rv), s->span);
     }
 

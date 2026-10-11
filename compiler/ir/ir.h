@@ -160,7 +160,7 @@ struct Rvalue {
     UnKind un = UnKind::Neg;
     CastKind cast = CastKind::Widen;
     Intrinsic intrinsic = Intrinsic::Len;
-    uint32_t variant = 0;
+    uint32_t variant = 0;  // MakeVariant — номер варианта; MakeStruct объединения — заданное поле + 1, 0 — нет
     uint32_t fn = 0;  // номер функции в программе
     std::vector<Operand> ops;
     std::vector<Arg> args;

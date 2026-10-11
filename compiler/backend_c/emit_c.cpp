@@ -389,7 +389,10 @@ private:
 
     std::string type_decls() {
         std::string out;
-        for (const Type* t : types_) out += "typedef struct " + ctype(t) + " " + ctype(t) + ";\n";
+        for (const Type* t : types_) {
+            const char* tag = t->kind == TK::Struct && t->sdef->union_ ? "union " : "struct ";
+            out += "typedef " + std::string(tag) + ctype(t) + " " + ctype(t) + ";\n";
+        }
         // Указатель на функцию C (Р61): типы параметров здесь могут быть неполными.
         for (const Type* t : cfns_) out += cfn_typedef(t, ctype(t), ctype);
         out += "\n";
@@ -407,7 +410,7 @@ private:
 
     std::string type_def(const Type* t) {
         std::string n = ctype(t);
-        std::string out = "struct " + n + " {\n";
+        std::string out = (t->kind == TK::Struct && t->sdef->union_ ? "union " : "struct ") + n + " {\n";
         switch (t->kind) {
             case TK::List: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n    int64_t cap;\n"; break;
             case TK::Map:  // Р54: пары в порядке вставки и хэш-индекс позиций (позиция + 1, 0 — пусто)
@@ -1262,8 +1265,13 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             std::vector<std::string> ops;
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
             std::string r = fresh("dp_r");
-            line(ctype(rv.type) + " " + r + " = {0};");
+            line(ctype(rv.type) + " " + r + ";");
+            line("memset(&" + r + ", 0, sizeof " + r + ");");
             const sema::StructDef* sd = rv.type->sdef;
+            if (sd->union_) {  // Р62: только заданное поле; остальное — нули
+                if (rv.variant > 0) line(r + ".f_" + sd->fields[rv.variant - 1].name + " = " + ops[rv.variant - 1] + ";");
+                return r;
+            }
             for (size_t k = 0; k < ops.size() && k < sd->fields.size(); k++) {
                 line(r + ".f_" + sd->fields[k].name + " = " + ops[k] + ";");
             }
@@ -1601,7 +1609,7 @@ std::string Emitter::header() {
     std::function<void(const Type*)> need = [&](const Type* t) {
         if (!t || seen.count(t)) return;
         seen.insert(t);
-        if (t->kind == TK::Optional) need(t->elem);
+        if (t->kind == TK::Optional || t->kind == TK::Array) need(t->elem);
         if (t->kind == TK::Struct) {
             for (const sema::FieldDef& fd : t->sdef->fields) need(fd.type);
             structs.push_back(t);
@@ -1622,7 +1630,7 @@ std::string Emitter::header() {
         return c_word(name_count[d->name] > 1 ? d->module->name + "_" + d->name : d->name);
     };
     hct = [&](const Type* t) -> std::string {
-        if (t->kind == TK::Struct) return "struct " + struct_name(t);
+        if (t->kind == TK::Struct) return (t->sdef->union_ ? "union " : "struct ") + struct_name(t);
         if (t->kind == TK::CFn) return fn_names.count(t) ? fn_names[t] : "void*";
         return ctype(t);  // числа, bool, дескриптор — void*
     };
@@ -1641,12 +1649,20 @@ std::string Emitter::header() {
     out += "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n";
     // Сначала имена структур: их видят типы указателей на функции, затем
     // эти типы: их видят поля структур.
-    for (const Type* t : structs) out += "struct " + struct_name(t) + ";\n";
+    for (const Type* t : structs) out += hct(t) + ";\n";
     if (!structs.empty()) out += "\n";
     if (!fn_defs.empty()) out += fn_defs + "\n";
     for (const Type* t : structs) {
-        out += "struct " + struct_name(t) + " {\n";
-        for (const sema::FieldDef& fd : t->sdef->fields) out += "    " + hct(fd.type) + " " + c_word(fd.name) + ";\n";
+        out += hct(t) + " {\n";
+        for (const sema::FieldDef& fd : t->sdef->fields) {
+            const Type* ft = fd.type;
+            std::string dims;  // массив C (Р62): T name[N][M]
+            while (ft->kind == TK::Array) {
+                dims += "[" + std::to_string(ft->len) + "]";
+                ft = ft->elem;
+            }
+            out += "    " + hct(ft) + " " + c_word(fd.name) + dims + ";\n";
+        }
         out += "};\n\n";
     }
     for (const Function* f : exported) {

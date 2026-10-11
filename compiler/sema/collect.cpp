@@ -342,15 +342,20 @@ private:
 
     void struct_sig(Resolver& r, StructDef& d) {
         for (const Attr& a : d.node->attrs) {
-            bool* flag = a.name == "c" ? &d.c : a.name == "linear" ? &d.linear : nullptr;
+            bool* flag = a.name == "c" ? &d.c : a.name == "linear" ? &d.linear : a.name == "union" ? &d.union_ : nullptr;
             if (!flag) {
-                diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "' for a struct; use '@c' or '@linear'");
+                diags_.error(Code::E0319, a.span,
+                             "unknown attribute '@" + a.name + "' for a struct; use '@c', '@union' or '@linear'");
             } else if (*flag) {
                 diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' is given twice");
             } else if (a.has_arg) {
                 diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' takes no argument");
             }
             if (flag) *flag = true;
+        }
+        if (d.union_) {  // Р62: объединение C — раскладка C
+            if (d.linear) diags_.error(Code::E0319, d.span, "a '@union' cannot be '@linear': its fields share memory");
+            d.c = true;
         }
         fields(r, d.node->fields, d.fields, d.pub, "struct", d.c);
     }
@@ -468,6 +473,13 @@ private:
     void c_struct(const StructDef& d) {
         for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
             const FieldDef& f = d.fields[i];
+            if (d.union_ && f.type && f.type->kind != TK::Error && !c_value_type(f.type)) {
+                diags_.error(Code::E0326, d.node->fields[i].type->span,
+                             "field '" + f.name + "' of '@union' '" + d.name + "' has type '" + type_name(f.type, d.module) +
+                                 "'; a union holds only data: numbers, bool, handles, '[N]T' and '@c' structs of them "
+                                 "(spec: ffi.struct)");
+                continue;
+            }
             if (f.type && f.type->kind != TK::Error && !c_field_type(f.type)) {
                 diags_.error(Code::E0326, d.node->fields[i].type->span,
                              "field '" + f.name + "' of '@c' struct '" + d.name + "' has type '" + type_name(f.type, d.module) +

@@ -33,6 +33,7 @@ struct StructDef {
     bool pub = false;
     bool c = false;       // `@c`: раскладка C (Р59)
     bool linear = false;  // `@linear`: значение закрывается ровно один раз (Р57)
+    bool union_ = false;  // `@union`: поля делят память, раскладка C (Р62); c тоже true
     Span span;
     std::vector<FieldDef> fields;
     const ast::StructItem* node = nullptr;
