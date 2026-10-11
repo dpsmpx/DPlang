@@ -1,5 +1,10 @@
 // Объявления модулей: области имён, типы в сигнатурах, правила сводок
 // (docs/spec/core.md, разделы 3 и 4).
+#include <algorithm>
+#include <cstdint>
+#include <map>
+#include <vector>
+
 #include "sema/builtins.h"
 #include "sema/resolve.h"
 #include "sema/sema.h"
@@ -25,20 +30,7 @@ public:
             if (f.node && f.is_extern) c_signature(f);
         }
         linear_placement();
-        for (StructDef& d : prog_.structs) {
-            if (!d.node) continue;
-            std::vector<const void*> path;
-            if (contains(prog_.types.struct_type(&d), &d, path, true)) {
-                diags_.error(Code::E0423, d.span, "struct '" + d.name + "' contains itself; keep the nested values in a List");
-            }
-        }
-        for (EnumDef& d : prog_.enums) {
-            if (!d.node) continue;
-            std::vector<const void*> path;
-            if (contains(prog_.types.enum_type(&d), &d, path, true)) {
-                diags_.error(Code::E0423, d.span, "enum '" + d.name + "' contains itself; keep the nested values in a List");
-            }
-        }
+        self_containment();
     }
 
 private:
@@ -173,33 +165,103 @@ private:
         }
     }
 
-    // Значение типа t хранит внутри себя (не через List) значение типа
-    // объявления self (E0423). path — объявления на пути, против зацикливания.
-    bool contains(const sema::Type* t, const void* self, std::vector<const void*>& path, bool top) {
-        if (!t) return false;
+    // Объявления, которые значение типа t хранит прямо внутри себя: через
+    // ?T и E!T, но не через List, Map и срез — те хранят элементы отдельно.
+    void direct(const sema::Type* t, std::vector<const void*>& out) {
+        if (!t) return;
         switch (t->kind) {
-            case TK::Optional: return contains(t->elem, self, path, false);
-            case TK::Result: return contains(t->elem, self, path, false) || contains(t->err, self, path, false);
-            case TK::Struct: case TK::Enum: {
-                const void* d = t->kind == TK::Struct ? static_cast<const void*>(t->sdef) : t->edef;
-                if (!top && d == self) return true;
-                for (const void* p : path) {
-                    if (p == d) return false;
+            case TK::Optional: direct(t->elem, out); break;
+            case TK::Result:
+                direct(t->elem, out);
+                direct(t->err, out);
+                break;
+            case TK::Struct: out.push_back(t->sdef); break;
+            case TK::Enum: out.push_back(t->edef); break;
+            default: break;
+        }
+    }
+
+    // E0423: структура или перечисление содержит себя, если лежит на цикле
+    // графа «хранит прямо внутри» (type.recursive). Компоненты сильной
+    // связности — алгоритм Тарьяна с явным стеком: O(объявлений + рёбер),
+    // без рекурсии по длине цепочки и без повторных обходов на «ромбах».
+    void self_containment() {
+        std::vector<const void*> nodes;
+        std::map<const void*, size_t> id;
+        for (StructDef& d : prog_.structs) {
+            if (d.node) id.emplace(&d, nodes.size()), nodes.push_back(&d);
+        }
+        size_t structs = nodes.size();
+        for (EnumDef& d : prog_.enums) {
+            if (d.node) id.emplace(&d, nodes.size()), nodes.push_back(&d);
+        }
+        std::vector<std::vector<size_t>> edges(nodes.size());
+        for (size_t v = 0; v < nodes.size(); v++) {
+            std::vector<const void*> out;
+            if (v < structs) {
+                for (const FieldDef& f : static_cast<const StructDef*>(nodes[v])->fields) direct(f.type, out);
+            } else {
+                for (const VariantDef& vd : static_cast<const EnumDef*>(nodes[v])->variants) {
+                    for (const sema::Type* x : vd.types) direct(x, out);
+                    for (const FieldDef& f : vd.fields) direct(f.type, out);
                 }
-                path.push_back(d);
-                bool found = false;
-                if (t->kind == TK::Struct) {
-                    for (const FieldDef& f : t->sdef->fields) found = found || contains(f.type, self, path, false);
-                } else {
-                    for (const VariantDef& v : t->edef->variants) {
-                        for (const sema::Type* x : v.types) found = found || contains(x, self, path, false);
-                        for (const FieldDef& f : v.fields) found = found || contains(f.type, self, path, false);
-                    }
-                }
-                path.pop_back();
-                return found;
             }
-            default: return false;  // List, Map и срез хранят элементы отдельно
+            for (const void* d : out) {
+                auto it = id.find(d);
+                if (it != id.end()) edges[v].push_back(it->second);
+            }
+        }
+        const size_t none = SIZE_MAX;
+        std::vector<size_t> index(nodes.size(), none), low(nodes.size(), 0), stack;
+        std::vector<char> on_stack(nodes.size(), 0), cyclic(nodes.size(), 0);
+        size_t counter = 0;
+        struct Frame {
+            size_t v, edge;
+        };
+        for (size_t root = 0; root < nodes.size(); root++) {
+            if (index[root] != none) continue;
+            std::vector<Frame> calls{{root, 0}};
+            index[root] = low[root] = counter++;
+            stack.push_back(root);
+            on_stack[root] = 1;
+            while (!calls.empty()) {
+                size_t v = calls.back().v;
+                if (calls.back().edge < edges[v].size()) {
+                    size_t w = edges[v][calls.back().edge++];
+                    if (w == v) cyclic[v] = 1;  // хранит себя прямо
+                    if (index[w] == none) {
+                        index[w] = low[w] = counter++;
+                        stack.push_back(w);
+                        on_stack[w] = 1;
+                        calls.push_back({w, 0});
+                    } else if (on_stack[w]) {
+                        low[v] = std::min(low[v], index[w]);
+                    }
+                    continue;
+                }
+                if (low[v] == index[v]) {  // корень компоненты
+                    size_t first = stack.size();
+                    while (stack[first - 1] != v) first--;
+                    bool loop = stack.size() - (first - 1) > 1;
+                    for (size_t k = first - 1; k < stack.size(); k++) {
+                        on_stack[stack[k]] = 0;
+                        if (loop) cyclic[stack[k]] = 1;
+                    }
+                    stack.resize(first - 1);
+                }
+                calls.pop_back();
+                if (!calls.empty()) low[calls.back().v] = std::min(low[calls.back().v], low[v]);
+            }
+        }
+        for (size_t v = 0; v < nodes.size(); v++) {
+            if (!cyclic[v]) continue;
+            if (v < structs) {
+                auto* d = static_cast<const StructDef*>(nodes[v]);
+                diags_.error(Code::E0423, d->span, "struct '" + d->name + "' contains itself; keep the nested values in a List");
+            } else {
+                auto* d = static_cast<const EnumDef*>(nodes[v]);
+                diags_.error(Code::E0423, d->span, "enum '" + d->name + "' contains itself; keep the nested values in a List");
+            }
         }
     }
 

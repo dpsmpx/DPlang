@@ -361,7 +361,11 @@ std::string type_text(const Type* t) {
             return s;
         }
         case TypeKind::Slice: return "[]" + type_text(static_cast<const SliceType*>(t)->elem);
-        case TypeKind::Optional: return "?" + type_text(static_cast<const OptionalType*>(t)->inner);
+        case TypeKind::Optional: {
+            // `? ?T`, а не `??T`: `??` — оператор, повторный разбор его не примет.
+            const Type* inner = static_cast<const OptionalType*>(t)->inner;
+            return (inner && inner->kind == TypeKind::Optional ? "? " : "?") + type_text(inner);
+        }
         case TypeKind::Result: {
             auto* r = static_cast<const ResultType*>(t);
             return (r->error ? type_text(r->error) : "") + "!" + type_text(r->value);

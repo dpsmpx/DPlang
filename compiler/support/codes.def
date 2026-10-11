@@ -226,7 +226,8 @@ DP_CODE(E0420, "break or continue outside a loop",
 DP_CODE(E0421, "not a constant expression",
         "A constant is computed when the program is compiled, so its value may only use literals, other "
         "constants, operators and conversions `T(x)` (spec: decl.const, decision R42). Constants must not "
-        "depend on each other in a cycle.")
+        "depend on each other in a cycle. Computing the constants of one module has a budget of 16777216 "
+        "steps: a step costs 1 plus the bytes of the strings it makes.")
 DP_CODE(E0422, "values of this type cannot be compared",
         "`==` and `!=` work on all values except results `E!T`; `<`, `<=`, `>`, `>=` and `sort` need numbers, "
         "`bool`, `str`, or structs, enums and lists of such values (spec: expr.compare).")
