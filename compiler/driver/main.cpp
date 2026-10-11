@@ -42,9 +42,10 @@ constexpr std::string_view kUsage =
     "usage: dpl <command> [arguments]\n"
     "\n"
     "commands:\n"
-    "  build [--release] [--target <target>] [-o <path>] <file.dpm>\n"
+    "  build [--release] [--lib] [--target <target>] [-o <path>] <file.dpm>\n"
     "                   build a native program (C compiler: $CC or cc; for other\n"
-    "                   targets $DPL_CROSS_CC or clang)\n"
+    "                   targets $DPL_CROSS_CC or clang); --lib builds a static library\n"
+    "                   of the @export functions and a C header next to it\n"
     "  check [--format=json] <file.dpm>\n"
     "                   check a program and the modules it imports\n"
     "  explain <code>   explain a diagnostic code, e.g. E0101\n"
@@ -446,13 +447,18 @@ void finish_options(const Cli& cli, dp::BuildOptions& opt) {
     opt.runtime_dir = cli.runtime;
 }
 
+int build_library(const dp::ir::Program& ir, const dp::SourceMap& sources, dp::BuildOptions& opt);
+
 int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
     dp::BuildOptions opt;
     std::vector<std::string_view> files;
+    bool lib = false;
     for (size_t i = 0; i < args.size(); i++) {
         std::string_view a = args[i];
         if (a == "--release") {
             opt.profile = dp::Profile::Release;
+        } else if (a == "--lib") {
+            lib = true;
         } else if (a == "--target") {
             int code = 0;
             if (!parse_target(args, i, opt, code)) return code;
@@ -467,18 +473,41 @@ int cmd_build(const Cli& cli, const std::vector<std::string_view>& args) {
     }
     if (files.size() != 1) return usage_error("build takes one file");
     finish_options(cli, opt);
-    if (opt.output.empty()) opt.output = module_name(files[0]) + std::string(opt.target->exe_suffix);
+    if (opt.output.empty()) {
+        opt.output = lib ? "lib" + module_name(files[0]) + ".a" : module_name(files[0]) + std::string(opt.target->exe_suffix);
+    }
     dp::SourceMap sources;
     dp::Diagnostics diags;
     auto prog = check_program(cli, files[0], sources, diags);
-    if (prog && !diags.has_errors() && !dp::sema::check_main(*prog, diags)) return finish(diags, sources);
+    // Библиотеке `main` не нужна: её функции зовёт хост (Р61).
+    if (prog && !diags.has_errors() && !lib && !dp::sema::check_main(*prog, diags)) return finish(diags, sources);
     if (!prog || diags.has_errors()) return finish(diags, sources);
     auto ir = lower_program(*prog, sources);
     if (!ir) return 3;
+    if (lib) return build_library(*ir, sources, opt);
     dp::backend_c::CResult c = dp::backend_c::emit_c(*ir, sources);
     if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
     opt.links = c.links;
     return dp::build_native(c.code, opt);
+}
+
+// `build --lib` (Р61): заголовок — рядом с библиотекой, имя без `lib` и
+// расширения (`out/libgame.a` → `out/game.h`); в нём — чем компоновать хост.
+int build_library(const dp::ir::Program& ir, const dp::SourceMap& sources, dp::BuildOptions& opt) {
+    size_t slash = opt.output.find_last_of('/');
+    std::string dir = slash == std::string::npos ? "" : opt.output.substr(0, slash + 1);
+    std::string base = module_name(opt.output);
+    if (base.size() > 3 && base.compare(0, 3, "lib") == 0) base = base.substr(3);
+    dp::backend_c::CResult c = dp::backend_c::emit_c_lib(ir, sources, base);
+    if (!c.errors.empty()) return internal_error("C backend: " + c.errors.front());
+    opt.links = c.links;
+    std::string libs;
+    for (const std::string& l : c.links) libs += " -l" + l;
+    for (std::string_view l : opt.target->libs) libs += " " + std::string(l);
+    size_t nl = c.header.find('\n');
+    c.header.insert(nl + 1, "// Компоновка хоста (" + std::string(opt.target->name) + "): " +
+                                opt.output.substr(slash == std::string::npos ? 0 : slash + 1) + libs + "\n");
+    return dp::build_lib(c.code, c.header, dir + base + ".h", opt);
 }
 
 // test: тесты программы (Р50, docs/compiler/cli.md, «test») — функции

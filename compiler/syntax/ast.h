@@ -49,7 +49,9 @@ struct Node {
 
 // --- типы
 
-enum class TypeKind : uint8_t { Name, Slice, Optional, Result, Error };
+enum class TypeKind : uint8_t { Name, Slice, Optional, Result, Fn, Error };
+
+enum class ParamMode : uint8_t { Value, Ref, Mut };
 
 struct Type : Node {
     TypeKind kind;
@@ -83,6 +85,18 @@ struct ResultType : Type {  // `!T` или `E!T`
     ResultType() : Type(Kind) {}
     Type* error = nullptr;  // nullptr — `!T`, тип ошибки выводится (Р41)
     Type* value = nullptr;
+};
+
+// `extern fn(&i32, T) R` — указатель на функцию C (Р61): имён параметров нет.
+struct FnType : Type {
+    static constexpr TypeKind Kind = TypeKind::Fn;
+    FnType() : Type(Kind) {}
+    struct Param {
+        ParamMode mode = ParamMode::Value;
+        Type* type = nullptr;
+    };
+    std::vector<Param> params;
+    Type* ret = nullptr;  // nullptr — без результата
 };
 
 struct ErrorType : Type {
@@ -172,7 +186,8 @@ struct SliceExpr : Expr {  // `a[lo..hi]`, концы необязательны
 };
 
 // Что вызывает вызов (заполняет проверка типов).
-enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Variant };
+// Ptr — вызов через переменную типа `extern fn(...)` (Р61): callee — её NameExpr.
+enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Variant, Ptr };
 
 // Методы встроенных типов: List и str.
 // Методы: List — Push…Contains, str — Trim…Split, Map (Р54) — Get, Keys и
@@ -516,8 +531,6 @@ struct Attr {
     std::string arg_src;   // запись в исходнике, с кавычками
     std::string text() const { return "@" + name + (has_arg ? "(" + arg_src + ")" : ""); }
 };
-
-enum class ParamMode : uint8_t { Value, Ref, Mut };
 
 struct Param {
     std::string name;

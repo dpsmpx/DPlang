@@ -1,0 +1,40 @@
+// spec: ffi.export ffi.fn
+// Колбэк dpl в qsort из libc: функция @export как значение extern fn,
+// переменная этого типа, вызов через неё; на трёх целях.
+extern fn qsort(base: &mut List[i32], n: u64, size: u64, cmp: extern fn(&i32, &i32) i32)
+
+@export
+fn by_value(a: &i32, b: &i32) i32 {
+    if a < b {
+        return -1
+    }
+    if a > b {
+        return 1
+    }
+    return 0
+}
+
+@export("by_value_desc")
+fn desc(a: &i32, b: &i32) i32 {
+    return by_value(&b, &a)
+}
+
+fn show(xs: []i32) {
+    var s = ""
+    for x in &xs {
+        s = s + str(x) + " "
+    }
+    println(s)
+}
+
+fn main() {
+    var xs: List[i32] = [5, -2, 9, 0, 3]
+    qsort(&mut xs, u64(len(xs)), 4, by_value)
+    show(xs)
+    let f: extern fn(&i32, &i32) i32 = desc
+    qsort(&mut xs, u64(len(xs)), 4, f)
+    show(xs)
+    let x: i32 = 1
+    let y: i32 = 2
+    println(str(f(&x, &y)))
+}

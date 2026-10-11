@@ -21,7 +21,9 @@ C — $CC или cc, с ASan и UBSan, если они есть), и её выв
 qemu-aarch64; docs/policy/PLATFORMS.md), если их инструменты есть; иначе
 проход пропускается, и итог говорит об этом. Набор ffi — программы с
 функциями C (Р59): интерпретатор их не исполняет, вывод сборки хоста и
-целей сверяется с X.out. Устройство —
+целей сверяется с X.out. Проход lib — tests/lib/X/: библиотека
+`dpl build --lib` из X/main.dpm и хост на C X/host.c, собранный с ней
+компилятором цели (Р61); вывод хоста на хосте и целях сверяется с X.out. Устройство —
 docs/compiler/README.md, docs/compiler/backend_c.md, docs/compiler/cli.md.
 Проход runtime — тесты runtime по функциям и запись плавающих против
 образца (tests/runtime.py). Проход example — программы examples/X/: их
@@ -181,6 +183,15 @@ def discover(pattern):
         if cross_tools(cross) is None:
             native += [(cross, path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
             native += [(cross, path + profile) for path in ffi for profile in ('', ' --release')]
+    ldir = os.path.join(TESTS, 'lib')
+    if os.path.isdir(ldir):
+        for name in sorted(os.listdir(ldir)):
+            main_dpm = os.path.join(ldir, name, 'main.dpm')
+            if not os.path.exists(main_dpm) or pattern not in os.path.relpath(main_dpm, TESTS):
+                continue
+            verify.append(('verify', main_dpm))
+            native.append(('lib', main_dpm + ' host'))
+            native += [('lib', main_dpm + ' ' + c) for c in CROSS if cross_tools(c) is None]
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
     deep += [('limits', 'scale/' + name) for name in limits.SCALE if pattern in 'limits/scale/' + name]
     deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
@@ -252,6 +263,15 @@ CROSS = {
     'android': ('android-arm64', ['qemu-aarch64'], ''),
 }
 NDK = os.environ.get('ANDROID_NDK_HOME') or '/opt/android-ndk'
+# Компилятор C хоста библиотеки (проход lib): команда и флаги цели, как у
+# драйвера (compiler/driver/build.cpp); библиотеки — из строки заголовка.
+LIB_CC = {
+    'host': lambda: [os.environ.get('CC') or 'cc'],
+    'windows': lambda: [os.environ.get('DPL_CROSS_CC') or 'clang', '--target=x86_64-w64-mingw32', '-fuse-ld=lld'],
+    'android': lambda: [os.environ.get('DPL_CROSS_CC') or
+                        os.path.join(NDK, 'toolchains', 'llvm', 'prebuilt', 'linux-x86_64', 'bin', 'clang'),
+                        '--target=aarch64-linux-android24', '-static'],
+}
 
 
 def cross_tools(cross):
@@ -324,6 +344,53 @@ def build_pass_one(arg, cross=None, bless=False):
     diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'интерпретатор' if suite == 'run' else 'ожидалось',
                                 target or 'build', lineterm='', n=1)
     return 'вывод расходится с интерпретатором:\n' + '\n'.join(list(diff)[:20])
+
+
+def lib_one(arg, bless=False):
+    """Проход lib (Р61): `dpl build --lib` для цели, хост host.c — её
+    компилятором C с библиотекой и строкой компоновки из заголовка, запуск
+    runner-ом цели; вывод — с X.out (--bless пишет его по хосту)."""
+    path, _, where = arg.partition(' ')
+    case = os.path.dirname(path)
+    name = os.path.basename(case)
+    target, runner, suffix = CROSS[where] if where in CROSS else (None, [], '')
+    out = os.path.join(NATIVE, f'lib_{name}_{where}')
+    os.makedirs(out, exist_ok=True)
+    lib = os.path.join(out, f'lib{name}.a')
+    argv = [DPL, 'build', '--lib'] + (['--target', target] if target else []) + ['-o', lib, 'main.dpm']
+    r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT, cwd=case)
+    if r.returncode != 0:
+        return f'build --lib: код {r.returncode}: ' + '\n'.join((r.stdout + r.stderr).splitlines()[:5])
+    header = os.path.join(out, f'{name}.h')
+    with open(header, encoding='utf-8') as f:
+        link = next((ln for ln in f if ln.startswith('// Компоновка хоста')), None)
+    if not link:
+        return 'в заголовке нет строки компоновки'
+    libs = link.split(':', 1)[1].split()[1:]  # первое — имя библиотеки
+    exe = os.path.join(out, 'host' + suffix)
+    cc = LIB_CC[where]() + ['-std=c11', '-Wall', '-Wextra', '-Werror', '-I', out, os.path.join(case, 'host.c'), lib] + libs
+    r = subprocess.run(cc + ['-o', exe], capture_output=True, text=True, timeout=TIMEOUT)
+    if r.returncode != 0:
+        return 'хост не собирается: ' + '\n'.join(r.stderr.splitlines()[:8])
+    try:
+        p = subprocess.run(runner + [exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
+                           cwd=case, env=dict(os.environ, WINEDEBUG='-all'))
+    except subprocess.TimeoutExpired:
+        return f'[timeout {TIMEOUT} s]'
+    got = p.stdout + ('--- stderr ---\n' + p.stderr if p.stderr else '') + (f'[exit {p.returncode}]\n' if p.returncode else '')
+    exp = case + '.out'
+    if bless and where == 'host':
+        with open(exp, 'w', encoding='utf-8') as f:
+            f.write(got)
+        return None
+    if not os.path.exists(exp):
+        return f'нет ожидаемого {os.path.relpath(exp, TESTS)} (--bless)'
+    with open(exp, encoding='utf-8') as f:
+        want = f.read()
+    if got == want:
+        return None
+    diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'ожидалось', where, lineterm='', n=1)
+    return 'вывод хоста расходится:\n' + '\n'.join(list(diff)[:20])
 
 
 def capture(argv, cwd):
@@ -564,6 +631,8 @@ def run_one(suite, path, bless):
         return build_pass_one(path, suite)
     if suite == 'ffi':
         return build_pass_one(path, bless=bless)
+    if suite == 'lib':
+        return lib_one(path, bless)
     if suite == 'limits':
         return limits.check_case(path, DPL)
     if suite == 'example':
@@ -618,16 +687,16 @@ def main():
             print('компилятор: runtime не собирается')
             print(err)
             return 1
-    if any(suite == 'windows' for suite, _ in tests):
+    if any(suite == 'windows' or (suite == 'lib' and path.endswith(' windows')) for suite, path in tests):
         err = prepare_cross()
         if err:
             print('компилятор: Wine не готовится')
             print(err)
             return 1
     # Проходы native, build, windows и android сверяют с ожидаемым набора run — после того, как --bless его перепишет.
-    late = ('native', 'build', 'example', 'bench') + tuple(CROSS)
-    if a.bless:  # ожидаемое ffi пишет сборка хоста — до сверки других целей с ним
-        first = [t for t in tests if t[0] == 'ffi' and ' ' not in t[1]]
+    late = ('native', 'build', 'example', 'bench', 'lib') + tuple(CROSS)
+    if a.bless:  # ожидаемое ffi и lib пишет сборка хоста — до сверки других целей с ним
+        first = [t for t in tests if (t[0] == 'ffi' and ' ' not in t[1]) or (t[0] == 'lib' and t[1].endswith(' host'))]
         for t in first:
             run_one(t[0], t[1], True)
     tests = [t for t in tests if t[0] not in late] + [t for t in tests if t[0] in late]
@@ -644,7 +713,7 @@ def main():
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
             name = suite + '/' + path if suite in ('bench', 'example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
-            if suite in ('build', 'ffi') + tuple(CROSS):
+            if suite in ('build', 'ffi', 'lib') + tuple(CROSS):
                 name = suite + '/' + os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1

@@ -26,9 +26,14 @@ public:
         for (StructDef& d : prog_.structs) {
             if (d.node && d.c) c_struct(d);
         }
+        prog_.c_layout_known = true;
+        for (const Program::PendingCFn& p : prog_.pending_cfn) check_cfn(p.node, p.type, p.module, diags_);
+        prog_.pending_cfn.clear();
         for (FnDef& f : prog_.fns) {
             if (f.node && f.is_extern) c_signature(f);
+            if (f.node && f.exported) export_signature(f);
         }
+        export_symbols();
         linear_placement();
         self_containment();
     }
@@ -281,6 +286,10 @@ private:
                 public_type(node, t->key, what);
                 public_type(node, t->elem, what);
                 break;
+            case TK::CFn:
+                for (const auto& p : t->sig->params) public_type(node, p.second, what);
+                public_type(node, t->sig->ret, what);
+                break;
             case TK::Struct:
                 if (!t->sdef->pub) {
                     diags_.error(Code::E0309, node->span,
@@ -412,8 +421,7 @@ private:
     bool c_param(const sema::Type* t, ParamMode mode) {
         if (!t || t->kind == TK::Error) return true;
         if (mode == ParamMode::Value) {
-            return c_value_type(t) || t->kind == TK::Str || (t->kind == TK::Slice && c_value_type(t->elem)) ||
-                   (t->kind == TK::Optional && t->elem->kind == TK::Handle);
+            return export_param(t, mode) || (t->kind == TK::Slice && c_value_type(t->elem));
         }
         return c_value_type(t) || (mode == ParamMode::Mut && t->kind == TK::List && c_value_type(t->elem));
     }
@@ -437,9 +445,66 @@ private:
     }
 
     bool c_result(const sema::Type* t) {
-        if (!t || t->kind == TK::Error || t->kind == TK::Void) return true;
-        if (c_value_type(t) || t->kind == TK::Str) return true;
-        return t->kind == TK::Optional && (t->elem->kind == TK::Str || t->elem->kind == TK::Handle);
+        if (!t || t->kind == TK::Error) return true;
+        return export_result(t) || t->kind == TK::Str || (t->kind == TK::Optional && t->elem->kind == TK::Str);
+    }
+
+    // `@export` (Р61): сигнатура — для вызова из C, как у `extern fn(...)`;
+    // строку и ссылку C отдаёт только на время вызова, `E!T` в C нет.
+    void export_signature(const FnDef& f) {
+        const FnItem* n = f.node;
+        for (size_t i = 0; i < f.params.size() && i < n->params.size(); i++) {
+            const ParamDef& p = f.params[i];
+            if (!export_param(p.type, p.mode)) {
+                diags_.error(Code::E0326, n->params[i].type->span,
+                             "parameter '" + p.name + "' of exported function '" + f.name + "' has type '" +
+                                 std::string(p.mode == ParamMode::Ref ? "&" : p.mode == ParamMode::Mut ? "&mut " : "") +
+                                 type_name(p.type, f.module) + "', which C cannot pass (spec: ffi.export)");
+            }
+        }
+        if (!export_result(f.ret)) {
+            std::string hint = f.ret->kind == TK::Result ? "; C has no 'E!T': return a code" : "";
+            diags_.error(Code::E0326, n->ret ? n->ret->span : f.span,
+                         "exported function '" + f.name + "' returns '" + type_name(f.ret, f.module) +
+                             "', which C cannot take (spec: ffi.export)" + hint);
+        }
+    }
+
+    // Символы C программы (Р61): у `@export` — свои, не повторяются, не
+    // совпадают с `extern fn`, словами C, `main` и именами dpl (`dp…`).
+    void export_symbols() {
+        static const char* const kKeywords[] = {
+            "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum",
+            "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return",
+            "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void",
+            "volatile", "while", "alignas", "alignof", "bool", "true", "false", "nullptr", "static_assert",
+            "thread_local", "typeof", "constexpr"};
+        std::map<std::string, const FnDef*> taken;
+        for (FnDef& f : prog_.fns) {
+            if (f.node && f.is_extern) taken.emplace(f.name, &f);
+        }
+        for (FnDef& f : prog_.fns) {
+            if (!f.node || !f.exported) continue;
+            const std::string& s = f.export_name;
+            bool keyword = false;
+            for (const char* k : kKeywords) keyword = keyword || s == k;
+            if (keyword || s == "main" || s.rfind("dp", 0) == 0) {
+                diags_.error(Code::E0327, f.export_span,
+                             "C symbol '" + s + "' is reserved" +
+                                 (keyword ? ": it is a C keyword" : s == "main" ? ": it is the C entry point" : ": names starting with 'dp' belong to dpl") +
+                                 "; choose another with @export(\"name\")");
+                continue;
+            }
+            auto [it, fresh] = taken.emplace(s, &f);
+            if (!fresh) {
+                const FnDef& other = *it->second;
+                Diagnostic& d = diags_.error(Code::E0327, f.export_span,
+                                             "C symbol '" + s + "' is already " +
+                                                 (other.is_extern ? "declared by 'extern fn " + other.name + "'"
+                                                                  : "exported by '" + other.module->name + "." + other.name + "'"));
+                d.notes.push_back(Note{other.exported ? other.export_span : other.span, true, "first here"});
+            }
+        }
     }
 
     void enum_sig(Resolver& r, EnumDef& d) {
@@ -465,6 +530,15 @@ private:
         }
     }
 
+    static bool c_identifier(const std::string& s) {
+        if (s.empty() || (s[0] >= '0' && s[0] <= '9')) return false;
+        for (char c : s) {
+            bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+            if (!ok) return false;
+        }
+        return true;
+    }
+
     // `@det import m` (Р55): у импорта — только `@det`, один раз.
     bool import_det(const ImportItem& im) {
         bool det = false;
@@ -486,6 +560,19 @@ private:
         f.is_extern = n->is_extern;
         bool linked = false;
         for (const Attr& a : n->attrs) {
+            if (a.name == "export") {  // `@export`, `@export("name")` — функцию зовёт C (Р61)
+                if (n->is_extern) {
+                    diags_.error(Code::E0319, a.span, "an 'extern fn' is already C; '@export' marks a dpl function for C");
+                } else if (f.exported) {
+                    diags_.error(Code::E0319, a.span, "attribute '@export' is given twice");
+                } else if (a.has_arg && !c_identifier(a.arg)) {
+                    diags_.error(Code::E0319, a.span, "'@export' needs a C name: a letter or '_', then letters, digits or '_'");
+                }
+                f.exported = true;
+                f.export_name = a.has_arg ? a.arg : f.name;
+                f.export_span = a.span;
+                continue;
+            }
             if (a.name == "link") {  // `@link("lib")` — только у `extern fn` (Р59)
                 if (!n->is_extern) {
                     diags_.error(Code::E0319, a.span, "'@link' names the C library of an 'extern fn'");
@@ -537,6 +624,9 @@ private:
             }
         } else {
             f.ret = prog_.types.prim(TK::Void);
+        }
+        if (f.test && f.exported) {
+            diags_.error(Code::E0319, f.export_span, "a test cannot be '@export': 'dpl test' calls it");
         }
         if (f.test) {
             bool ok_ret = f.ret->kind == TK::Void || f.ret->kind == TK::Error ||

@@ -28,6 +28,7 @@ public:
         out_ += ")";
         if (f_.ret && f_.ret->kind != TK::Void) out_ += " " + type(f_.ret);
         if (f_.det) out_ += " det";
+        if (f_.exported) out_ += " export " + f_.c_name;
         if (f_.is_extern) {
             out_ += " = " + f_.c_name + "\n";
             return out_;
@@ -118,6 +119,7 @@ private:
                 json_string(s, c.str < p_.strings.size() ? p_.strings[c.str] : "?");
                 return s;
             }
+            case Const::Kind::Fn: return "fn " + (c.fn < p_.fns.size() ? p_.fns[c.fn].name : std::string("?"));
         }
         return "?";
     }
@@ -206,8 +208,9 @@ private:
                 if (rv.ops.size() > 1) s += operand(rv.ops[1]);
                 return s + "]";
             }
-            case RvKind::Call: {
-                std::string s = "call " + (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(";
+            case RvKind::Call: case RvKind::CallPtr: {
+                std::string s = rv.kind == RvKind::CallPtr ? "call_ptr " + ops(rv.ops) + "("
+                                                           : "call " + (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(";
                 for (size_t i = 0; i < rv.args.size(); i++) {
                     const Arg& a = rv.args[i];
                     if (i) s += ", ";

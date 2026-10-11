@@ -23,6 +23,7 @@ public:
     const Symbol* member(const ModuleInfo& mod, const std::string& name, Span span);
 
     Program& prog() { return prog_; }
+    void check_cfn(const ast::FnType* node, const Type* t);
     ModuleInfo& module() { return m_; }
 
 private:
@@ -30,5 +31,8 @@ private:
     ModuleInfo& m_;
     Diagnostics& diags_;
 };
+
+// Типы параметров и результата `extern fn(...)` — с видом в C (Р61, E0326).
+void check_cfn(const ast::FnType* node, const Type* t, const ModuleInfo* m, Diagnostics& diags);
 
 }  // namespace dp::sema

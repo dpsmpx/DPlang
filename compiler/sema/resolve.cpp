@@ -115,10 +115,45 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
             out = tt.result(err, value);
             break;
         }
+        case TypeKind::Fn: {  // `extern fn(...)` (Р61)
+            auto* f = static_cast<FnType*>(node);
+            CFnSig sig;
+            bool bad = false;
+            for (const FnType::Param& p : f->params) {
+                const sema::Type* t = type(p.type);
+                bad = bad || t->kind == TK::Error;
+                sig.params.emplace_back(p.mode, t);
+            }
+            sig.ret = f->ret ? type(f->ret) : tt.prim(TK::Void);
+            if (bad || sig.ret->kind == TK::Error) break;
+            out = tt.cfn(sig);
+            // Виды в C известны, когда известны `@c` всех структур (collect).
+            if (prog_.c_layout_known) check_cfn(f, out);
+            else prog_.pending_cfn.push_back({f, out, &m_});
+            break;
+        }
         case TypeKind::Error: break;
     }
     node->resolved = out;
     return out;
 }
+
+void check_cfn(const ast::FnType* node, const sema::Type* t, const ModuleInfo* m, Diagnostics& diags) {
+    for (size_t i = 0; i < t->sig->params.size() && i < node->params.size(); i++) {
+        const auto& [mode, p] = t->sig->params[i];
+        if (!export_param(p, mode)) {
+            diags.error(Code::E0326, node->params[i].type->span,
+                        "a parameter of '" + type_name(t, m) + "' cannot be '" + type_name(p, m) +
+                            "': it has no C form (spec: ffi.fn)");
+        }
+    }
+    if (!export_result(t->sig->ret)) {
+        diags.error(Code::E0326, node->ret ? node->ret->span : node->span,
+                    "'" + type_name(t, m) + "' cannot return '" + type_name(t->sig->ret, m) +
+                        "': it has no C form (spec: ffi.fn)");
+    }
+}
+
+void Resolver::check_cfn(const ast::FnType* node, const sema::Type* t) { sema::check_cfn(node, t, &m_, diags_); }
 
 }  // namespace dp::sema

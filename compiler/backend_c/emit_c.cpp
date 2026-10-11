@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -42,7 +43,7 @@ namespace {
 bool is_scalar(const Type* t) {
     switch (t->kind) {
         case TK::Bool: case TK::I8: case TK::I16: case TK::I32: case TK::I64: case TK::Int: case TK::U8:
-        case TK::U16: case TK::U32: case TK::U64: case TK::F32: case TK::F64: case TK::Handle:
+        case TK::U16: case TK::U32: case TK::U64: case TK::F32: case TK::F64: case TK::Handle: case TK::CFn:
             return true;
         default: return false;
     }
@@ -86,6 +87,13 @@ std::string mangle(const Type* t) {
         case TK::Result: return "R_" + (t->err ? mangle(t->err) : std::string("x")) + "_" + mangle(t->elem);
         case TK::Struct: return "T_" + lp(t->sdef->module->name) + lp(t->sdef->name);
         case TK::Enum: return "E_" + lp(t->edef->module->name) + lp(t->edef->name);
+        case TK::CFn: {  // F_<число параметров><режим и тип>…<результат>; записи с длиной
+            std::string s = "F_" + std::to_string(t->sig->params.size());
+            for (const auto& [mode, p] : t->sig->params) {
+                s += (mode == ast::ParamMode::Value ? "v" : mode == ast::ParamMode::Ref ? "r" : "m") + lp(mangle(p));
+            }
+            return s + lp(mangle(t->sig->ret));
+        }
         default: return "error";
     }
 }
@@ -175,8 +183,9 @@ std::string drop_of(const Type* t, const std::string& lv) {
 
 class Emitter {
 public:
-    Emitter(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>* tests)
-        : p_(p), src_(sources), tests_(tests) {}
+    Emitter(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>* tests, bool lib = false,
+            std::string lib_name = "")
+        : p_(p), src_(sources), tests_(tests), lib_(lib), lib_name_(std::move(lib_name)) {}
 
     CResult run() {
         for (const Function& f : p_.fns) collect(f);
@@ -187,12 +196,21 @@ public:
         out += type_decls();
         out += helpers();
         for (const Function& f : p_.fns) out += (f.is_extern ? extern_head(f) : fn_head(f)) + ";\n";
+        for (const Function& f : p_.fns) {
+            if (f.exported) out += export_head(f) + " __asm__(" + cstr(f.c_name) + ");\n";
+        }
         out += "\n";
         for (const Function& f : p_.fns) {
             if (!f.is_extern) out += function(f);
         }
-        out += tests_ ? test_entry() : entry();
-        return CResult{out, errors_, p_.links};
+        for (const Function& f : p_.fns) {
+            if (f.exported) out += export_wrapper(f);
+        }
+        CResult r{out, errors_, p_.links, ""};
+        if (lib_) r.header = header();  // библиотека для хоста C (Р61): входа нет
+        else r.code += tests_ ? test_entry() : entry();
+        r.errors = errors_;
+        return r;
     }
 
     // Функция C (Р59): объявление под своим именем dpx_… с меткой символа
@@ -202,28 +220,55 @@ public:
         return "dpx_" + lp(f.name.substr(0, dot)) + lp(f.name.substr(dot + 1));
     }
 
-    static std::string c_param_type(const ir::Local& l) {
-        const Type* t = l.type;
-        if (l.kind == LocalKind::ParamRef) return "const " + ctype(t) + "*";
-        if (l.kind == LocalKind::ParamMut) return (t->kind == TK::List ? ctype(t->elem) : ctype(t)) + "*";
-        if (t->kind == TK::Str) return "const char*";
-        if (t->kind == TK::Slice) return "const " + ctype(t->elem) + "*";
-        if (t->kind == TK::Optional) return "void*";  // ?H — дескриптор или NULL
-        return ctype(t);
+    static ast::ParamMode mode_of(const ir::Local& l) {
+        return l.kind == LocalKind::ParamRef ? ast::ParamMode::Ref
+               : l.kind == LocalKind::ParamMut ? ast::ParamMode::Mut
+                                               : ast::ParamMode::Value;
     }
 
-    static std::string c_result_type(const Type* t) {
+    // Параметр на границе C (Р59, Р61); type — в записи dpl, ctype — в C программы.
+    using CType = std::function<std::string(const Type*)>;
+
+    static std::string c_param_type(ast::ParamMode mode, const Type* t, const CType& ct = ctype) {
+        if (mode == ast::ParamMode::Ref) return "const " + ct(t) + "*";
+        if (mode == ast::ParamMode::Mut) return (t->kind == TK::List ? ct(t->elem) : ct(t)) + "*";
+        if (t->kind == TK::Str) return "const char*";
+        if (t->kind == TK::Slice) return "const " + ct(t->elem) + "*";
+        if (t->kind == TK::Optional) return t->elem->kind == TK::CFn ? ct(t->elem) : "void*";  // ?H, ?extern fn — или NULL
+        return ct(t);
+    }
+
+    static std::string c_result_type(const Type* t, const CType& ct = ctype) {
         if (t->kind == TK::Str || (t->kind == TK::Optional && t->elem->kind == TK::Str)) return "const char*";
-        if (t->kind == TK::Optional) return "void*";
-        return ctype(t);
+        if (t->kind == TK::Optional) return t->elem->kind == TK::CFn ? ct(t->elem) : "void*";
+        return ct(t);
     }
 
     std::string extern_head(const Function& f) {
         std::string h = "extern " + c_result_type(f.ret) + " " + extern_name(f) + "(";
-        for (uint32_t i = 0; i < f.param_count; i++) h += (i ? ", " : "") + c_param_type(f.locals[i]);
+        for (uint32_t i = 0; i < f.param_count; i++) h += (i ? ", " : "") + c_param_type(mode_of(f.locals[i]), f.locals[i].type);
         if (f.param_count == 0) h += "void";
         return h + ") __asm__(" + cstr(f.c_name) + ")";
     }
+
+    // Функция `@export` (Р61): обёртка с ABI C под именем dpe_…; символ —
+    // меткой __asm__, так имя C не спорит с заголовками libc.
+    static std::string export_name(const Function& f) {
+        size_t dot = f.name.find('.');
+        return "dpe_" + lp(f.name.substr(0, dot)) + lp(f.name.substr(dot + 1));
+    }
+
+    std::string export_head(const Function& f) {
+        std::string h = c_result_type(f.ret) + " " + export_name(f) + "(";
+        for (uint32_t i = 0; i < f.param_count; i++) {
+            h += (i ? ", " : "") + c_param_type(mode_of(f.locals[i]), f.locals[i].type) + " a" + std::to_string(i);
+        }
+        if (f.param_count == 0) h += "void";
+        return h + ")";
+    }
+
+    std::string export_wrapper(const Function& f);
+    std::string header();
 
     // Для FnEmitter.
     // Имя функции в IR — «модуль.функция»; в C — dpf_<модуль><функция> с длинами.
@@ -262,8 +307,11 @@ private:
     const ir::Program& p_;
     const SourceMap& src_;
     const std::vector<uint32_t>* tests_ = nullptr;  // сборка тестов: функции-тесты по порядку
+    bool lib_ = false;                              // `dpl build --lib` (Р61): без входа, с заголовком
+    std::string lib_name_;                          // имя библиотеки: метка заголовка
     std::vector<std::string> errors_;
     std::vector<const Type*> types_;  // составные типы в порядке определения
+    std::vector<const Type*> cfns_;   // типы `extern fn(...)`: typedef указателя до определений
     std::set<const Type*> seen_;
     std::set<std::string> mangled_;
 
@@ -293,6 +341,11 @@ private:
                 for (uint32_t v = 0; v < t->edef->variants.size(); v++) {
                     for (uint32_t k = 0; k < payload_count(t->edef->variants[v]); k++) add_type(payload_type(t, v, k));
                 }
+                break;
+            case TK::CFn:
+                for (const auto& p : t->sig->params) add_type(p.second);
+                add_type(t->sig->ret);
+                cfns_.push_back(t);
                 break;
             default: break;
         }
@@ -333,9 +386,19 @@ private:
     std::string type_decls() {
         std::string out;
         for (const Type* t : types_) out += "typedef struct " + ctype(t) + " " + ctype(t) + ";\n";
+        // Указатель на функцию C (Р61): типы параметров здесь могут быть неполными.
+        for (const Type* t : cfns_) out += cfn_typedef(t, ctype(t), ctype);
         out += "\n";
         for (const Type* t : types_) out += type_def(t);
         return out;
+    }
+
+    static std::string cfn_typedef(const Type* t, const std::string& name, const CType& ct) {
+        std::string s = "typedef " + c_result_type(t->sig->ret, ct) + " (*" + name + ")(";
+        for (size_t i = 0; i < t->sig->params.size(); i++) {
+            s += (i ? ", " : "") + c_param_type(t->sig->params[i].first, t->sig->params[i].second, ct);
+        }
+        return s + (t->sig->params.empty() ? "void" : "") + ");\n";
     }
 
     std::string type_def(const Type* t) {
@@ -848,6 +911,7 @@ private:
         const Type* t = c.type;
         switch (c.kind) {
             case Const::Kind::Bool: return c.b ? "true" : "false";
+            case Const::Kind::Fn: return "(" + ctype(t) + ")" + Emitter::export_name(p_.fns[c.fn]);
             case Const::Kind::Str: {
                 const std::string& s = p_.strings[c.str];
                 std::string n = "dp_s" + std::to_string(c.str);
@@ -909,6 +973,12 @@ private:
     std::string cast(const Rvalue& rv);
     std::string intrinsic(const Rvalue& rv);
     std::string extern_call(const Rvalue& rv, const Function& g);
+    struct CParam {
+        ast::ParamMode mode;
+        const Type* type;
+    };
+    std::string c_call(const Rvalue& rv, const std::vector<CParam>& params, const Type* ret, const std::string& callee,
+                       const std::string& what, const std::string& c_name);
     std::string inst(const Inst& in);
     std::string term(const Term& t);
 };
@@ -1243,6 +1313,14 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             line(r + ".len = " + h + " - (int64_t)" + lo + ";");
             return r;
         }
+        case RvKind::CallPtr: {  // Р61: вызов C через указатель — как у extern fn
+            const Type* ft = rv.ops[0].kind == OpKind::Const ? rv.ops[0].c.type : ir::place_type(p_, f_, rv.ops[0].place);
+            std::string fp = fresh("dp_fp");
+            line(ctype(ft) + " " + fp + " = " + operand(rv.ops[0], false) + ";");
+            std::vector<CParam> params;
+            for (const auto& [mode, t] : ft->sig->params) params.push_back(CParam{mode, t});
+            return c_call(rv, params, ft->sig->ret, fp, "a C function pointer", "");
+        }
         case RvKind::Call: {
             line("DP_CALL_CHECK(" + loc_ + ");");
             const Function& g = p_.fns[rv.fn];
@@ -1377,17 +1455,25 @@ std::string FnEmitter::run() {
 // ?H — дескриптор или NULL. Строка и дескриптор из C проверяются: NULL
 // там, где он не ожидается, — ловушка.
 std::string FnEmitter::extern_call(const Rvalue& rv, const Function& g) {
+    std::vector<CParam> params;
+    for (uint32_t i = 0; i < g.param_count; i++) params.push_back(CParam{Emitter::mode_of(g.locals[i]), g.locals[i].type});
+    return c_call(rv, params, g.ret, Emitter::extern_name(g), "C function '" + g.c_name + "'", g.c_name);
+}
+
+// what — кто вызван, для ловушек: «C function 'SDL_Init'»; c_name — имя
+// функции C для строки-результата (она бывает только у extern fn).
+std::string FnEmitter::c_call(const Rvalue& rv, const std::vector<CParam>& params, const Type* ret,
+                              const std::string& callee, const std::string& what, const std::string& c_name) {
     std::vector<std::string> args, frees;
     for (size_t i = 0; i < rv.args.size(); i++) {
         const Arg& a = rv.args[i];
-        const ir::Local& l = g.locals[i];
         if (a.kind != Arg::Kind::Value) {
             Lv lv = place(a.place);
-            args.push_back(l.type->kind == TK::List ? "(" + lv.expr + ").ptr" : "&" + lv.expr);
+            args.push_back(params[i].type->kind == TK::List ? "(" + lv.expr + ").ptr" : "&" + lv.expr);
             continue;
         }
         std::string v = operand(a.op, false);
-        const Type* t = l.type;
+        const Type* t = params[i].type;
         if (t->kind == TK::Str) {
             std::string c = fresh("dp_c");
             line("char* " + c + " = dp_str_to_c(" + v + ", " + loc_ + ");");
@@ -1403,10 +1489,10 @@ std::string FnEmitter::extern_call(const Rvalue& rv, const Function& g) {
             args.push_back(v);
         }
     }
-    std::string call = Emitter::extern_name(g) + "(";
+    std::string call = callee + "(";
     for (size_t i = 0; i < args.size(); i++) call += (i ? ", " : "") + args[i];
     call += ")";
-    const Type* t = g.ret;
+    const Type* t = ret;
     auto free_all = [&] {
         for (const std::string& c : frees) line("dp_free(" + c + ");");
     };
@@ -1418,20 +1504,133 @@ std::string FnEmitter::extern_call(const Rvalue& rv, const Function& g) {
     std::string r = fresh("dp_r");
     line(Emitter::c_result_type(t) + " " + r + " = " + call + ";");
     free_all();
-    std::string what = cstr(g.c_name);
-    if (t->kind == TK::Str) return "dp_str_from_c(" + r + ", " + what + ", " + loc_ + ")";
-    if (t->kind == TK::Handle) {
-        line("if (!" + r + ") dp_trapf(" + loc_ + ", \"C function '%s' returned NULL\", " + what + ");");
+    if (t->kind == TK::Str) return "dp_str_from_c(" + r + ", " + cstr(c_name) + ", " + loc_ + ")";
+    if (t->kind == TK::Handle || t->kind == TK::CFn) {
+        line("if (!" + r + ") dp_trapf(" + loc_ + ", \"%s returned NULL\", " + cstr(what) + ");");
         return r;
     }
     if (t->kind == TK::Optional) {
         std::string o = fresh("dp_o");
         line(ctype(t) + " " + o + " = {0};");
-        std::string value = t->elem->kind == TK::Str ? "dp_str_from_c(" + r + ", " + what + ", " + loc_ + ")" : r;
+        std::string value = t->elem->kind == TK::Str ? "dp_str_from_c(" + r + ", " + cstr(c_name) + ", " + loc_ + ")" : r;
         line("if (" + r + ") {\n            " + o + ".has = true;\n            " + o + ".value = " + value + ";\n        }");
         return o;
     }
     return r;
+}
+
+// Обёртка `@export` (Р61): значения C → значения dpl, вызов, результат →
+// C. Строка — копия (её освобождает вызванная функция, как любой параметр
+// по значению); NULL там, где dpl ждёт значение, — ловушка.
+std::string Emitter::export_wrapper(const Function& f) {
+    std::string out = export_head(f) + " {\n";
+    std::string where = f.def ? loc(f.def->span) : "\"\"";
+    std::string fname = cstr(f.c_name);
+    std::vector<std::string> args;
+    for (uint32_t i = 0; i < f.param_count; i++) {
+        const ir::Local& l = f.locals[i];
+        const Type* t = l.type;
+        std::string a = "a" + std::to_string(i), pname = cstr(l.name);
+        auto not_null = [&] {
+            out += "    if (!" + a + ") dp_trapf(" + where + ", \"C passed NULL as '%s' of '%s'\", " + pname + ", " + fname + ");\n";
+        };
+        ast::ParamMode mode = mode_of(l);
+        if (mode != ast::ParamMode::Value) {
+            not_null();
+            args.push_back("(" + ctype(t) + "*)" + a);
+        } else if (t->kind == TK::Str) {
+            std::string s = "s" + std::to_string(i);
+            out += "    dp_str " + s + " = dp_str_from_c_arg(" + a + ", " + pname + ", " + fname + ", " + where + ");\n";
+            args.push_back(s);
+        } else if (t->kind == TK::Handle || t->kind == TK::CFn) {
+            not_null();
+            args.push_back(a);
+        } else if (t->kind == TK::Optional) {  // ?H, ?extern fn: NULL — none
+            std::string o = "o" + std::to_string(i);
+            out += "    " + ctype(t) + " " + o + " = {0};\n    if (" + a + ") {\n        " + o + ".has = true;\n        " + o +
+                   ".value = " + a + ";\n    }\n";
+            args.push_back(o);
+        } else {
+            args.push_back(a);
+        }
+    }
+    std::string call = fn_name(f) + "(";
+    for (size_t i = 0; i < args.size(); i++) call += (i ? ", " : "") + args[i];
+    call += ")";
+    out += "    DP_CALL_CHECK(" + where + ");\n";
+    if (f.ret->kind == TK::Void) return out + "    " + call + ";\n}\n\n";
+    out += "    " + ctype(f.ret) + " r = " + call + ";\n";
+    if (f.ret->kind == TK::Optional) return out + "    return r.has ? r.value : NULL;\n}\n\n";
+    return out + "    return r;\n}\n\n";
+}
+
+// Заголовок для хоста C (Р61): объявления `@export`, структуры `@c` и
+// типы `extern fn(...)` их сигнатур. Дескриптор — void*.
+std::string Emitter::header() {
+    std::vector<const Type*> structs;
+    std::set<const Type*> seen;
+    std::map<const Type*, std::string> fn_names;
+    std::map<std::string, int> name_count;
+    std::string fn_defs;
+    CType hct;
+    std::function<void(const Type*)> need = [&](const Type* t) {
+        if (!t || seen.count(t)) return;
+        seen.insert(t);
+        if (t->kind == TK::Optional) need(t->elem);
+        if (t->kind == TK::Struct) {
+            for (const sema::FieldDef& fd : t->sdef->fields) need(fd.type);
+            structs.push_back(t);
+            name_count[t->sdef->name]++;
+        }
+        if (t->kind == TK::CFn) {
+            for (const auto& p : t->sig->params) need(p.second);
+            need(t->sig->ret);
+            std::string n = "dp_fn" + std::to_string(fn_names.size() + 1);
+            fn_names[t] = n;
+            fn_defs += cfn_typedef(t, n, hct);
+        }
+    };
+    auto struct_name = [&](const Type* t) {
+        const sema::StructDef* d = t->sdef;
+        return name_count[d->name] > 1 ? d->module->name + "_" + d->name : d->name;
+    };
+    hct = [&](const Type* t) -> std::string {
+        if (t->kind == TK::Struct) return "struct " + struct_name(t);
+        if (t->kind == TK::CFn) return fn_names.count(t) ? fn_names[t] : "void*";
+        return ctype(t);  // числа, bool, дескриптор — void*
+    };
+    std::vector<const Function*> exported;
+    for (const Function& f : p_.fns) {
+        if (!f.exported) continue;
+        exported.push_back(&f);
+        for (uint32_t i = 0; i < f.param_count; i++) need(f.locals[i].type);
+        need(f.ret);
+    }
+    std::string guard = "DPL_";
+    for (char c : lib_name_) guard += (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) ? c : '_';
+    guard += "_H";
+    std::string out = "// Сгенерировано dpl (dpl build --lib) — не править.\n";
+    out += "#ifndef " + guard + "\n#define " + guard + "\n\n#include <stdbool.h>\n#include <stdint.h>\n\n";
+    out += "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n";
+    // Сначала имена структур: их видят типы указателей на функции, затем
+    // эти типы: их видят поля структур.
+    for (const Type* t : structs) out += "struct " + struct_name(t) + ";\n";
+    if (!structs.empty()) out += "\n";
+    if (!fn_defs.empty()) out += fn_defs + "\n";
+    for (const Type* t : structs) {
+        out += "struct " + struct_name(t) + " {\n";
+        for (const sema::FieldDef& fd : t->sdef->fields) out += "    " + hct(fd.type) + " " + fd.name + ";\n";
+        out += "};\n\n";
+    }
+    for (const Function* f : exported) {
+        out += c_result_type(f->ret, hct) + " " + f->c_name + "(";
+        for (uint32_t i = 0; i < f->param_count; i++) {
+            out += (i ? ", " : "") + c_param_type(mode_of(f->locals[i]), f->locals[i].type, hct) + " " + f->locals[i].name;
+        }
+        out += std::string(f->param_count == 0 ? "void" : "") + ");\n";
+    }
+    out += "\n#ifdef __cplusplus\n}\n#endif\n\n#endif\n";
+    return out;
 }
 
 std::string Emitter::function(const Function& f) {
@@ -1500,6 +1699,10 @@ CResult emit_c(const ir::Program& p, const SourceMap& sources) { return Emitter(
 
 CResult emit_c_tests(const ir::Program& p, const SourceMap& sources, const std::vector<uint32_t>& tests) {
     return Emitter(p, sources, &tests).run();
+}
+
+CResult emit_c_lib(const ir::Program& p, const SourceMap& sources, const std::string& name) {
+    return Emitter(p, sources, nullptr, true, name).run();
 }
 
 }  // namespace dp::backend_c

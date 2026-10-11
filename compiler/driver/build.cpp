@@ -59,6 +59,20 @@ std::string cc_for(const Target& t) {
     return "clang";
 }
 
+std::string ar_for(const Target& t, const std::string& cc) {
+    const char* env = std::getenv("DPL_AR");
+    if (env && *env) return env;
+    if (t.host) return "ar";
+    // llvm-ar пишет архивы всех целей; у NDK он рядом с clang.
+    size_t slash = cc.find_last_of('/');
+    if (slash != std::string::npos) {
+        std::string near = cc.substr(0, slash + 1) + "llvm-ar";
+        struct stat st {};
+        if (stat(near.c_str(), &st) == 0) return near;
+    }
+    return "llvm-ar";
+}
+
 std::string runner_for(const Target& t) {
     const char* env = std::getenv("DPL_RUNNER");
     if (env && *env && !t.host) return env;
@@ -201,27 +215,40 @@ bool toolchain_works(const BuildOptions& opt, TempDir& tmp) {
     return spawn_wait(argv, "/dev/null", "/dev/null") == 0;
 }
 
-// Компилирует c_code в exe. Код выхода команды: 0, 2 или 3.
-int compile(const std::string& c_code, const std::string& exe, const BuildOptions& opt, TempDir& tmp) {
+// Исходники сборки: сгенерированный C и runtime. Пусто — ошибка
+// окружения уже сообщена (код 2).
+struct Sources {
+    std::string core, c_path, rt, entry;
+};
+
+bool prepare(const std::string& c_code, const BuildOptions& opt, TempDir& tmp, Sources& s) {
     const Target& t = target_of(opt);
-    std::string core = opt.runtime_dir + "/core";
+    s.core = opt.runtime_dir + "/core";
     std::string platform = opt.runtime_dir + "/" + std::string(t.platform);
-    if (!exists(core + "/dp_rt.h") || !exists(core + "/dp_rt.c") || !exists(platform + "/dp_entry.c")) {
+    s.rt = s.core + "/dp_rt.c";
+    s.entry = platform + "/dp_entry.c";
+    if (!exists(s.core + "/dp_rt.h") || !exists(s.rt) || !exists(s.entry)) {
         say("error: the dpl runtime is not found in '" + opt.runtime_dir + "'; set DPL_RUNTIME\n");
-        return 2;
+        return false;
     }
-    if (tmp.path.empty()) return 2;
-    std::string c_path = tmp.file("program.c");
-    if (!write_all(c_path, c_code)) {
-        say("error: cannot write '" + c_path + "'\n");
-        return 2;
+    if (tmp.path.empty()) return false;
+    s.c_path = tmp.file("program.c");
+    if (!write_all(s.c_path, c_code)) {
+        say("error: cannot write '" + s.c_path + "'\n");
+        return false;
     }
     if (!t.host && !toolchain_works(opt, tmp)) {
         say("error: the C toolchain for target '" + std::string(t.name) + "' does not work ('" + opt.cc +
             "' with " + std::string(t.triple) + "); see docs/policy/PLATFORMS.md or set " +
             (t.name == "android-arm64" ? "ANDROID_NDK_HOME or " : "") + "DPL_CROSS_CC\n");
-        return 2;
+        return false;
     }
+    return true;
+}
+
+// Флаги компилятора C для всех исходников сборки.
+std::vector<std::string> c_flags(const BuildOptions& opt, TempDir& tmp) {
+    const Target& t = target_of(opt);
     std::vector<std::string> argv = {opt.cc, "-std=c11", "-ffp-contract=off", "-fno-strict-aliasing", "-w"};
     for (std::string_view f : t.cflags) argv.emplace_back(f);
     if (opt.profile == Profile::Release) {
@@ -238,13 +265,11 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
             say("note: the C compiler '" + opt.cc + "' has no ASan and UBSan; tests run without them\n");
         }
     }
-    for (const std::string& a : {std::string("-I"), core, c_path, core + "/dp_rt.c", platform + "/dp_entry.c"}) {
-        argv.push_back(a);
-    }
-    for (const std::string& l : opt.links) argv.push_back("-l" + l);
-    for (std::string_view l : t.libs) argv.emplace_back(l);
-    argv.push_back("-o");
-    argv.push_back(exe);
+    return argv;
+}
+
+// Код выхода запуска компилятора C: 0, 2 (не запустился) или 3 (отверг код).
+int run_cc(const std::vector<std::string>& argv, const BuildOptions& opt) {
     int r = spawn_wait(argv);
     if (r < 0) {
         say("error: cannot run the C compiler '" + opt.cc + "': " + std::strerror(-r) + "; set CC to a C11 compiler\n");
@@ -257,12 +282,26 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
     return 0;
 }
 
-// Копирует собранную программу в path (права 0755 с учётом umask).
+// Компилирует c_code в exe. Код выхода команды: 0, 2 или 3.
+int compile(const std::string& c_code, const std::string& exe, const BuildOptions& opt, TempDir& tmp) {
+    const Target& t = target_of(opt);
+    Sources s;
+    if (!prepare(c_code, opt, tmp, s)) return 2;
+    std::vector<std::string> argv = c_flags(opt, tmp);
+    for (const std::string& a : {std::string("-I"), s.core, s.c_path, s.rt, s.entry}) argv.push_back(a);
+    for (const std::string& l : opt.links) argv.push_back("-l" + l);
+    for (std::string_view l : t.libs) argv.emplace_back(l);
+    argv.push_back("-o");
+    argv.push_back(exe);
+    return run_cc(argv, opt);
+}
+
+// Копирует собранный файл в path (права mode с учётом umask).
 // Ошибка — errno; на месте path тогда может остаться неполный файл.
-int copy_program(const std::string& from, const std::string& path) {
+int copy_program(const std::string& from, const std::string& path, mode_t mode = 0755) {
     std::string bytes = read_all(from);
     if (bytes.empty()) return EIO;
-    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0755);
+    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, mode);
     if (fd < 0) return errno;
     size_t done = 0;
     while (done < bytes.size()) {
@@ -292,6 +331,49 @@ int build_native(const std::string& c_code, const BuildOptions& opt) {
     if (int e = copy_program(exe, opt.output)) {
         say("error: cannot write '" + opt.output + "': " + std::strerror(e) + "\n");
         return 2;
+    }
+    return 0;
+}
+
+// Библиотека (Р61): каждый исходник — объектом, объекты — в архив;
+// заголовок — рядом. Всё — во временном каталоге, затем копией в -o.
+int build_lib(const std::string& c_code, const std::string& header, const std::string& header_path,
+              const BuildOptions& opt) {
+    const Target& t = target_of(opt);
+    TempDir tmp;
+    Sources s;
+    if (!prepare(c_code, opt, tmp, s)) return 2;
+    std::vector<std::string> objs;
+    const std::string srcs[] = {s.c_path, s.rt, s.entry};
+    for (size_t i = 0; i < 3; i++) {
+        std::vector<std::string> argv = c_flags(opt, tmp);
+        if (std::string_view(t.platform) != "windows") argv.push_back("-fPIC");  // архив годится и в .so хоста
+        objs.push_back(tmp.file("part" + std::to_string(i) + ".o"));
+        for (const std::string& a : {std::string("-I"), s.core, std::string("-c"), srcs[i], std::string("-o"), objs.back()}) {
+            argv.push_back(a);
+        }
+        if (int code = run_cc(argv, opt)) return code;
+    }
+    std::string ar = ar_for(t, opt.cc);
+    std::string lib = tmp.file("lib.a");
+    std::vector<std::string> argv = {ar, "rcs", lib};
+    argv.insert(argv.end(), objs.begin(), objs.end());
+    int r = spawn_wait(argv);
+    if (r != 0) {
+        say("error: the archiver '" + ar + "' failed" + (r < 0 ? std::string(": ") + std::strerror(-r) : std::string()) +
+            "; set DPL_AR\n");
+        return 2;
+    }
+    std::string h = tmp.file("lib.h");
+    if (!write_all(h, header)) {
+        say("error: cannot write '" + h + "'\n");
+        return 2;
+    }
+    for (const auto& [from, to] : {std::pair{lib, opt.output}, std::pair{h, header_path}}) {
+        if (int e = copy_program(from, to, 0644)) {
+            say("error: cannot write '" + to + "': " + std::strerror(e) + "\n");
+            return 2;
+        }
     }
     return 0;
 }

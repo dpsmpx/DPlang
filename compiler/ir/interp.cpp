@@ -405,6 +405,7 @@ private:
             case Const::Kind::Float: return float_value(c.f);
             case Const::Kind::Bool: return bool_value(c.b);
             case Const::Kind::Str: return str_value(p_.strings[c.str]);
+            case Const::Kind::Fn: return int_value(c.fn);  // адрес функции — её номер (Р61)
         }
         return Value{};
     }
@@ -459,7 +460,7 @@ private:
             fr.inst++;
             return;
         }
-        if (in.rv.kind == RvKind::Call) return call(fr, in.rv);  // продолжение — при возврате
+        if (in.rv.kind == RvKind::Call || in.rv.kind == RvKind::CallPtr) return call(fr, in.rv);  // продолжение — при возврате
         Value v = rvalue(fr, in.rv);
         if (stop_) return;
         if (in.kind == InstKind::Assign) {
@@ -472,13 +473,21 @@ private:
 
     void call(Frame& fr, const Rvalue& rv) {
         if (frames_.size() >= kMaxFrames) return trap("stack overflow: calls are nested too deeply");
-        const Function& g = p_.fns[rv.fn];
+        uint32_t target = rv.fn;
+        if (rv.kind == RvKind::CallPtr) {  // Р61: значение — номер функции `@export`
+            Value scratch;
+            const Value& v = peek(fr, rv.ops[0], scratch);
+            if (stop_) return;
+            if (v.k != Value::K::Int || v.i >= p_.fns.size()) return internal("pointer call of a non-function value");
+            target = static_cast<uint32_t>(v.i);
+        }
+        const Function& g = p_.fns[target];
         if (g.is_extern) {  // Р59: интерпретатор исполняет только dpl
             return internal("cannot call C function '" + g.c_name +
                             "': the reference interpreter runs only dpl code; build the program with 'dpl build'");
         }
         Frame nf;
-        nf.fn = rv.fn;
+        nf.fn = target;
         nf.locals.resize(g.locals.size());
         nf.refs.resize(g.param_count);
         for (size_t i = 0; i < rv.args.size(); i++) {
@@ -588,7 +597,7 @@ private:
                 if (rv.kind == RvKind::Tag) return int_value(r.v->tag);
                 return bool_value(rv.kind == RvKind::IsSome ? r.v->tag == 1 : r.v->tag == 0);
             }
-            case RvKind::Call: break;  // исполняется в step()
+            case RvKind::Call: case RvKind::CallPtr: break;  // исполняется в step()
         }
         internal("unknown rvalue");
         return Value{};

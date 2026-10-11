@@ -331,6 +331,9 @@ static inline float dp_canon_f32(float x) {
 char* dp_str_to_c(dp_str s, const char* loc);
 /* Строка C из функции fn — копия в str. NULL и не UTF-8 — ловушка. */
 dp_str dp_str_from_c(const char* p, const char* fn, const char* loc);
+/* Строка, которую C передал функции `@export` (Р61): копия; NULL и не
+ * UTF-8 — ловушка с именами параметра и функции. */
+dp_str dp_str_from_c_arg(const char* p, const char* param, const char* fn, const char* loc);
 
 /* Открывает файл для чтения байтов по пути в UTF-8 (порт платформы:
  * runtime/linux, runtime/windows). NULL — нет; errno — причина. */

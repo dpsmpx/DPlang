@@ -65,6 +65,18 @@ private:
         return true;
     }
 
+    // Сигнатура функции g — та же, что у типа `extern fn(...)` (Р61).
+    static bool fits(const Function& g, const sema::CFnSig& sig) {
+        if (g.param_count != sig.params.size() || g.ret != sig.ret) return false;
+        for (uint32_t i = 0; i < g.param_count; i++) {
+            LocalKind want = sig.params[i].first == ast::ParamMode::Value ? LocalKind::Param
+                             : sig.params[i].first == ast::ParamMode::Ref ? LocalKind::ParamRef
+                                                                          : LocalKind::ParamMut;
+            if (g.locals[i].kind != want || g.locals[i].type != sig.params[i].second) return false;
+        }
+        return true;
+    }
+
     // stored — значение сохраняется (там допустим move).
     const Type* operand(const Operand& o, bool stored) {
         if (o.kind == OpKind::Const) {
@@ -76,7 +88,9 @@ private:
             bool ok = (o.c.kind == Const::Kind::Int && sema::is_integer(t)) ||
                       (o.c.kind == Const::Kind::Float && sema::is_float(t)) ||
                       (o.c.kind == Const::Kind::Bool && t->kind == TK::Bool) ||
-                      (o.c.kind == Const::Kind::Str && t->kind == TK::Str && o.c.str < p_.strings.size());
+                      (o.c.kind == Const::Kind::Str && t->kind == TK::Str && o.c.str < p_.strings.size()) ||
+                      (o.c.kind == Const::Kind::Fn && t->kind == TK::CFn && o.c.fn < p_.fns.size() &&
+                       p_.fns[o.c.fn].exported && fits(p_.fns[o.c.fn], *t->sig));
             if (!ok) fail("constant does not match its type");
             return t;
         }
@@ -465,6 +479,32 @@ private:
                 }
                 if (rv.ops.empty() || rv.ops.size() > 2) fail("wrong number of slice bounds");
                 for (const Operand& o : rv.ops) same(operand(o, false), prim(TK::I64), "slice bound");
+                break;
+            }
+            case RvKind::CallPtr: {  // Р61: ops[0] — указатель, режимы и типы — по сигнатуре
+                if (rv.ops.size() != 1) return fail("pointer call without a callee");
+                const Type* ft = operand(rv.ops[0], false);
+                if (!ft) break;
+                if (ft->kind != TK::CFn) return fail("pointer call of a non-function value");
+                const sema::CFnSig& sig = *ft->sig;
+                same(t, sig.ret, "result");
+                if (rv.args.size() != sig.params.size()) return fail("wrong number of arguments to a pointer call");
+                for (size_t i = 0; i < rv.args.size(); i++) {
+                    const Arg& a = rv.args[i];
+                    Arg::Kind want = sig.params[i].first == ast::ParamMode::Value ? Arg::Kind::Value
+                                     : sig.params[i].first == ast::ParamMode::Ref ? Arg::Kind::Ref
+                                                                                  : Arg::Kind::Mut;
+                    if (a.kind != want) {
+                        fail("argument " + std::to_string(i) + " of a pointer call has a wrong mode");
+                        continue;
+                    }
+                    if (a.kind == Arg::Kind::Value) {
+                        same(operand(a.op, true), sig.params[i].second, "argument");
+                    } else {
+                        same(place(a.place), sig.params[i].second, "argument");
+                        if (a.kind == Arg::Kind::Mut && !writable(a.place)) fail("'&mut' argument of a read-only place");
+                    }
+                }
                 break;
             }
             case RvKind::Call: {

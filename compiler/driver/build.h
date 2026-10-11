@@ -56,6 +56,9 @@ struct BuildOptions {
 // иначе у Android — clang из NDK ($ANDROID_NDK_HOME или /opt/android-ndk),
 // у остальных — clang.
 std::string cc_for(const Target& t);
+// Архиватор цели: $DPL_AR; у хоста — ar; у других — llvm-ar рядом с
+// компилятором C или из PATH.
+std::string ar_for(const Target& t, const std::string& cc);
 // Запуск тестов цели: $DPL_RUNNER или runner цели.
 std::string runner_for(const Target& t);
 
@@ -63,6 +66,12 @@ std::string runner_for(const Target& t);
 // 0 — собрана; 2 — окружение (нет компилятора C или runtime); 3 —
 // компилятор C отверг сгенерированный код (внутренняя ошибка).
 int build_native(const std::string& c_code, const BuildOptions& opt);
+
+// `dpl build --lib` (Р61): статическая библиотека opt.output из C-кода
+// (backend_c::emit_c_lib) и runtime, заголовок header — в header_path.
+// Коды выхода — как у build_native.
+int build_lib(const std::string& c_code, const std::string& header, const std::string& header_path,
+              const BuildOptions& opt);
 
 // Собирает C-код сборки тестов (backend_c::emit_c_tests) в профиле test
 // и исполняет каждый тест names[i] отдельным процессом. Отчёт — в

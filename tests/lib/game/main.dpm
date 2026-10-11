@@ -1,0 +1,50 @@
+// spec: ffi.export ffi.fn ffi.lib
+// Библиотека для хоста на C (host.c): числа, структура @c по значению и
+// по ссылке, строка от C, колбэк с контекстом C, ?-дескриптор и ловушка.
+extern type Ctx
+
+@c
+pub struct Vec2 {
+    x: f32
+    y: f32
+}
+
+@export
+fn game_add(a: i32, b: i32) i32 {
+    return a + b
+}
+
+@export
+fn game_len2(v: Vec2) f32 {
+    return v.x * v.x + v.y * v.y
+}
+
+@export("game_greet")
+fn greet(name: str) i32 {
+    println("hello, " + name)
+    return i32(len(name))
+}
+
+@export
+fn game_scale(v: &mut Vec2, k: f32) {
+    v.x = v.x * k
+    v.y = v.y * k
+}
+
+@export
+fn game_apply(f: extern fn(Ctx, i32) i32, ctx: Ctx, x: i32) i32 {
+    return f(ctx, x) + 1
+}
+
+@export
+fn game_has(ctx: ?Ctx) bool {
+    if let c = ctx {
+        return c == c
+    }
+    return false
+}
+
+@export
+fn game_div(a: i32, b: i32) i32 {
+    return a / b
+}

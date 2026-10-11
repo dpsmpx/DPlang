@@ -106,6 +106,10 @@ private:
     const Type* common(ast::Expr* lhs, ast::Expr* rhs, const Type* hint, Span op_span, const char* op);
     const Type* call(ast::CallExpr* c, const Type* hint);
     const Type* user_call(ast::CallExpr* c, const FnDef& f);
+    const Type* ptr_call(ast::CallExpr* c, const Local& callee);
+    void check_args(ast::CallExpr* c, const std::vector<ParamDef>& params);
+    // Функция как значение: только `@export` — указатель на функцию C (Р61).
+    const Type* fn_value(const FnDef& f, Span span);
     const Type* builtin_call(ast::CallExpr* c, uint32_t b, const Type* hint);
     const Type* method_call(ast::CallExpr* c, ast::FieldExpr* f);
     const Type* convert_call(ast::CallExpr* c, const Type* target, bool wrap);

@@ -575,6 +575,32 @@ private:
             t->span = span_from(begin);
             return t;
         }
+        if (eat(TokKind::KwExtern)) {  // `extern fn(&i32, T) R` (Р61)
+            auto* t = m_.make<FnType>();
+            if (!expect(TokKind::KwFn) || !expect(TokKind::LParen)) {
+                t->span = span_from(begin);
+                return t;
+            }
+            {
+                NlScope nl(*this, true);
+                while (!at(TokKind::RParen) && !failed_) {
+                    FnType::Param p;
+                    if (eat(TokKind::Amp)) p.mode = eat(TokKind::KwMut) ? ParamMode::Mut : ParamMode::Ref;
+                    p.type = type();
+                    t->params.push_back(p);
+                    if (!eat(TokKind::Comma)) break;
+                }
+                if (!failed_) expect(TokKind::RParen);
+            }
+            // Результат — если дальше начинается тип: в списке параметров
+            // за типом идут `,` и `)`, в поле и `let` — конец строки и `=`.
+            if (!failed_ && (at(TokKind::Ident) || at(TokKind::Question) || at(TokKind::Bang) ||
+                             at(TokKind::LBracket) || at(TokKind::KwExtern))) {
+                t->ret = type();
+            }
+            t->span = span_from(begin);
+            return t;
+        }
         if (!at(TokKind::Ident)) {
             expected("type");
             auto* t = m_.make<ErrorType>();
