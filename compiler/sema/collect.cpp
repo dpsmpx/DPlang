@@ -36,6 +36,7 @@ public:
         }
         export_symbols();
         linear_placement();
+        c_placement();
         self_containment();
     }
 
@@ -320,8 +321,9 @@ private:
         }
     }
 
+    // c_layout — поля `@c`-структуры: срез и типы C (Р62) там можно.
     void fields(Resolver& r, const std::vector<FieldDecl>& decls, std::vector<FieldDef>& out, bool pub,
-                const std::string& what) {
+                const std::string& what, bool c_layout = false) {
         for (const FieldDecl& fd : decls) {
             bool dup = false;
             for (const FieldDef& prev : out) {
@@ -332,7 +334,7 @@ private:
             }
             const sema::Type* t = r.type(fd.type);
             if (pub) public_type(fd.type, t, what);
-            no_slice(fd.type, t, "a field");
+            if (!c_layout) no_slice(fd.type, t, "a field");
             if (dup) continue;
             out.push_back(FieldDef{fd.name, fd.name_span, t, fd.value});
         }
@@ -350,7 +352,7 @@ private:
             }
             if (flag) *flag = true;
         }
-        fields(r, d.node->fields, d.fields, d.pub, "struct");
+        fields(r, d.node->fields, d.fields, d.pub, "struct", d.c);
     }
 
     // Где лежат линейные значения (Р60, E0514): поле — только у `@linear`,
@@ -404,14 +406,73 @@ private:
         }
     }
 
+    // Типы только для C (Р62, E0328): `[N]T` и `&T` — поля `@c` (`?&T` —
+    // ещё параметр функции C); заимствующая структура — параметр по
+    // значению или `&T` и поле `@c`. Проверка — когда `@c` всех известен.
+    void c_placement() {
+        auto bad = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m, const std::string& where) {
+            if (!node || !t || t->kind == TK::Error) return;
+            if (contains_c_only(t)) {
+                diags_.error(Code::E0328, node->span, "'" + type_name(t, m) + "' cannot be " + where +
+                                                          ": '[N]T' and '&T' are fields of a '@c' struct (spec: ffi.struct)");
+            } else if (c_borrowing(t) || (t->kind != TK::Struct && borrowing_inside(t))) {
+                diags_.error(Code::E0328, node->span,
+                             "'" + type_name(t, m) + "' has borrowed fields and cannot be " + where +
+                                 ": it lives only in a call argument (spec: ffi.struct)");
+            }
+        };
+        for (StructDef& d : prog_.structs) {
+            if (!d.node || d.c) continue;
+            for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
+                bad(d.node->fields[i].type, d.fields[i].type, d.module, "a field of a plain struct");
+            }
+        }
+        for (EnumDef& d : prog_.enums) {
+            if (!d.node) continue;
+            for (size_t v = 0; v < d.variants.size() && v < d.node->variants.size(); v++) {
+                const VariantDecl& vd = d.node->variants[v];
+                for (size_t k = 0; k < d.variants[v].types.size() && k < vd.types.size(); k++) {
+                    bad(vd.types[k], d.variants[v].types[k], d.module, "a variant value");
+                }
+                for (size_t k = 0; k < d.variants[v].fields.size() && k < vd.fields.size(); k++) {
+                    bad(vd.fields[k].type, d.variants[v].fields[k].type, d.module, "a variant value");
+                }
+            }
+        }
+        for (FnDef& f : prog_.fns) {
+            if (!f.node) continue;
+            for (size_t i = 0; i < f.params.size() && i < f.node->params.size(); i++) {
+                const ParamDef& p = f.params[i];
+                const sema::Type* t = p.type;
+                // `?&T` — параметр функции C: указатель или NULL на время вызова.
+                bool opt_ref = f.is_extern && p.mode == ParamMode::Value && t->kind == TK::Optional &&
+                               t->elem->kind == TK::Ref && c_borrow_field(t);
+                if (opt_ref) continue;
+                if (c_borrowing(t) && p.mode != ParamMode::Mut) continue;  // как срез: параметр
+                bad(f.node->params[i].type, t, f.module,
+                    p.mode == ParamMode::Mut ? "a '&mut' parameter (C would write into it)" : "a parameter");
+            }
+            bad(f.node->ret, f.ret, f.module, "a result");
+        }
+    }
+
+    // Заимствующая структура внутри другого типа: List, ?T, E!T, Map.
+    static bool borrowing_inside(const sema::Type* t) {
+        if (!t) return false;
+        if (c_borrowing(t)) return true;
+        if (t->kind == TK::Struct || t->kind == TK::Enum || t->kind == TK::CFn) return false;
+        return borrowing_inside(t->elem) || borrowing_inside(t->err) || borrowing_inside(t->key);
+    }
+
     // `@c` (Р59): поля — типы с видом в C; проверка — когда поля всех структур известны.
     void c_struct(const StructDef& d) {
         for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
             const FieldDef& f = d.fields[i];
-            if (f.type && f.type->kind != TK::Error && !c_value_type(f.type)) {
+            if (f.type && f.type->kind != TK::Error && !c_field_type(f.type)) {
                 diags_.error(Code::E0326, d.node->fields[i].type->span,
                              "field '" + f.name + "' of '@c' struct '" + d.name + "' has type '" + type_name(f.type, d.module) +
-                                 "', which has no C layout; use integers, floats, bool, 'extern type' or '@c' structs");
+                                 "', which has no C layout; use numbers, bool, handles, 'extern fn', '@c' structs, "
+                                 "'[N]T' or borrowed 'str', '[]T', '&T', '?&T' (spec: ffi.struct)");
             }
         }
     }
@@ -422,9 +483,13 @@ private:
     bool c_param(const sema::Type* t, ParamMode mode) {
         if (!t || t->kind == TK::Error) return true;
         if (mode == ParamMode::Value) {
-            return export_param(t, mode) || (t->kind == TK::Slice && c_value_type(t->elem));
+            // Срез, заимствующая структура и `?&T` переводятся в C на время вызова (Р62).
+            return export_param(t, mode) || (t->kind == TK::Slice && c_borrow_field(t)) || c_borrowing(t) ||
+                   (t->kind == TK::Optional && t->elem->kind == TK::Ref && c_borrow_field(t));
         }
-        return c_value_type(t) || (mode == ParamMode::Mut && t->kind == TK::List && c_value_type(t->elem));
+        if (t->kind == TK::Array) return false;
+        return c_value_type(t) || (mode == ParamMode::Ref && c_borrowing(t)) ||
+               (mode == ParamMode::Mut && t->kind == TK::List && c_value_type(t->elem));
     }
 
     // Типы функции C — когда известны `@c` всех структур.

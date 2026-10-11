@@ -569,9 +569,24 @@ private:
         }
         if (at(TokKind::LBracket)) {
             bump();
+            if (at(TokKind::Int)) {  // `[N]T` — массив C (Р62)
+                auto* t = m_.make<ArrayType>();
+                t->len_src = std::string(text_of(toks_[idx()]));
+                parse_int_literal(text_of(bump()), t->len);
+                expect(TokKind::RBracket);
+                t->elem = type();
+                t->span = span_from(begin);
+                return t;
+            }
             auto* t = m_.make<SliceType>();
             expect(TokKind::RBracket);
             t->elem = type();
+            t->span = span_from(begin);
+            return t;
+        }
+        if (eat(TokKind::Amp)) {  // `&T` — заимствующее поле `@c` (Р62)
+            auto* t = m_.make<RefType>();
+            t->inner = type();
             t->span = span_from(begin);
             return t;
         }

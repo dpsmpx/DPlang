@@ -115,6 +115,22 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
             out = tt.result(err, value);
             break;
         }
+        case TypeKind::Array: {  // `[N]T` (Р62)
+            auto* a = static_cast<ArrayType*>(node);
+            const sema::Type* elem = type(a->elem);
+            if (elem->kind == TK::Error) break;
+            if (a->len == 0 || a->len > (uint64_t{1} << 24)) {
+                diags_.error(Code::E0328, node->span, "the length of '[N]T' must be from 1 to 16777216");
+                break;
+            }
+            out = tt.array(elem, a->len);
+            break;
+        }
+        case TypeKind::Ref: {  // `&T` поля `@c` (Р62)
+            const sema::Type* inner = type(static_cast<RefType*>(node)->inner);
+            if (inner->kind != TK::Error) out = tt.ref(inner);
+            break;
+        }
         case TypeKind::Fn: {  // `extern fn(...)` (Р61)
             auto* f = static_cast<FnType*>(node);
             CFnSig sig;

@@ -84,7 +84,7 @@ bool Checker::convertible(const Type* from, const Type* to) {
         return !sf && st && bf < bt;
     }
     if (from->kind == TK::F32 && to->kind == TK::F64) return true;
-    if (from->kind == TK::List && to->kind == TK::Slice) return from->elem == to->elem;
+    if ((from->kind == TK::List || from->kind == TK::Array) && to->kind == TK::Slice) return from->elem == to->elem;
     if (to->kind == TK::Optional && from->kind != TK::Optional) return convertible(from, to->elem);
     if (to->kind == TK::Result && from->kind != TK::Result) return convertible(from, to->elem);
     return false;
@@ -131,7 +131,8 @@ bool Checker::literal_like(const Expr* e) const {
 bool Checker::type_prop(const Type* t, bool ord, size_t& low) {
     switch (t->kind) {
         case TK::Error: return true;
-        case TK::Void: case TK::Result: case TK::Map: case TK::CFn: return false;  // указатель C (Р61) не сравнивается  // Р54: отображения не сравниваются
+        // Р54: отображения не сравниваются; указатель C (Р61), массив и ссылка-поле C (Р62) — тоже.
+        case TK::Void: case TK::Result: case TK::Map: case TK::CFn: case TK::Array: case TK::Ref: return false;
         case TK::Bool: case TK::Str: return true;
         case TK::List: case TK::Slice: return type_prop(t->elem, ord, low);
         case TK::Optional: return !ord && type_prop(t->elem, ord, low);  // ?T не упорядочен
@@ -713,7 +714,7 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
         case BuiltinFn::Len: {
             const Type* t = infer(c->args[0], nullptr);
             if (t->kind != TK::List && t->kind != TK::Slice && t->kind != TK::Str && t->kind != TK::Map &&
-                t->kind != TK::Error) {
+                t->kind != TK::Array && t->kind != TK::Error) {
                 error(Code::E0401, c->args[0]->span, "'len' needs a List, a slice, a Map or a str, found '" + tn(t) + "'");
             }
             return prim(TK::I64);
@@ -929,7 +930,7 @@ const Type* Checker::variant_value(const EnumDef* en, uint32_t index, VariantFor
 }
 
 void Checker::field_inits(std::vector<FieldInit>& inits, const std::vector<FieldDef>& fields, bool defaults_ok,
-                          Span span, const std::string& what) {
+                          Span span, const std::string& what, bool c_zero) {
     std::vector<char> given(fields.size(), 0);
     for (FieldInit& fi : inits) {
         int idx = -1;
@@ -958,7 +959,8 @@ void Checker::field_inits(std::vector<FieldInit>& inits, const std::vector<Field
     }
     std::string missing;
     for (size_t i = 0; i < fields.size(); i++) {
-        if (!given[i] && !(defaults_ok && fields[i].default_value)) {
+        // Р62: у `@c` пропущенное поле — ноль, если он у типа есть.
+        if (!given[i] && !(defaults_ok && fields[i].default_value) && !(c_zero && zeroable(fields[i].type))) {
             missing += (missing.empty() ? "'" : ", '") + fields[i].name + "'";
         }
     }
@@ -976,7 +978,7 @@ const Type* Checker::struct_lit(StructLitExpr* s) {
     }
     if (p && p->kind == ResKind::Struct) {
         s->res = *p;
-        field_inits(s->fields, p->st->fields, true, s->span, "struct '" + p->st->name + "'");
+        field_inits(s->fields, p->st->fields, true, s->span, "struct '" + p->st->name + "'", p->st->c);
         return tt_.struct_type(p->st);
     }
     if (p && p->kind == ResKind::Variant) {
@@ -1051,6 +1053,14 @@ const Type* Checker::list_lit(ListLitExpr* l, const Type* hint) {
         for (Expr* x : l->items) infer(x, nullptr);
         return err();
     }
+    if (h && h->kind == TK::Array) {  // Р62: значение поля `[N]T` — ровно N элементов
+        for (Expr* x : l->items) check(x, h->elem);
+        if (l->items.size() != h->len) {
+            error(Code::E0401, l->span, "'" + tn(h) + "' takes exactly " + std::to_string(h->len) + " element" +
+                                            (h->len == 1 ? "" : "s") + ", found " + std::to_string(l->items.size()));
+        }
+        return h;
+    }
     const Type* elem = h && (h->kind == TK::List || h->kind == TK::Slice) ? h->elem : nullptr;
     if (l->items.empty()) {
         if (!elem) {
@@ -1084,7 +1094,7 @@ const Type* Checker::index_expr(IndexExpr* i) {
         else coerce(i->index, prim(TK::I64));
     }
     switch (t->kind) {
-        case TK::List: case TK::Slice: return t->elem;
+        case TK::List: case TK::Slice: case TK::Array: return t->elem;
         case TK::Str: return prim(TK::U8);
         case TK::Error: return err();
         default:
@@ -1103,7 +1113,7 @@ const Type* Checker::slice_expr(SliceExpr* s) {
         else coerce(bound, prim(TK::I64));
     }
     switch (t->kind) {
-        case TK::List: case TK::Slice: return tt_.slice(t->elem);
+        case TK::List: case TK::Slice: case TK::Array: return tt_.slice(t->elem);
         case TK::Str: return prim(TK::Str);
         case TK::Map:
             error(Code::E0403, s->object->span, "a Map cannot be sliced; read values with m[k]");

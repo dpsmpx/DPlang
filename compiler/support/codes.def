@@ -165,6 +165,13 @@ DP_CODE(E0326, "type cannot cross to C",
         "values with a C form, `str`, `?H`, `?extern fn(...)` and `&T`, `&mut T` of a C form, and returns a "
         "value with a C form, `?H`, `?extern fn(...)` or nothing: C has no `E!T`, and a `str` it would have "
         "to free.")
+DP_CODE(E0328, "type only for C structs",
+        "Some types exist only to describe C structs (decision R62, spec: ffi.struct): a fixed array "
+        "`[N]T` and a reference `&T` are fields of a `@c` struct (`?&T` is also a parameter of an "
+        "`extern fn`). A `@c` struct with a borrowed field - `str`, `[]T`, `&T`, `?&T`, `?H` or "
+        "`?extern fn(...)` - lives only in a call argument, like a slice: it is a parameter type, not the "
+        "type of a variable, a result, or a field of a plain struct. Build it right in the call: "
+        "`vkCreateInstance(&VkInstanceCreateInfo { ... }, none, &mut instance)`.")
 DP_CODE(E0327, "C symbol is taken",
         "An `@export fn` (decision R61) is a global C symbol: by default the function name, or the name "
         "in `@export(\"name\")`. Two exported functions of one program cannot share a symbol, nor can an "

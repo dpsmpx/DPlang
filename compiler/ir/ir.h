@@ -144,6 +144,7 @@ enum class RvKind : uint8_t {
     Tag,          // номер варианта значения place (u32)
     IsSome,       // у place (?T) есть значение
     IsOk,         // place (E!T) — успех
+    Zero,         // ноль типа (Р62: пропущенное поле `@c`); операндов нет
 };
 
 struct Arg {

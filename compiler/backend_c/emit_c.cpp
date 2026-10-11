@@ -54,6 +54,7 @@ bool is_scalar(const Type* t) {
 bool is_composite(const Type* t) {
     switch (t->kind) {
         case TK::List: case TK::Map: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum:
+        case TK::Array:
             return true;
         default: return false;
     }
@@ -89,6 +90,7 @@ std::string mangle(const Type* t) {
         case TK::Result: return "R_" + (t->err ? mangle(t->err) : std::string("x")) + "_" + mangle(t->elem);
         case TK::Struct: return "T_" + lp(t->sdef->module->name) + lp(t->sdef->name);
         case TK::Enum: return "E_" + lp(t->edef->module->name) + lp(t->edef->name);
+        case TK::Array: return "A" + std::to_string(t->len) + "_" + mangle(t->elem);  // Р62
         case TK::CFn: {  // F_<число параметров><режим и тип>…<результат>; записи с длиной
             std::string s = "F_" + std::to_string(t->sig->params.size());
             for (const auto& [mode, p] : t->sig->params) {
@@ -325,7 +327,7 @@ private:
         if (!t || seen_.count(t)) return;
         seen_.insert(t);
         switch (t->kind) {
-            case TK::List: case TK::Slice: add_type(t->elem); break;
+            case TK::List: case TK::Slice: case TK::Array: add_type(t->elem); break;
             case TK::Map:
                 add_type(t->key);
                 add_type(t->elem);
@@ -413,6 +415,8 @@ private:
                        "* vals;\n    int64_t len;\n    int64_t cap;\n    int64_t* slots;\n    int64_t nslots;\n";
                 break;
             case TK::Slice: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n"; break;
+            // Массив C (Р62) — в обёртке: так его можно присвоить; раскладка — как у массива.
+            case TK::Array: out += "    " + ctype(t->elem) + " v[" + std::to_string(t->len) + "];\n"; break;
             case TK::Optional: out += "    bool has;\n    " + ctype(t->elem) + " value;\n"; break;
             case TK::Result:
                 out += "    bool is_err;\n";
@@ -881,6 +885,13 @@ private:
                         break;
                     }
                     std::string ptr = fresh("dp_p");
+                    if (t->kind == TK::Array) {  // Р62: длина — в типе
+                        line(ctype(t->elem) + "* " + ptr + " = &(" + r.expr + ").v[dp_check_index(" + idx + ", " +
+                             std::to_string(t->len) + ", " + loc_ + ")];");
+                        r.expr = "(*" + ptr + ")";
+                        r.type = t->elem;
+                        break;
+                    }
                     line(ctype(t->elem) + "* " + ptr + " = &(" + r.expr + ").ptr[dp_check_index(" + idx + ", (" +
                          r.expr + ").len, " + loc_ + ")];");
                     r.expr = "(*" + ptr + ")";
@@ -1154,7 +1165,11 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
     std::vector<std::string> ops;
     for (const Operand& o : rv.ops) ops.push_back(operand(o, false));
     switch (rv.intrinsic) {
-        case Intrinsic::Len: return "((int64_t)(" + ops[0] + ").len)";
+        case Intrinsic::Len: {
+            const Type* t = op_type(rv.ops[0]);
+            if (t->kind == TK::Array) return "((int64_t)" + std::to_string(t->len) + ")";
+            return "((int64_t)(" + ops[0] + ").len)";
+        }
         case Intrinsic::Repeat: {
             const Type* nt = op_type(rv.ops[1]);
             std::string n = fresh("dp_n");
@@ -1272,6 +1287,10 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
             std::string r = fresh("dp_r"), ec = ctype(rv.type->elem);
             line(ctype(rv.type) + " " + r + " = {0};");
+            if (rv.type->kind == TK::Array) {  // Р62: на месте, без памяти
+                for (size_t k = 0; k < ops.size(); k++) line(r + ".v[" + std::to_string(k) + "] = " + ops[k] + ";");
+                return r;
+            }
             if (!ops.empty()) {
                 std::string n = std::to_string(ops.size());
                 line(r + ".ptr = (" + ec + "*)dp_alloc(" + n + ", sizeof(" + ec + "), " + loc_ + ");");
@@ -1306,12 +1325,14 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             std::string lo = operand(rv.ops[0], false);
             std::string hi = rv.ops.size() > 1 ? operand(rv.ops[1], false) : "";
             Lv base = place(rv.place);
-            std::string h = hi.empty() ? "(" + base.expr + ").len" : "(int64_t)" + hi;
+            bool arr = base.type->kind == TK::Array;  // Р62: элементы — v, длина — в типе
+            std::string len = arr ? "(int64_t)" + std::to_string(base.type->len) : "(" + base.expr + ").len";
+            std::string h = hi.empty() ? len : "(int64_t)" + hi;
             if (base.type->kind == TK::Str) return "dp_str_slice(" + base.expr + ", (int64_t)" + lo + ", " + h + ", " + loc_ + ")";
             std::string r = fresh("dp_r");
-            line("dp_check_slice((int64_t)" + lo + ", " + h + ", (" + base.expr + ").len, " + loc_ + ");");
+            line("dp_check_slice((int64_t)" + lo + ", " + h + ", " + len + ", " + loc_ + ");");
             line(ctype(rv.type) + " " + r + " = {0};");
-            line(r + ".ptr = (" + base.expr + ").ptr + (int64_t)" + lo + ";");
+            line(r + ".ptr = (" + base.expr + (arr ? ").v" : ").ptr") + " + (int64_t)" + lo + ";");
             line(r + ".len = " + h + " - (int64_t)" + lo + ";");
             return r;
         }
@@ -1352,6 +1373,8 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         case RvKind::Tag: return "((uint32_t)(" + place(rv.place).expr + ").tag)";
         case RvKind::IsSome: return "((" + place(rv.place).expr + ").has)";
         case RvKind::IsOk: return "(!(" + place(rv.place).expr + ").is_err)";
+        case RvKind::Zero: return is_composite(rv.type) || rv.type->kind == TK::Str ? "((" + ctype(rv.type) + "){0})"
+                                                                                   : "((" + ctype(rv.type) + ")0)";
     }
     error("unknown rvalue");
     return "0";

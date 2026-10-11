@@ -224,7 +224,8 @@ private:
             case Intrinsic::Len:
                 args(1);
                 t0 = op(0);
-                if (t0 && t0->kind != TK::List && t0->kind != TK::Slice && t0->kind != TK::Str && t0->kind != TK::Map) {
+                if (t0 && t0->kind != TK::List && t0->kind != TK::Slice && t0->kind != TK::Str && t0->kind != TK::Map &&
+                    t0->kind != TK::Array) {
                     fail("len of a non-sequence");
                 }
                 same(rv.type, prim(TK::I64), "result");
@@ -437,7 +438,8 @@ private:
                 break;
             }
             case RvKind::MakeList:
-                if (t->kind != TK::List) return fail("list value of a non-List type");
+                if (t->kind != TK::List && t->kind != TK::Array) return fail("list value of a non-List type");
+                if (t->kind == TK::Array) count(rv, t->len);  // Р62: ровно N
                 for (size_t i = 0; i < rv.ops.size(); i++) stored(i, t->elem);
                 break;
             case RvKind::MakeMap:
@@ -472,7 +474,7 @@ private:
                 const Type* base = place(rv.place);
                 if (!base) break;
                 if (base->kind == TK::Str) same(t, prim(TK::Str), "result");
-                else if (base->kind == TK::List || base->kind == TK::Slice) {
+                else if (base->kind == TK::List || base->kind == TK::Slice || base->kind == TK::Array) {
                     if (t->kind != TK::Slice || t->elem != base->elem) fail("slice of a wrong type");
                 } else {
                     fail("slice of a non-sequence");
@@ -538,6 +540,10 @@ private:
                 same(t, prim(TK::U32), "result");
                 break;
             }
+            case RvKind::Zero:  // Р62: ноль — у типов, где он есть
+                count(rv, 0);
+                if (!sema::zeroable(t)) fail("zero of a type without a zero");
+                break;
             case RvKind::IsSome: case RvKind::IsOk: {
                 const Type* x = rv.has_place ? place(rv.place) : nullptr;
                 TK want = rv.kind == RvKind::IsSome ? TK::Optional : TK::Result;

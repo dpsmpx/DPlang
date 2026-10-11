@@ -67,6 +67,29 @@ Value str_value(std::string s) {
     return v;
 }
 
+Value seq_value(uint32_t tag);
+
+// Ноль типа (Р62): пропущенное поле `@c`.
+Value zero_value(const Type* t) {
+    if (sema::is_float(t)) return float_value(0);
+    if (sema::is_integer(t)) return int_value(0);
+    switch (t->kind) {
+        case TK::Bool: return bool_value(false);
+        case TK::Str: return str_value("");
+        case TK::Array: {
+            Value v = seq_value(0);
+            for (uint64_t i = 0; i < t->len; i++) v.items.push_back(zero_value(t->elem));
+            return v;
+        }
+        case TK::Struct: {
+            Value v = seq_value(0);
+            for (const sema::FieldDef& f : t->sdef->fields) v.items.push_back(zero_value(f.type));
+            return v;
+        }
+        default: return seq_value(0);  // ?T — none, срез — пустой
+    }
+}
+
 Value seq_value(uint32_t tag) {
     Value v;
     v.k = Value::K::Seq;
@@ -585,6 +608,7 @@ private:
                 return v;
             }
             case RvKind::MakeMap: return seq_value(0);
+            case RvKind::Zero: return zero_value(rv.type);
             case RvKind::SliceOf: return slice(fr, rv);
             case RvKind::Intrinsic: return intrinsic(fr, rv);
             case RvKind::Tag: case RvKind::IsSome: case RvKind::IsOk: {

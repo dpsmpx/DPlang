@@ -50,6 +50,15 @@ Local* Checker::declare(const std::string& name, Span span, const Type* type, bo
         d.notes.push_back(Note{prev->span, true, "previous definition here"});
         return nullptr;
     }
+    if (!declaring_params_ && type && type->kind != TK::Error) {
+        if (contains_c_only(type)) {
+            error(Code::E0328, span, "'" + name + "' cannot hold '" + tn(type) +
+                                         "': '[N]T' and '&T' are fields of a '@c' struct; index or pass them where they are");
+        } else if (c_borrowing(type)) {
+            error(Code::E0328, span, "'" + name + "' cannot hold '" + tn(type) +
+                                         "': it has borrowed fields and lives only in a call argument; build it in the call");
+        }
+    }
     Local& l = prog_.locals.emplace_back();
     l.name = name;
     l.span = span;
@@ -79,6 +88,7 @@ void Checker::fn(FnDef& f) {
     loops_.clear();
     push_scope();
     FnItem* node = const_cast<FnItem*>(f.node);
+    declaring_params_ = true;
     for (size_t i = 0; i < node->params.size() && i < f.params.size(); i++) {
         Param& p = node->params[i];
         if (find_local(p.name)) continue;  // повтор параметра — уже E0318 при сборе объявлений
@@ -86,6 +96,7 @@ void Checker::fn(FnDef& f) {
                           p.mode != ParamMode::Value, true);
         if (p.local) p.local->is_param = true;
     }
+    declaring_params_ = false;
     block(node->body);
     // Конец тела достижим: функция с результатом (кроме `!void`) обязана вернуть значение.
     if (flow_.live && f.ret && f.ret->kind != TK::Void && f.ret->kind != TK::Error) {

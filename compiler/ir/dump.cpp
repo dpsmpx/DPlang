@@ -227,6 +227,7 @@ private:
             case RvKind::Tag: return "tag " + place(rv.place);
             case RvKind::IsSome: return "is_some " + place(rv.place);
             case RvKind::IsOk: return "is_ok " + place(rv.place);
+            case RvKind::Zero: return "zero " + type(rv.type);
         }
         return "?";
     }

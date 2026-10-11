@@ -370,6 +370,11 @@ std::string type_text(const Type* t) {
             auto* r = static_cast<const ResultType*>(t);
             return (r->error ? type_text(r->error) : "") + "!" + type_text(r->value);
         }
+        case TypeKind::Array: {
+            auto* a = static_cast<const ArrayType*>(t);
+            return "[" + a->len_src + "]" + type_text(a->elem);
+        }
+        case TypeKind::Ref: return "&" + type_text(static_cast<const RefType*>(t)->inner);
         case TypeKind::Fn: {
             auto* f = static_cast<const FnType*>(t);
             std::string s = "extern fn(";

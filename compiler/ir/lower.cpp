@@ -413,7 +413,7 @@ private:
             rv.ops.push_back(rd(std::move(o)));
             return to_temp(std::move(rv), span);
         }
-        if (from->kind == TK::List && to->kind == TK::Slice) {
+        if ((from->kind == TK::List || from->kind == TK::Array) && to->kind == TK::Slice) {
             bool fresh = false;
             Rvalue rv = make(RvKind::SliceOf, to);
             rv.place = place_of(std::move(o), span, fresh);
@@ -687,7 +687,8 @@ private:
 
     // Значения полей в порядке записи, затем значения по умолчанию;
     // в правой части — по порядку объявления.
-    std::vector<Operand> field_values(const std::vector<FieldInit>& inits, const std::vector<sema::FieldDef>& fields) {
+    std::vector<Operand> field_values(const std::vector<FieldInit>& inits, const std::vector<sema::FieldDef>& fields,
+                                      Span span) {
         std::vector<const Expr*> es;
         for (const FieldInit& fi : inits) es.push_back(fi.value ? fi.value : fi.shorthand);
         std::vector<Operand> given = exprs(es);
@@ -702,7 +703,9 @@ private:
             }
         }
         for (size_t k = 0; k < fields.size(); k++) {
-            if (!have[k] && fields[k].default_value) out[k] = expr(fields[k].default_value);
+            if (have[k]) continue;
+            if (fields[k].default_value) out[k] = expr(fields[k].default_value);
+            else out[k] = to_temp(make(RvKind::Zero, fields[k].type), span);  // Р62: ноль поля `@c`
         }
         return out;
     }
@@ -712,11 +715,11 @@ private:
             const sema::VariantDef& vd = s->res.en->variants[s->res.index];
             Rvalue rv = make(RvKind::MakeVariant, s->type);
             rv.variant = s->res.index;
-            rv.ops = field_values(s->fields, vd.fields);
+            rv.ops = field_values(s->fields, vd.fields, s->span);
             return to_temp(std::move(rv), s->span);
         }
         Rvalue rv = make(RvKind::MakeStruct, s->type);
-        rv.ops = field_values(s->fields, s->res.st->fields);
+        rv.ops = field_values(s->fields, s->res.st->fields, s->span);
         return to_temp(std::move(rv), s->span);
     }
 
@@ -728,7 +731,7 @@ private:
             std::vector<const Expr*> es(v->args.begin(), v->args.end());
             rv.ops = exprs(es);
         } else if (v->form == VariantForm::Record) {
-            rv.ops = field_values(v->fields, vd.fields);
+            rv.ops = field_values(v->fields, vd.fields, v->span);
         }
         return to_temp(std::move(rv), v->span);
     }

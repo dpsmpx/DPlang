@@ -211,6 +211,8 @@ private:
                 push(K::Type, r->value, d);
                 break;
             }
+            case TypeKind::Array: push(K::Type, static_cast<const ArrayType*>(t)->elem, d); break;
+            case TypeKind::Ref: push(K::Type, static_cast<const RefType*>(t)->inner, d); break;
             case TypeKind::Fn: {
                 auto* f = static_cast<const FnType*>(t);
                 for (const FnType::Param& p : f->params) push(K::Type, p.type, d);
