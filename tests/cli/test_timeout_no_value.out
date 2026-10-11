@@ -1,0 +1,4 @@
+--- stderr ---
+error: --timeout needs a number of seconds (0 for no limit)
+run 'dpl help' to list the commands
+[exit 2]

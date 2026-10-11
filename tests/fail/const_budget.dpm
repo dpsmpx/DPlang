@@ -1,0 +1,37 @@
+// spec: decl.const
+// Бюджет вычисления констант модуля: удвоение строки упирается в него
+// на C21, а не съедает память (docs/policy/SECURITY.md, раздел 4).
+const C0: str = "ab"
+const C1: str = C0 + C0
+const C2: str = C1 + C1
+const C3: str = C2 + C2
+const C4: str = C3 + C3
+const C5: str = C4 + C4
+const C6: str = C5 + C5
+const C7: str = C6 + C6
+const C8: str = C7 + C7
+const C9: str = C8 + C8
+const C10: str = C9 + C9
+const C11: str = C10 + C10
+const C12: str = C11 + C11
+const C13: str = C12 + C12
+const C14: str = C13 + C13
+const C15: str = C14 + C14
+const C16: str = C15 + C15
+const C17: str = C16 + C16
+const C18: str = C17 + C17
+const C19: str = C18 + C18
+const C20: str = C19 + C19
+const C21: str = C20 + C20
+const C22: str = C21 + C21
+const C23: str = C22 + C22
+const C24: str = C23 + C23
+const C25: str = C24 + C24
+const C26: str = C25 + C25
+const C27: str = C26 + C26
+const C28: str = C27 + C27
+const C29: str = C28 + C28
+const C30: str = C29 + C29
+fn main() {
+    println(str(len(C30)))
+}

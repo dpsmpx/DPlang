@@ -1,12 +1,19 @@
-# spec: syntax.nesting
-"""Проход limits исполнителя tests/run.py: предел вложенности (E0002).
+# spec: syntax.nesting type.recursive expr.compare
+"""Проход limits исполнителя tests/run.py: предел вложенности (E0002) и
+масштаб графа объявлений.
 
 Для каждой конструкции наибольшее принятое число уровней n ищется
 делением пополам по `dpl check`. На n все команды компилятора проходят
 без падения (код 0 или 1, без внутренней ошибки и сообщений санитайзеров),
 на n + 1 — ровно одно сообщение E0002 и код 1. Устройство —
 docs/compiler/README.md, «Предел вложенности».
+
+Масштаб (limits/scale/ИМЯ): команда на большом входе — графе объявлений,
+тысячах строк — укладывается в предел времени с ожидаемым кодом:
+небольшой вход не должен вешать компилятор (docs/policy/SECURITY.md,
+раздел 5).
 """
+import time
 import os
 import subprocess
 import tempfile
@@ -27,6 +34,44 @@ CASES = {
     'types': lambda n: 'fn main() {\n    let x: ' + 'List[' * n + 'i32' + ']' * n + ' = []\n}\n',
     'patterns': lambda n: ('fn main() {\n    let x: ?i32 = none\n    match x {\n        ' + 'some(' * n + '_' +
                            ')' * n + ' => println("s")\n        none => println("n")\n    }\n}\n'),
+}
+
+def _chain(n):
+    """Цепочка struct S0 { x: S1 } … из n структур."""
+    return ''.join(f'struct S{i} {{\n    x: S{i + 1}\n}}\n\n' for i in range(n)) + f'struct S{n} {{\n    v: i32\n}}\n\nfn main() {{\n}}\n'
+
+
+def _diamond(n):
+    """«Ромб»: struct Si { a: Si+1, b: Si+1 } — 2^n путей; sort и == обходят все типы."""
+    body = ''.join(f'struct S{i} {{\n    a: S{i + 1}\n    b: S{i + 1}\n}}\n\n' for i in range(n))
+    return body + (f'struct S{n} {{\n    v: i32\n}}\n\nfn main() {{\n    var xs: List[S0] = []\n    xs.sort()\n'
+                   '    println(str(xs == xs))\n}\n')
+
+
+def _cycle(n):
+    """Цикл из n структур: каждая — E0423."""
+    return ''.join(f'struct S{i} {{\n    x: S{(i + 1) % n}\n}}\n\n' for i in range(n)) + 'fn main() {\n}\n'
+
+
+def _strings(n):
+    """n разных строковых литералов: lowering ищет их номер (было перебором)."""
+    return 'fn main() {\n' + ''.join(f'    println("s{i}")\n' for i in range(n)) + '}\n'
+
+
+def _try_chain(n):
+    """f0 → try f1 → … → fail: вывод типа ошибки (было по проходу на функцию)."""
+    fns = ''.join(f'fn f{i}() !i32 {{\n    return try f{i + 1}()\n}}\n\n' for i in range(n - 1))
+    return (f'enum E {{\n    X\n}}\n\n{fns}fn f{n - 1}() !i32 {{\n    fail .X\n}}\n\n'
+            'fn main() {\n    _ = f0()\n}\n')
+
+
+# Масштаб: имя → (исходник, команда, ожидаемый код, предел секунд под ASan).
+SCALE = {
+    'chain': (_chain(20000), ['check'], 0, 30),
+    'diamond': (_diamond(64), ['check'], 0, 10),
+    'cycle': (_cycle(5000), ['check'], 1, 30),
+    'strings': (_strings(40000), ['debug', 'ir'], 0, 5),
+    'try_chain': (_try_chain(8000), ['check'], 0, 10),
 }
 
 # Команды на наибольшем принятом n: все проходы компилятора.
@@ -65,7 +110,28 @@ def broken(r):
     return None
 
 
+def check_scale(name, dpl):
+    src, cmd, want, limit = SCALE[name]
+    with tempfile.TemporaryDirectory(prefix='dplimits-') as tmp:
+        start = time.monotonic()
+        r = run(dpl, cmd, src, tmp)
+        took = time.monotonic() - start
+        what = ' '.join(cmd)
+        if r is None:
+            return f'{what} не уложился в {TIMEOUT} с'
+        err = broken(r)
+        if err:
+            return err
+        if r.returncode != want:
+            return f'код {r.returncode}, ожидался {want}:\n' + '\n'.join(r.stderr.splitlines()[:5])
+        if took > limit:
+            return f'{what} — {took:.1f} с, предел {limit} с'
+    return None
+
+
 def check_case(name, dpl):
+    if name.startswith('scale/'):
+        return check_scale(name[len('scale/'):], dpl)
     gen = CASES[name]
     with tempfile.TemporaryDirectory(prefix='dplimits-') as tmp:
         # Наибольшее n без E0002: n = 1 принимается, SEARCH_MAX — нет.

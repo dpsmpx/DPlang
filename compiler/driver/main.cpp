@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -50,9 +51,10 @@ constexpr std::string_view kUsage =
     "  fmt [--check] <file.dpm>...\n"
     "                   format files in place; --check only lists files that would change\n"
     "  help             show this help\n"
-    "  test [--target <target>] <file.dpm>\n"
+    "  test [--target <target>] [--timeout <seconds>] <file.dpm>\n"
     "                   run the @test functions of a program, each in its own process\n"
-    "                   (other targets run under $DPL_RUNNER or the target's runner)\n"
+    "                   (other targets run under $DPL_RUNNER or the target's runner);\n"
+    "                   a test running longer than --timeout (default 60, 0 = none) fails\n"
     "  targets: linux-x86_64 (host), windows-x86_64, android-arm64\n"
     "  --version        print the compiler version\n"
     "  worker ...       serve one request of the online service (see docs/service)\n"
@@ -490,6 +492,15 @@ int cmd_test(const Cli& cli, const std::vector<std::string_view>& args) {
         if (a == "--target") {
             int code = 0;
             if (!parse_target(args, i, opt, code)) return code;
+        } else if (a == "--timeout") {
+            // Секунды на тест; 0 — без предела.
+            std::string_view v = i + 1 < args.size() ? args[++i] : std::string_view();
+            uint32_t n = 0;
+            auto [end, ec] = std::from_chars(v.data(), v.data() + v.size(), n);
+            if (v.empty() || ec != std::errc() || end != v.data() + v.size()) {
+                return usage_error("--timeout needs a number of seconds (0 for no limit)");
+            }
+            opt.test_timeout = n;
         } else if (a.substr(0, 1) == "-") {
             return usage_error("unknown option '" + std::string(a) + "'");
         } else {

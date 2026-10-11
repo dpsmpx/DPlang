@@ -115,7 +115,8 @@ SUITES = {
     'ir': ('.dpm', DPL, lambda name, path: ['debug', 'ir', name]),
     'run': ('.dpm', DPL, lambda name, path: ['debug', 'run', name] + program_args(path)),
     'fmt': ('.dpm', DPL, lambda name, path: ['fmt', name]),
-    'test': ('.dpm', DPL, lambda name, path: ['test', name]),
+    # X.args рядом — флаги команды (например, --timeout).
+    'test': ('.dpm', DPL, lambda name, path: ['test'] + program_args(path) + [name]),
     # Функции C (Р59): программа собирается `dpl build` и запускается —
     # интерпретатор C не вызывает (build_pass_one).
     'ffi': ('.dpm', DPL, lambda name, path: ['check', name]),
@@ -181,6 +182,7 @@ def discover(pattern):
             native += [(cross, path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
             native += [(cross, path + profile) for path in ffi for profile in ('', ' --release')]
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
+    deep += [('limits', 'scale/' + name) for name in limits.SCALE if pattern in 'limits/scale/' + name]
     deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
     if os.path.isdir(EXAMPLES):
         for ex in sorted(os.listdir(EXAMPLES)):

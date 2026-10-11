@@ -1,5 +1,6 @@
 // Проверка выражений: имена, типы, преобразования, вызовы, места,
 // константы (docs/spec/core.md, разделы 4, 5, 8, 9).
+#include <algorithm>
 #include <cstdio>
 
 #include "sema/builtins.h"
@@ -122,53 +123,59 @@ bool Checker::literal_like(const Expr* e) const {
     }
 }
 
-bool Checker::equatable(const Type* t) {
+// `==` и `<` у типа (expr.compare). Рекурсивный тип (List[Node] в Node,
+// type.recursive) в процессе обхода считается подходящим — наибольшая
+// неподвижная точка. Ответ запоминается: «нет» — всегда, «да» — если он
+// не опирался на внешний тип, который ещё проверяется. Так обход
+// линеен и на «ромбах» `struct S0 { a: S1, b: S1 }`.
+bool Checker::type_prop(const Type* t, bool ord, size_t& low) {
     switch (t->kind) {
-        case TK::Result: case TK::Void: return false;
-        case TK::List: case TK::Slice: case TK::Optional: return equatable(t->elem);
-        case TK::Map: return false;  // Р54: отображения не сравниваются
-        case TK::Struct:
-            if (t->sdef->linear) return false;  // Р60: линейные значения не сравниваются
-            for (const FieldDef& f : t->sdef->fields) {
-                if (!equatable(f.type)) return false;
-            }
-            return true;
-        case TK::Enum:
-            for (const VariantDef& v : t->edef->variants) {
-                for (const Type* p : v.types) {
-                    if (!equatable(p)) return false;
-                }
-                for (const FieldDef& f : v.fields) {
-                    if (!equatable(f.type)) return false;
-                }
-            }
-            return true;
-        default: return true;
+        case TK::Error: return true;
+        case TK::Void: case TK::Result: case TK::Map: return false;  // Р54: отображения не сравниваются
+        case TK::Bool: case TK::Str: return true;
+        case TK::List: case TK::Slice: return type_prop(t->elem, ord, low);
+        case TK::Optional: return !ord && type_prop(t->elem, ord, low);  // ?T не упорядочен
+        case TK::Struct: case TK::Enum: break;
+        default: return ord ? is_numeric(t) : true;
     }
+    std::map<const Type*, bool>& cache = prop_cache_[ord ? 1 : 0];
+    if (auto it = cache.find(t); it != cache.end()) return it->second;
+    for (size_t i = 0; i < prop_stack_.size(); i++) {
+        if (prop_stack_[i] == t) {
+            low = std::min(low, i);
+            return true;
+        }
+    }
+    size_t depth = prop_stack_.size();
+    prop_stack_.push_back(t);
+    size_t my_low = SIZE_MAX;
+    bool r = true;
+    auto part = [&](const Type* p) {
+        if (r && !type_prop(p, ord, my_low)) r = false;
+    };
+    if (t->kind == TK::Struct) {
+        if (t->sdef->linear) r = false;  // Р60: линейные значения не сравниваются
+        for (const FieldDef& f : t->sdef->fields) part(f.type);
+    } else {
+        for (const VariantDef& v : t->edef->variants) {
+            for (const Type* p : v.types) part(p);
+            for (const FieldDef& f : v.fields) part(f.type);
+        }
+    }
+    prop_stack_.pop_back();
+    if (!r || my_low >= depth) cache[t] = r;
+    else low = std::min(low, my_low);
+    return r;
+}
+
+bool Checker::equatable(const Type* t) {
+    size_t low = SIZE_MAX;
+    return type_prop(t, false, low);
 }
 
 bool Checker::ordered(const Type* t) {
-    switch (t->kind) {
-        case TK::Error: case TK::Bool: case TK::Str: return true;
-        case TK::List: case TK::Slice: return ordered(t->elem);
-        case TK::Struct:
-            if (t->sdef->linear) return false;  // Р60
-            for (const FieldDef& f : t->sdef->fields) {
-                if (!ordered(f.type)) return false;
-            }
-            return true;
-        case TK::Enum:
-            for (const VariantDef& v : t->edef->variants) {
-                for (const Type* p : v.types) {
-                    if (!ordered(p)) return false;
-                }
-                for (const FieldDef& f : v.fields) {
-                    if (!ordered(f.type)) return false;
-                }
-            }
-            return true;
-        default: return is_numeric(t);
-    }
+    size_t low = SIZE_MAX;
+    return type_prop(t, true, low);
 }
 
 // --- имена и пути
@@ -1299,8 +1306,27 @@ double round_to(double v, const Type* t) {
 
 }  // namespace
 
+// Размер значения в шагах бюджета: копия константы стоит столько же.
+static uint64_t const_size(const ConstValue& v) {
+    uint64_t n = v.s.size();
+    for (const ConstValue& x : v.items) n += 1 + const_size(x);
+    return n;
+}
+
+bool Checker::const_spend(Expr* e, uint64_t steps) {
+    const_work_ += steps;
+    if (const_work_ <= kConstEvalBudget) return true;
+    if (!const_over_) {
+        const_over_ = true;
+        error(Code::E0421, e->span, "constant evaluation exceeds the budget of " + std::to_string(kConstEvalBudget) +
+                                        " steps per module (a step costs 1 plus the bytes of the strings it makes)");
+    }
+    return false;
+}
+
 bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
     const Type* t = e->type;
+    if (!const_spend(e, 1)) return false;
     auto fail = [&](const std::string& why) {
         error(Code::E0421, e->span, why);
         return false;
@@ -1318,7 +1344,11 @@ bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
             break;
         case ExprKind::Float: v.kind = ConstValue::Kind::Float; v.f = round_to(static_cast<FloatExpr*>(e)->value, t); break;
         case ExprKind::Bool: v.kind = ConstValue::Kind::Bool; v.b = static_cast<BoolExpr*>(e)->value; break;
-        case ExprKind::Str: v.kind = ConstValue::Kind::Str; v.s = static_cast<StrExpr*>(e)->value; break;
+        case ExprKind::Str:
+            if (!const_spend(e, static_cast<StrExpr*>(e)->value.size())) return false;
+            v.kind = ConstValue::Kind::Str;
+            v.s = static_cast<StrExpr*>(e)->value;
+            break;
         case ExprKind::Byte: v.kind = ConstValue::Kind::Int; v.i = static_cast<ByteExpr*>(e)->value; break;
         case ExprKind::Paren:
             if (!const_eval(static_cast<ParenExpr*>(e)->inner, nullptr, v)) return false;
@@ -1335,8 +1365,9 @@ bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
             const Res& r = e->kind == ExprKind::Name ? static_cast<NameExpr*>(e)->res : static_cast<FieldExpr*>(e)->res;
             if (r.kind != ResKind::Const) return fail("a constant may only use literals, constants and operators");
             ConstDef& c = const_cast<ConstDef&>(*r.cn);
-            v = c.module == &m_ ? const_value(c) : c.value;
-            if (v.kind == ConstValue::Kind::None) return false;
+            const ConstValue& cv = c.module == &m_ ? const_value(c) : c.value;
+            if (cv.kind == ConstValue::Kind::None || !const_spend(e, const_size(cv))) return false;
+            v = cv;
             break;
         }
         case ExprKind::Unary: {
@@ -1380,6 +1411,7 @@ bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
             }
             if (x.kind == ConstValue::Kind::Str) {
                 if (b->op == BinOp::Add) {
+                    if (!const_spend(e, x.s.size() + y.s.size())) return false;
                     v.kind = ConstValue::Kind::Str;
                     v.s = x.s + y.s;
                 } else {
@@ -1486,6 +1518,7 @@ bool Checker::const_eval(Expr* e, const Type* want, ConstValue& out) {
                 else if (a.kind == ConstValue::Kind::Float) v.s = format_float(a.f, from->kind == TK::F32);
                 else if (a.kind == ConstValue::Kind::Str) v.s = a.s;
                 else v.s = is_signed(from) ? std::to_string(as_signed(a.i, from)) : std::to_string(a.i);
+                if (!const_spend(e, v.s.size())) return false;
             } else if (is_float(to)) {
                 v.kind = ConstValue::Kind::Float;
                 v.f = a.kind == ConstValue::Kind::Float ? a.f

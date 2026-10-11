@@ -3,12 +3,15 @@
 #include "driver/build.h"
 
 #include <fcntl.h>
+#include <signal.h>
 #include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cerrno>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -99,7 +102,13 @@ std::string read_all(const std::string& path) {
 
 // Исполняет argv; stdout и stderr — в файлы (пусто — как у dpl).
 // Результат: код выхода, 128 + сигнал или -errno, если запустить нельзя.
-int spawn_wait(std::vector<std::string> argv, const std::string& out_file = "", const std::string& err_file = "") {
+// Код «не уложился в предел времени» у spawn_wait: вне 0–255 и не -errno.
+constexpr int kTimedOut = 1000;
+
+// timeout_s > 0: процесс — в своей группе; по истечении группа получает
+// SIGKILL (с ней и дочерние процессы runner-а), результат — kTimedOut.
+int spawn_wait(std::vector<std::string> argv, const std::string& out_file = "", const std::string& err_file = "",
+               uint32_t timeout_s = 0) {
     std::vector<char*> cargv;
     for (std::string& a : argv) cargv.push_back(a.data());
     cargv.push_back(nullptr);
@@ -107,12 +116,35 @@ int spawn_wait(std::vector<std::string> argv, const std::string& out_file = "", 
     posix_spawn_file_actions_init(&fa);
     if (!out_file.empty()) posix_spawn_file_actions_addopen(&fa, 1, out_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (!err_file.empty()) posix_spawn_file_actions_addopen(&fa, 2, err_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    if (timeout_s > 0) {
+        posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+        posix_spawnattr_setpgroup(&attr, 0);
+    }
     pid_t pid = 0;
-    int err = posix_spawnp(&pid, cargv[0], &fa, nullptr, cargv.data(), environ);
+    int err = posix_spawnp(&pid, cargv[0], &fa, &attr, cargv.data(), environ);
     posix_spawn_file_actions_destroy(&fa);
+    posix_spawnattr_destroy(&attr);
     if (err != 0) return -err;
     int status = 0;
-    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    if (timeout_s == 0) {
+        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+        }
+    } else {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_s);
+        for (;;) {
+            pid_t r = waitpid(pid, &status, WNOHANG);
+            if (r == pid || (r < 0 && errno != EINTR)) break;
+            if (std::chrono::steady_clock::now() >= deadline) {
+                kill(-pid, SIGKILL);
+                while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+                }
+                return kTimedOut;
+            }
+            struct timespec pause = {0, 10 * 1000 * 1000};  // 10 мс
+            nanosleep(&pause, nullptr);
+        }
     }
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
@@ -282,7 +314,7 @@ int run_tests(const std::string& c_code, const std::vector<std::string>& names, 
         std::fflush(stdout);
         std::vector<std::string> argv = {exe, std::to_string(i)};
         if (!opt.runner.empty()) argv.insert(argv.begin(), opt.runner);
-        int r = spawn_wait(argv, out_file, err_file);
+        int r = spawn_wait(argv, out_file, err_file, opt.test_timeout);
         if (r < 0) {
             say("error: cannot run the tests with '" + argv[0] + "': " + std::strerror(-r) +
                 (opt.runner.empty() ? std::string() : "; set DPL_RUNNER") + "\n");
@@ -295,7 +327,9 @@ int run_tests(const std::string& c_code, const std::vector<std::string>& names, 
         }
         failed++;
         say("test " + names[i] + " ... FAILED\n", stdout);
-        std::string what = r > 128 ? "signal " + std::to_string(r - 128) : "exit " + std::to_string(r);
+        std::string what = r == kTimedOut ? "timed out after " + std::to_string(opt.test_timeout) + " s"
+                           : r > 128  ? "signal " + std::to_string(r - 128)
+                                      : "exit " + std::to_string(r);
         failures += "\n--- " + names[i] + " (" + what + ")\n";
         std::string text = read_all(out_file) + read_all(err_file);
         if (!text.empty() && text.back() != '\n') text += '\n';

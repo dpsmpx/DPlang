@@ -1,0 +1,29 @@
+// spec: type.recursive expr.compare builtin.methods
+// == и sort у рекурсивных типов (List[Node] в Node): проверка их не
+// обходила бесконечно (TODO, аудит готовности 7 октября).
+struct Node {
+    v: i32
+    kids: List[Node]
+}
+
+enum Tree {
+    Leaf(i32)
+    Branch(List[Tree])
+}
+
+fn main() {
+    let a = Node { v: 1, kids: [Node { v: 2, kids: [] }] }
+    let b = Node { v: 1, kids: [Node { v: 2, kids: [] }] }
+    let c = Node { v: 1, kids: [] }
+    println(str(a == b) + " " + str(a == c) + " " + str(c < a))
+    var ns: List[Node] = [a, c, Node { v: 0, kids: [] }]
+    ns.sort()
+    for n in &ns {
+        println(str(n.v) + " " + str(len(n.kids)))
+    }
+    let t1 = Tree.Branch([Tree.Leaf(1), Tree.Branch([])])
+    let t2 = Tree.Branch([Tree.Leaf(1), Tree.Branch([])])
+    var ts: List[Tree] = [Tree.Leaf(3), t1, Tree.Leaf(-1)]
+    ts.sort()
+    println(str(t1 == t2) + " " + str(ts[0] == Tree.Leaf(-1)) + " " + str(ts.contains(t2)))
+}

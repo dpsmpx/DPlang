@@ -1,0 +1,15 @@
+// spec: module.test
+// Зависший тест не вешает `dpl test`: по пределу (`--timeout 1` из
+// timeout.args) процесс снимается, тест — FAILED, остальные идут дальше.
+@test
+fn hangs() {
+    var i = 0
+    while true {
+        i = i +% 1
+    }
+}
+
+@test
+fn passes() {
+    assert(2 + 2 == 4)
+}

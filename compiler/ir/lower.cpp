@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <map>
+#include <unordered_map>
 
 #include "sema/builtins.h"
 
@@ -83,8 +84,9 @@ const Expr* strip_parens(const Expr* e) {
 
 class FnLower {
 public:
-    FnLower(Program& out, sema::Program& prog, const std::map<const sema::FnDef*, uint32_t>& fns, Function& f)
-        : out_(out), prog_(prog), tt_(prog.types), fns_(fns), f_(f) {}
+    FnLower(Program& out, sema::Program& prog, const std::map<const sema::FnDef*, uint32_t>& fns,
+            std::unordered_map<std::string, uint32_t>& strings, Function& f)
+        : out_(out), prog_(prog), tt_(prog.types), fns_(fns), strings_(strings), f_(f) {}
 
     void run(const sema::FnDef& def) {
         const FnItem* node = def.node;
@@ -141,6 +143,7 @@ private:
     sema::Program& prog_;
     sema::TypeTable& tt_;
     const std::map<const sema::FnDef*, uint32_t>& fns_;
+    std::unordered_map<std::string, uint32_t>& strings_;
     Function& f_;
     uint32_t cur_ = 0;
     uint32_t ret_ = UINT32_MAX;
@@ -320,14 +323,9 @@ private:
         Operand o;
         o.c.kind = Const::Kind::Str;
         o.c.type = prim(TK::Str);
-        for (size_t i = 0; i < out_.strings.size(); i++) {
-            if (out_.strings[i] == s) {
-                o.c.str = static_cast<uint32_t>(i);
-                return o;
-            }
-        }
-        out_.strings.push_back(s);
-        o.c.str = static_cast<uint32_t>(out_.strings.size() - 1);
+        auto [it, fresh] = strings_.try_emplace(s, static_cast<uint32_t>(out_.strings.size()));
+        if (fresh) out_.strings.push_back(s);
+        o.c.str = it->second;
         return o;
     }
 
@@ -1387,7 +1385,8 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
         }
     }
     out->fns.resize(order.size());
-    for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, out->fns[i]).run(*order[i]);
+    std::unordered_map<std::string, uint32_t> strings;  // строка → номер в out->strings
+    for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, strings, out->fns[i]).run(*order[i]);
     for (const sema::FnDef* f : order) {
         if (!f->is_extern || f->link.empty()) continue;
         if (std::find(out->links.begin(), out->links.end(), f->link) == out->links.end()) out->links.push_back(f->link);

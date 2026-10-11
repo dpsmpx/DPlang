@@ -1,0 +1,5 @@
+--- stderr ---
+const_budget.dpm:25:18: error[E0421]: constant evaluation exceeds the budget of 16777216 steps per module (a step costs 1 plus the bytes of the strings it makes)
+  25 | const C21: str = C20 + C20
+     |                  ^~~~~~~~~
+[exit 1]

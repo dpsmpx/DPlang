@@ -1,0 +1,7 @@
+test timeout.hangs ... FAILED
+test timeout.passes ... ok
+
+--- timeout.hangs (timed out after 1 s)
+
+test result: FAILED. 1 passed; 1 failed
+[exit 1]

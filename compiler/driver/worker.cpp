@@ -74,6 +74,11 @@ struct Options {
     uint64_t memory_bytes = 0;  // RLIMIT_AS
     uint64_t cpu_seconds = 0;   // RLIMIT_CPU
     uint64_t stack_bytes = 0;   // стек потока компилятора
+    // Только для тестов пределов: после запирания вместо компиляции
+    // тратить CPU или память до предела процесса. В компиляторе
+    // известных «бомб» нет — без этого предел нечем проверить. Шлюз
+    // флаг не передаёт (docs/service/README.md, «Тесты»).
+    std::string_view burn;
 };
 
 struct Flag {
@@ -110,6 +115,11 @@ int parse_options(int argc, char** argv, Options& o) {
             return usage("unexpected argument '" + std::string(a) + "'");
         }
         std::string_view name = a.substr(2, eq - 2);
+        if (name == "test-burn") {
+            o.burn = a.substr(eq + 1);
+            if (o.burn != "cpu" && o.burn != "memory") return usage("option '--test-burn' needs 'cpu' or 'memory'");
+            continue;
+        }
         size_t k = 0;
         while (k < sizeof flags / sizeof flags[0] && flags[k].name != name) k++;
         if (k == sizeof flags / sizeof flags[0]) return usage("unknown option '--" + std::string(name) + "'");
@@ -169,6 +179,18 @@ void serve(void* p) {
     if (!lock_down(error)) {
         job->code = internal("cannot enter the sandbox: " + error);
         return;
+    }
+    if (job->opt->burn == "cpu") {
+        volatile uint64_t n = 0;
+        for (;;) n = n + 1;  // до RLIMIT_CPU: SIGXCPU, затем SIGKILL
+    }
+    if (job->opt->burn == "memory") {
+        // До RLIMIT_AS: new не выделит — обработчик ответит limit_exceeded.
+        for (;;) {
+            char* block = new char[1 << 20];
+            std::memset(block, 1, 1 << 20);
+            asm volatile("" : : "r"(block) : "memory");  // выделение не выбросить при оптимизации
+        }
     }
     const api::OnlineLimits& lim = job->opt->limits;
     // Читается не больше предела + 1 байт: этого хватает, чтобы ответить

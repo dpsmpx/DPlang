@@ -52,7 +52,7 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
         case TK::List: return "List[" + type_name(t->elem, from) + "]";
         case TK::Map: return "Map[" + type_name(t->key, from) + ", " + type_name(t->elem, from) + "]";
         case TK::Slice: return "[]" + type_name(t->elem, from);
-        case TK::Optional: return "?" + type_name(t->elem, from);
+        case TK::Optional: return (t->elem->kind == TK::Optional ? "? " : "?") + type_name(t->elem, from);
         case TK::Result: return (t->err ? type_name(t->err, from) : "") + "!" + type_name(t->elem, from);
         case TK::Struct:
             return from && t->sdef->module != from ? t->sdef->module->name + "." + t->sdef->name : t->sdef->name;

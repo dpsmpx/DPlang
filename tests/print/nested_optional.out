@@ -1,0 +1,15 @@
+// spec: type.optional
+// `? ?T` печатается с пробелом: `??` — оператор, и `??i32` повторно не
+// разбирается (TODO, аудит готовности).
+fn first(xs: []? ?i32) ? ?i32 {
+    let x: ? ?i32 = none
+    if len(xs) > 0 {
+        return xs[0]
+    }
+    return x
+}
+
+fn main() {
+    let v: ? ?i32 = some(none)
+    println(str(first([v]) == v))
+}

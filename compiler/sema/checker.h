@@ -3,12 +3,19 @@
 // (docs/spec/core.md, разделы 3–9). Внутренний заголовок sema.
 #pragma once
 
+#include <cstdint>
+#include <map>
 #include <vector>
 
 #include "sema/resolve.h"
 #include "sema/sema.h"
 
 namespace dp::sema {
+
+// Бюджет вычисления констант одного модуля ([decl.const]): шаг стоит 1
+// плюс байты строк, которые он создаёт. Без него `const Ci: str = Cj + Cj`
+// удваивает память на строку исходника (docs/policy/SECURITY.md, раздел 4).
+constexpr uint64_t kConstEvalBudget = uint64_t{1} << 24;
 
 class Checker {
 public:
@@ -115,6 +122,9 @@ private:
     const EnumDef* enum_for_variant(const std::string& name, const Type* hint, Span span);
     bool ordered(const Type* t);
     bool equatable(const Type* t);
+    bool type_prop(const Type* t, bool ord, size_t& low);
+    std::map<const Type*, bool> prop_cache_[2];  // equatable, ordered
+    std::vector<const Type*> prop_stack_;
 
     // места: изменяемость и корень (Р44)
     bool is_place(ast::Expr* e);
@@ -129,6 +139,10 @@ private:
 
     // --- константы (check_expr.cpp)
     bool const_eval(ast::Expr* e, const Type* want, ConstValue& out);
+    // Списывает шаги с бюджета; сверх него — одно E0421 на модуль и false.
+    bool const_spend(ast::Expr* e, uint64_t steps);
+    uint64_t const_work_ = 0;
+    bool const_over_ = false;
 };
 
 // Вывод типа ошибки непубличных функций `!T` (Р41) — до проверки тел.
