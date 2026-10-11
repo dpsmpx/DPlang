@@ -1,0 +1,74 @@
+// spec: ffi.export ffi.fn syntax.item module.det
+// Отказы @export и extern fn(...) (Р61): сигнатуры без вида в C, символы,
+// атрибут не там, функция без @export как значение, класс D.
+extern type H
+extern fn take(cb: extern fn(List[i32]) str)
+
+@export
+@export
+fn twice(a: i32) i32 {
+    return a
+}
+
+@export("9bad")
+fn bad_name() {
+}
+
+@export("main")
+fn m2() {
+}
+
+@export("dp_x")
+fn m3() {
+}
+
+@export("int")
+fn m4() {
+}
+
+@export("twice")
+fn dup() {
+}
+
+@export("take")
+fn dup2() {
+}
+
+@export
+extern fn puts(s: str) i32
+
+@export
+@test
+fn t() {
+}
+
+enum Oops {
+    Bad
+}
+
+@export
+fn fails() Oops!i32 {
+    fail .Bad
+}
+
+@export
+fn list_arg(xs: List[i32], s: []u8) str {
+    return ""
+}
+
+fn plain(a: i32) i32 {
+    return a
+}
+
+@det
+fn det_call(f: extern fn(i32) i32) i32 {
+    return f(1)
+}
+
+fn main() {
+    let f = plain
+    let g: extern fn(i32) i32 = twice
+    let h: extern fn(i64) i32 = twice
+    println(str(g(1, 2)))
+    let same = g == g
+}

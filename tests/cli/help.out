@@ -1,9 +1,10 @@
 usage: dpl <command> [arguments]
 
 commands:
-  build [--release] [--target <target>] [-o <path>] <file.dpm>
+  build [--release] [--lib] [--target <target>] [-o <path>] <file.dpm>
                    build a native program (C compiler: $CC or cc; for other
-                   targets $DPL_CROSS_CC or clang)
+                   targets $DPL_CROSS_CC or clang); --lib builds a static library
+                   of the @export functions and a C header next to it
   check [--format=json] <file.dpm>
                    check a program and the modules it imports
   explain <code>   explain a diagnostic code, e.g. E0101

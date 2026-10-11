@@ -471,7 +471,8 @@ private:
     }
 
     // Символы C программы (Р61): у `@export` — свои, не повторяются, не
-    // совпадают с `extern fn`, словами C, `main` и именами dpl (`dp…`).
+    // совпадают с `extern fn`, словами C (их не объявить в заголовке),
+    // `main` и символами runtime (`dp_…`).
     void export_symbols() {
         static const char* const kKeywords[] = {
             "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum",
@@ -488,10 +489,10 @@ private:
             const std::string& s = f.export_name;
             bool keyword = false;
             for (const char* k : kKeywords) keyword = keyword || s == k;
-            if (keyword || s == "main" || s.rfind("dp", 0) == 0) {
+            if (keyword || s == "main" || s.rfind("dp_", 0) == 0) {
                 diags_.error(Code::E0327, f.export_span,
                              "C symbol '" + s + "' is reserved" +
-                                 (keyword ? ": it is a C keyword" : s == "main" ? ": it is the C entry point" : ": names starting with 'dp' belong to dpl") +
+                                 (keyword ? ": it is a C keyword" : s == "main" ? ": it is the C entry point" : ": names starting with 'dp_' belong to the dpl runtime") +
                                  "; choose another with @export(\"name\")");
                 continue;
             }
@@ -568,9 +569,11 @@ private:
                 } else if (a.has_arg && !c_identifier(a.arg)) {
                     diags_.error(Code::E0319, a.span, "'@export' needs a C name: a letter or '_', then letters, digits or '_'");
                 }
-                f.exported = true;
-                f.export_name = a.has_arg ? a.arg : f.name;
-                f.export_span = a.span;
+                if (!n->is_extern && !f.exported) {
+                    f.exported = true;
+                    f.export_name = a.has_arg ? a.arg : f.name;
+                    f.export_span = a.span;
+                }
                 continue;
             }
             if (a.name == "link") {  // `@link("lib")` — только у `extern fn` (Р59)

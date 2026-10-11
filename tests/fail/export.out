@@ -1,0 +1,68 @@
+--- stderr ---
+export.dpm:5:30: error[E0326]: a parameter of 'extern fn(List[i32]) str' cannot be 'List[i32]': it has no C form (spec: ffi.fn)
+   5 | extern fn take(cb: extern fn(List[i32]) str)
+     |                              ^~~~~~~~~
+export.dpm:5:41: error[E0326]: 'extern fn(List[i32]) str' cannot return 'str': it has no C form (spec: ffi.fn)
+   5 | extern fn take(cb: extern fn(List[i32]) str)
+     |                                         ^~~
+export.dpm:8:1: error[E0319]: attribute '@export' is given twice
+   8 | @export
+     | ^~~~~~~
+export.dpm:13:1: error[E0319]: '@export' needs a C name: a letter or '_', then letters, digits or '_'
+  13 | @export("9bad")
+     | ^~~~~~~~~~~~~~~
+export.dpm:17:1: error[E0327]: C symbol 'main' is reserved: it is the C entry point; choose another with @export("name")
+  17 | @export("main")
+     | ^~~~~~~~~~~~~~~
+export.dpm:21:1: error[E0327]: C symbol 'dp_x' is reserved: names starting with 'dp_' belong to the dpl runtime; choose another with @export("name")
+  21 | @export("dp_x")
+     | ^~~~~~~~~~~~~~~
+export.dpm:25:1: error[E0327]: C symbol 'int' is reserved: it is a C keyword; choose another with @export("name")
+  25 | @export("int")
+     | ^~~~~~~~~~~~~~
+export.dpm:29:1: error[E0327]: C symbol 'twice' is already exported by 'export.twice'
+  29 | @export("twice")
+     | ^~~~~~~~~~~~~~~~
+export.dpm:7:1: note: first here
+   7 | @export
+     | ^~~~~~~
+export.dpm:33:1: error[E0327]: C symbol 'take' is already declared by 'extern fn take'
+  33 | @export("take")
+     | ^~~~~~~~~~~~~~~
+export.dpm:5:11: note: first here
+   5 | extern fn take(cb: extern fn(List[i32]) str)
+     |           ^~~~
+export.dpm:37:1: error[E0319]: an 'extern fn' is already C; '@export' marks a dpl function for C
+  37 | @export
+     | ^~~~~~~
+export.dpm:40:1: error[E0319]: a test cannot be '@export': 'dpl test' calls it
+  40 | @export
+     | ^~~~~~~
+export.dpm:50:12: error[E0326]: exported function 'fails' returns 'Oops!i32', which C cannot take (spec: ffi.export); C has no 'E!T': return a code
+  50 | fn fails() Oops!i32 {
+     |            ^~~~~~~~
+export.dpm:55:17: error[E0326]: parameter 'xs' of exported function 'list_arg' has type 'List[i32]', which C cannot pass (spec: ffi.export)
+  55 | fn list_arg(xs: List[i32], s: []u8) str {
+     |                 ^~~~~~~~~
+export.dpm:55:31: error[E0326]: parameter 's' of exported function 'list_arg' has type '[]u8', which C cannot pass (spec: ffi.export)
+  55 | fn list_arg(xs: List[i32], s: []u8) str {
+     |                               ^~~~
+export.dpm:55:37: error[E0326]: exported function 'list_arg' returns 'str', which C cannot take (spec: ffi.export)
+  55 | fn list_arg(xs: List[i32], s: []u8) str {
+     |                                     ^~~
+export.dpm:65:12: error[E0425]: 'f' calls C through a pointer; 'det_call' is class D and cannot call C
+  65 |     return f(1)
+     |            ^~~~
+export.dpm:69:13: error[E0405]: function 'plain' is not a value; call it: plain(...), or mark it '@export' to pass it to C
+  69 |     let f = plain
+     |             ^~~~~
+export.dpm:71:33: error[E0401]: expected 'extern fn(i64) i32', found 'extern fn(i32) i32'
+  71 |     let h: extern fn(i64) i32 = twice
+     |                                 ^~~~~
+export.dpm:72:17: error[E0407]: 'g' takes 1 argument, found 2
+  72 |     println(str(g(1, 2)))
+     |                 ^~~~~~~
+export.dpm:73:18: error[E0422]: values of type 'extern fn(i32) i32' cannot be compared with '=='
+  73 |     let same = g == g
+     |                  ^~
+[exit 1]

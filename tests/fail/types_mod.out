@@ -29,7 +29,7 @@ types_mod/main.dpm:29:13: error[E0404]: cannot infer the element type of '[]'; a
 types_mod/main.dpm:30:14: error[E0404]: cannot tell which enum '.One' belongs to (A, B); write it: A.One
   30 |     let k = .One
      |              ^~~
-types_mod/main.dpm:31:13: error[E0405]: function 'f' is not a value; call it: f(...)
+types_mod/main.dpm:31:13: error[E0405]: function 'f' is not a value; call it: f(...), or mark it '@export' to pass it to C
   31 |     let l = f
      |             ^
 types_mod/main.dpm:32:13: error[E0405]: type 'P' is not a value

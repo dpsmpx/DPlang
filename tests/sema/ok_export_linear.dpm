@@ -1,0 +1,27 @@
+// spec: ffi.fn ffi.linear
+// Линейное @c-значение, переданное по значению через указатель на
+// функцию, поглощается, как при обычном вызове (Р60, Р61).
+extern type Win
+
+@c
+@linear
+struct Owned {
+    w: Win
+}
+
+fn close(o: Owned) {
+    let Owned { w } = o
+}
+
+@export
+fn eat(o: Owned) {
+    close(o)
+}
+
+fn give(o: Owned) {
+    let f: extern fn(Owned) = eat
+    f(o)
+}
+
+fn main() {
+}

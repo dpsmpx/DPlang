@@ -168,8 +168,8 @@ DP_CODE(E0326, "type cannot cross to C",
 DP_CODE(E0327, "C symbol is taken",
         "An `@export fn` (decision R61) is a global C symbol: by default the function name, or the name "
         "in `@export(\"name\")`. Two exported functions of one program cannot share a symbol, nor can an "
-        "exported function and an `extern fn`. C keywords, `main` and names starting with `dp` (the dpl "
-        "runtime and generated code) are reserved (spec: ffi.export).")
+        "exported function and an `extern fn`. C keywords (the C header could not declare them), `main` "
+        "and names starting with `dp_` (the dpl runtime) are reserved (spec: ffi.export).")
 DP_CODE(E0401, "mismatched types",
         "The value has a different type than the place it goes to (spec: type.conv). Only lossless "
         "conversions are implicit: a narrower integer to a wider one that holds all its values, `f32` to "

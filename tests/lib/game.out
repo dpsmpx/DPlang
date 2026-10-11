@@ -5,6 +5,7 @@ hello, world
 6 8
 42
 1 0
+3 -1
 --- stderr ---
-main.dpm:49:14: trap: division by zero
+main.dpm:57:14: trap: division by zero
 [exit 101]

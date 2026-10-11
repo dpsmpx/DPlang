@@ -17,6 +17,7 @@ int main(void) {
     int dummy = 0;
     printf("%d\n", game_apply(twice, &dummy, 20));
     printf("%d %d\n", game_has(&dummy), game_has(NULL));
+    printf("%d %d\n", game_maybe(twice, &dummy), game_maybe(NULL, &dummy));
     fflush(stdout);
     printf("%d\n", game_div(1, 0));
     return 0;
