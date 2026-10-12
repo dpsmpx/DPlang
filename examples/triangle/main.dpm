@@ -4,7 +4,11 @@
 // пиксели сверяются с эталоном.
 //
 //   triangle frame.ppm   — один кадр: снимок в файл и сверка
-//   triangle             — окно до закрытия
+//   triangle             — окно до закрытия; сверка первого кадра — в
+//                          stdout, на Android — сообщением SDL
+//
+// На Android программа — библиотека libmain.so: SDLActivity зовёт её
+// SDL_main (examples/triangle/android/).
 import os
 import sdl3
 import shaders
@@ -58,6 +62,12 @@ struct Frame {
     fence: vulkan.VkFence
 }
 
+// Снимок кадра: строка сверки и PPM.
+struct Report {
+    line: str
+    ppm: List[u8]
+}
+
 // Цепочка показа окна.
 struct Chain {
     swapchain: vulkan.VkSwapchainKHR
@@ -77,21 +87,33 @@ fn main() Fail!void {
     let driver = sdl3.SDL_GetCurrentVideoDriver() ?? ""
     if let w = sdl3.SDL_CreateWindow("dpl triangle", 512, 512, sdl3.SDL_WINDOW_VULKAN | sdl3.SDL_WINDOW_RESIZABLE) {
         defer sdl3.SDL_DestroyWindow(w)
-        try run(w, driver, args)
+        try run(w, driver, true, args)
         return
     }
     // Vulkan без поверхности окна (Wine без экрана): кадр — только вне окна.
     if let w = sdl3.SDL_CreateWindow("dpl triangle", 512, 512, 0) {
         defer sdl3.SDL_DestroyWindow(w)
-        try run(w, "", args)
+        try run(w, driver, false, args)
         return
     }
     eprintln("SDL_CreateWindow: " + sdl3.SDL_GetError())
     fail .Sdl
 }
 
-fn run(w: sdl3.SDL_Window, driver: str, args: List[str]) Fail!void {
-    let exts = instance_extensions(driver)
+// Вход на Android: SDLActivity зовёт SDL_main из libmain.so.
+@export("SDL_main")
+fn sdl_main(argc: i32, argv: ?vulkan.VkVoid) i32 {
+    match main() {
+        ok(_) => return 0
+        err(_) => return 1
+    }
+}
+
+fn run(w: sdl3.SDL_Window, driver: str, vulkan_window: bool, args: List[str]) Fail!void {
+    var exts: List[str] = []
+    if vulkan_window {
+        exts = instance_extensions(driver)
+    }
     let inst = try create_instance(exts)
     defer vulkan.vkDestroyInstance(inst, none)
     var surface: ?vulkan.VkSurfaceKHR = none
@@ -155,11 +177,14 @@ fn run(w: sdl3.SDL_Window, driver: str, args: List[str]) Fail!void {
     }
     if len(args) > 0 {
         let shown = try draw(&gpu, &frame, chain)
-        try snapshot(&gpu, &frame, args[0])
+        let report = try read_frame(&gpu, &frame)
+        try write_file(args[0], report.ppm)
+        println(report.line)
         println("shown in a window: " + str(shown))
         return
     }
     var running = true
+    var first = true
     while running {
         var ev = sdl3.SDL_Event {}
         while sdl3.SDL_PollEvent(&mut ev) {
@@ -167,7 +192,16 @@ fn run(w: sdl3.SDL_Window, driver: str, args: List[str]) Fail!void {
                 running = false
             }
         }
-        if !try draw(&gpu, &frame, chain) {
+        let shown = try draw(&gpu, &frame, chain)
+        if first {
+            first = false
+            let report = try read_frame(&gpu, &frame)
+            println(report.line)
+            if driver == "android" {
+                _ = sdl3.SDL_ShowSimpleMessageBox(sdl3.SDL_MESSAGEBOX_INFORMATION, "dpl triangle", report.line, w)
+            }
+        }
+        if !shown {
             // Окно сменило размер или ещё не показано: цепочка заново.
             if let s = surface {
                 _ = vulkan.vkDeviceWaitIdle(d)
@@ -779,7 +813,7 @@ fn draw(gpu: &Gpu, f: &Frame, chain: ?Chain) Fail!bool {
 
 // --- снимок
 
-fn snapshot(gpu: &Gpu, f: &Frame, path: str) Fail!void {
+fn read_frame(gpu: &Gpu, f: &Frame) Fail!Report {
     let size = W * H * 4
     var mapped: ?vulkan.VkVoid = none
     try vk(vulkan.vkMapMemory(gpu.device, f.buffer_memory, 0, vulkan.VK_WHOLE_SIZE, 0, &mut mapped), "vkMapMemory")
@@ -804,17 +838,21 @@ fn snapshot(gpu: &Gpu, f: &Frame, path: str) Fail!void {
             triangle = triangle + 1
         }
     }
+    let line = "frame " + str(W) + "x" + str(H) + ": " + str(triangle) + " triangle pixels, fnv1a " + str(hash) +
+               ", matches the reference: " + str(hash == REFERENCE)
+    return Report { line: line, ppm: ppm }
+}
+
+fn write_file(path: str, data: []u8) Fail!void {
     if let file = fopen(path, "wb") {
-        let written = fwrite(ppm, 1, u64(len(ppm)), file)
+        let written = fwrite(data, 1, u64(len(data)), file)
         _ = fclose(file)
-        if written != u64(len(ppm)) {
+        if written != u64(len(data)) {
             eprintln("cannot write " + path)
             fail .Io
         }
-    } else {
-        eprintln("cannot open " + path)
-        fail .Io
+        return
     }
-    println("frame " + str(W) + "x" + str(H) + ": " + str(triangle) + " triangle pixels, fnv1a " + str(hash) +
-            ", matches the reference: " + str(hash == REFERENCE))
+    eprintln("cannot open " + path)
+    fail .Io
 }

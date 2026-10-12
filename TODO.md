@@ -40,10 +40,17 @@
   строки `bash tools/setup/host_libs.sh` (пакеты Vulkan, lavapipe и
   сборка SDL3 3.4.18 — около минуты) и, после `cross_windows.sh`,
   `bash tools/setup/graphics_windows.sh` (SDL3 для MinGW, библиотека
-  импорта Vulkan, Xvfb — около двух минут) в скрипте настройки облачного
-  окружения. Без них случаи `bindings/vulkan/layout`, `bindings/*/run` и
-  `bindings/triangle/windows` пропускаются; итог `tests/run.py` это
-  называет.
+  импорта Vulkan, Xvfb — около двух минут), после `cross_android.sh` —
+  `bash tools/setup/graphics_android.sh` (Android SDK 35, SDL3 для
+  Android — около минуты) в скрипте настройки облачного окружения. Без
+  них случаи `bindings/vulkan/layout`, `bindings/*/run`,
+  `bindings/triangle/windows` и `bindings/triangle/android`
+  пропускаются; итог `tests/run.py` это называет.
+- `М` **Запуск треугольника на устройстве Android** (Р64, ворота v0.2):
+  поставить `triangle.apk` (из сессии или `examples/triangle/android/build.sh`)
+  на устройство с Vulkan — `adb install -r triangle.apk`, открыть «dpl
+  triangle» и прислать в сессию текст сообщения (или снимок экрана).
+  Ожидается `matches the reference: true`.
 
 ## Задачи
 

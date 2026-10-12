@@ -9,7 +9,7 @@
 |---|---|---|---|
 | Linux x86-64 | хост разработки и цель | clang | весь набор тестов natively |
 | Windows x86-64 | цель | кросс-сборка на Linux: clang + lld поверх MinGW-w64; MSVC — цель, проверяется отдельно | тесты под Wine; периодически — на настоящей Windows |
-| Android arm64 | цель | Android NDK (clang), NativeActivity | тесты в эмуляторе пользовательского режима или эмуляторе Android; периодически — на устройстве |
+| Android arm64 | цель | Android NDK (clang); окно — SDLActivity из SDL3 (Р64) | тесты в эмуляторе пользовательского режима или эмуляторе Android; графика — на устройстве (Р64) |
 
 ## 2. Уровни поддержки
 
@@ -34,7 +34,7 @@
 |---|---|---|---|
 | Linux x86-64 | хост | `runtime/linux` | весь набор тестов |
 | Windows x86-64 | `windows-x86_64`: clang + lld поверх MinGW-w64 | `runtime/windows` | проход `windows` в `tests/run.py`: набор исполнения в профилях debug и release под Wine; инструменты — `tools/setup/cross_windows.sh` |
-| Android arm64 | `android-arm64`: clang из Android NDK r30, API 24, статическая программа | `runtime/linux` (POSIX; bionic) | проход `android`: тот же набор под qemu-aarch64 (эмулятор пользовательского режима); инструменты — `tools/setup/cross_android.sh` |
+| Android arm64 | `android-arm64`: clang из Android NDK r30, API 24, статическая программа; графическая — библиотека `dpl build --lib` в пакете APK с SDL3 (`examples/triangle/android/`) | `runtime/linux` (POSIX; bionic) | проход `android`: тот же набор под qemu-aarch64 (эмулятор пользовательского режима); инструменты — `tools/setup/cross_android.sh`; графика — сборка APK в сессии, запуск на устройстве автора (Р64) |
 
 На настоящей Windows и на устройстве Android программы ещё не
 запускались (уровень 1 требует периодического запуска — до выпуска).

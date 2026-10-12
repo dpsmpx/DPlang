@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Пакет examples/triangle для Android (шаг 7 v0.2, Р64): SDLActivity
+     из SDL3 загружает libSDL3.so и libmain.so и зовёт SDL_main. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.dpl.triangle"
+    android:versionCode="1"
+    android:versionName="0.2">
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400000" android:required="true" />
+    <application
+        android:label="dpl triangle"
+        android:hasCode="true"
+        android:extractNativeLibs="true"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+        <activity
+            android:name="org.libsdl.app.SDLActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

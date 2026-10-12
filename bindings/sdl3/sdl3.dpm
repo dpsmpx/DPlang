@@ -1214,6 +1214,22 @@ pub const SDL_NS_PER_SECOND: u64 = 1000000000
 pub const SDL_NS_PER_MS: i32 = 1000000
 pub const SDL_NS_PER_US: i32 = 1000
 
+// SDL_messagebox.h
+pub const SDL_MESSAGEBOX_ERROR: u32 = 16
+pub const SDL_MESSAGEBOX_WARNING: u32 = 32
+pub const SDL_MESSAGEBOX_INFORMATION: u32 = 64
+pub const SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT: u32 = 128
+pub const SDL_MESSAGEBOX_BUTTONS_RIGHT_TO_LEFT: u32 = 256
+pub const SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT: u32 = 1
+pub const SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT: u32 = 2
+// SDL_MessageBoxColorType
+pub const SDL_MESSAGEBOX_COLOR_BACKGROUND: i32 = 0
+pub const SDL_MESSAGEBOX_COLOR_TEXT: i32 = 1
+pub const SDL_MESSAGEBOX_COLOR_BUTTON_BORDER: i32 = 2
+pub const SDL_MESSAGEBOX_COLOR_BUTTON_BACKGROUND: i32 = 3
+pub const SDL_MESSAGEBOX_COLOR_BUTTON_SELECTED: i32 = 4
+pub const SDL_MESSAGEBOX_COLOR_COUNT: i32 = 5
+
 // Непрозрачные типы SDL.
 pub extern type SDL_DisplayModeData
 pub extern type SDL_Window
@@ -1751,6 +1767,36 @@ pub struct SDL_FRect {
     h: f32
 }
 
+@c
+pub struct SDL_MessageBoxButtonData {
+    flags: u32
+    button_id: i32
+    text: ?SDL_Void
+}
+
+@c
+pub struct SDL_MessageBoxColor {
+    r: u8
+    g: u8
+    b: u8
+}
+
+@c
+pub struct SDL_MessageBoxColorScheme {
+    colors: [5]SDL_MessageBoxColor
+}
+
+@c
+pub struct SDL_MessageBoxData {
+    flags: u32
+    window: ?SDL_Window
+    title: ?SDL_Void
+    message: ?SDL_Void
+    numbuttons: i32
+    buttons: ?SDL_Void
+    color_scheme: ?SDL_Void
+}
+
 // SDL_init.h
 @link("SDL3")
 pub extern fn SDL_Init(flags: u32) bool
@@ -2186,6 +2232,12 @@ pub extern fn SDL_AddTimer(interval: u32, callback: extern fn(?SDL_Void, u32, u3
 pub extern fn SDL_AddTimerNS(interval: u64, callback: extern fn(?SDL_Void, u32, u64) u64, userdata: ?SDL_Void) u32
 @link("SDL3")
 pub extern fn SDL_RemoveTimer(id: u32) bool
+
+// SDL_messagebox.h
+@link("SDL3")
+pub extern fn SDL_ShowMessageBox(messageboxdata: &SDL_MessageBoxData, buttonid: &mut i32) bool
+@link("SDL3")
+pub extern fn SDL_ShowSimpleMessageBox(flags: u32, title: str, message: str, window: ?SDL_Window) bool
 
 // Пропущено — не выражается в dpl v0.2:
 // - SDL_SetError: переменное число аргументов

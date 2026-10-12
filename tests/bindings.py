@@ -24,6 +24,11 @@
   виртуальном экране Xvfb, Vulkan Wine передаёт lavapipe хоста; снимок и
   вывод — те же. SDL3 и библиотеку импорта Vulkan для MinGW ставит
   tools/setup/graphics_windows.sh.
+- triangle/android — сборка пакета examples/triangle/android/build.sh
+  (Р64: запускает автор на устройстве): APK подписан, в нём libmain.so и
+  libSDL3.so; libmain.so скомпонован без неразрешённых символов, зовёт
+  libvulkan.so и экспортирует SDL_main. Инструменты —
+  tools/setup/cross_android.sh и tools/setup/graphics_android.sh.
 
 Без заголовка, библиотеки или драйвера случай пропускается (missing), и
 итог прогона это называет.
@@ -44,7 +49,10 @@ VULKAN_H = '/usr/include/vulkan/vulkan.h'
 LAVAPIPE = '/usr/share/vulkan/icd.d/lvp_icd.json'
 
 CASES = ['vulkan/layout', 'sdl3/layout', 'jni/layout', 'vulkan/run', 'sdl3/run', 'jni/run', 'triangle/run',
-         'triangle/windows']
+         'triangle/windows', 'triangle/android']
+ANDROID_TOOLS = ['/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang',
+                 '/opt/android/sdk/build-tools/35.0.0/aapt2', '/opt/android/sdk/platforms/android-35/android.jar',
+                 '/opt/android/sdl3-3.4.18/lib/libSDL3.so']
 MINGW = '/usr/x86_64-w64-mingw32'
 TRIANGLE = os.path.join(ROOT, 'examples', 'triangle')
 JVM_ENV = ('JAVA_TOOL_OPTIONS', '_JAVA_OPTIONS', 'JDK_JAVA_OPTIONS')
@@ -88,6 +96,9 @@ def missing(case):
                 need = 'Xvfb (пакет xvfb)'
             elif not os.path.exists(LAVAPIPE):
                 need = 'lavapipe (mesa-vulkan-drivers)'
+        elif case == 'triangle/android':
+            if not all(os.path.exists(x) for x in ANDROID_TOOLS) or not shutil.which('javac'):
+                need = 'NDK, Android SDK и SDL3 для Android (tools/setup/graphics_android.sh)'
         elif case == 'jni/run':
             if not _jvm_dir():
                 need = 'JDK (java и libjvm.so)'
@@ -278,6 +289,36 @@ def triangle_windows(dpl):
     return None
 
 
+def triangle_android(dpl):
+    """Сборка APK examples/triangle и проверка компоновки libmain.so."""
+    llvm = os.path.dirname(ANDROID_TOOLS[0])
+    with tempfile.TemporaryDirectory() as d:
+        env = {k: v for k, v in os.environ.items() if k not in JVM_ENV}
+        env['DPL'] = dpl
+        r = subprocess.run(['bash', os.path.join(TRIANGLE, 'android', 'build.sh'), d], capture_output=True, text=True,
+                           timeout=TIMEOUT * 3, env=env)
+        if r.returncode != 0:
+            return f'build.sh: код {r.returncode}: ' + '\n'.join((r.stdout + r.stderr).splitlines()[-8:])
+        apk = os.path.join(d, 'triangle.apk')
+        names = subprocess.run(['unzip', '-Z1', apk], capture_output=True, text=True).stdout.split()
+        for need in ('AndroidManifest.xml', 'classes.dex', 'lib/arm64-v8a/libmain.so', 'lib/arm64-v8a/libSDL3.so'):
+            if need not in names:
+                return f'в APK нет {need}'
+        v = subprocess.run([os.path.join(os.path.dirname(ANDROID_TOOLS[1]), 'apksigner'), 'verify', apk],
+                           capture_output=True, text=True, env=env)
+        if v.returncode != 0:
+            return 'apksigner verify: ' + (v.stdout + v.stderr).strip()[:300]
+        lib = os.path.join(d, 'stage', 'lib', 'arm64-v8a', 'libmain.so')
+        dyn = subprocess.run([os.path.join(llvm, 'llvm-readelf'), '-d', '--dyn-syms', lib], capture_output=True,
+                             text=True).stdout
+        for need in ('[libSDL3.so]', '[libvulkan.so]'):
+            if need not in dyn:
+                return f'libmain.so не зовёт {need}'
+        if not any(ln.split()[-1] == 'SDL_main' and ' UND ' not in ln for ln in dyn.splitlines() if ln.strip()):
+            return 'libmain.so не экспортирует SDL_main'
+    return None
+
+
 def check_case(case, dpl, bless=False):
     if case == 'vulkan/layout':
         return layout(dpl, 'vulkan')
@@ -287,6 +328,8 @@ def check_case(case, dpl, bless=False):
         return layout(dpl, 'jni')
     if case == 'triangle/windows':
         return triangle_windows(dpl)
+    if case == 'triangle/android':
+        return triangle_android(dpl)
     if case.endswith('/run'):
         return run(dpl, case.split('/')[0], bless)
     return f'нет случая {case}'

@@ -35,3 +35,20 @@ triangle             # окно до закрытия
 dpl build -o triangle main.dpm
 SDL_VIDEO_DRIVER=offscreen ./triangle frame.ppm
 ```
+
+**Windows** — `dpl build --target windows-x86_64 -o triangle.exe
+main.dpm`, рядом — `SDL3.dll`. Нужны SDL3 для MinGW и библиотека импорта
+`vulkan-1.dll` (`tools/setup/graphics_windows.sh`). В проверке
+программа идёт под Wine на виртуальном экране Xvfb: окно Windows,
+поверхность `VK_KHR_win32_surface`, Vulkan Wine передаёт lavapipe хоста.
+Снимок и вывод — те же, что на Linux.
+
+**Android** — `examples/triangle/android/build.sh` собирает
+`build/android-triangle/triangle.apk`. Программа dpl — библиотека
+(`dpl build --lib`), из неё `libmain.so` с `SDL_main`, который зовёт
+`SDLActivity` из SDL3; пакет подписан ключом отладки. Инструменты —
+`tools/setup/cross_android.sh` и `tools/setup/graphics_android.sh`.
+Запуск — на устройстве с Vulkan (Р64): `adb install -r triangle.apk`,
+затем значок «dpl triangle». Сверка первого кадра показывается
+сообщением: `frame 64x64: 1152 triangle pixels, fnv1a 1933328421,
+matches the reference: true`.
