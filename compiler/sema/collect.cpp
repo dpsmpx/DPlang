@@ -451,7 +451,8 @@ private:
 
     // Типы только для C (Р62, E0328): `[N]T` и `&T` — поля `@c` (`?&T` —
     // ещё параметр функции C); заимствующая структура — параметр по
-    // значению или `&T` и поле `@c`. Проверка — когда `@c` всех известен.
+    // значению или `&T` и поле `@c`, срез таких — поле `@c` и параметр
+    // функции C. Проверка — когда `@c` всех известен.
     void c_placement() {
         auto bad = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m, const std::string& where) {
             if (!node || !t || t->kind == TK::Error) return;
@@ -491,6 +492,9 @@ private:
                 bool opt_ref = f.is_extern && p.mode == ParamMode::Value && t->kind == TK::Optional &&
                                t->elem->kind == TK::Ref && c_borrow_field(t);
                 if (opt_ref) continue;
+                // Срез заимствующих структур — параметр функции C, как поле `@c`:
+                // `vkQueueSubmit(q, 1, [VkSubmitInfo { ... }], none)`.
+                if (f.is_extern && p.mode == ParamMode::Value && t->kind == TK::Slice && c_borrowing(t->elem)) continue;
                 if (c_borrowing(t) && p.mode != ParamMode::Mut) continue;  // как срез: параметр
                 bad(f.node->params[i].type, t, f.module,
                     p.mode == ParamMode::Mut ? "a '&mut' parameter (C would write into it)" : "a parameter");

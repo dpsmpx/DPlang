@@ -1,0 +1,5 @@
+# Расширения Vulkan в привязке сверх ядра 1.0–1.3 (Р62): по имени в
+# строке. Новое расширение — строка здесь и перегенерация
+# (python3 bindings/gen/vulkan.py).
+VK_KHR_surface
+VK_KHR_swapchain
