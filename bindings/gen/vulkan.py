@@ -10,11 +10,13 @@ bindings/vulkan/vulkan.dpm.
 стандартная библиотека Python; результат зависит только от входа:
 повторная генерация даёт те же байты.
 """
-import argparse
 import os
 import re
 import sys
 import xml.etree.ElementTree as ET
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import Skip, main as gen_main, snake  # noqa: E402 — bindings/gen/common.py
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIR = os.path.join(os.path.dirname(HERE), 'vulkan')
@@ -24,10 +26,6 @@ OUT = os.path.join(DIR, 'vulkan.dpm')
 
 FEATURES = ['VK_VERSION_1_0', 'VK_VERSION_1_1', 'VK_VERSION_1_2', 'VK_VERSION_1_3']
 LIB = 'vulkan'
-# Ключевые слова dpl (compiler/syntax/tokens.def) и зарезервированное.
-KEYWORDS = {'fn', 'struct', 'enum', 'const', 'import', 'pub', 'let', 'var', 'if', 'else', 'while', 'for', 'in', 'match',
-            'return', 'break', 'continue', 'defer', 'errdefer', 'fail', 'try', 'parallel', 'none', 'true', 'false', 'mut',
-            'extern', 'unsafe'}
 BASIC = {'uint8_t': 'u8', 'uint16_t': 'u16', 'uint32_t': 'u32', 'uint64_t': 'u64', 'int8_t': 'i8', 'int16_t': 'i16',
          'int32_t': 'i32', 'int64_t': 'i64', 'float': 'f32', 'double': 'f64', 'char': 'u8', 'int': 'i32',
          # Цели dpl — 64-битные (docs/policy/PLATFORMS.md): size_t — u64.
@@ -41,29 +39,9 @@ OVERRIDES = {
 }
 
 
-class Skip(Exception):
-    """Объявление не выражается в dpl — пропуск с причиной."""
-
-
 def api_ok(e):
     a = e.get('api')
     return a is None or 'vulkan' in a.split(',')
-
-
-def snake(name):
-    """camelCase → snake_case: pNext → p_next, deviceUUID → device_uuid."""
-    out = []
-    for i, c in enumerate(name):
-        if c.isupper():
-            prev = name[i - 1] if i else ''
-            nxt = name[i + 1] if i + 1 < len(name) else ''
-            if prev.islower() or (prev.isupper() and nxt.islower()):
-                out.append('_')
-            out.append(c.lower())
-        else:
-            out.append(c)
-    s = ''.join(out)
-    return s + '_' if s in KEYWORDS else s
 
 
 def depends_ok(expr, enabled):
@@ -717,28 +695,5 @@ def generate():
     return Gen(reg).run()
 
 
-def main(argv):
-    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--check', action='store_true', help='сверить vulkan.dpm с генерацией')
-    a = ap.parse_args(argv)
-    text = generate()
-    rel = os.path.relpath(OUT, os.path.dirname(os.path.dirname(HERE)))
-    if a.check:
-        try:
-            with open(OUT, encoding='utf-8') as f:
-                old = f.read()
-        except FileNotFoundError:
-            old = None
-        if old != text:
-            print(f'{rel}: не совпадает с генерацией (python3 bindings/gen/vulkan.py)')
-            return 1
-        print(f'{rel}: совпадает с генерацией')
-        return 0
-    with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(text)
-    print(f'{rel}: записан, строк {text.count(chr(10))}')
-    return 0
-
-
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(gen_main(sys.argv[1:], generate, OUT, __doc__, 'vulkan.py'))

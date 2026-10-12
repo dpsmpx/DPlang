@@ -6,6 +6,8 @@
   с параметром на каждую структуру переводится в C (`dpl debug c`), к
   нему — _Static_assert на каждое поле; компилятор C проверяет с
   заголовком. Нужен vulkan.h (пакет libvulkan-dev).
+- sdl3/layout — то же для SDL3 против закреплённых заголовков
+  bindings/sdl3/include: пакеты хоста не нужны.
 - vulkan/run — tests/bindings/vulkan/main.dpm собирается `dpl build` и
   идёт на программном драйвере lavapipe (пакет mesa-vulkan-drivers):
   вывод — с tests/bindings/vulkan.out (--bless пишет его).
@@ -27,7 +29,7 @@ TIMEOUT = 120
 VULKAN_H = '/usr/include/vulkan/vulkan.h'
 LAVAPIPE = '/usr/share/vulkan/icd.d/lvp_icd.json'
 
-CASES = ['vulkan/layout', 'vulkan/run']
+CASES = ['vulkan/layout', 'sdl3/layout', 'vulkan/run']
 
 
 def _links(lib):
@@ -57,13 +59,18 @@ def missing(case):
     return _missing[case]
 
 
-def _vulkan_structs():
-    """[(имя C, [(поле dpl, поле C)])] — структуры привязки по генератору."""
+def _generator(name):
+    """Модуль генератора bindings/gen/<name>.py."""
     sys.path.insert(0, GEN)
     try:
-        import vulkan as vkgen  # bindings/gen/vulkan.py
+        return __import__(name)
     finally:
         sys.path.pop(0)
+
+
+def _vulkan_structs():
+    """[(имя C, [(поле dpl, поле C)])] — структуры привязки по генератору."""
+    vkgen = _generator('vulkan')
     import xml.etree.ElementTree as ET
     reg = vkgen.Registry(ET.parse(vkgen.XML).getroot(), vkgen.read_extensions())
     gen = vkgen.Gen(reg)
@@ -75,17 +82,32 @@ def _vulkan_structs():
     return out
 
 
+def _sdl3_structs():
+    gen = _generator('sdl3').Gen()
+    gen.run()
+    return [(n, [(f[0], f[3]) for f in fields]) for n, fields in gen.structs.items()]
+
+
 def _lp(s):
     return f'{len(s)}{s}'
 
 
-def layout(dpl):
-    structs = _vulkan_structs()
+def layout(dpl, module):
+    """module — vulkan или sdl3: раскладка структур против заголовков C."""
+    if module == 'vulkan':
+        structs = _vulkan_structs()
+        includes = ['#include <vulkan/vulkan.h>']
+        flags = []
+    else:
+        sdl = _generator('sdl3')
+        structs = _sdl3_structs()
+        includes = [f'#include <SDL3/{h}>' for h in sdl.read_list()]
+        flags = ['-I', os.path.join(ROOT, 'bindings', 'sdl3', 'include')]
     with tempfile.TemporaryDirectory() as d:
-        prog = ['import vulkan', '']
+        prog = [f'import {module}', '']
         for i in range(0, len(structs), 16):  # по 16 параметров в функции
             part = structs[i:i + 16]
-            params = ', '.join(f'a{k}: &vulkan.{n}' for k, (n, _) in enumerate(part))
+            params = ', '.join(f'a{k}: &{module}.{n}' for k, (n, _) in enumerate(part))
             prog += [f'fn touch{i // 16}({params}) {{', '}', '']
         prog += ['fn main() {', '}']
         with open(os.path.join(d, 'main.dpm'), 'w', encoding='utf-8') as f:
@@ -93,9 +115,9 @@ def layout(dpl):
         r = subprocess.run([dpl, 'debug', 'c', 'main.dpm'], capture_output=True, text=True, cwd=d, timeout=TIMEOUT)
         if r.returncode != 0:
             return 'debug c: ' + '\n'.join((r.stdout + r.stderr).splitlines()[:8])
-        checks = ['', '#include <stddef.h>', '#include <vulkan/vulkan.h>']
+        checks = ['', '#include <stddef.h>'] + includes
         for n, fields in structs:
-            t = f'dp_T_{_lp("vulkan")}{_lp(n)}'
+            t = f'dp_T_{_lp(module)}{_lp(n)}'
             checks.append(f'_Static_assert(sizeof({t}) == sizeof({n}), "size of {n}");')
             checks.append(f'_Static_assert(_Alignof({t}) == _Alignof({n}), "alignment of {n}");')
             for dn, cn in fields:
@@ -105,11 +127,11 @@ def layout(dpl):
         src = os.path.join(d, 'layout.c')
         with open(src, 'w', encoding='utf-8') as f:
             f.write(r.stdout + '\n'.join(checks) + '\n')
-        r = subprocess.run([CC, '-std=c11', '-fsyntax-only', '-w', '-I', os.path.join(ROOT, 'runtime', 'core'), src],
-                           capture_output=True, text=True, timeout=TIMEOUT)
+        r = subprocess.run([CC, '-std=c11', '-fsyntax-only', '-w', '-I', os.path.join(ROOT, 'runtime', 'core')] + flags +
+                           [src], capture_output=True, text=True, timeout=TIMEOUT)
         if r.returncode != 0:
             errs = [ln for ln in r.stderr.splitlines() if 'error' in ln][:8]
-            return f'раскладка расходится с vulkan.h ({len(structs)} структур):\n' + '\n'.join(errs)
+            return f'раскладка расходится с заголовками C ({len(structs)} структур):\n' + '\n'.join(errs)
     return None
 
 
@@ -145,7 +167,9 @@ def run(dpl, bless):
 
 def check_case(case, dpl, bless=False):
     if case == 'vulkan/layout':
-        return layout(dpl)
+        return layout(dpl, 'vulkan')
+    if case == 'sdl3/layout':
+        return layout(dpl, 'sdl3')
     if case == 'vulkan/run':
         return run(dpl, bless)
     return f'нет случая {case}'

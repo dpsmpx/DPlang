@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GENERATORS = ['vulkan.py']
+GENERATORS = ['vulkan.py', 'sdl3.py']
 
 
 def main():
