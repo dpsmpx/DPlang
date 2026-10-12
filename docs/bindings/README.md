@@ -1,10 +1,10 @@
 # Привязки
 
 Модули dpl для библиотек C, сгенерированные из закреплённого входа
-(Р58): Vulkan из `vk.xml`, SDL3 из заголовков; JNI — впереди. Результат лежит в
+(Р58): Vulkan из `vk.xml`, SDL3 из заголовков, JNI из `jni.h` AOSP. Результат лежит в
 репозитории и проходит ревью; сборка программы от генератора и сети не
 зависит. Средства языка — `extern fn`, `extern type`, `@c`, заимствующие
-поля, `@count`, `[N]T`, `@union`, общее начало (Р59, Р61, Р62;
+поля, `@count`, `[N]T`, `@union`, общее начало, `@slot` (Р59, Р61–Р63;
 `docs/spec/core.md`, разделы ffi).
 
 ## 1. Раскладка
@@ -14,6 +14,8 @@ bindings/gen/common.py         общее генераторов: имена, з
 bindings/gen/check.py          все генераторы в режиме --check (шаг run.sh «привязки»)
 bindings/gen/vulkan.py         vk.xml → vulkan/vulkan.dpm
 bindings/gen/sdl3.py           sdl3/include/SDL3 → sdl3/sdl3.dpm
+bindings/gen/jni.py            jni/jni.h → jni/jni.dpm
+bindings/gen/cheader.py        разбор заголовков C: препроцессор, объявления, выражения
 bindings/vulkan/vk.xml         вход, закреплён: 1.3.275 (docs/THIRD_PARTY.md)
 bindings/vulkan/extensions.txt расширения сверх ядра 1.0–1.3 (Р62)
 bindings/vulkan/vulkan.dpm     модуль `vulkan` — не править
@@ -21,6 +23,8 @@ bindings/sdl3/include/SDL3/    вход, закреплён: заголовки 
 bindings/sdl3/LICENSE.txt      лицензия SDL (Zlib)
 bindings/sdl3/headers.txt      заголовки, функции и константы которых входят в привязку
 bindings/sdl3/sdl3.dpm         модуль `sdl3` — не править
+bindings/jni/jni.h             вход, закреплён: AOSP libnativehelper, android-15.0.0_r1
+bindings/jni/jni.dpm           модуль `jni` — не править
 ```
 
 - **Импорт** — `import vulkan`. Загрузчик ищет модуль рядом с главным,
@@ -36,16 +40,21 @@ bindings/sdl3/sdl3.dpm         модуль `sdl3` — не править
 - **Проверки.** `bindings/gen/check.py` (шаг `tools/check/run.sh`):
   повторная генерация даёт те же байты. Проход `bindings` в
   `tests/run.py` (`tests/bindings.py`):
-  - `vulkan/layout`, `sdl3/layout` — размер, выравнивание, смещение и
-    размер каждого поля всех структур сверяются с заголовками C:
-    `vulkan.h` (пакет `libvulkan-dev`) и закреплёнными заголовками SDL3;
+  - `vulkan/layout`, `sdl3/layout`, `jni/layout` — размер,
+    выравнивание, смещение и размер каждого поля всех структур
+    сверяются с заголовками C: `vulkan.h` (пакет `libvulkan-dev`) и
+    закреплёнными заголовками SDL3 и JNI; у JNI ещё номер каждой записи
+    `@slot` — место поля в таблице;
   - `vulkan/run` — программа `tests/bindings/vulkan/` на программном
     драйвере lavapipe (`mesa-vulkan-drivers`): экземпляр, устройство с
     цепочкой `pNext`, буфер, заливка командой в очереди, чтение через
     `vkMapMemory`;
   - `sdl3/run` — программа `tests/bindings/sdl3/`: видео offscreen,
     окно Vulkan, событие пользователя через очередь, поверхность Vulkan
-    окна на lavapipe (`VK_EXT_headless_surface`).
+    окна на lavapipe (`VK_EXT_headless_surface`);
+  - `jni/run` — программа `tests/bindings/jni/` на JVM хоста (libjvm из
+    JDK): статические методы Java, строка Java, исключение, `GetEnv` и
+    `DestroyJavaVM` через таблицу `JavaVM`.
 
   Без библиотек случай пропускается, и итог прогона это называет.
   Ставит их `tools/setup/host_libs.sh`: пакеты Vulkan и SDL3 той же
@@ -148,7 +157,40 @@ p_code: []u8`, SPIR-V байтами из файла (указатель в C т
 Сборка для Windows и Android (`SDL3.dll`, `libSDL3.so` с `SDLActivity`)
 — шаг 7 v0.2.
 
-## 6. Пример
+## 6. JNI
+
+Вход — `jni.h` AOSP (Apache-2.0; `jni.h` OpenJDK под GPL не берётся,
+`docs/policy/LICENSING.md`). Функции `JNIEnv` и `JavaVM` — записи таблиц
+`JNINativeInterface` и `JNIInvokeInterface`: `@slot(N)` (Р63), `N` —
+место поля в таблице, считая резервные. Имена параметров — из обёрток
+C++ того же заголовка (`FindClass(const char* name)`, макросы
+`Call…Method…`).
+
+| в C | в dpl |
+|---|---|
+| `jboolean`, `jbyte`, `jchar`, `jshort`, `jint`, `jsize`, `jlong`, `jfloat`, `jdouble` | `u8`, `i8`, `u16`, `i16`, `i32`, `i32`, `i64`, `f32`, `f64` |
+| `jobject` и его имена в C (`jclass`, `jstring`, `jthrowable`, массивы) | `?jobject` — в C это один тип `void*` |
+| `jmethodID`, `jfieldID` | `?jmethodID`, `?jfieldID` |
+| `JNIEnv*`, `JavaVM*` | `JNIEnv`, `JavaVM` — первый параметр функций `@slot` |
+| `jvalue` | `@union pub struct jvalue`: `[jni.jvalue { l: s }]` — аргументы `…A` |
+| `const char*` | `str` |
+| `const jT*` | `[]T` |
+| `jT* buf`, `char* buf` (`Get…Region`) | `&mut List[T]` — копия данных Java |
+| `JNIEnv**`, `JavaVM**`, `void** env` (`GetEnv`) | `&mut ?JNIEnv`, `&mut ?JavaVM` |
+| `JavaVMInitArgs`, `JavaVMOption`, `JavaVMAttachArgs` | `@c`-структуры; `options` — `@count(n_options) []JavaVMOption` |
+
+Пропущено (перечень — в конце `jni.dpm`): варианты с переменным числом
+аргументов и `va_list` (есть `…A`), функции, отдающие указатель на
+данные JVM (`GetStringUTFChars`, `Get…ArrayElements`, критические
+участки), и их `Release…`, `RegisterNatives` (адрес функции как `void*`
+— методы `native` находит JVM по символу `@export("Java_…")`),
+`JNI_GetDefaultJavaVMInitArgs`. `JNI_OnLoad` пишет сама библиотека:
+`@export fn JNI_OnLoad(vm: jni.JavaVM, reserved: ?jni.JniVoid) i32`.
+
+`JNI_CreateJavaVM` и `JNI_GetCreatedJavaVMs` — `@link("jvm")`: на
+хосте — libjvm JDK; библиотека идёт в сборку, только если их зовут.
+
+## 7. Пример
 
 ```
 import vulkan

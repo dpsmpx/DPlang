@@ -6,19 +6,24 @@
   с параметром на каждую структуру переводится в C (`dpl debug c`), к
   нему — _Static_assert на каждое поле; компилятор C проверяет с
   заголовком. Нужен vulkan.h (пакет libvulkan-dev).
-- sdl3/layout — то же для SDL3 против закреплённых заголовков
-  bindings/sdl3/include: пакеты хоста не нужны.
+- sdl3/layout, jni/layout — то же для SDL3 и JNI против закреплённых
+  заголовков (bindings/sdl3/include, bindings/jni/jni.h): пакеты хоста
+  не нужны. У JNI ещё номер каждой записи @slot — место поля в таблице
+  JNINativeInterface или JNIInvokeInterface.
 - vulkan/run, sdl3/run — tests/bindings/X/main.dpm собирается `dpl
   build` и идёт на программном драйвере lavapipe (пакет
   mesa-vulkan-drivers); SDL3 — с видео offscreen, без экрана: вывод — с
   tests/bindings/X.out (--bless пишет его). Библиотеки ставит
   tools/setup/host_libs.sh.
+- jni/run — tests/bindings/jni/main.dpm на JVM хоста: libjvm из JDK
+  (`java` в PATH); переменные окружения JVM (JAVA_TOOL_OPTIONS) снимаются.
 
 Без заголовка, библиотеки или драйвера случай пропускается (missing), и
 итог прогона это называет.
 """
 import difflib
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -31,7 +36,18 @@ TIMEOUT = 120
 VULKAN_H = '/usr/include/vulkan/vulkan.h'
 LAVAPIPE = '/usr/share/vulkan/icd.d/lvp_icd.json'
 
-CASES = ['vulkan/layout', 'sdl3/layout', 'vulkan/run', 'sdl3/run']
+CASES = ['vulkan/layout', 'sdl3/layout', 'jni/layout', 'vulkan/run', 'sdl3/run', 'jni/run']
+JVM_ENV = ('JAVA_TOOL_OPTIONS', '_JAVA_OPTIONS', 'JDK_JAVA_OPTIONS')
+
+
+def _jvm_dir():
+    """Каталог libjvm.so JDK из PATH; None — нет."""
+    java = shutil.which('java')
+    if not java:
+        return None
+    home = os.path.dirname(os.path.dirname(os.path.realpath(java)))
+    d = os.path.join(home, 'lib', 'server')
+    return d if os.path.exists(os.path.join(d, 'libjvm.so')) else None
 
 
 def _links(lib):
@@ -52,6 +68,9 @@ def missing(case):
         need = None
         if case == 'vulkan/layout' and not os.path.exists(VULKAN_H):
             need = 'vulkan.h (libvulkan-dev)'
+        elif case == 'jni/run':
+            if not _jvm_dir():
+                need = 'JDK (java и libjvm.so)'
         elif case.endswith('/run'):
             if not _links('vulkan'):
                 need = 'libvulkan для компоновки (libvulkan-dev)'
@@ -92,16 +111,32 @@ def _sdl3_structs():
     return [(n, [(f[0], f[3]) for f in fields]) for n, fields in gen.structs.items()]
 
 
+def _jni_layout():
+    """Структуры и записи таблиц JNI по генератору."""
+    gen = _generator('jni').Gen()
+    gen.run()
+    structs = [(n, [(f[0], f[3]) for f in fields]) for n, fields in gen.structs.items()]
+    structs.append(('jvalue', [(c, c) for c in 'zbcsijfdl']))
+    checks = [f'_Static_assert(offsetof(struct {t}, {fn}) == {slot} * sizeof(void*), "slot of {fn}");'
+              for t, fn, slot in gen.slots]
+    return structs, checks
+
+
 def _lp(s):
     return f'{len(s)}{s}'
 
 
 def layout(dpl, module):
     """module — vulkan или sdl3: раскладка структур против заголовков C."""
+    extra = []
     if module == 'vulkan':
         structs = _vulkan_structs()
         includes = ['#include <vulkan/vulkan.h>']
         flags = []
+    elif module == 'jni':
+        structs, extra = _jni_layout()
+        includes = ['#include <jni.h>']
+        flags = ['-I', os.path.join(ROOT, 'bindings', 'jni')]
     else:
         sdl = _generator('sdl3')
         structs = _sdl3_structs()
@@ -128,6 +163,7 @@ def layout(dpl, module):
                 checks.append(f'_Static_assert(offsetof({t}, f_{dn}) == offsetof({n}, {cn}), "offset of {n}.{cn}");')
                 checks.append(f'_Static_assert(sizeof((({t}*)0)->f_{dn}) == sizeof((({n}*)0)->{cn}), '
                               f'"size of {n}.{cn}");')
+        checks += extra
         src = os.path.join(d, 'layout.c')
         with open(src, 'w', encoding='utf-8') as f:
             f.write(r.stdout + '\n'.join(checks) + '\n')
@@ -144,11 +180,16 @@ def run(dpl, name, bless):
     exp = case + '.out'
     with tempfile.TemporaryDirectory() as d:
         exe = os.path.join(d, name)
+        env = {k: v for k, v in os.environ.items() if k not in JVM_ENV}
+        if name == 'jni':  # libjvm — не в путях компоновщика: каталог JDK
+            jvm = _jvm_dir()
+            env['LIBRARY_PATH'] = jvm + os.pathsep + env.get('LIBRARY_PATH', '')
+            env['LD_LIBRARY_PATH'] = jvm + os.pathsep + env.get('LD_LIBRARY_PATH', '')
         r = subprocess.run([dpl, 'build', '-o', exe, 'main.dpm'], capture_output=True, text=True, cwd=case,
-                           timeout=TIMEOUT)
+                           timeout=TIMEOUT, env=env)
         if r.returncode != 0:
             return f'build: код {r.returncode}: ' + '\n'.join((r.stdout + r.stderr).splitlines()[:6])
-        env = dict(os.environ, VK_ICD_FILENAMES=LAVAPIPE, VK_DRIVER_FILES=LAVAPIPE)
+        env.update(VK_ICD_FILENAMES=LAVAPIPE, VK_DRIVER_FILES=LAVAPIPE)
         try:
             p = subprocess.run([exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
                                cwd=case, env=env)
@@ -174,6 +215,8 @@ def check_case(case, dpl, bless=False):
         return layout(dpl, 'vulkan')
     if case == 'sdl3/layout':
         return layout(dpl, 'sdl3')
+    if case == 'jni/layout':
+        return layout(dpl, 'jni')
     if case.endswith('/run'):
         return run(dpl, case.split('/')[0], bless)
     return f'нет случая {case}'

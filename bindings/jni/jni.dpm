@@ -1,0 +1,468 @@
+// SPDX-License-Identifier: Apache-2.0
+// Привязка JNI: функции JNIEnv и JavaVM — записи их таблиц (@slot, Р63).
+// Сгенерировано bindings/gen/jni.py из jni.h (AOSP libnativehelper) — не править (Р58).
+// jni.h: Copyright (C) 2006 The Android Open Source Project, Apache-2.0.
+// Правила перевода типов C — docs/bindings/README.md.
+
+// Ссылка Java: jobject и его имена в C (jclass, jstring, jthrowable, массивы).
+pub extern type jobject
+pub extern type jfieldID
+pub extern type jmethodID
+// JNIEnv* и JavaVM* в C: объект, первое слово которого — адрес таблицы функций.
+pub extern type JNIEnv
+pub extern type JavaVM
+// void* без длины: указатель C без операций.
+pub extern type JniVoid
+
+// Константы
+pub const JNI_FALSE: u8 = 0
+pub const JNI_TRUE: u8 = 1
+pub const JNI_VERSION_1_1: i32 = 65537
+pub const JNI_VERSION_1_2: i32 = 65538
+pub const JNI_VERSION_1_4: i32 = 65540
+pub const JNI_VERSION_1_6: i32 = 65542
+pub const JNI_OK: i32 = 0
+pub const JNI_ERR: i32 = -1
+pub const JNI_EDETACHED: i32 = -2
+pub const JNI_EVERSION: i32 = -3
+pub const JNI_ENOMEM: i32 = -4
+pub const JNI_EEXIST: i32 = -5
+pub const JNI_EINVAL: i32 = -6
+pub const JNI_COMMIT: i32 = 1
+pub const JNI_ABORT: i32 = 2
+// jobjectRefType
+pub const JNIInvalidRefType: i32 = 0
+pub const JNILocalRefType: i32 = 1
+pub const JNIGlobalRefType: i32 = 2
+pub const JNIWeakGlobalRefType: i32 = 3
+
+@union
+pub struct jvalue {
+    z: u8
+    b: i8
+    c: u16
+    s: i16
+    i: i32
+    j: i64
+    f: f32
+    d: f64
+    l: ?jobject
+}
+
+@c
+pub struct JavaVMAttachArgs {
+    version: i32
+    name: str
+    group: ?jobject
+}
+
+@c
+pub struct JavaVMOption {
+    option_string: str
+    extra_info: ?JniVoid
+}
+
+@c
+pub struct JavaVMInitArgs {
+    version: i32
+    n_options: i32
+    @count(n_options) options: []JavaVMOption
+    ignore_unrecognized: u8
+}
+
+// JNINativeInterface: JNIEnv
+@slot(4)
+pub extern fn GetVersion(env: JNIEnv) i32
+@slot(5)
+pub extern fn DefineClass(env: JNIEnv, name: str, loader: ?jobject, buf: []i8, buf_len: i32) ?jobject
+@slot(6)
+pub extern fn FindClass(env: JNIEnv, name: str) ?jobject
+@slot(7)
+pub extern fn FromReflectedMethod(env: JNIEnv, method: ?jobject) ?jmethodID
+@slot(8)
+pub extern fn FromReflectedField(env: JNIEnv, field: ?jobject) ?jfieldID
+@slot(9)
+pub extern fn ToReflectedMethod(env: JNIEnv, cls: ?jobject, method_id: ?jmethodID, is_static: u8) ?jobject
+@slot(10)
+pub extern fn GetSuperclass(env: JNIEnv, clazz: ?jobject) ?jobject
+@slot(11)
+pub extern fn IsAssignableFrom(env: JNIEnv, clazz1: ?jobject, clazz2: ?jobject) u8
+@slot(12)
+pub extern fn ToReflectedField(env: JNIEnv, cls: ?jobject, field_id: ?jfieldID, is_static: u8) ?jobject
+@slot(13)
+pub extern fn Throw(env: JNIEnv, obj: ?jobject) i32
+@slot(14)
+pub extern fn ThrowNew(env: JNIEnv, clazz: ?jobject, message: str) i32
+@slot(15)
+pub extern fn ExceptionOccurred(env: JNIEnv) ?jobject
+@slot(16)
+pub extern fn ExceptionDescribe(env: JNIEnv)
+@slot(17)
+pub extern fn ExceptionClear(env: JNIEnv)
+@slot(18)
+pub extern fn FatalError(env: JNIEnv, msg: str)
+@slot(19)
+pub extern fn PushLocalFrame(env: JNIEnv, capacity: i32) i32
+@slot(20)
+pub extern fn PopLocalFrame(env: JNIEnv, result: ?jobject) ?jobject
+@slot(21)
+pub extern fn NewGlobalRef(env: JNIEnv, obj: ?jobject) ?jobject
+@slot(22)
+pub extern fn DeleteGlobalRef(env: JNIEnv, global_ref: ?jobject)
+@slot(23)
+pub extern fn DeleteLocalRef(env: JNIEnv, local_ref: ?jobject)
+@slot(24)
+pub extern fn IsSameObject(env: JNIEnv, ref1: ?jobject, ref2: ?jobject) u8
+@slot(25)
+pub extern fn NewLocalRef(env: JNIEnv, ref: ?jobject) ?jobject
+@slot(26)
+pub extern fn EnsureLocalCapacity(env: JNIEnv, capacity: i32) i32
+@slot(27)
+pub extern fn AllocObject(env: JNIEnv, clazz: ?jobject) ?jobject
+@slot(30)
+pub extern fn NewObjectA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) ?jobject
+@slot(31)
+pub extern fn GetObjectClass(env: JNIEnv, obj: ?jobject) ?jobject
+@slot(32)
+pub extern fn IsInstanceOf(env: JNIEnv, obj: ?jobject, clazz: ?jobject) u8
+@slot(33)
+pub extern fn GetMethodID(env: JNIEnv, clazz: ?jobject, name: str, sig: str) ?jmethodID
+@slot(36)
+pub extern fn CallObjectMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) ?jobject
+@slot(39)
+pub extern fn CallBooleanMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) u8
+@slot(42)
+pub extern fn CallByteMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) i8
+@slot(45)
+pub extern fn CallCharMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) u16
+@slot(48)
+pub extern fn CallShortMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) i16
+@slot(51)
+pub extern fn CallIntMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) i32
+@slot(54)
+pub extern fn CallLongMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) i64
+@slot(57)
+pub extern fn CallFloatMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) f32
+@slot(60)
+pub extern fn CallDoubleMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue) f64
+@slot(63)
+pub extern fn CallVoidMethodA(env: JNIEnv, obj: ?jobject, method_id: ?jmethodID, args: []jvalue)
+@slot(66)
+pub extern fn CallNonvirtualObjectMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) ?jobject
+@slot(69)
+pub extern fn CallNonvirtualBooleanMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) u8
+@slot(72)
+pub extern fn CallNonvirtualByteMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i8
+@slot(75)
+pub extern fn CallNonvirtualCharMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) u16
+@slot(78)
+pub extern fn CallNonvirtualShortMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i16
+@slot(81)
+pub extern fn CallNonvirtualIntMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i32
+@slot(84)
+pub extern fn CallNonvirtualLongMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i64
+@slot(87)
+pub extern fn CallNonvirtualFloatMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) f32
+@slot(90)
+pub extern fn CallNonvirtualDoubleMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) f64
+@slot(93)
+pub extern fn CallNonvirtualVoidMethodA(env: JNIEnv, obj: ?jobject, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue)
+@slot(94)
+pub extern fn GetFieldID(env: JNIEnv, clazz: ?jobject, name: str, sig: str) ?jfieldID
+@slot(95)
+pub extern fn GetObjectField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) ?jobject
+@slot(96)
+pub extern fn GetBooleanField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) u8
+@slot(97)
+pub extern fn GetByteField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) i8
+@slot(98)
+pub extern fn GetCharField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) u16
+@slot(99)
+pub extern fn GetShortField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) i16
+@slot(100)
+pub extern fn GetIntField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) i32
+@slot(101)
+pub extern fn GetLongField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) i64
+@slot(102)
+pub extern fn GetFloatField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) f32
+@slot(103)
+pub extern fn GetDoubleField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID) f64
+@slot(104)
+pub extern fn SetObjectField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: ?jobject)
+@slot(105)
+pub extern fn SetBooleanField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: u8)
+@slot(106)
+pub extern fn SetByteField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: i8)
+@slot(107)
+pub extern fn SetCharField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: u16)
+@slot(108)
+pub extern fn SetShortField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: i16)
+@slot(109)
+pub extern fn SetIntField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: i32)
+@slot(110)
+pub extern fn SetLongField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: i64)
+@slot(111)
+pub extern fn SetFloatField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: f32)
+@slot(112)
+pub extern fn SetDoubleField(env: JNIEnv, obj: ?jobject, field_id: ?jfieldID, value: f64)
+@slot(113)
+pub extern fn GetStaticMethodID(env: JNIEnv, clazz: ?jobject, name: str, sig: str) ?jmethodID
+@slot(116)
+pub extern fn CallStaticObjectMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) ?jobject
+@slot(119)
+pub extern fn CallStaticBooleanMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) u8
+@slot(122)
+pub extern fn CallStaticByteMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i8
+@slot(125)
+pub extern fn CallStaticCharMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) u16
+@slot(128)
+pub extern fn CallStaticShortMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i16
+@slot(131)
+pub extern fn CallStaticIntMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i32
+@slot(134)
+pub extern fn CallStaticLongMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) i64
+@slot(137)
+pub extern fn CallStaticFloatMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) f32
+@slot(140)
+pub extern fn CallStaticDoubleMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue) f64
+@slot(143)
+pub extern fn CallStaticVoidMethodA(env: JNIEnv, clazz: ?jobject, method_id: ?jmethodID, args: []jvalue)
+@slot(144)
+pub extern fn GetStaticFieldID(env: JNIEnv, clazz: ?jobject, name: str, sig: str) ?jfieldID
+@slot(145)
+pub extern fn GetStaticObjectField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) ?jobject
+@slot(146)
+pub extern fn GetStaticBooleanField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) u8
+@slot(147)
+pub extern fn GetStaticByteField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) i8
+@slot(148)
+pub extern fn GetStaticCharField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) u16
+@slot(149)
+pub extern fn GetStaticShortField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) i16
+@slot(150)
+pub extern fn GetStaticIntField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) i32
+@slot(151)
+pub extern fn GetStaticLongField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) i64
+@slot(152)
+pub extern fn GetStaticFloatField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) f32
+@slot(153)
+pub extern fn GetStaticDoubleField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID) f64
+@slot(154)
+pub extern fn SetStaticObjectField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: ?jobject)
+@slot(155)
+pub extern fn SetStaticBooleanField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: u8)
+@slot(156)
+pub extern fn SetStaticByteField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: i8)
+@slot(157)
+pub extern fn SetStaticCharField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: u16)
+@slot(158)
+pub extern fn SetStaticShortField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: i16)
+@slot(159)
+pub extern fn SetStaticIntField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: i32)
+@slot(160)
+pub extern fn SetStaticLongField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: i64)
+@slot(161)
+pub extern fn SetStaticFloatField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: f32)
+@slot(162)
+pub extern fn SetStaticDoubleField(env: JNIEnv, clazz: ?jobject, field_id: ?jfieldID, value: f64)
+@slot(163)
+pub extern fn NewString(env: JNIEnv, unicode_chars: []u16, len: i32) ?jobject
+@slot(164)
+pub extern fn GetStringLength(env: JNIEnv, string: ?jobject) i32
+@slot(166)
+pub extern fn ReleaseStringChars(env: JNIEnv, string: ?jobject, chars: []u16)
+@slot(167)
+pub extern fn NewStringUTF(env: JNIEnv, bytes: str) ?jobject
+@slot(168)
+pub extern fn GetStringUTFLength(env: JNIEnv, string: ?jobject) i32
+@slot(170)
+pub extern fn ReleaseStringUTFChars(env: JNIEnv, string: ?jobject, utf: str)
+@slot(171)
+pub extern fn GetArrayLength(env: JNIEnv, array: ?jobject) i32
+@slot(172)
+pub extern fn NewObjectArray(env: JNIEnv, length: i32, element_class: ?jobject, initial_element: ?jobject) ?jobject
+@slot(173)
+pub extern fn GetObjectArrayElement(env: JNIEnv, array: ?jobject, index: i32) ?jobject
+@slot(174)
+pub extern fn SetObjectArrayElement(env: JNIEnv, array: ?jobject, index: i32, value: ?jobject)
+@slot(175)
+pub extern fn NewBooleanArray(env: JNIEnv, length: i32) ?jobject
+@slot(176)
+pub extern fn NewByteArray(env: JNIEnv, length: i32) ?jobject
+@slot(177)
+pub extern fn NewCharArray(env: JNIEnv, length: i32) ?jobject
+@slot(178)
+pub extern fn NewShortArray(env: JNIEnv, length: i32) ?jobject
+@slot(179)
+pub extern fn NewIntArray(env: JNIEnv, length: i32) ?jobject
+@slot(180)
+pub extern fn NewLongArray(env: JNIEnv, length: i32) ?jobject
+@slot(181)
+pub extern fn NewFloatArray(env: JNIEnv, length: i32) ?jobject
+@slot(182)
+pub extern fn NewDoubleArray(env: JNIEnv, length: i32) ?jobject
+@slot(199)
+pub extern fn GetBooleanArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[u8])
+@slot(200)
+pub extern fn GetByteArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[i8])
+@slot(201)
+pub extern fn GetCharArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[u16])
+@slot(202)
+pub extern fn GetShortArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[i16])
+@slot(203)
+pub extern fn GetIntArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[i32])
+@slot(204)
+pub extern fn GetLongArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[i64])
+@slot(205)
+pub extern fn GetFloatArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[f32])
+@slot(206)
+pub extern fn GetDoubleArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: &mut List[f64])
+@slot(207)
+pub extern fn SetBooleanArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []u8)
+@slot(208)
+pub extern fn SetByteArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []i8)
+@slot(209)
+pub extern fn SetCharArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []u16)
+@slot(210)
+pub extern fn SetShortArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []i16)
+@slot(211)
+pub extern fn SetIntArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []i32)
+@slot(212)
+pub extern fn SetLongArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []i64)
+@slot(213)
+pub extern fn SetFloatArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []f32)
+@slot(214)
+pub extern fn SetDoubleArrayRegion(env: JNIEnv, array: ?jobject, start: i32, len: i32, buf: []f64)
+@slot(216)
+pub extern fn UnregisterNatives(env: JNIEnv, clazz: ?jobject) i32
+@slot(217)
+pub extern fn MonitorEnter(env: JNIEnv, obj: ?jobject) i32
+@slot(218)
+pub extern fn MonitorExit(env: JNIEnv, obj: ?jobject) i32
+@slot(219)
+pub extern fn GetJavaVM(env: JNIEnv, vm: &mut ?JavaVM) i32
+@slot(220)
+pub extern fn GetStringRegion(env: JNIEnv, str: ?jobject, start: i32, len: i32, buf: &mut List[u16])
+@slot(221)
+pub extern fn GetStringUTFRegion(env: JNIEnv, str: ?jobject, start: i32, len: i32, buf: &mut List[u8])
+@slot(223)
+pub extern fn ReleasePrimitiveArrayCritical(env: JNIEnv, array: ?jobject, carray: ?JniVoid, mode: i32)
+@slot(225)
+pub extern fn ReleaseStringCritical(env: JNIEnv, string: ?jobject, carray: []u16)
+@slot(226)
+pub extern fn NewWeakGlobalRef(env: JNIEnv, obj: ?jobject) ?jobject
+@slot(227)
+pub extern fn DeleteWeakGlobalRef(env: JNIEnv, obj: ?jobject)
+@slot(228)
+pub extern fn ExceptionCheck(env: JNIEnv) u8
+@slot(229)
+pub extern fn NewDirectByteBuffer(env: JNIEnv, address: ?JniVoid, capacity: i64) ?jobject
+@slot(231)
+pub extern fn GetDirectBufferCapacity(env: JNIEnv, buf: ?jobject) i64
+@slot(232)
+pub extern fn GetObjectRefType(env: JNIEnv, obj: ?jobject) i32
+
+// JNIInvokeInterface: JavaVM
+@slot(3)
+pub extern fn DestroyJavaVM(vm: JavaVM) i32
+@slot(4)
+pub extern fn AttachCurrentThread(vm: JavaVM, p_env: &mut ?JNIEnv, thr_args: ?&JavaVMAttachArgs) i32
+@slot(5)
+pub extern fn DetachCurrentThread(vm: JavaVM) i32
+@slot(6)
+pub extern fn GetEnv(vm: JavaVM, env: &mut ?JNIEnv, version: i32) i32
+@slot(7)
+pub extern fn AttachCurrentThreadAsDaemon(vm: JavaVM, p_env: &mut ?JNIEnv, thr_args: ?&JavaVMAttachArgs) i32
+
+// Функции JVM (на хосте — libjvm).
+@link("jvm")
+pub extern fn JNI_CreateJavaVM(p_vm: &mut ?JavaVM, p_env: &mut ?JNIEnv, vm_args: &JavaVMInitArgs) i32
+@link("jvm")
+pub extern fn JNI_GetCreatedJavaVMs(vms: &mut List[?JavaVM], len: i32, n_vms: &mut i32) i32
+
+// Пропущено — не выражается в dpl v0.2:
+// - NewObject: переменное число аргументов (есть вариант …A)
+// - NewObjectV: va_list
+// - CallObjectMethod: переменное число аргументов (есть вариант …A)
+// - CallObjectMethodV: va_list
+// - CallBooleanMethod: переменное число аргументов (есть вариант …A)
+// - CallBooleanMethodV: va_list
+// - CallByteMethod: переменное число аргументов (есть вариант …A)
+// - CallByteMethodV: va_list
+// - CallCharMethod: переменное число аргументов (есть вариант …A)
+// - CallCharMethodV: va_list
+// - CallShortMethod: переменное число аргументов (есть вариант …A)
+// - CallShortMethodV: va_list
+// - CallIntMethod: переменное число аргументов (есть вариант …A)
+// - CallIntMethodV: va_list
+// - CallLongMethod: переменное число аргументов (есть вариант …A)
+// - CallLongMethodV: va_list
+// - CallFloatMethod: переменное число аргументов (есть вариант …A)
+// - CallFloatMethodV: va_list
+// - CallDoubleMethod: переменное число аргументов (есть вариант …A)
+// - CallDoubleMethodV: va_list
+// - CallVoidMethod: переменное число аргументов (есть вариант …A)
+// - CallVoidMethodV: va_list
+// - CallNonvirtualObjectMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualObjectMethodV: va_list
+// - CallNonvirtualBooleanMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualBooleanMethodV: va_list
+// - CallNonvirtualByteMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualByteMethodV: va_list
+// - CallNonvirtualCharMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualCharMethodV: va_list
+// - CallNonvirtualShortMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualShortMethodV: va_list
+// - CallNonvirtualIntMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualIntMethodV: va_list
+// - CallNonvirtualLongMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualLongMethodV: va_list
+// - CallNonvirtualFloatMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualFloatMethodV: va_list
+// - CallNonvirtualDoubleMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualDoubleMethodV: va_list
+// - CallNonvirtualVoidMethod: переменное число аргументов (есть вариант …A)
+// - CallNonvirtualVoidMethodV: va_list
+// - CallStaticObjectMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticObjectMethodV: va_list
+// - CallStaticBooleanMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticBooleanMethodV: va_list
+// - CallStaticByteMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticByteMethodV: va_list
+// - CallStaticCharMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticCharMethodV: va_list
+// - CallStaticShortMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticShortMethodV: va_list
+// - CallStaticIntMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticIntMethodV: va_list
+// - CallStaticLongMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticLongMethodV: va_list
+// - CallStaticFloatMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticFloatMethodV: va_list
+// - CallStaticDoubleMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticDoubleMethodV: va_list
+// - CallStaticVoidMethod: переменное число аргументов (есть вариант …A)
+// - CallStaticVoidMethodV: va_list
+// - GetStringChars: результат — указатель на данные JVM; копию дают функции …Region
+// - GetStringUTFChars: результат — указатель на данные JVM; копию дают функции …Region
+// - GetBooleanArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - GetByteArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - GetCharArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - GetShortArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - GetIntArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - GetLongArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - GetFloatArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - GetDoubleArrayElements: результат — указатель на данные JVM; копию дают функции …Region
+// - ReleaseBooleanArrayElements: параметр elems: jboolean*
+// - ReleaseByteArrayElements: параметр elems: jbyte*
+// - ReleaseCharArrayElements: параметр elems: jchar*
+// - ReleaseShortArrayElements: параметр elems: jshort*
+// - ReleaseIntArrayElements: параметр elems: jint*
+// - ReleaseLongArrayElements: параметр elems: jlong*
+// - ReleaseFloatArrayElements: параметр elems: jfloat*
+// - ReleaseDoubleArrayElements: параметр elems: jdouble*
+// - RegisterNatives: параметр methods: const JNINativeMethod*
+// - GetPrimitiveArrayCritical: результат — указатель на данные JVM; копию дают функции …Region
+// - GetStringCritical: результат — указатель на данные JVM; копию дают функции …Region
+// - GetDirectBufferAddress: результат — указатель на данные JVM; копию дают функции …Region
+// - JNI_GetDefaultJavaVMInitArgs: начальные параметры JNI 1.1

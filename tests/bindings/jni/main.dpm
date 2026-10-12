@@ -1,0 +1,53 @@
+// spec: ffi.slot ffi.struct
+// Привязка JNI (Р58, Р63) на JVM хоста (libjvm из JDK): создать JVM,
+// вызвать статические методы Java через записи таблицы JNIEnv, прочитать
+// строку Java, поймать исключение, закрыть JVM через таблицу JavaVM.
+import jni
+
+fn main() {
+    var vm: ?jni.JavaVM = none
+    var env: ?jni.JNIEnv = none
+    let rc = jni.JNI_CreateJavaVM(&mut vm, &mut env, &jni.JavaVMInitArgs {
+        version: jni.JNI_VERSION_1_6,
+        options: [jni.JavaVMOption { option_string: "-Xrs" }, jni.JavaVMOption { option_string: "-Xmx64m" }],
+        ignore_unrecognized: jni.JNI_FALSE,
+    })
+    println("JNI_CreateJavaVM: " + str(rc))
+    if let e = env {
+        work(e)
+    }
+    if let v = vm {
+        var again: ?jni.JNIEnv = none
+        println("GetEnv: " + str(jni.GetEnv(v, &mut again, jni.JNI_VERSION_1_6)) + ", same env: " + str(again == env))
+        println("DestroyJavaVM: " + str(jni.DestroyJavaVM(v)))
+    }
+}
+
+fn digits(bytes: []u8) str {
+    var s = ""
+    for b in &bytes {
+        if b >= 48 && b <= 57 {
+            s = s + str(b - 48)
+        }
+    }
+    return s
+}
+
+fn work(env: jni.JNIEnv) {
+    println("JNI 1.6+: " + str(jni.GetVersion(env) >= jni.JNI_VERSION_1_6))
+    let integer = jni.FindClass(env, "java/lang/Integer")
+    let parse = jni.GetStaticMethodID(env, integer, "parseInt", "(Ljava/lang/String;)I")
+    let n = jni.CallStaticIntMethodA(env, integer, parse, [jni.jvalue { l: jni.NewStringUTF(env, "1234") }])
+    println("Integer.parseInt(\"1234\"): " + str(n))
+    let string = jni.FindClass(env, "java/lang/String")
+    let value_of = jni.GetStaticMethodID(env, string, "valueOf", "(I)Ljava/lang/String;")
+    let r = jni.CallStaticObjectMethodA(env, string, value_of, [jni.jvalue { i: n * 7 }])
+    let length = jni.GetStringUTFLength(env, r)
+    var buf: List[u8] = repeat(u8(0), int(length) + 1)
+    jni.GetStringUTFRegion(env, r, 0, jni.GetStringLength(env, r), &mut buf)
+    println("String.valueOf(" + str(n * 7) + "): " + digits(buf) + ", length " + str(length))
+    _ = jni.CallStaticIntMethodA(env, integer, parse, [jni.jvalue { l: jni.NewStringUTF(env, "x") }])
+    println("NumberFormatException: " + str(jni.ExceptionCheck(env) == jni.JNI_TRUE))
+    jni.ExceptionClear(env)
+    println("cleared: " + str(jni.ExceptionCheck(env) == jni.JNI_FALSE))
+}
