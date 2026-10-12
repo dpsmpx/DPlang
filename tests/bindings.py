@@ -17,6 +17,9 @@
   tools/setup/host_libs.sh.
 - jni/run — tests/bindings/jni/main.dpm на JVM хоста: libjvm из JDK
   (`java` в PATH); переменные окружения JVM (JAVA_TOOL_OPTIONS) снимаются.
+- triangle/run — графическая программа examples/triangle (шаг 7 v0.2,
+  Р64) с видео SDL3 offscreen на lavapipe: снимок кадра побайтно равен
+  examples/triangle/reference/frame.ppm, вывод — tests/bindings/triangle.out.
 
 Без заголовка, библиотеки или драйвера случай пропускается (missing), и
 итог прогона это называет.
@@ -36,7 +39,8 @@ TIMEOUT = 120
 VULKAN_H = '/usr/include/vulkan/vulkan.h'
 LAVAPIPE = '/usr/share/vulkan/icd.d/lvp_icd.json'
 
-CASES = ['vulkan/layout', 'sdl3/layout', 'jni/layout', 'vulkan/run', 'sdl3/run', 'jni/run']
+CASES = ['vulkan/layout', 'sdl3/layout', 'jni/layout', 'vulkan/run', 'sdl3/run', 'jni/run', 'triangle/run']
+TRIANGLE = os.path.join(ROOT, 'examples', 'triangle')
 JVM_ENV = ('JAVA_TOOL_OPTIONS', '_JAVA_OPTIONS', 'JDK_JAVA_OPTIONS')
 
 
@@ -76,7 +80,7 @@ def missing(case):
                 need = 'libvulkan для компоновки (libvulkan-dev)'
             elif not os.path.exists(LAVAPIPE):
                 need = 'lavapipe (mesa-vulkan-drivers)'
-            elif case == 'sdl3/run' and not _links('SDL3'):
+            elif case in ('sdl3/run', 'triangle/run') and not _links('SDL3'):
                 need = 'libSDL3 (tools/setup/host_libs.sh)'
         _missing[case] = need
     return _missing[case]
@@ -176,8 +180,8 @@ def layout(dpl, module):
 
 
 def run(dpl, name, bless):
-    case = os.path.join(TESTS, 'bindings', name)
-    exp = case + '.out'
+    case = TRIANGLE if name == 'triangle' else os.path.join(TESTS, 'bindings', name)
+    exp = os.path.join(TESTS, 'bindings', name + '.out')
     with tempfile.TemporaryDirectory() as d:
         exe = os.path.join(d, name)
         env = {k: v for k, v in os.environ.items() if k not in JVM_ENV}
@@ -190,11 +194,18 @@ def run(dpl, name, bless):
         if r.returncode != 0:
             return f'build: код {r.returncode}: ' + '\n'.join((r.stdout + r.stderr).splitlines()[:6])
         env.update(VK_ICD_FILENAMES=LAVAPIPE, VK_DRIVER_FILES=LAVAPIPE)
+        if name == 'triangle':  # tests/bindings/sdl3 задаёт видео сам, подсказкой
+            env['SDL_VIDEO_DRIVER'] = 'offscreen'
+        frame = os.path.join(d, 'frame.ppm')
         try:
-            p = subprocess.run([exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
-                               cwd=case, env=env)
+            p = subprocess.run([exe] + ([frame] if name == 'triangle' else []), capture_output=True, text=True,
+                               errors='backslashreplace', timeout=TIMEOUT, cwd=case, env=env)
         except subprocess.TimeoutExpired:
             return f'[timeout {TIMEOUT} s]'
+        if name == 'triangle' and p.returncode == 0:
+            with open(frame, 'rb') as f, open(os.path.join(TRIANGLE, 'reference', 'frame.ppm'), 'rb') as g:
+                if f.read() != g.read():
+                    return 'снимок кадра не равен examples/triangle/reference/frame.ppm'
     got = p.stdout + ('--- stderr ---\n' + p.stderr if p.stderr else '') + (f'[exit {p.returncode}]\n' if p.returncode else '')
     if bless:
         with open(exp, 'w', encoding='utf-8') as f:
