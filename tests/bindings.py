@@ -8,9 +8,11 @@
   заголовком. Нужен vulkan.h (пакет libvulkan-dev).
 - sdl3/layout — то же для SDL3 против закреплённых заголовков
   bindings/sdl3/include: пакеты хоста не нужны.
-- vulkan/run — tests/bindings/vulkan/main.dpm собирается `dpl build` и
-  идёт на программном драйвере lavapipe (пакет mesa-vulkan-drivers):
-  вывод — с tests/bindings/vulkan.out (--bless пишет его).
+- vulkan/run, sdl3/run — tests/bindings/X/main.dpm собирается `dpl
+  build` и идёт на программном драйвере lavapipe (пакет
+  mesa-vulkan-drivers); SDL3 — с видео offscreen, без экрана: вывод — с
+  tests/bindings/X.out (--bless пишет его). Библиотеки ставит
+  tools/setup/host_libs.sh.
 
 Без заголовка, библиотеки или драйвера случай пропускается (missing), и
 итог прогона это называет.
@@ -29,7 +31,7 @@ TIMEOUT = 120
 VULKAN_H = '/usr/include/vulkan/vulkan.h'
 LAVAPIPE = '/usr/share/vulkan/icd.d/lvp_icd.json'
 
-CASES = ['vulkan/layout', 'sdl3/layout', 'vulkan/run']
+CASES = ['vulkan/layout', 'sdl3/layout', 'vulkan/run', 'sdl3/run']
 
 
 def _links(lib):
@@ -50,11 +52,13 @@ def missing(case):
         need = None
         if case == 'vulkan/layout' and not os.path.exists(VULKAN_H):
             need = 'vulkan.h (libvulkan-dev)'
-        elif case == 'vulkan/run':
+        elif case.endswith('/run'):
             if not _links('vulkan'):
                 need = 'libvulkan для компоновки (libvulkan-dev)'
             elif not os.path.exists(LAVAPIPE):
                 need = 'lavapipe (mesa-vulkan-drivers)'
+            elif case == 'sdl3/run' and not _links('SDL3'):
+                need = 'libSDL3 (tools/setup/host_libs.sh)'
         _missing[case] = need
     return _missing[case]
 
@@ -135,11 +139,11 @@ def layout(dpl, module):
     return None
 
 
-def run(dpl, bless):
-    case = os.path.join(TESTS, 'bindings', 'vulkan')
+def run(dpl, name, bless):
+    case = os.path.join(TESTS, 'bindings', name)
     exp = case + '.out'
     with tempfile.TemporaryDirectory() as d:
-        exe = os.path.join(d, 'vulkan')
+        exe = os.path.join(d, name)
         r = subprocess.run([dpl, 'build', '-o', exe, 'main.dpm'], capture_output=True, text=True, cwd=case,
                            timeout=TIMEOUT)
         if r.returncode != 0:
@@ -156,7 +160,7 @@ def run(dpl, bless):
             f.write(got)
         return None
     if not os.path.exists(exp):
-        return 'нет ожидаемого bindings/vulkan.out (--bless)'
+        return f'нет ожидаемого bindings/{name}.out (--bless)'
     with open(exp, encoding='utf-8') as f:
         want = f.read()
     if got == want:
@@ -170,6 +174,6 @@ def check_case(case, dpl, bless=False):
         return layout(dpl, 'vulkan')
     if case == 'sdl3/layout':
         return layout(dpl, 'sdl3')
-    if case == 'vulkan/run':
-        return run(dpl, bless)
+    if case.endswith('/run'):
+        return run(dpl, case.split('/')[0], bless)
     return f'нет случая {case}'

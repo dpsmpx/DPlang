@@ -1,0 +1,72 @@
+// spec: module.import ffi.types ffi.struct
+// Привязка SDL3 (Р58, Р62) вместе с привязкой Vulkan: видео offscreen без
+// окна на экране, окно Vulkan, событие пользователя через очередь
+// (@union SDL_Event), поверхность Vulkan окна на lavapipe
+// (VK_EXT_headless_surface) и её возможности.
+import sdl3
+import vulkan
+
+fn main() {
+    println("hint: " + str(sdl3.SDL_SetHint(sdl3.SDL_HINT_VIDEO_DRIVER, "offscreen")))
+    if !sdl3.SDL_Init(sdl3.SDL_INIT_VIDEO) {
+        println("SDL_Init: " + sdl3.SDL_GetError())
+        return
+    }
+    println("driver: " + (sdl3.SDL_GetCurrentVideoDriver() ?? "none"))
+    if let w = sdl3.SDL_CreateWindow("dpl", 64, 48, sdl3.SDL_WINDOW_VULKAN) {
+        var pw: i32 = 0
+        var ph: i32 = 0
+        _ = sdl3.SDL_GetWindowSizeInPixels(w, &mut pw, &mut ph)
+        println("pixels: " + str(pw) + "x" + str(ph))
+        events()
+        surface(w)
+        sdl3.SDL_DestroyWindow(w)
+    } else {
+        println("SDL_CreateWindow: " + sdl3.SDL_GetError())
+    }
+    sdl3.SDL_Quit()
+    println("quit")
+}
+
+fn events() {
+    var ev = sdl3.SDL_Event { user: sdl3.SDL_UserEvent { type: u32(sdl3.SDL_EVENT_USER), code: 7 } }
+    println("push: " + str(sdl3.SDL_PushEvent(&mut ev)))
+    var got = sdl3.SDL_Event {}
+    var code: i32 = -1
+    while sdl3.SDL_PollEvent(&mut got) {
+        if got.type == u32(sdl3.SDL_EVENT_USER) {
+            code = got.user.code
+        }
+    }
+    println("user event code: " + str(code))
+}
+
+fn surface(w: sdl3.SDL_Window) {
+    var inst: ?vulkan.VkInstance = none
+    let rc = vulkan.vkCreateInstance(&vulkan.VkInstanceCreateInfo {
+        p_application_info: &vulkan.VkApplicationInfo { api_version: vulkan.VK_API_VERSION_1_3 },
+        pp_enabled_layer_names: [],
+        pp_enabled_extension_names: [vulkan.VK_KHR_SURFACE_EXTENSION_NAME, "VK_EXT_headless_surface"],
+    }, none, &mut inst)
+    println("vkCreateInstance: " + str(rc))
+    if let i = inst {
+        var surf: ?vulkan.VkSurfaceKHR = none
+        println("SDL_Vulkan_CreateSurface: " + str(sdl3.SDL_Vulkan_CreateSurface(w, i, none, &mut surf)))
+        if let s = surf {
+            var n: u32 = 1
+            var devs: List[?vulkan.VkPhysicalDevice] = [none]
+            _ = vulkan.vkEnumeratePhysicalDevices(i, &mut n, &mut devs)
+            if let pd = devs[0] {
+                var ok: u32 = 0
+                _ = vulkan.vkGetPhysicalDeviceSurfaceSupportKHR(pd, 0, s, &mut ok)
+                var caps = vulkan.VkSurfaceCapabilitiesKHR {}
+                let crc = vulkan.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, s, &mut caps)
+                println("present support: " + str(ok == vulkan.VK_TRUE) + ", capabilities: " + str(crc) +
+                        ", min images >= 1: " + str(caps.min_image_count >= 1))
+                println("Vulkan presentation: " + str(sdl3.SDL_Vulkan_GetPresentationSupport(i, pd, 0)))
+            }
+            sdl3.SDL_Vulkan_DestroySurface(i, s, none)
+        }
+        vulkan.vkDestroyInstance(i, none)
+    }
+}

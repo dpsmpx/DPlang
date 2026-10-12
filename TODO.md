@@ -36,11 +36,11 @@
   сессии → Edit → Setup script). Без них проходы `windows` (Wine) и
   `android` (qemu-aarch64) в новой сессии пропускаются, пока их не
   поставят вручную; итог `tests/run.py` это называет.
-- `М` **Пакеты Vulkan в каждой сессии** (по желанию): строка
-  `apt-get install -y libvulkan-dev mesa-vulkan-drivers` в скрипте
-  настройки облачного окружения. Без них случаи `bindings/vulkan/layout`
-  (сверка раскладки с `vulkan.h`) и `bindings/vulkan/run` (программа на
-  lavapipe) пропускаются; итог `tests/run.py` это называет.
+- `М` **Библиотеки привязок в каждой сессии** (по желанию): строка
+  `bash tools/setup/host_libs.sh` в скрипте настройки облачного окружения
+  (пакеты Vulkan, lavapipe и сборка SDL3 3.4.18 — около минуты). Без неё
+  случаи `bindings/vulkan/layout`, `bindings/vulkan/run` и
+  `bindings/sdl3/run` пропускаются; итог `tests/run.py` это называет.
 
 ## Задачи
 

@@ -1,7 +1,7 @@
 # Привязки
 
 Модули dpl для библиотек C, сгенерированные из закреплённого входа
-(Р58): Vulkan из `vk.xml`, дальше SDL3 и JNI. Результат лежит в
+(Р58): Vulkan из `vk.xml`, SDL3 из заголовков; JNI — впереди. Результат лежит в
 репозитории и проходит ревью; сборка программы от генератора и сети не
 зависит. Средства языка — `extern fn`, `extern type`, `@c`, заимствующие
 поля, `@count`, `[N]T`, `@union`, общее начало (Р59, Р61, Р62;
@@ -10,11 +10,17 @@
 ## 1. Раскладка
 
 ```
-bindings/gen/vulkan.py        генератор: vk.xml → vulkan/vulkan.dpm; --check — сверка
-bindings/gen/check.py         все генераторы в режиме --check (шаг run.sh «привязки»)
-bindings/vulkan/vk.xml        вход, закреплён: 1.3.275 (docs/THIRD_PARTY.md)
+bindings/gen/common.py         общее генераторов: имена, запись и --check
+bindings/gen/check.py          все генераторы в режиме --check (шаг run.sh «привязки»)
+bindings/gen/vulkan.py         vk.xml → vulkan/vulkan.dpm
+bindings/gen/sdl3.py           sdl3/include/SDL3 → sdl3/sdl3.dpm
+bindings/vulkan/vk.xml         вход, закреплён: 1.3.275 (docs/THIRD_PARTY.md)
 bindings/vulkan/extensions.txt расширения сверх ядра 1.0–1.3 (Р62)
-bindings/vulkan/vulkan.dpm    модуль `vulkan` — не править
+bindings/vulkan/vulkan.dpm     модуль `vulkan` — не править
+bindings/sdl3/include/SDL3/    вход, закреплён: заголовки SDL 3.4.18 (35 файлов)
+bindings/sdl3/LICENSE.txt      лицензия SDL (Zlib)
+bindings/sdl3/headers.txt      заголовки, функции и константы которых входят в привязку
+bindings/sdl3/sdl3.dpm         модуль `sdl3` — не править
 ```
 
 - **Импорт** — `import vulkan`. Загрузчик ищет модуль рядом с главным,
@@ -22,20 +28,28 @@ bindings/vulkan/vulkan.dpm    модуль `vulkan` — не править
   `<привязки>/vulkan/vulkan.dpm` (`module.import`). Каталог —
   `$DPL_BINDINGS`, по умолчанию `bindings/` рядом со сборкой
   (`docs/compiler/cli.md`).
-- **Перегенерация** — `python3 bindings/gen/vulkan.py`. Новое расширение
-  — строка в `extensions.txt` и перегенерация; новая версия Vulkan —
-  новый `vk.xml`, строка в `docs/THIRD_PARTY.md` и перегенерация.
+- **Перегенерация** — `python3 bindings/gen/vulkan.py`,
+  `python3 bindings/gen/sdl3.py`. Новое расширение Vulkan — строка в
+  `extensions.txt`, новый заголовок SDL3 — строка в `headers.txt` (и
+  его включения в `include/SDL3`), затем перегенерация; новая версия —
+  новый вход, строка в `docs/THIRD_PARTY.md` и перегенерация.
 - **Проверки.** `bindings/gen/check.py` (шаг `tools/check/run.sh`):
   повторная генерация даёт те же байты. Проход `bindings` в
   `tests/run.py` (`tests/bindings.py`):
-  - `vulkan/layout` — размер, выравнивание, смещение и размер каждого
-    поля всех структур сверяются с `vulkan.h` (пакет `libvulkan-dev`);
+  - `vulkan/layout`, `sdl3/layout` — размер, выравнивание, смещение и
+    размер каждого поля всех структур сверяются с заголовками C:
+    `vulkan.h` (пакет `libvulkan-dev`) и закреплёнными заголовками SDL3;
   - `vulkan/run` — программа `tests/bindings/vulkan/` на программном
     драйвере lavapipe (`mesa-vulkan-drivers`): экземпляр, устройство с
     цепочкой `pNext`, буфер, заливка командой в очереди, чтение через
-    `vkMapMemory`.
+    `vkMapMemory`;
+  - `sdl3/run` — программа `tests/bindings/sdl3/`: видео offscreen,
+    окно Vulkan, событие пользователя через очередь, поверхность Vulkan
+    окна на lavapipe (`VK_EXT_headless_surface`).
 
-  Без пакетов случай пропускается, и итог прогона это называет.
+  Без библиотек случай пропускается, и итог прогона это называет.
+  Ставит их `tools/setup/host_libs.sh`: пакеты Vulkan и SDL3 той же
+  версии, что заголовки, из релизного архива с проверкой SHA-256.
 
 ## 2. Vulkan: перевод типов
 
@@ -91,7 +105,50 @@ p_code: []u8`, SPIR-V байтами из файла (указатель в C т
 не выражаются: `&mut` в поле в языке нет. Компоновка на Windows
 (`vulkan-1`) и Android (динамический `libvulkan.so`) — шаг 7 v0.2.
 
-## 4. Пример
+## 4. SDL3: перевод типов
+
+Функции и константы — из заголовков `headers.txt`; типы — из всех
+закреплённых заголовков, сколько нужно (события тянут типы джойстика,
+пера, сенсора). Препроцессор — для 64-битных little-endian целей.
+Заголовки C не размечают смысл указателей, поэтому генератор читает
+тип и описание параметра (`\param`) в документации заголовка; что
+однозначно не выражается — пропускается с причиной в конце `sdl3.dpm`.
+
+| в C | в dpl |
+|---|---|
+| `Uint8` … `Sint64`, `int`, `float`, `bool`, `size_t` | `u8` … `i64`, `i32`, `f32`, `bool`, `u64` |
+| перечисление | `i32` и константы |
+| `#define` с числом | константа: типа предшествующего `typedef` целого (`SDL_InitFlags` → `SDL_INIT_*: u32`), иначе по суффиксу (`u` — `u32`, `SDL_UINT64_C` — `u64`, без суффикса — `i32`) |
+| `#define` со строкой | `pub const SDL_HINT_…: str` |
+| скрытая структура (`SDL_Window`), `typedef struct X *H`, `typedef void *H` | `pub extern type`; результат — `?H` (NULL при ошибке) |
+| структура, объединение | `@c pub struct`, `@union pub struct`; поля — `snake_case` |
+| указатель в поле | на скрытую структуру — `?H`; иначе `?SDL_Void` — указатель без операций (строки и буферы событий в dpl не читаются) |
+| параметр `const char*` | `str`; в описании есть NULL — `?str` |
+| параметр `const T*` | `&T`, NULL в описании — `?&T`; «array» в описании — `[]T` |
+| параметр `T*` (число, структура) | `&mut T` — значение для записи (`SDL_GetWindowSizeInPixels`, `SDL_PollEvent`) |
+| параметр `void*` (`userdata`) | `?SDL_Void` |
+| указатель на функцию (`SDL_TimerCallback`) | `extern fn(...)`, NULL в описании — `?extern fn(...)` |
+| `VkInstance`, `VkSurfaceKHR*`, `const VkAllocationCallbacks*` | `vulkan.VkInstance`, `&mut ?vulkan.VkSurfaceKHR`, `?&vulkan.VkAllocationCallbacks` |
+| результат `const char*` | `str`; NULL в описании — `?str` |
+
+## 5. SDL3: чего нет
+
+- Переменное число аргументов (`SDL_SetError`), `va_list`.
+- Результаты-указатели на данные SDL: массивы (`SDL_GetDisplays`,
+  `SDL_GetKeyboardState`), структуры (`SDL_GetCurrentDisplayMode`) и
+  массив строк `SDL_Vulkan_GetInstanceExtensions` — расширения
+  поверхности пишут сами: `VK_KHR_surface` и расширение платформы
+  (`VK_EXT_headless_surface` у offscreen).
+- Строка, которую освобождает вызывающий (`char*`), и буфер строки.
+- Объекты с открытыми полями (`SDL_Surface`, `SDL_Palette`): их функции.
+- Обратные вызовы со строками и указателями на числа
+  (`SDL_AddHintCallback`).
+
+Привязка — к динамической `libSDL3`: программа берёт её у системы.
+Сборка для Windows и Android (`SDL3.dll`, `libSDL3.so` с `SDLActivity`)
+— шаг 7 v0.2.
+
+## 6. Пример
 
 ```
 import vulkan

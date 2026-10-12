@@ -1,0 +1,10 @@
+hint: true
+driver: offscreen
+pixels: 64x48
+push: true
+user event code: 7
+vkCreateInstance: 0
+SDL_Vulkan_CreateSurface: true
+present support: true, capabilities: 0, min images >= 1: true
+Vulkan presentation: true
+quit
