@@ -27,6 +27,10 @@ extern fn host_info() Info
 extern fn host_same(a: ?Device, b: ?Device) bool
 extern fn host_name(name: ?str) i32
 
+// Не вызывается: её библиотеки нет, и в сборку она не идёт (ffi.extern).
+@link("dpl_no_such_library")
+extern fn never_called() i32
+
 @export
 fn twice(x: i32) i32 {
     return x * 2

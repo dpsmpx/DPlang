@@ -1469,8 +1469,19 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
     out->fns.resize(order.size());
     std::unordered_map<std::string, uint32_t> strings;  // строка → номер в out->strings
     for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, strings, out->fns[i]).run(*order[i]);
-    for (const sema::FnDef* f : order) {
-        if (!f->is_extern || f->link.empty()) continue;
+    // Библиотеки `@link` — только у вызываемых функций C: импорт привязки
+    // не требует библиотек, которые программа не зовёт.
+    std::vector<bool> called(out->fns.size(), false);
+    for (const Function& f : out->fns) {
+        for (const Block& b : f.blocks) {
+            for (const Inst& in : b.insts) {
+                if (in.rv.kind == RvKind::Call && in.rv.fn < called.size()) called[in.rv.fn] = true;
+            }
+        }
+    }
+    for (size_t i = 0; i < order.size(); i++) {
+        const sema::FnDef* f = order[i];
+        if (!f->is_extern || f->link.empty() || !called[i]) continue;
         if (std::find(out->links.begin(), out->links.end(), f->link) == out->links.end()) out->links.push_back(f->link);
     }
     return out;
