@@ -105,6 +105,7 @@ enum class CastKind : uint8_t {
     Check,  // T(x) между числами: значение вне T — ловушка
     Wrap,   // T.wrap(x): по модулю 2^N
     ToStr,  // str(x)
+    RefUp,  // &S → &B по общему началу (Р62): тот же адрес
 };
 
 enum class Intrinsic : uint8_t {
@@ -122,6 +123,9 @@ enum class Intrinsic : uint8_t {
     // вставка или замена), MapRemove (ключ → ?V), MapClear. Читающие —
     // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K], ключи по возрастанию).
     MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys,
+    // Арена C на время вызова (Р62): строки и массивы заимствующих
+    // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
+    CArenaMark, CArenaRelease,
 };
 
 enum class RvKind : uint8_t {
@@ -145,6 +149,7 @@ enum class RvKind : uint8_t {
     IsSome,       // у place (?T) есть значение
     IsOk,         // place (E!T) — успех
     Zero,         // ноль типа (Р62: пропущенное поле `@c`); операндов нет
+    AddrOf,       // ссылка на place (Р62): значение `&T` поля `@c` и параметра `?&T`
 };
 
 struct Arg {

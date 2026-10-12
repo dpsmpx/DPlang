@@ -46,6 +46,7 @@ bool is_scalar(const Type* t) {
     switch (t->kind) {
         case TK::Bool: case TK::I8: case TK::I16: case TK::I32: case TK::I64: case TK::Int: case TK::U8:
         case TK::U16: case TK::U32: case TK::U64: case TK::F32: case TK::F64: case TK::Handle: case TK::CFn:
+        case TK::Ref:
             return true;
         default: return false;
     }
@@ -91,6 +92,7 @@ std::string mangle(const Type* t) {
         case TK::Struct: return "T_" + lp(t->sdef->module->name) + lp(t->sdef->name);
         case TK::Enum: return "E_" + lp(t->edef->module->name) + lp(t->edef->name);
         case TK::Array: return "A" + std::to_string(t->len) + "_" + mangle(t->elem);  // Р62
+        case TK::Ref: return "P_" + mangle(t->elem);
         case TK::CFn: {  // F_<число параметров><режим и тип>…<результат>; записи с длиной
             std::string s = "F_" + std::to_string(t->sig->params.size());
             for (const auto& [mode, p] : t->sig->params) {
@@ -118,6 +120,7 @@ std::string ctype(const Type* t) {
         case TK::F64: return "double";
         case TK::Str: return "dp_str";
         case TK::Handle: return "void*";  // `extern type` — дескриптор C (Р59)
+        case TK::Ref: return ctype(t->elem) + "*";  // Р62: адрес на время вызова C
         default: return "dp_" + mangle(t);
     }
 }
@@ -237,8 +240,11 @@ public:
         if (mode == ast::ParamMode::Ref) return "const " + ct(t) + "*";
         if (mode == ast::ParamMode::Mut) return (t->kind == TK::List ? ct(t->elem) : ct(t)) + "*";
         if (t->kind == TK::Str) return "const char*";
-        if (t->kind == TK::Slice) return "const " + ct(t->elem) + "*";
-        if (t->kind == TK::Optional) return t->elem->kind == TK::CFn ? ct(t->elem) : "void*";  // ?H, ?extern fn — или NULL
+        if (t->kind == TK::Slice) return t->elem->kind == TK::Str ? "const char* const*" : "const " + ct(t->elem) + "*";
+        if (t->kind == TK::Optional) {  // ?H, ?extern fn, ?&T (Р62) — или NULL
+            if (t->elem->kind == TK::Ref) return "const " + ct(t->elem->elem) + "*";
+            return t->elem->kind == TK::CFn ? ct(t->elem) : "void*";
+        }
         return ct(t);
     }
 
@@ -327,7 +333,7 @@ private:
         if (!t || seen_.count(t)) return;
         seen_.insert(t);
         switch (t->kind) {
-            case TK::List: case TK::Slice: case TK::Array: add_type(t->elem); break;
+            case TK::List: case TK::Slice: case TK::Array: case TK::Ref: add_type(t->elem); break;
             case TK::Map:
                 add_type(t->key);
                 add_type(t->elem);
@@ -400,6 +406,20 @@ private:
         return out;
     }
 
+    // Поле заимствующей структуры в раскладке C (Р62): строка — const char*,
+    // срез и ссылка — указатель на элементы, ?-указатель — указатель или NULL.
+    static std::string c_field_ctype(const Type* t) {
+        switch (t->kind) {
+            case TK::Str: return "const char*";
+            case TK::Slice: return t->elem->kind == TK::Str ? "const char**" : ctype(t->elem) + "*";
+            case TK::Ref: return ctype(t->elem) + "*";
+            case TK::Optional:
+                if (t->elem->kind == TK::Ref) return ctype(t->elem->elem) + "*";
+                return t->elem->kind == TK::CFn ? ctype(t->elem) : "void*";
+            default: return ctype(t);
+        }
+    }
+
     static std::string cfn_typedef(const Type* t, const std::string& name, const CType& ct) {
         std::string s = "typedef " + c_result_type(t->sig->ret, ct) + " (*" + name + ")(";
         for (size_t i = 0; i < t->sig->params.size(); i++) {
@@ -428,7 +448,10 @@ private:
                 break;
             case TK::Struct:
                 if (t->sdef->fields.empty()) out += "    char dp_empty;\n";
-                for (const sema::FieldDef& f : t->sdef->fields) out += "    " + ctype(f.type) + " f_" + f.name + ";\n";
+                // Р62: у заимствующей структуры поля — сразу в раскладке C.
+                for (const sema::FieldDef& f : t->sdef->fields) {
+                    out += "    " + (sema::c_borrowing(t) ? c_field_ctype(f.type) : ctype(f.type)) + " f_" + f.name + ";\n";
+                }
                 break;
             case TK::Enum:
                 out += "    uint32_t tag;\n";
@@ -488,6 +511,7 @@ private:
     std::string eq_def(const Type* t) {
         std::string n = ctype(t), m = mangle(t);
         std::string b = "DP_INLINE bool dp_eq__" + m + "(const " + n + "* a, const " + n + "* b) {\n";
+        if (sema::c_borrowing(t)) return b + "    (void)a;\n    (void)b;\n    return false;\n}\n\n";  // Р62: не сравнивается
         switch (t->kind) {
             case TK::List: case TK::Slice:
                 b += "    if (a->len != b->len) return false;\n    for (int64_t i = 0; i < a->len; i++) {\n        if (!" +
@@ -542,6 +566,7 @@ private:
     std::string lt_def(const Type* t) {
         std::string n = ctype(t), m = mangle(t);
         std::string b = "DP_INLINE bool dp_lt__" + m + "(const " + n + "* a, const " + n + "* b) {\n";
+        if (sema::c_borrowing(t)) return b + "    (void)a;\n    (void)b;\n    return false;\n}\n\n";
         switch (t->kind) {
             case TK::List: case TK::Slice:
                 b += "    int64_t n = a->len < b->len ? a->len : b->len;\n    for (int64_t i = 0; i < n; i++) {\n";
@@ -989,6 +1014,7 @@ private:
     std::string cast(const Rvalue& rv);
     std::string intrinsic(const Rvalue& rv);
     std::string extern_call(const Rvalue& rv, const Function& g);
+    std::string borrowing_struct(const Rvalue& rv);
     struct CParam {
         ast::ParamMode mode;
         const Type* type;
@@ -1104,7 +1130,7 @@ std::string FnEmitter::cast(const Rvalue& rv) {
     const Type* to = rv.type;
     std::string ct = ctype(to);
     switch (rv.cast) {
-        case CastKind::Widen: return "((" + ct + ")" + a + ")";
+        case CastKind::Widen: case CastKind::RefUp: return "((" + ct + ")" + a + ")";
         case CastKind::Wrap:
             if (sema::is_signed(to)) return "((" + ct + ")dp_sbits((uint64_t)" + a + ", " + bits(to) + "))";
             return "((" + ct + ")dp_ubits((uint64_t)" + a + ", " + bits(to) + "))";
@@ -1168,6 +1194,8 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
     std::vector<std::string> ops;
     for (const Operand& o : rv.ops) ops.push_back(operand(o, false));
     switch (rv.intrinsic) {
+        case Intrinsic::CArenaMark: return "dp_carena_mark()";  // Р62
+        case Intrinsic::CArenaRelease: return "(dp_carena_release(" + ops[0] + "), (void)0)";
         case Intrinsic::Len: {
             const Type* t = op_type(rv.ops[0]);
             if (t->kind == TK::Array) return "((int64_t)" + std::to_string(t->len) + ")";
@@ -1262,6 +1290,7 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         case RvKind::Unary: return unary(rv);
         case RvKind::Cast: return cast(rv);
         case RvKind::MakeStruct: {
+            if (sema::c_borrowing(rv.type)) return borrowing_struct(rv);
             std::vector<std::string> ops;
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
             std::string r = fresh("dp_r");
@@ -1383,6 +1412,7 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         case RvKind::IsOk: return "(!(" + place(rv.place).expr + ").is_err)";
         case RvKind::Zero: return is_composite(rv.type) || rv.type->kind == TK::Str ? "((" + ctype(rv.type) + "){0})"
                                                                                    : "((" + ctype(rv.type) + ")0)";
+        case RvKind::AddrOf: return "(&" + place(rv.place).expr + ")";  // Р62
     }
     error("unknown rvalue");
     return "0";
@@ -1487,6 +1517,66 @@ std::string FnEmitter::run() {
 // []T и &mut List[T] — указатель на элементы, &T и &mut T — указатель,
 // ?H — дескриптор или NULL. Строка и дескриптор из C проверяются: NULL
 // там, где он не ожидается, — ловушка.
+// Заимствующая структура (Р62) — сразу в раскладке C: строка — копия с
+// нулём в арене вызова, срез — указатель на элементы (срез строк — массив
+// копий в арене), `?`-указатель — указатель или NULL; счётчик @count —
+// длина среза (проверка диапазона и равенства длин у общего счётчика).
+std::string FnEmitter::borrowing_struct(const Rvalue& rv) {
+    const sema::StructDef* sd = rv.type->sdef;
+    std::string r = fresh("dp_r");
+    line(ctype(rv.type) + " " + r + ";");
+    line("memset(&" + r + ", 0, sizeof " + r + ");");
+    std::vector<std::string> lens(sd->fields.size());
+    for (size_t k = 0; k < rv.ops.size() && k < sd->fields.size(); k++) {
+        const Type* ft = sd->fields[k].type;
+        const Operand& o = rv.ops[k];
+        std::string v = operand(o, false);
+        std::string f = r + ".f_" + sd->fields[k].name;
+        if (ft->kind == TK::Str) {
+            line(f + " = dp_carena_str(" + v + ", " + loc_ + ");");
+            if (o.kind == OpKind::Move) line(drop_of(ft, v));  // временное отдало байты арене
+        } else if (ft->kind == TK::Slice) {
+            std::string sv = fresh("dp_sl");
+            line(ctype(ft) + " " + sv + " = " + v + ";");
+            lens[k] = sv + ".len";
+            if (ft->elem->kind == TK::Str) {
+                line(f + " = (const char**)dp_carena_alloc(" + sv + ".len, sizeof(const char*), " + loc_ + ");");
+                line("for (int64_t i = 0; i < " + sv + ".len; i++) " + f + "[i] = dp_carena_str(" + sv + ".ptr[i], " +
+                     loc_ + ");");
+            } else {
+                line(f + " = " + sv + ".ptr;");
+            }
+        } else if (ft->kind == TK::Optional) {
+            std::string ov = fresh("dp_o");
+            line(ctype(ft) + " " + ov + " = " + v + ";");
+            line(f + " = " + ov + ".has ? " + ov + ".value : NULL;");
+        } else {
+            line(f + " = " + v + ";");
+        }
+    }
+    std::vector<int> first(sd->fields.size(), -1);  // счётчик → первый срез с ним
+    for (size_t k = 0; k < sd->fields.size(); k++) {
+        int c = sd->fields[k].count;
+        if (c < 0 || lens[k].empty()) continue;
+        const sema::FieldDef& cf = sd->fields[static_cast<size_t>(c)];
+        if (first[static_cast<size_t>(c)] >= 0) {
+            const sema::FieldDef& other = sd->fields[static_cast<size_t>(first[static_cast<size_t>(c)])];
+            line("if (" + lens[k] + " != " + lens[static_cast<size_t>(first[static_cast<size_t>(c)])] + ") dp_trapf(" + loc_ +
+                 ", \"slices '%s' and '%s' share the count '%s' but have different lengths\", " + cstr(other.name) + ", " +
+                 cstr(sd->fields[k].name) + ", " + cstr(cf.name) + ");");
+            continue;
+        }
+        first[static_cast<size_t>(c)] = static_cast<int>(k);
+        int b = sema::int_bits(cf.type);
+        uint64_t max = sema::is_signed(cf.type) ? (b >= 64 ? INT64_MAX : (uint64_t{1} << (b - 1)) - 1)
+                                                : (b >= 64 ? UINT64_MAX : (uint64_t{1} << b) - 1);
+        line("if ((uint64_t)" + lens[k] + " > UINT64_C(" + std::to_string(max) + ")) dp_trapf(" + loc_ +
+             ", \"a slice of %lld elements does not fit the count '%s'\", (long long)" + lens[k] + ", " + cstr(cf.name) + ");");
+        line(r + ".f_" + cf.name + " = (" + ctype(cf.type) + ")" + lens[k] + ";");
+    }
+    return r;
+}
+
 std::string FnEmitter::extern_call(const Rvalue& rv, const Function& g) {
     std::vector<CParam> params;
     for (uint32_t i = 0; i < g.param_count; i++) params.push_back(CParam{Emitter::mode_of(g.locals[i]), g.locals[i].type});
@@ -1512,6 +1602,12 @@ std::string FnEmitter::c_call(const Rvalue& rv, const std::vector<CParam>& param
             line("char* " + c + " = dp_str_to_c(" + v + ", " + loc_ + ");");
             args.push_back(c);
             frees.push_back(c);
+        } else if (t->kind == TK::Slice && t->elem->kind == TK::Str) {  // Р62: массив строк C в арене
+            std::string sv = fresh("dp_sl"), a = fresh("dp_a");
+            line(ctype(t) + " " + sv + " = " + v + ";");
+            line("const char** " + a + " = (const char**)dp_carena_alloc(" + sv + ".len, sizeof(const char*), " + loc_ + ");");
+            line("for (int64_t i = 0; i < " + sv + ".len; i++) " + a + "[i] = dp_carena_str(" + sv + ".ptr[i], " + loc_ + ");");
+            args.push_back(a);
         } else if (t->kind == TK::Slice) {
             args.push_back("(" + v + ").ptr");
         } else if (t->kind == TK::Optional) {

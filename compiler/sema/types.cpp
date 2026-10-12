@@ -145,12 +145,16 @@ bool c_value_type(const Type* t) {
     return true;
 }
 
+static bool c_struct_type(const Type* t) { return t && t->kind == TK::Struct && t->sdef->c; }
+
 bool c_borrow_field(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
         case TK::Str: return true;
-        case TK::Slice: return c_value_type(t->elem) || t->elem->kind == TK::Str || c_borrowing(t->elem);
-        case TK::Ref: return c_value_type(t->elem) || c_borrowing(t->elem);
+        // Элемент и цель ссылки — любая `@c`-структура: заимствующую там не
+        // разбираем (её поле `?&Self` замкнуло бы обход).
+        case TK::Slice: return c_value_type(t->elem) || t->elem->kind == TK::Str || c_struct_type(t->elem);
+        case TK::Ref: return c_value_type(t->elem) || c_struct_type(t->elem);
         case TK::Optional:
             return t->elem->kind == TK::Handle || t->elem->kind == TK::CFn ||
                    (t->elem->kind == TK::Ref && c_borrow_field(t->elem));

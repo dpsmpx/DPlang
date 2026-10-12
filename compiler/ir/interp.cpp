@@ -756,6 +756,11 @@ private:
             }
             case RvKind::MakeMap: return seq_value(0);
             case RvKind::Zero: return zero_value(rv.type);
+            case RvKind::AddrOf: {  // Р62: ссылку читает только C, а его интерпретатор не вызывает — копия
+                Ref r = resolve(fr, rv.place);
+                if (stop_) return Value{};
+                return r.byte >= 0 ? int_value(static_cast<uint64_t>(r.byte)) : *r.v;
+            }
             case RvKind::SliceOf: return slice(fr, rv);
             case RvKind::Intrinsic: return intrinsic(fr, rv);
             case RvKind::Tag: case RvKind::IsSome: case RvKind::IsOk: {
@@ -943,7 +948,7 @@ private:
         const Type* from = op_type(fr, rv.ops[0]);
         const Type* to = rv.type;
         switch (rv.cast) {
-            case CastKind::Widen: return a;
+            case CastKind::Widen: case CastKind::RefUp: return a;
             case CastKind::Wrap: return int_value(canon(a.i, to));
             case CastKind::ToStr:
                 if (from->kind == TK::Bool) return str_value(a.i ? "true" : "false");
@@ -1076,6 +1081,8 @@ private:
                 if (i >= 0) out.items.push_back(m.items[2 * static_cast<size_t>(i) + 1]);
                 return out;
             }
+            case Intrinsic::CArenaMark: return int_value(0);  // Р62: арена — только у сборки
+            case Intrinsic::CArenaRelease: return Value{};
             case Intrinsic::MapKeys: {
                 const Value& m = arg(0, s0);
                 Value out = seq_value(0);

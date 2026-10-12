@@ -329,6 +329,14 @@ static inline float dp_canon_f32(float x) {
 /* Копия s с нулём в конце для функции C; освобождается dp_free после
  * вызова. Байт 0 внутри s — ловушка: C увидел бы только начало строки. */
 char* dp_str_to_c(dp_str s, const char* loc);
+
+/* Арена C на время вызова (Р62): строки и массивы заимствующих структур.
+ * Отметка — число блоков; освобождение — всех блоков после отметки
+ * (вызовы вложены, поэтому порядок — стековый). */
+int64_t dp_carena_mark(void);
+void dp_carena_release(int64_t mark);
+void* dp_carena_alloc(int64_t count, size_t elem, const char* loc);
+const char* dp_carena_str(dp_str s, const char* loc);
 /* Строка C из функции fn — копия в str. NULL и не UTF-8 — ловушка. */
 dp_str dp_str_from_c(const char* p, const char* fn, const char* loc);
 /* Строка, которую C передал функции `@export` (Р61): копия; NULL и не

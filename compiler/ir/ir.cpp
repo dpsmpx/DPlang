@@ -64,6 +64,8 @@ bool needs_drop(const Type* t) {
         case TK::Optional: return needs_drop(t->elem);
         case TK::Result: return needs_drop(t->elem) || needs_drop(t->err);
         case TK::Struct:
+            // Р62: заимствующая структура — раскладка C, её строки и массивы — в арене вызова.
+            if (sema::c_borrowing(t)) return false;
             for (const sema::FieldDef& f : t->sdef->fields) {
                 if (needs_drop(f.type)) return true;
             }

@@ -637,8 +637,11 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
         Expr* a = c->args[i];
         const ParamDef& p = params[i];
         auto* r = as<RefExpr>(a);
+        // Р62: параметр `?&T` функции C — `&x` как значение.
+        bool ref_value = p.type && (p.type->kind == TK::Ref ||
+                                    (p.type->kind == TK::Optional && p.type->elem->kind == TK::Ref));
         if (p.mode == ParamMode::Value) {
-            if (r) {
+            if (r && !ref_value) {
                 error(Code::E0408, a->span, "parameter '" + p.name + "' takes a value; remove '" +
                                                 std::string(r->mut ? "&mut" : "&") + "'");
                 infer(r->operand, p.type);
@@ -665,7 +668,8 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
         bool literal = !r->mut && as<StructLitExpr>(strip_paren(r->operand));
         if (!is_place(r->operand) && !literal) {
             if (t->kind != TK::Error) {
-                error(Code::E0501, r->operand->span, "a reference needs a variable, a field, an element or a struct literal");
+                error(Code::E0501, r->operand->span, r->mut ? "a reference needs a variable, a field or an element"
+                                                            : "a reference needs a variable, a field, an element or a struct literal");
             }
             continue;
         }
@@ -1339,7 +1343,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             Expr* base = a;
             while (auto* s = as<SliceExpr>(base)) base = s->object;
             refs.push_back({root_local(base), false, a->span});
-            borrowed(a);
+            if (as<ListLitExpr>(strip_paren(a))) borrowed(a);  // `[S { ... }]` — заимствования внутри
         } else if (params[i].type && (c_borrowing(params[i].type) || params[i].type->kind == TK::Optional)) {
             borrowed(a);
         }

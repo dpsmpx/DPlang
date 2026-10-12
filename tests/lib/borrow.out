@@ -1,0 +1,11 @@
+order kind=1 title=order 42 items=2 tags=2
+  item apple 1.50
+  item pear 2.25
+  tag x
+  tag yy
+  next kind=9 bonus=5 first=first 0.50
+  name a
+  name bb
+  name ccc
+  opt z 3.00
+1110

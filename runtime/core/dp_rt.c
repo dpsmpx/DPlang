@@ -441,6 +441,40 @@ dp_str dp_str_from_c(const char* p, const char* fn, const char* loc) {
     return s;
 }
 
+static void** dp_carena_blocks;
+static int64_t dp_carena_n, dp_carena_cap;
+
+int64_t dp_carena_mark(void) { return dp_carena_n; }
+
+void dp_carena_release(int64_t mark) {
+    while (dp_carena_n > mark) dp_free(dp_carena_blocks[--dp_carena_n]);
+}
+
+static void dp_carena_keep(void* p, const char* loc) {
+    if (dp_carena_n == dp_carena_cap) {
+        int64_t cap = dp_carena_cap ? dp_carena_cap * 2 : 16;
+        void** b = (void**)dp_alloc(cap, sizeof(void*), loc);
+        if (dp_carena_n) memcpy(b, dp_carena_blocks, (size_t)dp_carena_n * sizeof(void*));
+        dp_free(dp_carena_blocks);
+        dp_carena_blocks = b;
+        dp_carena_cap = cap;
+    }
+    dp_carena_blocks[dp_carena_n++] = p;
+}
+
+void* dp_carena_alloc(int64_t count, size_t elem, const char* loc) {
+    if (count <= 0) return NULL;
+    void* p = dp_alloc(count, elem, loc);
+    dp_carena_keep(p, loc);
+    return p;
+}
+
+const char* dp_carena_str(dp_str s, const char* loc) {
+    char* c = dp_str_to_c(s, loc);
+    dp_carena_keep(c, loc);
+    return c;
+}
+
 dp_str dp_str_from_c_arg(const char* p, const char* param, const char* fn, const char* loc) {
     if (!p) dp_trapf(loc, "C passed NULL instead of a string as '%s' of '%s'", param, fn);
     size_t n = strlen(p);

@@ -173,6 +173,9 @@ private:
             case CastKind::ToStr:
                 ok = to->kind == TK::Str && (numeric(from) || from->kind == TK::Bool);
                 break;
+            case CastKind::RefUp:  // Р62
+                ok = from->kind == TK::Ref && to->kind == TK::Ref && sema::c_prefix(to->elem, from->elem);
+                break;
         }
         if (!ok) fail("invalid cast from '" + sema::type_name(from) + "' to '" + sema::type_name(to) + "'");
     }
@@ -339,6 +342,15 @@ private:
                     if (rv.intrinsic == Intrinsic::MapContains) same(rv.type, prim(TK::Bool), "result");
                     else if (rv.type->kind != TK::Optional || rv.type->elem != m->elem) fail("get result is not ?V");
                 }
+                break;
+            case Intrinsic::CArenaMark:  // Р62
+                args(0);
+                same(rv.type, prim(TK::I64), "result");
+                break;
+            case Intrinsic::CArenaRelease:
+                args(1);
+                same(op(0), prim(TK::I64), "arena mark");
+                same(rv.type, prim(TK::Void), "result");
                 break;
             case Intrinsic::MapKeys:
                 args(1);
@@ -526,8 +538,10 @@ private:
                     }
                     if (a.kind == Arg::Kind::Value) {
                         same(operand(a.op, true), prm.type, "argument");
+                    } else if (const Type* pt = place(a.place); a.kind == Arg::Kind::Ref && sema::c_prefix(prm.type, pt)) {
+                        // Р62: `&S` в `&B` по общему началу
                     } else {
-                        same(place(a.place), prm.type, "argument");
+                        same(pt, prm.type, "argument");
                         if (a.kind == Arg::Kind::Mut && !writable(a.place)) fail("'&mut' argument of a read-only place");
                     }
                 }
@@ -538,6 +552,13 @@ private:
                 const Type* x = rv.has_place ? place(rv.place) : nullptr;
                 if (!x || x->kind != TK::Enum) fail("tag of a non-enum");
                 same(t, prim(TK::U32), "result");
+                break;
+            }
+            case RvKind::AddrOf: {  // Р62: ссылка на место
+                count(rv, 0);
+                if (!rv.has_place) return fail("address without a place");
+                const Type* pt = place(rv.place);
+                if (pt && (t->kind != TK::Ref || t->elem != pt)) fail("address of a wrong type");
                 break;
             }
             case RvKind::Zero:  // Р62: ноль — у типов, где он есть
