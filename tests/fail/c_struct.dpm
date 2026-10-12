@@ -1,0 +1,72 @@
+// spec: ffi.struct
+// Отказы структур C (Р62): массив и ссылка вне поля @c, заимствующая
+// структура в переменной и результате, чтение заимствованного поля,
+// @count не там, счётчик в литерале, объединение с двумя полями.
+extern type H
+
+@c
+struct Name {
+    text: str
+    @count(n) parts: []u8
+    n: u32
+}
+
+@c
+struct BadCount {
+    @count(missing) xs: []i32
+    @count(label) ys: []i32
+    label: str
+    @size(four) zs: []i32
+}
+
+struct Plain {
+    arr: [4]u8
+    name: Name
+}
+
+@union
+struct U {
+    a: i32
+    b: f32
+}
+
+@union
+struct BadU {
+    s: str
+}
+
+@c
+struct Arr {
+    v: [3]i32
+}
+
+@linear
+@union
+struct LU {
+    a: i32
+}
+
+extern fn take(n: &Name) i32
+
+fn arr_param(a: [2]i32) {
+}
+
+fn gives() Name {
+    return Name { text: "x" }
+}
+
+fn reads(n: Name) str {
+    return n.text
+}
+
+fn main() {
+    let v = Name { text: "a" }
+    let w: [3]i32 = [1, 2, 3]
+    _ = take(&Name { text: "a", n: 3 })
+    let u = U { a: 1, b: 2 }
+    let z = U { a: 1 }
+    let short: Name = Name { text: "b" }
+    _ = take(&Name { parts: [1, 2] })
+    let r = z.a + 1
+    let a = Arr { v: [1, 2] }
+}

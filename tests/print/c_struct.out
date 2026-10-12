@@ -1,0 +1,34 @@
+// spec: ffi.struct
+// Печать структур C (Р62): [N]T, &T и ?&T в полях, @count на строке поля,
+// @union, &литерал в аргументе.
+@c
+struct Base {
+    kind: u32
+    next: ?&Base
+}
+
+@c
+struct Info {
+    kind: u32 = 3
+    next: ?&Base
+    name: str
+    grid: [2][3]f32
+    @count(n) items: []u32
+    n: u32
+    base: &Base
+}
+
+@union
+struct Ev {
+    kind: u32
+    raw: [8]u8
+}
+
+extern fn send(info: &Info, alloc: ?&Base) i32
+
+fn main() {
+    let xs: List[u32] = [1, 2]
+    _ = send(&Info { name: "x", items: xs, base: &Base { kind: 1 } }, none)
+    let e = Ev { kind: 2 }
+    println(str(e.raw[0]))
+}

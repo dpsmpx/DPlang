@@ -523,7 +523,13 @@ private:
                 break;
             case TK::Result: b += "    (void)a;\n    (void)b;\n    return true;\n"; break;
             case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;  // не сравниваются (Р54)
+            // Р62: массив и объединение dpl не сравнивает — функция нужна для сборки C.
+            case TK::Array: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
             case TK::Struct:
+                if (t->sdef->union_) {
+                    b += "    (void)a;\n    (void)b;\n    return false;\n";
+                    break;
+                }
                 if (t->sdef->fields.empty()) b += "    (void)a;\n    (void)b;\n";
                 for (const sema::FieldDef& f : t->sdef->fields) {
                     b += "    if (!" + eq_of(f.type, "&a->f_" + f.name, "&b->f_" + f.name) + ") return false;\n";
@@ -574,8 +580,14 @@ private:
                 b += "        if (" + lt_of(t->elem, "&b->ptr[i]", "&a->ptr[i]") + ") return false;\n";
                 b += "    }\n    return a->len < b->len;\n";
                 break;
-            case TK::Optional: case TK::Result: case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
+            case TK::Optional: case TK::Result: case TK::Map: case TK::Array:
+                b += "    (void)a;\n    (void)b;\n    return false;\n";
+                break;
             case TK::Struct: {
+                if (t->sdef->union_) {  // Р62: объединение не упорядочивается
+                    b += "    (void)a;\n    (void)b;\n    return false;\n";
+                    break;
+                }
                 std::vector<std::pair<const Type*, std::string>> parts;
                 for (const sema::FieldDef& f : t->sdef->fields) parts.push_back({f.type, "f_" + f.name});
                 if (parts.empty()) b += "    (void)a;\n    (void)b;\n";
@@ -1198,7 +1210,7 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         case Intrinsic::CArenaRelease: return "(dp_carena_release(" + ops[0] + "), (void)0)";
         case Intrinsic::Len: {
             const Type* t = op_type(rv.ops[0]);
-            if (t->kind == TK::Array) return "((int64_t)" + std::to_string(t->len) + ")";
+            if (t->kind == TK::Array) return "((void)" + ops[0] + ", (int64_t)" + std::to_string(t->len) + ")";
             return "((int64_t)(" + ops[0] + ").len)";
         }
         case Intrinsic::Repeat: {
@@ -1291,16 +1303,20 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         case RvKind::Cast: return cast(rv);
         case RvKind::MakeStruct: {
             if (sema::c_borrowing(rv.type)) return borrowing_struct(rv);
+            const sema::StructDef* sd = rv.type->sdef;
+            if (sd->union_) {  // Р62: только заданное поле; остальное — нули
+                std::string v = rv.variant > 0 ? operand(rv.ops[rv.variant - 1], true) : "";
+                std::string r = fresh("dp_r");
+                line(ctype(rv.type) + " " + r + ";");
+                line("memset(&" + r + ", 0, sizeof " + r + ");");
+                if (rv.variant > 0) line(r + ".f_" + sd->fields[rv.variant - 1].name + " = " + v + ";");
+                return r;
+            }
             std::vector<std::string> ops;
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
             std::string r = fresh("dp_r");
             line(ctype(rv.type) + " " + r + ";");
             line("memset(&" + r + ", 0, sizeof " + r + ");");
-            const sema::StructDef* sd = rv.type->sdef;
-            if (sd->union_) {  // Р62: только заданное поле; остальное — нули
-                if (rv.variant > 0) line(r + ".f_" + sd->fields[rv.variant - 1].name + " = " + ops[rv.variant - 1] + ";");
-                return r;
-            }
             for (size_t k = 0; k < ops.size() && k < sd->fields.size(); k++) {
                 line(r + ".f_" + sd->fields[k].name + " = " + ops[k] + ";");
             }
