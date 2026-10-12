@@ -86,6 +86,8 @@ struct FnDef {
     bool test = false;  // @test (Р50)
     bool is_extern = false;  // `extern fn` — функция C (Р59): тела нет
     std::string link;        // `@link("lib")` — библиотека C; пусто — библиотека C по умолчанию
+    int32_t slot = -1;       // `@slot(N)` (Р63): запись N таблицы первого аргумента; -1 — символ C
+    Span slot_span;
     bool exported = false;   // `@export` (Р61): функцию зовёт C под именем export_name
     std::string export_name;
     Span export_span;        // атрибут `@export` — для сообщений о символе

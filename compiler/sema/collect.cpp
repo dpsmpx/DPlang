@@ -598,7 +598,7 @@ private:
     void export_symbols() {
         std::map<std::string, const FnDef*> taken;
         for (FnDef& f : prog_.fns) {
-            if (f.node && f.is_extern) taken.emplace(f.name, &f);
+            if (f.node && f.is_extern && f.slot < 0) taken.emplace(f.name, &f);  // у `@slot` символа нет
         }
         for (FnDef& f : prog_.fns) {
             if (!f.node || !f.exported) continue;
@@ -691,6 +691,30 @@ private:
                 }
                 continue;
             }
+            if (a.name == "slot") {  // `@slot(N)` — запись таблицы первого аргумента (Р63)
+                if (!n->is_extern) {
+                    diags_.error(Code::E0319, a.span, "'@slot' marks an 'extern fn' called through a table of C functions");
+                } else if (!a.has_arg || !a.arg_int) {
+                    diags_.error(Code::E0319, a.span, "'@slot' needs the entry number: @slot(4)");
+                } else if (f.slot >= 0) {
+                    diags_.error(Code::E0319, a.span, "attribute '@slot' is given twice");
+                } else {
+                    std::string digits;
+                    for (char c : a.arg) {
+                        if (c != '_') digits += c;
+                    }
+                    bool ok = !digits.empty() && digits.size() <= 5 &&
+                              digits.find_first_not_of("0123456789") == std::string::npos;
+                    long v = ok ? std::stol(digits) : -1;
+                    if (!ok || v > 65535) {
+                        diags_.error(Code::E0319, a.span, "'@slot' entry is a decimal number from 0 to 65535");
+                    } else {
+                        f.slot = static_cast<int32_t>(v);
+                        f.slot_span = a.span;
+                    }
+                }
+                continue;
+            }
             if (a.name == "link") {  // `@link("lib")` — только у `extern fn` (Р59)
                 if (!n->is_extern) {
                     diags_.error(Code::E0319, a.span, "'@link' names the C library of an 'extern fn'");
@@ -745,6 +769,19 @@ private:
         }
         if (f.test && f.exported) {
             diags_.error(Code::E0319, f.export_span, "a test cannot be '@export': 'dpl test' calls it");
+        }
+        if (f.slot >= 0) {  // Р63: первый аргумент — объект, его первое слово — адрес таблицы
+            if (linked) {
+                diags_.error(Code::E0319, f.slot_span, "an '@slot' function has no C symbol: '@link' does not apply");
+            }
+            const sema::Type* first = f.params.empty() ? nullptr : f.params[0].type;
+            if (!first || f.params[0].mode != ParamMode::Value || first->kind != TK::Handle) {
+                if (!first || first->kind != TK::Error) {
+                    diags_.error(Code::E0319, f.slot_span,
+                                 "'@slot' calls through the table of the first argument: it must be an 'extern type' "
+                                 "value");
+                }
+            }
         }
         if (f.test) {
             bool ok_ret = f.ret->kind == TK::Void || f.ret->kind == TK::Error ||

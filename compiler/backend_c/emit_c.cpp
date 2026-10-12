@@ -217,7 +217,9 @@ public:
         out += strings();
         out += type_decls();
         out += helpers();
-        for (const Function& f : p_.fns) out += (f.is_extern ? extern_head(f) : fn_head(f)) + ";\n";
+        for (const Function& f : p_.fns) {
+            if (f.slot < 0) out += (f.is_extern ? extern_head(f) : fn_head(f)) + ";\n";  // у `@slot` символа нет
+        }
         for (const Function& f : p_.fns) {
             if (f.exported) out += export_head(f) + " __asm__(" + cstr(f.c_name) + ");\n";
         }
@@ -1616,7 +1618,20 @@ std::string FnEmitter::borrowing_struct(const Rvalue& rv) {
 std::string FnEmitter::extern_call(const Rvalue& rv, const Function& g) {
     std::vector<CParam> params;
     for (uint32_t i = 0; i < g.param_count; i++) params.push_back(CParam{Emitter::mode_of(g.locals[i]), g.locals[i].type});
-    return c_call(rv, params, g.ret, Emitter::extern_name(g), "C function '" + g.c_name + "'", g.c_name);
+    std::string what = "C function '" + g.c_name + "'";
+    if (g.slot < 0) return c_call(rv, params, g.ret, Emitter::extern_name(g), what, g.c_name);
+    // `@slot(N)` (Р63): первое слово объекта — адрес таблицы, вызов — её запись N.
+    std::string obj = operand(rv.args[0].op, false);
+    std::string table = fresh("dp_t"), n = std::to_string(g.slot);
+    line("const dp_slot_fn* " + table + " = *(const dp_slot_fn* const*)" + obj + ";");
+    line("if (!" + table + "[" + n + "]) dp_trapf(" + loc_ + ", \"%s: entry %d of the table is NULL\", " + cstr(what) + ", " + n +
+         ");");
+    std::string type = Emitter::c_result_type(g.ret) + " (*)(";
+    for (uint32_t i = 0; i < g.param_count; i++) {
+        type += (i ? ", " : "") + Emitter::c_param_type(Emitter::mode_of(g.locals[i]), g.locals[i].type);
+    }
+    type += std::string(g.param_count == 0 ? "void" : "") + ")";
+    return c_call(rv, params, g.ret, "((" + type + ")" + table + "[" + n + "])", what, g.c_name);
 }
 
 // what — кто вызван, для ловушек: «C function 'SDL_Init'»; c_name — имя

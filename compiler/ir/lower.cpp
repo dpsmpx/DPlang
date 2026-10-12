@@ -106,6 +106,7 @@ public:
         if (def.is_extern) {  // функция C (Р59): только сигнатура
             f_.is_extern = true;
             f_.c_name = def.name;
+            f_.slot = def.slot;
             return;
         }
         if (def.exported) {  // функцию зовёт C (Р61)

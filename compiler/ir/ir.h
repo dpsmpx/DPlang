@@ -222,6 +222,7 @@ struct Function {
     bool det = false;           // класс D (Р55): после операций с плавающими — canon (Р56)
     bool is_extern = false;     // функция C (Р59): блоков нет, имя символа — c_name
     std::string c_name;         // символ C у extern и у экспортируемой
+    int32_t slot = -1;          // `@slot(N)` (Р63): вызов — запись N таблицы первого аргумента, символа нет
     bool exported = false;      // `@export` (Р61): у C-бэкенда — обёртка под символом c_name
 };
 

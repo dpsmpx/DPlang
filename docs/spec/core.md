@@ -105,7 +105,7 @@ mut extern
 ```
 module   = { item NL } .
 item     = { attr NL } [ "pub" ] ( fn | struct | enum | const | extern ) | { attr } "import" ident .
-attr     = "@" ident [ "(" ( string | ident ) ")" ] .
+attr     = "@" ident [ "(" ( string | ident | int ) ")" ] .
 fn       = "fn" ident "(" [ param { "," param } [ "," ] ] ")" [ type ] block .
 extern   = "extern" ( "fn" ident "(" [ param { "," param } [ "," ] ] ")" [ type ] | "type" ident ) .
 param    = ident ":" [ "&" [ "mut" ] ] type .
@@ -888,6 +888,25 @@ failed`; `repeat(v, n)` с отрицательным `n` и `s.split("")` — �
   функции (E0407, E0408). Это вызов C: из класса D нельзя (E0425).
   Сравнивать указатели нельзя (E0422). Контекст C (`void* userdata`) —
   дескриптор `extern type`: dpl его только передаёт.
+
+**[ffi.slot]** `@slot(N)` перед `extern fn` (Р63): функция C — запись
+`N` таблицы указателей на функции, адрес которой — первое слово объекта
+в первом аргументе. Так устроены `JNIEnv`, `JavaVM` (`(*env)->
+FindClass(env, name)`) и интерфейсы COM.
+- Первый параметр — дескриптор `extern type` по значению; он же
+  передаётся функции первым аргументом. `N` — десятичное число от 0
+  до 65535, считая с нуля по записям таблицы.
+- Символа у функции нет: `@link` к ней не относится (E0319).
+- Пустая запись (NULL) — ловушка. Таблица и её раскладка — дело
+  объявления, как сигнатура `extern fn` (ffi.types).
+- Иначе — как `extern fn`: параметры и результат по ffi.types, вызов
+  — не из класса D.
+
+```
+extern type JNIEnv
+@slot(6)
+extern fn FindClass(env: JNIEnv, name: str) ?jobject
+```
 
 **[ffi.lib]** `dpl build --lib` (Р61; `docs/compiler/cli.md`) собирает
 статическую библиотеку для хоста на C или C++: функции `@export` под

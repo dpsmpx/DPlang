@@ -543,8 +543,9 @@ struct Item : Node {
 struct Attr {
     std::string name;
     Span span;
-    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59); `@count(n)` — имя (Р62)
+    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59); `@count(n)` — имя (Р62); `@slot(4)` — число (Р63)
     bool arg_ident = false;  // аргумент — имя, а не строка
+    bool arg_int = false;    // аргумент — целый литерал
     std::string arg;       // значение строки
     std::string arg_src;   // запись в исходнике, с кавычками
     std::string text() const { return "@" + name + (has_arg ? "(" + arg_src + ")" : ""); }

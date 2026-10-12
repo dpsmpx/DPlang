@@ -135,9 +135,10 @@ DP_CODE(E0318, "duplicate member",
 DP_CODE(E0319, "unknown attribute",
         "dpl has these attributes: `@det` marks deterministic code — a function or, before an import, the "
         "imported module; `@test` marks a test function; `@link(\"lib\")` names the C library of an "
-        "`extern fn`; `@export` or `@export(\"name\")` makes a dpl function callable from C; `@c` and "
-        "`@linear` mark a struct (spec: syntax.item, module.det, module.test, section 11). Each is "
-        "written once, only where it applies.")
+        "`extern fn`; `@slot(N)` calls an `extern fn` through entry N of the table of its first argument, "
+        "an `extern type`; `@export` or `@export(\"name\")` makes a dpl function callable from C; `@c`, "
+        "`@union` and `@linear` mark a struct; `@count(n)` marks a slice field of a `@c` struct (spec: "
+        "syntax.item, module.det, module.test, section 11). Each is written once, only where it applies.")
 DP_CODE(E0320, "not a struct",
         "A struct literal `S { ... }` needs a struct or a record enum variant before the `{` "
         "(spec: expr.struct).")

@@ -363,6 +363,10 @@ void dp_check_repeat(int64_t n, const char* loc);
  * большим стеком; результат — код выхода. error_name — запись «E.V»
  * ошибки main или NULL. */
 typedef const char* (*dp_entry_fn)(void);
+
+/* Запись таблицы функций C (Р63, `@slot`): тип указателя на функцию
+ * вообще; перед вызовом приводится к своей сигнатуре. */
+typedef void (*dp_slot_fn)(void);
 int dp_run(dp_entry_fn entry);
 /* То же для теста (Р50): ошибка — «error: test failed with E.V». */
 int dp_run_test(dp_entry_fn entry);

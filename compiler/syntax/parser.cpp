@@ -384,18 +384,19 @@ private:
         a.name = expect_ident(s);
         a.span = Span{id_, at_tok.begin, s.end};
         if (failed_) return false;
-        if (eat(TokKind::LParen)) {  // `@link("SDL3")`, `@count(n)`
-            if (at(TokKind::Ident)) {
+        if (eat(TokKind::LParen)) {  // `@link("SDL3")`, `@count(n)`, `@slot(4)`
+            if (at(TokKind::Ident) || at(TokKind::Int)) {
                 a.has_arg = true;
+                a.arg_int = at(TokKind::Int);
+                a.arg_ident = !a.arg_int;
                 a.arg_src = std::string(text_of(bump()));
                 a.arg = a.arg_src;
-                a.arg_ident = true;
             } else if (at(TokKind::Str)) {
                 a.has_arg = true;
                 a.arg_src = std::string(text_of(bump()));
                 a.arg = string_literal_value(a.arg_src);
             } else {
-                expected("a string or a name");
+                expected("a string, a name or a number");
                 return false;
             }
             if (!expect(TokKind::RParen)) return false;
