@@ -36,8 +36,20 @@
   сессии → Edit → Setup script). Без них проходы `windows` (Wine) и
   `android` (qemu-aarch64) в новой сессии пропускаются, пока их не
   поставят вручную; итог `tests/run.py` это называет.
+- `М` **Пакеты Vulkan в каждой сессии** (по желанию): строка
+  `apt-get install -y libvulkan-dev mesa-vulkan-drivers` в скрипте
+  настройки облачного окружения. Без них случаи `bindings/vulkan/layout`
+  (сверка раскладки с `vulkan.h`) и `bindings/vulkan/run` (программа на
+  lavapipe) пропускаются; итог `tests/run.py` это называет.
 
 ## Задачи
+
+- `С` **Цепочки вывода `pNext` Vulkan не выражаются** — структуры
+  `returnedonly` получают `p_next: ?VkVoid` (только `none`), а функции с
+  `&mut` заимствующей структуры пропущены (`vkGetPhysicalDeviceFeatures2`;
+  `docs/bindings/README.md`, раздел 3). Нужно `&mut` в поле `@c` на время
+  вызова или другой способ; решить, если шагу 7 v0.2 понадобятся
+  свойства расширений.
 
 - `М` **Заголовок `dpl build --lib` сам определяет структуры `@c`** своих
   сигнатур (`compiler/backend_c/emit_c.cpp`, `header`): если хост

@@ -14,7 +14,7 @@
 | понять архитектуру toolchain | `design/ARCHITECTURE.md` |
 | понять устройство языка | спецификация ядра `spec/core.md` (пишется в v0.1), за ней — проект `design/LANGUAGE.md` |
 | быстро начать писать на dpl | краткое руководство с приёмами `guide/README.md` (нормативна спецификация) |
-| найти компонент в коде | `design/ARCHITECTURE.md`, раздел 10; затем `compiler/README.md` (устройство компилятора), `compiler/cli.md` (команды `dpl`), `ir/README.md` (Core IR, понижение, верификатор, интерпретатор), `compiler/backend_c.md` (C-бэкенд), `runtime/README.md` (runtime) и `stdlib/README.md` (стандартная библиотека) |
+| найти компонент в коде | `design/ARCHITECTURE.md`, раздел 10; затем `compiler/README.md` (устройство компилятора), `compiler/cli.md` (команды `dpl`), `ir/README.md` (Core IR, понижение, верификатор, интерпретатор), `compiler/backend_c.md` (C-бэкенд), `runtime/README.md` (runtime), `stdlib/README.md` (стандартная библиотека) и `bindings/README.md` (привязки) |
 | понять контракт для потребителя | `policy/COMPATIBILITY.md`, `policy/DETERMINISM.md`, спецификация |
 | внести изменение | `../CLAUDE.md` (обязательный минимум), `policy/ENGINEERING.md` |
 | запустить проверки и прочитать результат | `../tools/check/run.sh`, `policy/TESTING.md` (разделы 5–6) |
@@ -38,6 +38,7 @@
 | `runtime/` | описание устройства runtime: ловушки, пределы, вход, код выхода | v0.1, шаги 8–9 |
 | `service/` | онлайн-компилятор (Р49): worker, песочница, шлюз, профиль, модель угроз, DoD сервиса; контракт для dpsmpx.com | основа сделана, запуск выключен |
 | `stdlib/` | описание устройства стандартной библиотеки: модули, внутренние встроенные, `os` | v0.1, шаг 11 |
+| `bindings/` | привязки: генераторы, закреплённый вход, перевод типов C (Vulkan), проверки | v0.2, шаг 6 |
 | `../examples/` | программы на dpl с описанием в своём `README.md`: первая — `tomlcheck` | v0.1, шаг 12 |
 | `archive/` | отработанное, с описью | появится с первым архивным документом |
 

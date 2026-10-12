@@ -7,7 +7,8 @@
 # Вывод краткий: по строке на проверку; на красном — первые строки
 # сбоя. Полный журнал — build/check/run.log. Эталоны набора задач —
 # bench/run_refs.py; решения на вариантах синтаксиса —
-# bench/syntax/run_variants.py; компилятор и его тесты — tests/run.py
+# bench/syntax/run_variants.py; повторная генерация привязок —
+# bindings/gen/check.py (Р58); компилятор и его тесты — tests/run.py
 # (docs/compiler/README.md); обвязка опыта — bench/experiment.py
 # selftest, после компилятора: ей нужен dpl.
 # ============================================================
@@ -75,6 +76,7 @@ step "корень"          check_root
 step "скрипты"         check_scripts
 step "эталоны"         python3 "$ROOT/bench/run_refs.py"
 step "варианты"        python3 "$ROOT/bench/syntax/run_variants.py"
+step "привязки"        python3 "$ROOT/bindings/gen/check.py"
 step "компилятор"      python3 "$ROOT/tests/run.py"
 # Обвязке нужен собранный компилятор: язык dp опыта (bench/dp_check.py).
 step "обвязка"         python3 "$ROOT/bench/experiment.py" selftest
