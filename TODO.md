@@ -36,11 +36,21 @@
   сессии → Edit → Setup script). Без них проходы `windows` (Wine) и
   `android` (qemu-aarch64) в новой сессии пропускаются, пока их не
   поставят вручную; итог `tests/run.py` это называет.
-- `М` **Библиотеки привязок в каждой сессии** (по желанию): строка
-  `bash tools/setup/host_libs.sh` в скрипте настройки облачного окружения
-  (пакеты Vulkan, lavapipe и сборка SDL3 3.4.18 — около минуты). Без неё
-  случаи `bindings/vulkan/layout`, `bindings/vulkan/run` и
-  `bindings/sdl3/run` пропускаются; итог `tests/run.py` это называет.
+- `М` **Библиотеки привязок и графики в каждой сессии** (по желанию):
+  строки `bash tools/setup/host_libs.sh` (пакеты Vulkan, lavapipe и
+  сборка SDL3 3.4.18 — около минуты) и, после `cross_windows.sh`,
+  `bash tools/setup/graphics_windows.sh` (SDL3 для MinGW, библиотека
+  импорта Vulkan, Xvfb — около двух минут), после `cross_android.sh` —
+  `bash tools/setup/graphics_android.sh` (Android SDK 35, SDL3 для
+  Android — около минуты) в скрипте настройки облачного окружения. Без
+  них случаи `bindings/vulkan/layout`, `bindings/*/run`,
+  `bindings/triangle/windows` и `bindings/triangle/android`
+  пропускаются; итог `tests/run.py` это называет.
+- `М` **Запуск треугольника на устройстве Android** (Р64, ворота v0.2):
+  поставить `triangle.apk` (из сессии или `examples/triangle/android/build.sh`)
+  на устройство с Vulkan — `adb install -r triangle.apk`, открыть «dpl
+  triangle» и прислать в сессию текст сообщения (или снимок экрана).
+  Ожидается `matches the reference: true`.
 
 ## Задачи
 
@@ -76,7 +86,9 @@
   она ни вышла: многострочный литерал из 19 вариантов (драйвер
   `bench/tasks/t03_npc_fsm/dp/main.dpm`) стал строкой в 234 байта, из
   101 строки — в 1791. Нужны предел ширины и правило переноса;
-  драйверы набора пока обходят это вызовами по одному.
+  драйверы набора пока обходят это вызовами по одному. Из-за этого не
+  канонические `examples/triangle` и программы `tests/bindings/`: каждая
+  структура Vulkan свернулась бы в строку на сотни байт.
 - `М` **Вывод у глубоко вложенных типов квадратичен** — `debug types`,
   `debug ir` и `debug c` печатают полное имя типа на каждом уровне:
   `[[…1…]]` глубины 1000 — 4 МБ дампа типов и 86 МБ C-кода (1,4 с в

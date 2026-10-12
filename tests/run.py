@@ -207,6 +207,8 @@ def discover(pattern):
         main_dpm = os.path.join(bdir, name, 'main.dpm')
         if os.path.exists(main_dpm) and pattern in os.path.relpath(main_dpm, TESTS):
             verify.append(('verify', main_dpm))
+    if pattern in 'examples/triangle/main.dpm':  # графическая программа (Р64): IR без библиотек хоста
+        verify.append(('verify', os.path.join(bindings.TRIANGLE, 'main.dpm')))
     if os.path.isdir(EXAMPLES):
         for ex in sorted(os.listdir(EXAMPLES)):
             if os.path.isdir(os.path.join(EXAMPLES, ex, 'expected')):
