@@ -20,6 +20,10 @@
 - triangle/run — графическая программа examples/triangle (шаг 7 v0.2,
   Р64) с видео SDL3 offscreen на lavapipe: снимок кадра побайтно равен
   examples/triangle/reference/frame.ppm, вывод — tests/bindings/triangle.out.
+- triangle/windows — она же для windows-x86_64 под Wine: окно Windows на
+  виртуальном экране Xvfb, Vulkan Wine передаёт lavapipe хоста; снимок и
+  вывод — те же. SDL3 и библиотеку импорта Vulkan для MinGW ставит
+  tools/setup/graphics_windows.sh.
 
 Без заголовка, библиотеки или драйвера случай пропускается (missing), и
 итог прогона это называет.
@@ -39,7 +43,9 @@ TIMEOUT = 120
 VULKAN_H = '/usr/include/vulkan/vulkan.h'
 LAVAPIPE = '/usr/share/vulkan/icd.d/lvp_icd.json'
 
-CASES = ['vulkan/layout', 'sdl3/layout', 'jni/layout', 'vulkan/run', 'sdl3/run', 'jni/run', 'triangle/run']
+CASES = ['vulkan/layout', 'sdl3/layout', 'jni/layout', 'vulkan/run', 'sdl3/run', 'jni/run', 'triangle/run',
+         'triangle/windows']
+MINGW = '/usr/x86_64-w64-mingw32'
 TRIANGLE = os.path.join(ROOT, 'examples', 'triangle')
 JVM_ENV = ('JAVA_TOOL_OPTIONS', '_JAVA_OPTIONS', 'JDK_JAVA_OPTIONS')
 
@@ -72,6 +78,16 @@ def missing(case):
         need = None
         if case == 'vulkan/layout' and not os.path.exists(VULKAN_H):
             need = 'vulkan.h (libvulkan-dev)'
+        elif case == 'triangle/windows':
+            libs = [os.path.join(MINGW, x) for x in ('lib/libSDL3.dll.a', 'lib/libvulkan.a', 'bin/SDL3.dll')]
+            if not shutil.which('wine') or not shutil.which('clang'):
+                need = 'Wine и clang (tools/setup/cross_windows.sh)'
+            elif not all(os.path.exists(x) for x in libs):
+                need = 'SDL3 и Vulkan для MinGW (tools/setup/graphics_windows.sh)'
+            elif not shutil.which('Xvfb'):
+                need = 'Xvfb (пакет xvfb)'
+            elif not os.path.exists(LAVAPIPE):
+                need = 'lavapipe (mesa-vulkan-drivers)'
         elif case == 'jni/run':
             if not _jvm_dir():
                 need = 'JDK (java и libjvm.so)'
@@ -221,6 +237,47 @@ def run(dpl, name, bless):
     return 'вывод расходится:\n' + '\n'.join(list(diff)[:20])
 
 
+def triangle_windows(dpl):
+    """examples/triangle для windows-x86_64 под Wine на экране Xvfb."""
+    exp = os.path.join(TESTS, 'bindings', 'triangle.out')
+    with tempfile.TemporaryDirectory() as d:
+        exe = os.path.join(d, 'triangle.exe')
+        r = subprocess.run([dpl, 'build', '--target', 'windows-x86_64', '-o', exe, 'main.dpm'], capture_output=True,
+                           text=True, cwd=TRIANGLE, timeout=TIMEOUT)
+        if r.returncode != 0:
+            return f'build: код {r.returncode}: ' + '\n'.join((r.stdout + r.stderr).splitlines()[:6])
+        shutil.copy(os.path.join(MINGW, 'bin', 'SDL3.dll'), d)
+        # Свой экран: номер даёт Xvfb (-displayfd), тесты идут параллельно.
+        rfd, wfd = os.pipe()
+        xvfb = subprocess.Popen(['Xvfb', '-displayfd', str(wfd), '-screen', '0', '640x480x24', '-nolisten', 'tcp'],
+                                pass_fds=(wfd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.close(wfd)
+        try:
+            with os.fdopen(rfd) as f:
+                display = f.readline().strip()
+            env = {k: v for k, v in os.environ.items() if k not in JVM_ENV}
+            env.update(DISPLAY=':' + display, WINEDEBUG='-all', VK_ICD_FILENAMES=LAVAPIPE, VK_DRIVER_FILES=LAVAPIPE)
+            frame = os.path.join(d, 'frame.ppm')
+            try:
+                p = subprocess.run(['wine', exe, 'Z:' + frame.replace('/', '\\')], capture_output=True, text=True,
+                                   errors='backslashreplace', timeout=TIMEOUT, cwd=d, env=env)
+            except subprocess.TimeoutExpired:
+                return f'[timeout {TIMEOUT} s]'
+        finally:
+            xvfb.terminate()
+            xvfb.wait()
+        got = p.stdout + ('--- stderr ---\n' + p.stderr if p.stderr else '') + (f'[exit {p.returncode}]\n' if p.returncode else '')
+        with open(exp, encoding='utf-8') as f:
+            want = f.read()
+        if got != want:
+            diff = difflib.unified_diff(want.splitlines(), got.splitlines(), 'ожидалось', 'windows', lineterm='', n=1)
+            return 'вывод расходится:\n' + '\n'.join(list(diff)[:20])
+        with open(frame, 'rb') as f, open(os.path.join(TRIANGLE, 'reference', 'frame.ppm'), 'rb') as g:
+            if f.read() != g.read():
+                return 'снимок кадра не равен examples/triangle/reference/frame.ppm'
+    return None
+
+
 def check_case(case, dpl, bless=False):
     if case == 'vulkan/layout':
         return layout(dpl, 'vulkan')
@@ -228,6 +285,8 @@ def check_case(case, dpl, bless=False):
         return layout(dpl, 'sdl3')
     if case == 'jni/layout':
         return layout(dpl, 'jni')
+    if case == 'triangle/windows':
+        return triangle_windows(dpl)
     if case.endswith('/run'):
         return run(dpl, case.split('/')[0], bless)
     return f'нет случая {case}'

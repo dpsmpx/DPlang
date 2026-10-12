@@ -74,9 +74,16 @@ fn main() Fail!void {
         fail .Sdl
     }
     defer sdl3.SDL_Quit()
+    let driver = sdl3.SDL_GetCurrentVideoDriver() ?? ""
     if let w = sdl3.SDL_CreateWindow("dpl triangle", 512, 512, sdl3.SDL_WINDOW_VULKAN | sdl3.SDL_WINDOW_RESIZABLE) {
         defer sdl3.SDL_DestroyWindow(w)
-        try run(w, sdl3.SDL_GetCurrentVideoDriver() ?? "", args)
+        try run(w, driver, args)
+        return
+    }
+    // Vulkan без поверхности окна (Wine без экрана): кадр — только вне окна.
+    if let w = sdl3.SDL_CreateWindow("dpl triangle", 512, 512, 0) {
+        defer sdl3.SDL_DestroyWindow(w)
+        try run(w, "", args)
         return
     }
     eprintln("SDL_CreateWindow: " + sdl3.SDL_GetError())

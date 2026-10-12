@@ -36,11 +36,14 @@
   сессии → Edit → Setup script). Без них проходы `windows` (Wine) и
   `android` (qemu-aarch64) в новой сессии пропускаются, пока их не
   поставят вручную; итог `tests/run.py` это называет.
-- `М` **Библиотеки привязок в каждой сессии** (по желанию): строка
-  `bash tools/setup/host_libs.sh` в скрипте настройки облачного окружения
-  (пакеты Vulkan, lavapipe и сборка SDL3 3.4.18 — около минуты). Без неё
-  случаи `bindings/vulkan/layout`, `bindings/vulkan/run` и
-  `bindings/sdl3/run` пропускаются; итог `tests/run.py` это называет.
+- `М` **Библиотеки привязок и графики в каждой сессии** (по желанию):
+  строки `bash tools/setup/host_libs.sh` (пакеты Vulkan, lavapipe и
+  сборка SDL3 3.4.18 — около минуты) и, после `cross_windows.sh`,
+  `bash tools/setup/graphics_windows.sh` (SDL3 для MinGW, библиотека
+  импорта Vulkan, Xvfb — около двух минут) в скрипте настройки облачного
+  окружения. Без них случаи `bindings/vulkan/layout`, `bindings/*/run` и
+  `bindings/triangle/windows` пропускаются; итог `tests/run.py` это
+  называет.
 
 ## Задачи
 
