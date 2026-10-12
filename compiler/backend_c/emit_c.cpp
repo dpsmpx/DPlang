@@ -256,8 +256,9 @@ public:
         if (mode == ast::ParamMode::Mut) return (t->kind == TK::List ? ct(t->elem) : ct(t)) + "*";
         if (t->kind == TK::Str) return "const char*";
         if (t->kind == TK::Slice) return t->elem->kind == TK::Str ? "const char* const*" : "const " + ct(t->elem) + "*";
-        if (t->kind == TK::Optional) {  // ?H, ?extern fn, ?&T (Р62) — или NULL
+        if (t->kind == TK::Optional) {  // ?H, ?extern fn, ?&T (Р62), ?str — или NULL
             if (t->elem->kind == TK::Ref) return "const " + ct(t->elem->elem) + "*";
+            if (t->elem->kind == TK::Str) return "const char*";
             return t->elem->kind == TK::CFn ? ct(t->elem) : "void*";
         }
         return ct(t);
@@ -1637,6 +1638,12 @@ std::string FnEmitter::c_call(const Rvalue& rv, const std::vector<CParam>& param
         if (t->kind == TK::Str) {
             std::string c = fresh("dp_c");
             line("char* " + c + " = dp_str_to_c(" + v + ", " + loc_ + ");");
+            args.push_back(c);
+            frees.push_back(c);
+        } else if (t->kind == TK::Optional && t->elem->kind == TK::Str) {  // none — NULL
+            std::string o = fresh("dp_o"), c = fresh("dp_c");
+            line(ctype(t) + " " + o + " = " + v + ";");
+            line("char* " + c + " = " + o + ".has ? dp_str_to_c(" + o + ".value, " + loc_ + ") : NULL;");
             args.push_back(c);
             frees.push_back(c);
         } else if (t->kind == TK::Slice && t->elem->kind == TK::Str) {  // Р62: массив строк C в арене

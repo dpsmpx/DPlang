@@ -3,7 +3,7 @@
 // `&mut ?H`, массив дескрипторов `&mut List[?H]` по образцу Vulkan (сначала
 // число, потом массив), `?H` и `?extern fn` в поле @c-структуры, которую
 // C заполняет и возвращает; список и словарь дескрипторов. Функции C — в
-// host.c; хост проверяет раскладку C.
+// host.c; хост проверяет раскладку C. Параметр ?str — строка C или NULL.
 extern type Device
 
 @c
@@ -25,6 +25,7 @@ extern fn host_enumerate(count: &mut u32, out: &mut List[?Device]) i32
 extern fn host_props(device: Device, out: &mut Props)
 extern fn host_info() Info
 extern fn host_same(a: ?Device, b: ?Device) bool
+extern fn host_name(name: ?str) i32
 
 @export
 fn twice(x: i32) i32 {
@@ -83,5 +84,7 @@ fn handles_run() i32 {
         has_event = true
     }
     println("info " + str(info.id) + " " + str(has_event))
+    let layer: ?str = "abc"
+    println("name " + str(host_name(none)) + " " + str(host_name(layer)) + " " + str(host_name("hello")))
     return total
 }

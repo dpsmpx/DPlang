@@ -55,6 +55,13 @@ struct Info host_info(void) {
 
 bool host_same(void* a, void* b) { return a == b; }
 
+int32_t host_name(const char* name) {
+    int32_t n = 0;
+    if (!name) return -1;
+    while (name[n]) n++;
+    return n;
+}
+
 int main(void) {
     printf("%d\n", handles_run());
     return 0;

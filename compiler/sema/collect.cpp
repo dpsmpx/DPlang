@@ -529,13 +529,15 @@ private:
 
     // Тип параметра функции C (Р59): значение с видом в C; str — строка
     // с нулём в конце; []T — указатель на элементы; &T, &mut T — указатель;
-    // &mut List[T] — указатель на элементы для записи; ?H — дескриптор или NULL.
+    // &mut List[T] — указатель на элементы для записи; ?H — дескриптор или NULL;
+    // ?str — строка C или NULL.
     bool c_param(const sema::Type* t, ParamMode mode) {
         if (!t || t->kind == TK::Error) return true;
         if (mode == ParamMode::Value) {
             // Срез, заимствующая структура и `?&T` переводятся в C на время вызова (Р62).
             return export_param(t, mode) || (t->kind == TK::Slice && c_borrow_field(t)) || c_borrowing(t) ||
-                   (t->kind == TK::Optional && t->elem->kind == TK::Ref && c_borrow_field(t));
+                   (t->kind == TK::Optional && t->elem->kind == TK::Ref && c_borrow_field(t)) ||
+                   (t->kind == TK::Optional && t->elem->kind == TK::Str);  // ?str — строка C или NULL
         }
         if (t->kind == TK::Array) return false;
         return c_value_type(t) || (mode == ParamMode::Ref && c_borrowing(t)) ||
