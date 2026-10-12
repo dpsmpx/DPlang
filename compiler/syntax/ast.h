@@ -539,10 +539,12 @@ struct Item : Node {
     explicit Item(ItemKind k) : kind(k) {}
 };
 
+
 struct Attr {
     std::string name;
     Span span;
-    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59)
+    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59); `@count(n)` — имя (Р62)
+    bool arg_ident = false;  // аргумент — имя, а не строка
     std::string arg;       // значение строки
     std::string arg_src;   // запись в исходнике, с кавычками
     std::string text() const { return "@" + name + (has_arg ? "(" + arg_src + ")" : ""); }
@@ -567,7 +569,9 @@ struct FnItem : Item {
     bool is_extern = false;  // `extern fn` — функция C без тела (Р59)
 };
 
+
 struct FieldDecl {
+    std::vector<Attr> attrs;  // `@count(n)` перед полем `@c` (Р62), на той же строке
     std::string name;
     Span name_span;
     Type* type = nullptr;

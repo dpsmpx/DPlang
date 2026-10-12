@@ -340,6 +340,43 @@ private:
         }
     }
 
+    // `@count(n)` перед полем-срезом `@c` (Р62): n — целое поле той же
+    // структуры; его пишет компилятор из длины среза.
+    void counts(StructDef& d) {
+        for (size_t i = 0; i < d.node->fields.size() && i < d.fields.size(); i++) {
+            for (const Attr& a : d.node->fields[i].attrs) {
+                if (a.name != "count") {
+                    diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "' for a field; a '@c' slice takes '@count(n)'");
+                    continue;
+                }
+                FieldDef& f = d.fields[i];
+                if (!d.c || !f.type || f.type->kind != TK::Slice) {
+                    diags_.error(Code::E0319, a.span, "'@count' marks a slice field of a '@c' struct");
+                    continue;
+                }
+                if (!a.has_arg || !a.arg_ident) {
+                    diags_.error(Code::E0319, a.span, "'@count' needs the counter field: @count(len_field)");
+                    continue;
+                }
+                if (f.count >= 0) {
+                    diags_.error(Code::E0319, a.span, "attribute '@count' is given twice");
+                    continue;
+                }
+                int k = -1;
+                for (size_t j = 0; j < d.fields.size(); j++) {
+                    if (d.fields[j].name == a.arg) k = static_cast<int>(j);
+                }
+                if (k < 0 || !is_integer(d.fields[static_cast<size_t>(k)].type)) {
+                    diags_.error(Code::E0319, a.span, "'@count(" + a.arg + ")': '" + d.name + "' has no integer field '" +
+                                                          a.arg + "'");
+                    continue;
+                }
+                f.count = k;
+                d.fields[static_cast<size_t>(k)].counter = true;
+            }
+        }
+    }
+
     void struct_sig(Resolver& r, StructDef& d) {
         for (const Attr& a : d.node->attrs) {
             bool* flag = a.name == "c" ? &d.c : a.name == "linear" ? &d.linear : a.name == "union" ? &d.union_ : nullptr;
@@ -358,6 +395,7 @@ private:
             d.c = true;
         }
         fields(r, d.node->fields, d.fields, d.pub, "struct", d.c);
+        counts(d);
     }
 
     // Где лежат линейные значения (Р60, E0514): поле — только у `@linear`,

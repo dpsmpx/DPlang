@@ -187,6 +187,15 @@ static bool zeroable_at(const Type* t, int depth) {
 
 bool zeroable(const Type* t) { return zeroable_at(t, 0); }
 
+bool c_prefix(const Type* b, const Type* s) {
+    if (!b || !s || b->kind != TK::Struct || s->kind != TK::Struct || !b->sdef->c || !s->sdef->c) return false;
+    if (b->sdef->union_ || s->sdef->union_ || b->sdef->fields.size() > s->sdef->fields.size()) return false;
+    for (size_t i = 0; i < b->sdef->fields.size(); i++) {
+        if (b->sdef->fields[i].type != s->sdef->fields[i].type) return false;
+    }
+    return true;
+}
+
 // ?H и ?extern fn — указатель или NULL.
 static bool nullable_pointer(const Type* t) {
     return t->kind == TK::Optional && (t->elem->kind == TK::Handle || t->elem->kind == TK::CFn);

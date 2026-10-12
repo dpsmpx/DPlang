@@ -25,6 +25,8 @@ struct FieldDef {
     Span span;
     const Type* type = nullptr;
     const ast::Expr* default_value = nullptr;
+    int count = -1;        // `@count(n)` у среза (Р62): номер поля-счётчика n
+    bool counter = false;  // поле — счётчик среза: его пишет компилятор при передаче в C
 };
 
 struct StructDef {

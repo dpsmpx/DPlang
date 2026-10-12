@@ -1,6 +1,7 @@
 // Проверка выражений: имена, типы, преобразования, вызовы, места,
 // константы (docs/spec/core.md, разделы 4, 5, 8, 9).
 #include <algorithm>
+#include <functional>
 #include <cstdio>
 
 #include "sema/builtins.h"
@@ -72,6 +73,11 @@ constexpr MethodInfo kMethods[] = {
 
 }  // namespace
 
+static Expr* strip_paren(Expr* e) {
+    while (auto* p = as<ParenExpr>(e)) e = p->inner;
+    return e;
+}
+
 // --- преобразования
 
 bool Checker::convertible(const Type* from, const Type* to) {
@@ -84,6 +90,7 @@ bool Checker::convertible(const Type* from, const Type* to) {
         return !sf && st && bf < bt;
     }
     if (from->kind == TK::F32 && to->kind == TK::F64) return true;
+    if (from->kind == TK::Ref && to->kind == TK::Ref) return c_prefix(to->elem, from->elem);  // Р62: общее начало
     if ((from->kind == TK::List || from->kind == TK::Array) && to->kind == TK::Slice) return from->elem == to->elem;
     if (to->kind == TK::Optional && from->kind != TK::Optional) return convertible(from, to->elem);
     if (to->kind == TK::Result && from->kind != TK::Result) return convertible(from, to->elem);
@@ -336,6 +343,12 @@ const Type* Checker::field_expr(FieldExpr* f, const Type* /*hint*/) {
         for (size_t i = 0; i < s->fields.size(); i++) {
             if (s->fields[i].name == f->name) {
                 f->field = static_cast<int>(i);
+                // Р62: заимствованное поле пишется для C; в dpl его не прочесть.
+                if (c_borrowing(t) && c_borrow_field(s->fields[i].type)) {
+                    error(Code::E0328, f->name_span, "field '" + f->name + "' of '" + tn(t) +
+                                                         "' is borrowed for C and cannot be read in dpl");
+                    return err();
+                }
                 return s->fields[i].type;
             }
         }
@@ -648,14 +661,17 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
         }
         const Type* t = infer(r->operand, p.type);
         r->type = t;
-        if (!is_place(r->operand)) {
+        // Р62: `&S { ... }` — временное на время вызова (только чтение).
+        bool literal = !r->mut && as<StructLitExpr>(strip_paren(r->operand));
+        if (!is_place(r->operand) && !literal) {
             if (t->kind != TK::Error) {
-                error(Code::E0501, r->operand->span, "a reference needs a variable, a field or an element");
+                error(Code::E0501, r->operand->span, "a reference needs a variable, a field, an element or a struct literal");
             }
             continue;
         }
         if (r->mut) mutable_place(r->operand, "mutate");
-        if (t != p.type && t->kind != TK::Error && p.type->kind != TK::Error) {
+        bool prefix = !r->mut && c_prefix(p.type, t);  // Р62: `&S` в `&B` по общему началу
+        if (t != p.type && !prefix && t->kind != TK::Error && p.type->kind != TK::Error) {
             error(Code::E0401, r->operand->span, "expected '" + tn(p.type) + "', found '" + tn(t) + "'");
         }
     }
@@ -955,6 +971,14 @@ void Checker::field_inits(std::vector<FieldInit>& inits, const std::vector<Field
             error(Code::E0413, fi.name_span, "field '" + fi.name + "' is given twice");
         }
         given[static_cast<size_t>(idx)] = 1;
+        if (fields[static_cast<size_t>(idx)].counter) {  // Р62: счётчик пишет компилятор
+            std::string of;
+            for (const FieldDef& f : fields) {
+                if (f.count == idx) of += (of.empty() ? "'" : ", '") + f.name + "'";
+            }
+            error(Code::E0413, fi.name_span, "field '" + fi.name + "' is the length of " + of +
+                                                 " (@count); C gets it from the slice, remove it here");
+        }
         check(value, fields[static_cast<size_t>(idx)].type);
     }
     std::string missing;
@@ -1184,6 +1208,15 @@ const Type* Checker::infer(Expr* e, const Type* hint) {
         case ExprKind::Paren: t = infer(static_cast<ParenExpr*>(e)->inner, hint); break;
         case ExprKind::Ref: {
             auto* r = static_cast<RefExpr*>(e);
+            const Type* h = hint && hint->kind == TK::Optional ? hint->elem : hint;
+            if (h && h->kind == TK::Ref && !r->mut) {  // Р62: поле `&T`, `?&T` и параметр `?&T` функции C
+                const Type* ot = infer(r->operand, h->elem);
+                if (!is_place(r->operand) && !as<StructLitExpr>(strip_paren(r->operand)) && ot->kind != TK::Error) {
+                    error(Code::E0501, r->operand->span, "a reference needs a variable, a field, an element or a struct literal");
+                }
+                t = ot->kind == TK::Error ? err() : tt_.ref(ot);
+                break;
+            }
             error(Code::E0501, e->span, "'&' marks only call arguments for '&' and '&mut' parameters, and 'for ... in'");
             infer(r->operand, hint);
             break;
@@ -1279,14 +1312,36 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         Span span;
     };
     std::vector<Ref> refs;
+    // Р62: заимствования внутри аргумента — структуры с полями-ссылками и
+    // срезами: их корни читаются, пока идёт вызов.
+    std::function<void(Expr*)> borrowed = [&](Expr* e) {
+        e = strip_paren(e);
+        if (!e) return;
+        if (auto* s = as<StructLitExpr>(e)) {
+            for (FieldInit& fi : s->fields) borrowed(fi.value ? fi.value : fi.shorthand);
+        } else if (auto* l = as<ListLitExpr>(e)) {
+            for (Expr* x : l->items) borrowed(x);
+        } else if (auto* r = as<RefExpr>(e)) {
+            if (is_place(r->operand)) refs.push_back({root_local(r->operand), false, e->span});
+            else borrowed(r->operand);
+        } else if ((e->conv && e->conv->kind == TK::Slice) || as<SliceExpr>(e)) {
+            Expr* base = e;
+            while (auto* sl = as<SliceExpr>(base)) base = sl->object;
+            refs.push_back({root_local(base), false, e->span});
+        }
+    };
     for (size_t i = 0; i < c->args.size() && i < params.size(); i++) {
         Expr* a = c->args[i];
         if (auto* r = as<RefExpr>(a)) {
             if (params[i].mode != ParamMode::Value) refs.push_back({root_local(r->operand), r->mut, a->span});
+            if (!is_place(r->operand)) borrowed(r->operand);
         } else if (params[i].type && params[i].type->kind == TK::Slice) {
             Expr* base = a;
             while (auto* s = as<SliceExpr>(base)) base = s->object;
             refs.push_back({root_local(base), false, a->span});
+            borrowed(a);
+        } else if (params[i].type && (c_borrowing(params[i].type) || params[i].type->kind == TK::Optional)) {
+            borrowed(a);
         }
     }
     for (size_t i = 0; i < refs.size(); i++) {

@@ -339,23 +339,8 @@ private:
         uint32_t begin = start();
         std::vector<Attr> attrs;
         while (at(TokKind::At)) {
-            Token at_tok = bump();
             Attr a;
-            Span s;
-            a.name = expect_ident(s);
-            a.span = Span{id_, at_tok.begin, s.end};
-            if (failed_) return nullptr;
-            if (eat(TokKind::LParen)) {  // `@link("SDL3")`
-                if (!at(TokKind::Str)) {
-                    expected("a string argument");
-                    return nullptr;
-                }
-                a.has_arg = true;
-                a.arg_src = std::string(text_of(bump()));
-                a.arg = string_literal_value(a.arg_src);
-                if (!expect(TokKind::RParen)) return nullptr;
-                a.span.end = prev_end_;
-            }
+            if (!attr(a)) return nullptr;
             attrs.push_back(a);
             skip_newlines();
         }
@@ -390,6 +375,33 @@ private:
         it->pub = pub;
         it->span = span_from(begin);
         return it;
+    }
+
+    // `@имя`, `@имя("строка")`, `@имя(поле)` (Р62: `@count(n)`); false — ошибка.
+    bool attr(Attr& a) {
+        Token at_tok = bump();
+        Span s;
+        a.name = expect_ident(s);
+        a.span = Span{id_, at_tok.begin, s.end};
+        if (failed_) return false;
+        if (eat(TokKind::LParen)) {  // `@link("SDL3")`, `@count(n)`
+            if (at(TokKind::Ident)) {
+                a.has_arg = true;
+                a.arg_src = std::string(text_of(bump()));
+                a.arg = a.arg_src;
+                a.arg_ident = true;
+            } else if (at(TokKind::Str)) {
+                a.has_arg = true;
+                a.arg_src = std::string(text_of(bump()));
+                a.arg = string_literal_value(a.arg_src);
+            } else {
+                expected("a string or a name");
+                return false;
+            }
+            if (!expect(TokKind::RParen)) return false;
+            a.span.end = prev_end_;
+        }
+        return true;
     }
 
     // `extern fn f(...) T` без тела или `extern type Name` (Р59).
@@ -448,6 +460,11 @@ private:
     FieldDecl field_decl(bool allow_default) {
         FieldDecl fd;
         uint32_t begin = start();
+        while (at(TokKind::At) && !failed_) {  // `@count(n) xs: []T` (Р62)
+            Attr a;
+            if (!attr(a)) return fd;
+            fd.attrs.push_back(a);
+        }
         fd.name = expect_ident(fd.name_span);
         expect(TokKind::Colon);
         fd.type = type();
