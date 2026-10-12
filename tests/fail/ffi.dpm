@@ -7,7 +7,7 @@ extern fn takes_ref(s: &str) i32
 
 @c
 struct Bad {
-    name: str
+    name: List[u8]
     n: i32
 }
 

@@ -1,0 +1,53 @@
+// spec: ffi.struct ffi.export
+// Заимствующие структуры C (Р62): строка, срез структур со строками, срез
+// строк, @count, ?&T, ссылка на литерал, общее начало (pNext). Функции C —
+// в host.c; хост проверяет раскладку C и печатает, что получил.
+@c
+struct Base {
+    kind: u32
+    next: ?&Base
+}
+
+@c
+struct Extra {
+    kind: u32
+    next: ?&Base
+    bonus: i32
+}
+
+@c
+struct Item {
+    name: str
+    weight: f32
+}
+
+@c
+struct Order {
+    kind: u32 = 1
+    next: ?&Base
+    title: str
+    @count(item_count) items: []Item
+    item_count: u32
+    @count(tag_count) tags: []str
+    tag_count: u32
+    first: ?&Item
+}
+
+extern fn host_order(o: &Order) i32
+extern fn host_names(names: []str, n: i32) i32
+extern fn host_opt(item: ?&Item) i32
+
+@export
+fn borrow_run() i32 {
+    let tags: List[str] = ["x", "yy"]
+    var total = host_order(&Order {
+        next: &Extra { kind: 9, bonus: 5 },
+        title: "order " + str(42),
+        items: [Item { name: "apple", weight: 1.5 }, Item { name: "pear", weight: 2.25 }],
+        tags: tags,
+        first: &Item { name: "first", weight: 0.5 },
+    })
+    total = total + host_names(["a", "bb", "ccc"], 3)
+    total = total + host_opt(none) + host_opt(&Item { name: "z", weight: 3 })
+    return total
+}

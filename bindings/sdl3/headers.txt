@@ -1,0 +1,16 @@
+# Заголовки SDL3 в привязке (Р62): функции, константы и типы из них;
+# типы других заголовков из include/SDL3 — по мере надобности. Новый
+# заголовок — строка здесь и перегенерация (python3 bindings/gen/sdl3.py).
+SDL_init.h
+SDL_error.h
+SDL_hints.h
+SDL_version.h
+SDL_video.h
+SDL_vulkan.h
+SDL_events.h
+SDL_keyboard.h
+SDL_keycode.h
+SDL_scancode.h
+SDL_mouse.h
+SDL_rect.h
+SDL_timer.h

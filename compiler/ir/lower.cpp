@@ -106,6 +106,7 @@ public:
         if (def.is_extern) {  // функция C (Р59): только сигнатура
             f_.is_extern = true;
             f_.c_name = def.name;
+            f_.slot = def.slot;
             return;
         }
         if (def.exported) {  // функцию зовёт C (Р61)
@@ -407,13 +408,19 @@ private:
 
     Operand convert(Operand o, const Type* from, const Type* to, Span span) {
         if (!to || from == to) return o;
+        if (from->kind == TK::Ref && to->kind == TK::Ref) {  // Р62: общее начало
+            Rvalue rv = make(RvKind::Cast, to);
+            rv.cast = CastKind::RefUp;
+            rv.ops.push_back(rd(std::move(o)));
+            return to_temp(std::move(rv), span);
+        }
         if ((is_int(from) && is_int(to)) || (from->kind == TK::F32 && to->kind == TK::F64)) {
             Rvalue rv = make(RvKind::Cast, to);
             rv.cast = CastKind::Widen;
             rv.ops.push_back(rd(std::move(o)));
             return to_temp(std::move(rv), span);
         }
-        if (from->kind == TK::List && to->kind == TK::Slice) {
+        if ((from->kind == TK::List || from->kind == TK::Array) && to->kind == TK::Slice) {
             bool fresh = false;
             Rvalue rv = make(RvKind::SliceOf, to);
             rv.place = place_of(std::move(o), span, fresh);
@@ -514,13 +521,17 @@ private:
             case ExprKind::Slice: return slice(static_cast<const SliceExpr*>(e));
             case ExprKind::Call: {
                 Rvalue rv;
-                if (!call(static_cast<const CallExpr*>(e), rv)) return cbool(false);  // assert: значения нет
+                uint32_t mark = UINT32_MAX;
+                if (!call(static_cast<const CallExpr*>(e), rv, &mark)) return cbool(false);  // assert: значения нет
                 if (rv.type->kind == TK::Void) {
                     eval(std::move(rv), e->span);
+                    release(mark, e->span);
                     return cbool(false);
                 }
                 if (rv.kind == RvKind::Use) return std::move(rv.ops[0]);
-                return to_temp(std::move(rv), e->span);
+                Operand out = to_temp(std::move(rv), e->span);
+                release(mark, e->span);
+                return out;
             }
             case ExprKind::Unary: return unary(static_cast<const UnaryExpr*>(e));
             case ExprKind::Binary: return binary(static_cast<const BinaryExpr*>(e));
@@ -536,7 +547,15 @@ private:
                 rv.ops = exprs(items);
                 return to_temp(std::move(rv), e->span);
             }
-            case ExprKind::Ref: case ExprKind::Error: break;
+            case ExprKind::Ref: {  // Р62: значение `&T` — адрес места или временного литерала
+                auto* r = static_cast<const RefExpr*>(e);
+                bool fresh = false;
+                Rvalue rv = make(RvKind::AddrOf, e->type);
+                rv.place = object(r->operand, fresh);
+                rv.has_place = true;
+                return to_temp(std::move(rv), e->span);
+            }
+            case ExprKind::Error: break;
         }
         return cbool(false);  // проверка типов не пропускает сюда
     }
@@ -687,7 +706,8 @@ private:
 
     // Значения полей в порядке записи, затем значения по умолчанию;
     // в правой части — по порядку объявления.
-    std::vector<Operand> field_values(const std::vector<FieldInit>& inits, const std::vector<sema::FieldDef>& fields) {
+    std::vector<Operand> field_values(const std::vector<FieldInit>& inits, const std::vector<sema::FieldDef>& fields,
+                                      Span span) {
         std::vector<const Expr*> es;
         for (const FieldInit& fi : inits) es.push_back(fi.value ? fi.value : fi.shorthand);
         std::vector<Operand> given = exprs(es);
@@ -702,7 +722,9 @@ private:
             }
         }
         for (size_t k = 0; k < fields.size(); k++) {
-            if (!have[k] && fields[k].default_value) out[k] = expr(fields[k].default_value);
+            if (have[k]) continue;
+            if (fields[k].default_value) out[k] = expr(fields[k].default_value);
+            else out[k] = to_temp(make(RvKind::Zero, fields[k].type), span);  // Р62: ноль поля `@c`
         }
         return out;
     }
@@ -712,11 +734,17 @@ private:
             const sema::VariantDef& vd = s->res.en->variants[s->res.index];
             Rvalue rv = make(RvKind::MakeVariant, s->type);
             rv.variant = s->res.index;
-            rv.ops = field_values(s->fields, vd.fields);
+            rv.ops = field_values(s->fields, vd.fields, s->span);
             return to_temp(std::move(rv), s->span);
         }
         Rvalue rv = make(RvKind::MakeStruct, s->type);
-        rv.ops = field_values(s->fields, s->res.st->fields);
+        rv.ops = field_values(s->fields, s->res.st->fields, s->span);
+        if (s->res.st->union_ && !s->fields.empty()) {  // Р62: заданное поле объединения — его номер + 1
+            const auto& fs = s->res.st->fields;
+            for (size_t k = 0; k < fs.size(); k++) {
+                if (fs[k].name == s->fields[0].name) rv.variant = static_cast<uint32_t>(k + 1);
+            }
+        }
         return to_temp(std::move(rv), s->span);
     }
 
@@ -728,12 +756,20 @@ private:
             std::vector<const Expr*> es(v->args.begin(), v->args.end());
             rv.ops = exprs(es);
         } else if (v->form == VariantForm::Record) {
-            rv.ops = field_values(v->fields, vd.fields);
+            rv.ops = field_values(v->fields, vd.fields, v->span);
         }
         return to_temp(std::move(rv), v->span);
     }
 
     // --- вызовы
+
+    // Арена C после вызова (Р62): всё, что выделено после отметки.
+    void release(uint32_t mark, Span span) {
+        if (mark == UINT32_MAX) return;
+        Rvalue rv = intrinsic(Intrinsic::CArenaRelease, prim(TK::Void));
+        rv.ops.push_back(copy(local(mark)));
+        eval(std::move(rv), span);
+    }
 
     Rvalue intrinsic(Intrinsic k, const Type* t) {
         Rvalue rv = make(RvKind::Intrinsic, t);
@@ -742,10 +778,32 @@ private:
     }
 
     // Правая часть вызова; false — вызов уже понижен целиком (assert).
-    bool call(const CallExpr* c, Rvalue& rv) {
+    // Параметр, которому нужна арена C на время вызова (Р62): заимствующая
+    // структура, срез строк или заимствующих структур, `?&T`.
+    static bool arena_param(const Type* t) {
+        if (!t) return false;
+        if (sema::c_borrowing(t)) return true;
+        if (t->kind == TK::Slice) return t->elem->kind == TK::Str || sema::c_borrowing(t->elem);
+        return t->kind == TK::Optional && t->elem->kind == TK::Ref;
+    }
+
+    // mark — отметка арены C (Р62), если вызову она нужна: освободить после вызова.
+    bool call(const CallExpr* c, Rvalue& rv, uint32_t* mark = nullptr) {
         std::vector<const Expr*> args(c->args.begin(), c->args.end());
         switch (c->call) {
             case CallKind::Fn: case CallKind::Ptr: {
+                std::vector<std::pair<ParamMode, const Type*>> params;
+                if (c->call == CallKind::Fn) {
+                    for (const sema::ParamDef& p : c->fn->params) params.emplace_back(p.mode, p.type);
+                } else {
+                    params = c->callee->type->sig->params;
+                }
+                bool arena = false;
+                for (const auto& p : params) arena = arena || arena_param(p.second);
+                if (arena && mark) {
+                    *mark = temp(prim(TK::I64));
+                    assign(local(*mark), intrinsic(Intrinsic::CArenaMark, prim(TK::I64)), c->span);
+                }
                 if (c->call == CallKind::Fn) {
                     rv = make(RvKind::Call, c->fn->ret);
                     rv.fn = fns_.at(c->fn);
@@ -755,10 +813,12 @@ private:
                 }
                 for (size_t i = 0; i < args.size(); i++) {
                     Arg a;
-                    if (auto* r = as<const RefExpr>(args[i])) {
+                    auto* r = as<const RefExpr>(args[i]);
+                    bool by_ref = i < params.size() && params[i].first != ParamMode::Value;
+                    if (r && by_ref) {
                         bool fresh = false;
                         a.kind = r->mut ? Arg::Kind::Mut : Arg::Kind::Ref;
-                        a.place = lvalue(r->operand, fresh);
+                        a.place = object(r->operand, fresh);  // Р62: `&S { ... }` — временное
                     } else {
                         a.op = expr(args[i]);
                         bool later = false;
@@ -972,7 +1032,9 @@ private:
     void effect(const Expr* e) {
         if (auto* c = as<const CallExpr>(e)) {
             Rvalue rv;
-            if (call(c, rv)) eval(std::move(rv), e->span);
+            uint32_t mark = UINT32_MAX;
+            if (call(c, rv, &mark)) eval(std::move(rv), e->span);
+            release(mark, e->span);
             return;
         }
         expr(e);
@@ -1407,8 +1469,19 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
     out->fns.resize(order.size());
     std::unordered_map<std::string, uint32_t> strings;  // строка → номер в out->strings
     for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, strings, out->fns[i]).run(*order[i]);
-    for (const sema::FnDef* f : order) {
-        if (!f->is_extern || f->link.empty()) continue;
+    // Библиотеки `@link` — только у вызываемых функций C: импорт привязки
+    // не требует библиотек, которые программа не зовёт.
+    std::vector<bool> called(out->fns.size(), false);
+    for (const Function& f : out->fns) {
+        for (const Block& b : f.blocks) {
+            for (const Inst& in : b.insts) {
+                if (in.rv.kind == RvKind::Call && in.rv.fn < called.size()) called[in.rv.fn] = true;
+            }
+        }
+    }
+    for (size_t i = 0; i < order.size(); i++) {
+        const sema::FnDef* f = order[i];
+        if (!f->is_extern || f->link.empty() || !called[i]) continue;
         if (std::find(out->links.begin(), out->links.end(), f->link) == out->links.end()) out->links.push_back(f->link);
     }
     return out;

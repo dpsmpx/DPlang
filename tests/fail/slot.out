@@ -1,0 +1,29 @@
+--- stderr ---
+slot.dpm:5:1: error[E0319]: '@slot' marks an 'extern fn' called through a table of C functions
+   5 | @slot(1)
+     | ^~~~~~~~
+slot.dpm:9:1: error[E0319]: '@slot' needs the entry number: @slot(4)
+   9 | @slot
+     | ^~~~~
+slot.dpm:12:1: error[E0319]: '@slot' needs the entry number: @slot(4)
+  12 | @slot("2")
+     | ^~~~~~~~~~
+slot.dpm:15:1: error[E0319]: '@slot' entry is a decimal number from 0 to 65535
+  15 | @slot(70000)
+     | ^~~~~~~~~~~~
+slot.dpm:19:1: error[E0319]: attribute '@slot' is given twice
+  19 | @slot(2)
+     | ^~~~~~~~
+slot.dpm:22:1: error[E0319]: an '@slot' function has no C symbol: '@link' does not apply
+  22 | @slot(3)
+     | ^~~~~~~~
+slot.dpm:26:1: error[E0319]: '@slot' calls through the table of the first argument: it must be an 'extern type' value
+  26 | @slot(4)
+     | ^~~~~~~~
+slot.dpm:29:1: error[E0319]: '@slot' calls through the table of the first argument: it must be an 'extern type' value
+  29 | @slot(5)
+     | ^~~~~~~~
+slot.dpm:32:1: error[E0319]: '@slot' calls through the table of the first argument: it must be an 'extern type' value
+  32 | @slot(6)
+     | ^~~~~~~~
+[exit 1]

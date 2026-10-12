@@ -38,6 +38,8 @@ enum class TK : uint8_t {
     Enum,
     Handle,    // `extern type` — непрозрачный дескриптор C (Р59); hdef
     CFn,       // `extern fn(T) R` — указатель на функцию C (Р61); sig
+    Array,     // `[N]T` — массив C (Р62): elem, len; поле `@c`
+    Ref,       // `&T` — заимствующее поле `@c` или `?&T` параметра функции C (Р62); elem
 };
 
 struct Type;
@@ -58,6 +60,7 @@ struct Type {
     const EnumDef* edef = nullptr;
     const HandleDef* hdef = nullptr;
     const CFnSig* sig = nullptr;  // CFn
+    uint64_t len = 0;             // Array
 };
 
 class TypeTable {
@@ -74,6 +77,8 @@ public:
     const Type* enum_type(const EnumDef* d) { return make(TK::Enum, nullptr, nullptr, nullptr, d); }
     const Type* handle(const HandleDef* d) { return make(TK::Handle, nullptr, nullptr, nullptr, nullptr, nullptr, d); }
     const Type* cfn(const CFnSig& sig);
+    const Type* array(const Type* elem, uint64_t len);
+    const Type* ref(const Type* elem) { return make(TK::Ref, elem, nullptr, nullptr, nullptr); }
 
 private:
     const Type* make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e,
@@ -83,6 +88,7 @@ private:
     std::map<std::tuple<int, const void*, const void*, const void*, const void*, const void*, const void*>, const Type*>
         interned_;
     std::deque<CFnSig> sigs_;
+    std::map<std::pair<const Type*, uint64_t>, const Type*> arrays_;
     std::map<std::pair<std::vector<std::pair<int, const Type*>>, const Type*>, const Type*> cfns_;
 };
 
@@ -95,6 +101,24 @@ std::string type_name(const Type* t, const ModuleInfo* from = nullptr);
 // Тип содержит срез `[]T` где-либо внутри (Р44: срез — только тип параметра).
 bool contains_slice(const Type* t);
 
+// Заимствующее поле `@c` (Р62): str, []T, &T, ?&T — в C переводится при
+// вызове. Заимствующая структура — `@c` с таким полем
+// (или с полем-заимствующей структурой): живёт только в аргументе вызова.
+bool c_borrow_field(const Type* t);
+bool c_borrowing(const Type* t);
+// Тип поля `@c`: вид в C или заимствующее поле.
+bool c_field_type(const Type* t);
+// У типа есть ноль (Р62): пропущенное поле `@c` — ноль. Числа, bool, ?T,
+// str и срез (пустые), массив и `@c`-структура из таких.
+bool zeroable(const Type* t);
+// Общее начало (Р62): поля `@c`-структуры b — начало полей s с теми же
+// типами; ссылка `&s` тогда переходит в `&b`.
+bool c_prefix(const Type* b, const Type* s);
+
+// Тип содержит массив `[N]T` или ссылку-поле `&T` (Р62): им место — в
+// полях `@c`-структур (и `?&T` — в параметре функции C).
+bool contains_c_only(const Type* t);
+
 // Тип годится в ключ Map (Р54): целое, bool или str.
 bool map_key_type(const Type* t);
 
@@ -104,7 +128,8 @@ bool linear_type(const Type* t);
 bool linear_in_container(const Type* t);
 
 // Значение типа переходит границу C как есть (Р59): целое, плавающее,
-// bool, дескриптор `extern type`, структура `@c` из таких.
+// bool, дескриптор `extern type` и `?H`, `extern fn(...)` и `?extern fn`
+// (указатель или NULL), массив и структура `@c` из таких.
 bool c_value_type(const Type* t);
 
 // Тип параметра обратного вызова `extern fn(...)` и функции `@export`

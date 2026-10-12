@@ -263,6 +263,7 @@ private:
     }
 
     void field(const FieldDecl& f) {
+        for (const Attr& a : f.attrs) out += a.text() + " ";
         out += f.name + ": " + type_text(f.type);
         if (f.value) {
             out += " = ";

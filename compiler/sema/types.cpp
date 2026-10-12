@@ -44,6 +44,25 @@ const Type* TypeTable::cfn(const CFnSig& sig) {
     return &t;
 }
 
+const Type* TypeTable::array(const Type* elem, uint64_t len) {
+    auto key = std::make_pair(elem, len);
+    auto it = arrays_.find(key);
+    if (it != arrays_.end()) return it->second;
+    Type& t = store_.emplace_back();
+    t.kind = TK::Array;
+    t.elem = elem;
+    t.len = len;
+    arrays_.emplace(key, &t);
+    return &t;
+}
+
+bool contains_c_only(const Type* t) {
+    if (!t) return false;
+    if (t->kind == TK::Array || t->kind == TK::Ref) return true;
+    if (t->kind == TK::CFn) return false;  // сигнатура проверяется сама (check_cfn)
+    return contains_c_only(t->elem) || contains_c_only(t->err) || contains_c_only(t->key);
+}
+
 std::string type_name(const Type* t, const ModuleInfo* from) {
     if (!t) return "?";
     switch (t->kind) {
@@ -73,6 +92,8 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
             return from && t->edef->module != from ? t->edef->module->name + "." + t->edef->name : t->edef->name;
         case TK::Handle:
             return from && t->hdef->module != from ? t->hdef->module->name + "." + t->hdef->name : t->hdef->name;
+        case TK::Array: return "[" + std::to_string(t->len) + "]" + type_name(t->elem, from);
+        case TK::Ref: return "&" + type_name(t->elem, from);
         case TK::CFn: {
             std::string s = "extern fn(";
             for (size_t i = 0; i < t->sig->params.size(); i++) {
@@ -113,9 +134,16 @@ bool linear_in_container(const Type* t) {
 
 bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str); }
 
+// ?H и ?extern fn — указатель или NULL.
+static bool nullable_pointer(const Type* t) {
+    return t->kind == TK::Optional && (t->elem->kind == TK::Handle || t->elem->kind == TK::CFn);
+}
+
 bool c_value_type(const Type* t) {
     if (!t) return false;
     if (is_numeric(t) || t->kind == TK::Bool || t->kind == TK::Handle || t->kind == TK::CFn) return true;
+    if (nullable_pointer(t)) return true;  // Р62: в C — указатель или NULL, как и в dpl
+    if (t->kind == TK::Array) return c_value_type(t->elem);
     if (t->kind != TK::Struct || !t->sdef->c) return false;
     for (const FieldDef& f : t->sdef->fields) {
         if (!c_value_type(f.type)) return false;
@@ -123,20 +151,70 @@ bool c_value_type(const Type* t) {
     return true;
 }
 
-// ?H и ?extern fn — указатель или NULL.
-static bool nullable_pointer(const Type* t) {
-    return t->kind == TK::Optional && (t->elem->kind == TK::Handle || t->elem->kind == TK::CFn);
+static bool c_struct_type(const Type* t) { return t && t->kind == TK::Struct && t->sdef->c; }
+
+bool c_borrow_field(const Type* t) {
+    if (!t) return false;
+    switch (t->kind) {
+        case TK::Str: return true;
+        // Элемент и цель ссылки — любая `@c`-структура: заимствующую там не
+        // разбираем (её поле `?&Self` замкнуло бы обход).
+        case TK::Slice: return c_value_type(t->elem) || t->elem->kind == TK::Str || c_struct_type(t->elem);
+        case TK::Ref: return c_value_type(t->elem) || c_struct_type(t->elem);
+        case TK::Optional: return t->elem->kind == TK::Ref && c_borrow_field(t->elem);
+        default: return false;
+    }
+}
+
+// Поле — заимствующая структура по значению: рекурсия только по значению,
+// а такие циклы — E0423; глубина ограничена на случай ещё не найденного цикла.
+static bool c_borrowing_at(const Type* t, int depth) {
+    if (!t || t->kind != TK::Struct || !t->sdef->c || depth > 64) return false;
+    for (const FieldDef& f : t->sdef->fields) {
+        if (c_borrow_field(f.type) || c_borrowing_at(f.type, depth + 1)) return true;
+    }
+    return false;
+}
+
+bool c_borrowing(const Type* t) { return c_borrowing_at(t, 0); }
+
+bool c_field_type(const Type* t) { return c_value_type(t) || c_borrow_field(t) || c_borrowing(t); }
+
+static bool zeroable_at(const Type* t, int depth) {
+    if (!t || depth > 64) return false;
+    if (is_numeric(t) || t->kind == TK::Bool || t->kind == TK::Optional || t->kind == TK::Str || t->kind == TK::Slice) {
+        return true;
+    }
+    if (t->kind == TK::Array) return zeroable_at(t->elem, depth + 1);
+    if (t->kind != TK::Struct || !t->sdef->c) return false;
+    for (const FieldDef& f : t->sdef->fields) {
+        if (!zeroable_at(f.type, depth + 1)) return false;
+    }
+    return true;
+}
+
+bool zeroable(const Type* t) { return zeroable_at(t, 0); }
+
+bool c_prefix(const Type* b, const Type* s) {
+    if (!b || !s || b->kind != TK::Struct || s->kind != TK::Struct || !b->sdef->c || !s->sdef->c) return false;
+    if (b->sdef->union_ || s->sdef->union_ || b->sdef->fields.size() > s->sdef->fields.size()) return false;
+    for (size_t i = 0; i < b->sdef->fields.size(); i++) {
+        if (b->sdef->fields[i].type != s->sdef->fields[i].type) return false;
+    }
+    return true;
 }
 
 bool export_param(const Type* t, ast::ParamMode mode) {
     if (!t || t->kind == TK::Error) return true;
+    if (t->kind == TK::Array) return false;  // массив C по значению не передаётся
     if (mode != ast::ParamMode::Value) return c_value_type(t);
-    return c_value_type(t) || t->kind == TK::Str || nullable_pointer(t);
+    return c_value_type(t) || t->kind == TK::Str;
 }
 
 bool export_result(const Type* t) {
     if (!t || t->kind == TK::Error || t->kind == TK::Void) return true;
-    return c_value_type(t) || nullable_pointer(t);
+    if (t->kind == TK::Array) return false;
+    return c_value_type(t);
 }
 
 bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }

@@ -268,9 +268,9 @@ std::vector<std::string> c_flags(const BuildOptions& opt, TempDir& tmp) {
     return argv;
 }
 
-// Код выхода запуска компилятора C: 0, 2 (не запустился) или 3 (отверг код).
-int run_cc(const std::vector<std::string>& argv, const BuildOptions& opt) {
-    int r = spawn_wait(argv);
+// Код выхода по итогу запуска компилятора C (spawn_wait): 0, 2 (не
+// запустился) или 3 (отверг код).
+int run_cc_result(int r, const BuildOptions& opt) {
     if (r < 0) {
         say("error: cannot run the C compiler '" + opt.cc + "': " + std::strerror(-r) + "; set CC to a C11 compiler\n");
         return 2;
@@ -280,6 +280,25 @@ int run_cc(const std::vector<std::string>& argv, const BuildOptions& opt) {
         return 3;
     }
     return 0;
+}
+
+int run_cc(const std::vector<std::string>& argv, const BuildOptions& opt) { return run_cc_result(spawn_wait(argv), opt); }
+
+// Библиотека `@link` компонуется для цели: пробная сборка пустой
+// программы с ней. Иначе её отсутствие было бы принято за ошибку бэкенда.
+bool library_links(const std::string& lib, const BuildOptions& opt, TempDir& tmp) {
+    const Target& t = target_of(opt);
+    std::string src = tmp.file("link.c");
+    std::string exe = tmp.file("link" + std::string(t.exe_suffix));
+    if (!write_all(src, "int main(void) { return 0; }\n")) return false;
+    std::vector<std::string> argv = {opt.cc};
+    for (std::string_view f : t.cflags) argv.emplace_back(f);
+    argv.push_back(src);
+    argv.push_back("-l" + lib);
+    for (std::string_view l : t.libs) argv.emplace_back(l);
+    argv.push_back("-o");
+    argv.push_back(exe);
+    return spawn_wait(argv, "/dev/null", "/dev/null") == 0;
 }
 
 // Компилирует c_code в exe. Код выхода команды: 0, 2 или 3.
@@ -293,7 +312,18 @@ int compile(const std::string& c_code, const std::string& exe, const BuildOption
     for (std::string_view l : t.libs) argv.emplace_back(l);
     argv.push_back("-o");
     argv.push_back(exe);
-    return run_cc(argv, opt);
+    int r = spawn_wait(argv);
+    if (r > 0) {
+        // Нет библиотеки `@link` для цели — ошибка окружения, не бэкенда.
+        for (const std::string& l : opt.links) {
+            if (!library_links(l, opt, tmp)) {
+                say("error: cannot link library '" + l + "' (@link) for target '" + std::string(t.name) +
+                    "': install it for the target (for the host: the development package with lib" + l + ".so)\n");
+                return 2;
+            }
+        }
+    }
+    return run_cc_result(r, opt);
 }
 
 // Копирует собранный файл в path (права mode с учётом umask).

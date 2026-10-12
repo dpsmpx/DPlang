@@ -1,0 +1,8 @@
+JNI_CreateJavaVM: 0
+JNI 1.6+: true
+Integer.parseInt("1234"): 1234
+String.valueOf(8638): 8638, length 4
+NumberFormatException: true
+cleared: true
+GetEnv: 0, same env: true
+DestroyJavaVM: 0

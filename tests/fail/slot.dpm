@@ -1,0 +1,36 @@
+// spec: ffi.slot
+// Ошибки записи @slot (Р63, E0319).
+extern type Obj
+
+@slot(1)
+fn not_extern(o: Obj) {
+}
+
+@slot
+extern fn no_number(o: Obj)
+
+@slot("2")
+extern fn string_number(o: Obj)
+
+@slot(70000)
+extern fn too_big(o: Obj)
+
+@slot(1)
+@slot(2)
+extern fn twice(o: Obj)
+
+@slot(3)
+@link("m")
+extern fn linked(o: Obj)
+
+@slot(4)
+extern fn no_object(x: i32)
+
+@slot(5)
+extern fn by_ref(o: &Obj)
+
+@slot(6)
+extern fn nothing()
+
+fn main() {
+}

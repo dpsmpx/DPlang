@@ -173,6 +173,9 @@ private:
             case CastKind::ToStr:
                 ok = to->kind == TK::Str && (numeric(from) || from->kind == TK::Bool);
                 break;
+            case CastKind::RefUp:  // Р62
+                ok = from->kind == TK::Ref && to->kind == TK::Ref && sema::c_prefix(to->elem, from->elem);
+                break;
         }
         if (!ok) fail("invalid cast from '" + sema::type_name(from) + "' to '" + sema::type_name(to) + "'");
     }
@@ -224,7 +227,8 @@ private:
             case Intrinsic::Len:
                 args(1);
                 t0 = op(0);
-                if (t0 && t0->kind != TK::List && t0->kind != TK::Slice && t0->kind != TK::Str && t0->kind != TK::Map) {
+                if (t0 && t0->kind != TK::List && t0->kind != TK::Slice && t0->kind != TK::Str && t0->kind != TK::Map &&
+                    t0->kind != TK::Array) {
                     fail("len of a non-sequence");
                 }
                 same(rv.type, prim(TK::I64), "result");
@@ -339,6 +343,15 @@ private:
                     else if (rv.type->kind != TK::Optional || rv.type->elem != m->elem) fail("get result is not ?V");
                 }
                 break;
+            case Intrinsic::CArenaMark:  // Р62
+                args(0);
+                same(rv.type, prim(TK::I64), "result");
+                break;
+            case Intrinsic::CArenaRelease:
+                args(1);
+                same(op(0), prim(TK::I64), "arena mark");
+                same(rv.type, prim(TK::Void), "result");
+                break;
             case Intrinsic::MapKeys:
                 args(1);
                 if (const Type* m = map_operand(op(0))) {
@@ -437,7 +450,8 @@ private:
                 break;
             }
             case RvKind::MakeList:
-                if (t->kind != TK::List) return fail("list value of a non-List type");
+                if (t->kind != TK::List && t->kind != TK::Array) return fail("list value of a non-List type");
+                if (t->kind == TK::Array) count(rv, t->len);  // Р62: ровно N
                 for (size_t i = 0; i < rv.ops.size(); i++) stored(i, t->elem);
                 break;
             case RvKind::MakeMap:
@@ -472,7 +486,7 @@ private:
                 const Type* base = place(rv.place);
                 if (!base) break;
                 if (base->kind == TK::Str) same(t, prim(TK::Str), "result");
-                else if (base->kind == TK::List || base->kind == TK::Slice) {
+                else if (base->kind == TK::List || base->kind == TK::Slice || base->kind == TK::Array) {
                     if (t->kind != TK::Slice || t->elem != base->elem) fail("slice of a wrong type");
                 } else {
                     fail("slice of a non-sequence");
@@ -524,8 +538,10 @@ private:
                     }
                     if (a.kind == Arg::Kind::Value) {
                         same(operand(a.op, true), prm.type, "argument");
+                    } else if (const Type* pt = place(a.place); a.kind == Arg::Kind::Ref && sema::c_prefix(prm.type, pt)) {
+                        // Р62: `&S` в `&B` по общему началу
                     } else {
-                        same(place(a.place), prm.type, "argument");
+                        same(pt, prm.type, "argument");
                         if (a.kind == Arg::Kind::Mut && !writable(a.place)) fail("'&mut' argument of a read-only place");
                     }
                 }
@@ -538,6 +554,17 @@ private:
                 same(t, prim(TK::U32), "result");
                 break;
             }
+            case RvKind::AddrOf: {  // Р62: ссылка на место
+                count(rv, 0);
+                if (!rv.has_place) return fail("address without a place");
+                const Type* pt = place(rv.place);
+                if (pt && (t->kind != TK::Ref || t->elem != pt)) fail("address of a wrong type");
+                break;
+            }
+            case RvKind::Zero:  // Р62: ноль — у типов, где он есть
+                count(rv, 0);
+                if (!sema::zeroable(t)) fail("zero of a type without a zero");
+                break;
             case RvKind::IsSome: case RvKind::IsOk: {
                 const Type* x = rv.has_place ? place(rv.place) : nullptr;
                 TK want = rv.kind == RvKind::IsSome ? TK::Optional : TK::Result;

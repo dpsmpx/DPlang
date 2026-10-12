@@ -42,18 +42,27 @@ using sema::Type;
 
 namespace {
 
+// ?H, ?extern fn и ?&T (Р62) — указатель C, `none` — NULL: раскладка та же,
+// что у C, в полях `@c`, за `&mut` и в списках.
+bool niche_elem(const Type* e) { return e->kind == TK::Handle || e->kind == TK::CFn || e->kind == TK::Ref; }
+bool niche(const Type* t) { return t->kind == TK::Optional && niche_elem(t->elem); }
+
 bool is_scalar(const Type* t) {
+    if (niche(t)) return true;
     switch (t->kind) {
         case TK::Bool: case TK::I8: case TK::I16: case TK::I32: case TK::I64: case TK::Int: case TK::U8:
         case TK::U16: case TK::U32: case TK::U64: case TK::F32: case TK::F64: case TK::Handle: case TK::CFn:
+        case TK::Ref:
             return true;
         default: return false;
     }
 }
 
 bool is_composite(const Type* t) {
+    if (niche(t)) return false;
     switch (t->kind) {
         case TK::List: case TK::Map: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum:
+        case TK::Array:
             return true;
         default: return false;
     }
@@ -89,6 +98,8 @@ std::string mangle(const Type* t) {
         case TK::Result: return "R_" + (t->err ? mangle(t->err) : std::string("x")) + "_" + mangle(t->elem);
         case TK::Struct: return "T_" + lp(t->sdef->module->name) + lp(t->sdef->name);
         case TK::Enum: return "E_" + lp(t->edef->module->name) + lp(t->edef->name);
+        case TK::Array: return "A" + std::to_string(t->len) + "_" + mangle(t->elem);  // Р62
+        case TK::Ref: return "P_" + mangle(t->elem);
         case TK::CFn: {  // F_<число параметров><режим и тип>…<результат>; записи с длиной
             std::string s = "F_" + std::to_string(t->sig->params.size());
             for (const auto& [mode, p] : t->sig->params) {
@@ -101,6 +112,7 @@ std::string mangle(const Type* t) {
 }
 
 std::string ctype(const Type* t) {
+    if (niche(t)) return ctype(t->elem);
     switch (t->kind) {
         case TK::Void: return "void";
         case TK::Bool: return "bool";
@@ -116,6 +128,7 @@ std::string ctype(const Type* t) {
         case TK::F64: return "double";
         case TK::Str: return "dp_str";
         case TK::Handle: return "void*";  // `extern type` — дескриптор C (Р59)
+        case TK::Ref: return ctype(t->elem) + "*";  // Р62: адрес на время вызова C
         default: return "dp_" + mangle(t);
     }
 }
@@ -162,11 +175,18 @@ std::string eq_of(const Type* t, const std::string& a, const std::string& b) {
 }
 
 std::string lt_of(const Type* t, const std::string& a, const std::string& b) {
-    if (is_scalar(t)) return "(*(" + a + ") < *(" + b + "))";
-    if (t->kind == TK::Str) return "dp_str_lt(*(" + a + "), *(" + b + "))";
     // ?T и E!T интерпретатор не упорядочивает: «меньше» всегда ложно.
     if (t->kind == TK::Optional || t->kind == TK::Result) return "false";
+    if (is_scalar(t)) return "(*(" + a + ") < *(" + b + "))";
+    if (t->kind == TK::Str) return "dp_str_lt(*(" + a + "), *(" + b + "))";
     return "dp_lt__" + mangle(t) + "(" + a + ", " + b + ")";
+}
+
+// Запись «есть значение v» в место r типа ?T (elem — T); ind — отступ
+// второй строки.
+std::string set_some(const Type* elem, const std::string& r, const std::string& v, const std::string& ind) {
+    if (niche_elem(elem)) return r + " = " + v + ";";
+    return r + ".has = true;\n" + ind + r + ".value = " + v + ";";
 }
 
 // Копия значения места lv: у значений с памятью — глубокая.
@@ -197,7 +217,9 @@ public:
         out += strings();
         out += type_decls();
         out += helpers();
-        for (const Function& f : p_.fns) out += (f.is_extern ? extern_head(f) : fn_head(f)) + ";\n";
+        for (const Function& f : p_.fns) {
+            if (f.slot < 0) out += (f.is_extern ? extern_head(f) : fn_head(f)) + ";\n";  // у `@slot` символа нет
+        }
         for (const Function& f : p_.fns) {
             if (f.exported) out += export_head(f) + " __asm__(" + cstr(f.c_name) + ");\n";
         }
@@ -235,8 +257,12 @@ public:
         if (mode == ast::ParamMode::Ref) return "const " + ct(t) + "*";
         if (mode == ast::ParamMode::Mut) return (t->kind == TK::List ? ct(t->elem) : ct(t)) + "*";
         if (t->kind == TK::Str) return "const char*";
-        if (t->kind == TK::Slice) return "const " + ct(t->elem) + "*";
-        if (t->kind == TK::Optional) return t->elem->kind == TK::CFn ? ct(t->elem) : "void*";  // ?H, ?extern fn — или NULL
+        if (t->kind == TK::Slice) return t->elem->kind == TK::Str ? "const char* const*" : "const " + ct(t->elem) + "*";
+        if (t->kind == TK::Optional) {  // ?H, ?extern fn, ?&T (Р62), ?str — или NULL
+            if (t->elem->kind == TK::Ref) return "const " + ct(t->elem->elem) + "*";
+            if (t->elem->kind == TK::Str) return "const char*";
+            return t->elem->kind == TK::CFn ? ct(t->elem) : "void*";
+        }
         return ct(t);
     }
 
@@ -325,7 +351,7 @@ private:
         if (!t || seen_.count(t)) return;
         seen_.insert(t);
         switch (t->kind) {
-            case TK::List: case TK::Slice: add_type(t->elem); break;
+            case TK::List: case TK::Slice: case TK::Array: case TK::Ref: add_type(t->elem); break;
             case TK::Map:
                 add_type(t->key);
                 add_type(t->elem);
@@ -351,10 +377,8 @@ private:
                 break;
             default: break;
         }
-        if (is_composite(t)) {
-            types_.push_back(t);
-            mangled_.insert(mangle(t));
-        }
+        if (is_composite(t)) types_.push_back(t);
+        if (is_composite(t) || niche(t)) mangled_.insert(mangle(t));  // ?H — для pop и get
     }
 
     void collect(const Function& f) {
@@ -387,12 +411,29 @@ private:
 
     std::string type_decls() {
         std::string out;
-        for (const Type* t : types_) out += "typedef struct " + ctype(t) + " " + ctype(t) + ";\n";
+        for (const Type* t : types_) {
+            const char* tag = t->kind == TK::Struct && t->sdef->union_ ? "union " : "struct ";
+            out += "typedef " + std::string(tag) + ctype(t) + " " + ctype(t) + ";\n";
+        }
         // Указатель на функцию C (Р61): типы параметров здесь могут быть неполными.
         for (const Type* t : cfns_) out += cfn_typedef(t, ctype(t), ctype);
         out += "\n";
         for (const Type* t : types_) out += type_def(t);
         return out;
+    }
+
+    // Поле заимствующей структуры в раскладке C (Р62): строка — const char*,
+    // срез и ссылка — указатель на элементы, ?-указатель — указатель или NULL.
+    static std::string c_field_ctype(const Type* t) {
+        switch (t->kind) {
+            case TK::Str: return "const char*";
+            case TK::Slice: return t->elem->kind == TK::Str ? "const char**" : ctype(t->elem) + "*";
+            case TK::Ref: return ctype(t->elem) + "*";
+            case TK::Optional:
+                if (t->elem->kind == TK::Ref) return ctype(t->elem->elem) + "*";
+                return t->elem->kind == TK::CFn ? ctype(t->elem) : "void*";
+            default: return ctype(t);
+        }
     }
 
     static std::string cfn_typedef(const Type* t, const std::string& name, const CType& ct) {
@@ -405,7 +446,7 @@ private:
 
     std::string type_def(const Type* t) {
         std::string n = ctype(t);
-        std::string out = "struct " + n + " {\n";
+        std::string out = (t->kind == TK::Struct && t->sdef->union_ ? "union " : "struct ") + n + " {\n";
         switch (t->kind) {
             case TK::List: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n    int64_t cap;\n"; break;
             case TK::Map:  // Р54: пары в порядке вставки и хэш-индекс позиций (позиция + 1, 0 — пусто)
@@ -413,6 +454,8 @@ private:
                        "* vals;\n    int64_t len;\n    int64_t cap;\n    int64_t* slots;\n    int64_t nslots;\n";
                 break;
             case TK::Slice: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n"; break;
+            // Массив C (Р62) — в обёртке: так его можно присвоить; раскладка — как у массива.
+            case TK::Array: out += "    " + ctype(t->elem) + " v[" + std::to_string(t->len) + "];\n"; break;
             case TK::Optional: out += "    bool has;\n    " + ctype(t->elem) + " value;\n"; break;
             case TK::Result:
                 out += "    bool is_err;\n";
@@ -421,7 +464,10 @@ private:
                 break;
             case TK::Struct:
                 if (t->sdef->fields.empty()) out += "    char dp_empty;\n";
-                for (const sema::FieldDef& f : t->sdef->fields) out += "    " + ctype(f.type) + " f_" + f.name + ";\n";
+                // Р62: у заимствующей структуры поля — сразу в раскладке C.
+                for (const sema::FieldDef& f : t->sdef->fields) {
+                    out += "    " + (sema::c_borrowing(t) ? c_field_ctype(f.type) : ctype(f.type)) + " f_" + f.name + ";\n";
+                }
                 break;
             case TK::Enum:
                 out += "    uint32_t tag;\n";
@@ -481,6 +527,7 @@ private:
     std::string eq_def(const Type* t) {
         std::string n = ctype(t), m = mangle(t);
         std::string b = "DP_INLINE bool dp_eq__" + m + "(const " + n + "* a, const " + n + "* b) {\n";
+        if (sema::c_borrowing(t)) return b + "    (void)a;\n    (void)b;\n    return false;\n}\n\n";  // Р62: не сравнивается
         switch (t->kind) {
             case TK::List: case TK::Slice:
                 b += "    if (a->len != b->len) return false;\n    for (int64_t i = 0; i < a->len; i++) {\n        if (!" +
@@ -492,7 +539,13 @@ private:
                 break;
             case TK::Result: b += "    (void)a;\n    (void)b;\n    return true;\n"; break;
             case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;  // не сравниваются (Р54)
+            // Р62: массив и объединение dpl не сравнивает — функция нужна для сборки C.
+            case TK::Array: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
             case TK::Struct:
+                if (t->sdef->union_) {
+                    b += "    (void)a;\n    (void)b;\n    return false;\n";
+                    break;
+                }
                 if (t->sdef->fields.empty()) b += "    (void)a;\n    (void)b;\n";
                 for (const sema::FieldDef& f : t->sdef->fields) {
                     b += "    if (!" + eq_of(f.type, "&a->f_" + f.name, "&b->f_" + f.name) + ") return false;\n";
@@ -535,6 +588,7 @@ private:
     std::string lt_def(const Type* t) {
         std::string n = ctype(t), m = mangle(t);
         std::string b = "DP_INLINE bool dp_lt__" + m + "(const " + n + "* a, const " + n + "* b) {\n";
+        if (sema::c_borrowing(t)) return b + "    (void)a;\n    (void)b;\n    return false;\n}\n\n";
         switch (t->kind) {
             case TK::List: case TK::Slice:
                 b += "    int64_t n = a->len < b->len ? a->len : b->len;\n    for (int64_t i = 0; i < n; i++) {\n";
@@ -542,8 +596,14 @@ private:
                 b += "        if (" + lt_of(t->elem, "&b->ptr[i]", "&a->ptr[i]") + ") return false;\n";
                 b += "    }\n    return a->len < b->len;\n";
                 break;
-            case TK::Optional: case TK::Result: case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
+            case TK::Optional: case TK::Result: case TK::Map: case TK::Array:
+                b += "    (void)a;\n    (void)b;\n    return false;\n";
+                break;
             case TK::Struct: {
+                if (t->sdef->union_) {  // Р62: объединение не упорядочивается
+                    b += "    (void)a;\n    (void)b;\n    return false;\n";
+                    break;
+                }
                 std::vector<std::pair<const Type*, std::string>> parts;
                 for (const sema::FieldDef& f : t->sdef->fields) parts.push_back({f.type, "f_" + f.name});
                 if (parts.empty()) b += "    (void)a;\n    (void)b;\n";
@@ -735,15 +795,16 @@ private:
         }
         b += "    m->len = 0;\n    if (m->nslots > 0) memset(m->slots, 0, (size_t)m->nslots * sizeof(int64_t));\n}\n\n";
         if (mangled_.count("O_" + vm)) {
-            std::string o = "dp_O_" + vm;
+            std::string o = niche_elem(t->elem) ? ctype(t->elem) : "dp_O_" + vm;
             b += "DP_INLINE " + o + " dp_mget__" + m + "(const " + n + "* m, const " + kc + "* key) {\n";
             b += "    " + o + " r = {0};\n    int64_t p = dp_mfind__" + m + "(m, key);\n";
-            b += "    if (p >= 0) {\n        r.has = true;\n        r.value = " + copy_of(t->elem, "m->vals[p]") +
-                 ";\n    }\n    return r;\n}\n\n";
+            b += "    if (p >= 0) {\n        " + set_some(t->elem, "r", copy_of(t->elem, "m->vals[p]"), "        ") +
+                 "\n    }\n    return r;\n}\n\n";
             // Удаление сохраняет порядок остальных пар: сдвиг и индекс заново — O(n).
             b += "DP_INLINE " + o + " dp_mremove__" + m + "(" + n + "* m, " + kc + " key, const char* loc) {\n";
             b += "    " + o + " r = {0};\n    int64_t p = dp_mfind__" + m + "(m, &key);\n" + drop_stmt(t->key, "key");
-            b += "    if (p < 0) return r;\n    r.has = true;\n    r.value = m->vals[p];\n" + drop_stmt(t->key, "m->keys[p]");
+            b += "    if (p < 0) return r;\n    " + set_some(t->elem, "r", "m->vals[p]", "    ") + "\n" +
+                 drop_stmt(t->key, "m->keys[p]");
             b += "    memmove(&m->keys[p], &m->keys[p + 1], (size_t)(m->len - 1 - p) * sizeof(" + kc + "));\n";
             b += "    memmove(&m->vals[p], &m->vals[p + 1], (size_t)(m->len - 1 - p) * sizeof(" + vc + "));\n";
             b += "    m->len--;\n    dp_mindex__" + m + "(m, loc);\n    return r;\n}\n\n";
@@ -767,8 +828,10 @@ private:
         b += "        l->ptr = (" + ec + "*)dp_realloc(l->ptr, nc, sizeof(" + ec + "), loc);\n        l->cap = nc;\n    }\n";
         b += "    l->ptr[l->len++] = v;\n}\n\n";
         if (mangled_.count("O_" + e)) {
-            b += "DP_INLINE dp_O_" + e + " dp_pop__" + m + "(" + n + "* l) {\n    dp_O_" + e + " r = {0};\n";
-            b += "    if (l->len > 0) {\n        r.has = true;\n        r.value = l->ptr[--l->len];\n    }\n    return r;\n}\n\n";
+            std::string o = niche_elem(t->elem) ? ec : "dp_O_" + e;
+            b += "DP_INLINE " + o + " dp_pop__" + m + "(" + n + "* l) {\n    " + o + " r = {0};\n";
+            b += "    if (l->len > 0) {\n        " + set_some(t->elem, "r", "l->ptr[--l->len]", "        ") +
+                 "\n    }\n    return r;\n}\n\n";
         }
         b += "DP_INLINE void dp_insert__" + m + "(" + n + "* l, int64_t i, " + ec + " v, const char* loc) {\n";
         b += "    dp_check_insert(i, l->len, loc);\n    dp_push__" + m + "(l, v, loc);\n";
@@ -881,6 +944,13 @@ private:
                         break;
                     }
                     std::string ptr = fresh("dp_p");
+                    if (t->kind == TK::Array) {  // Р62: длина — в типе
+                        line(ctype(t->elem) + "* " + ptr + " = &(" + r.expr + ").v[dp_check_index(" + idx + ", " +
+                             std::to_string(t->len) + ", " + loc_ + ")];");
+                        r.expr = "(*" + ptr + ")";
+                        r.type = t->elem;
+                        break;
+                    }
                     line(ctype(t->elem) + "* " + ptr + " = &(" + r.expr + ").ptr[dp_check_index(" + idx + ", (" +
                          r.expr + ").len, " + loc_ + ")];");
                     r.expr = "(*" + ptr + ")";
@@ -893,7 +963,10 @@ private:
                     r.type = payload_type(t, pr.index, pr.sub);
                     break;
                 }
-                case ProjKind::Unwrap: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
+                case ProjKind::Unwrap:
+                    if (!niche(t)) r.expr = "(" + r.expr + ").value";  // ?H — сам указатель
+                    r.type = t->elem;
+                    break;
                 case ProjKind::ResultValue: r.expr = "(" + r.expr + ").value"; r.type = t->elem; break;
                 case ProjKind::ResultError: r.expr = "(" + r.expr + ").err"; r.type = t->err; break;
                 case ProjKind::MapValue: {  // Р54
@@ -975,6 +1048,7 @@ private:
     std::string cast(const Rvalue& rv);
     std::string intrinsic(const Rvalue& rv);
     std::string extern_call(const Rvalue& rv, const Function& g);
+    std::string borrowing_struct(const Rvalue& rv);
     struct CParam {
         ast::ParamMode mode;
         const Type* type;
@@ -1090,7 +1164,7 @@ std::string FnEmitter::cast(const Rvalue& rv) {
     const Type* to = rv.type;
     std::string ct = ctype(to);
     switch (rv.cast) {
-        case CastKind::Widen: return "((" + ct + ")" + a + ")";
+        case CastKind::Widen: case CastKind::RefUp: return "((" + ct + ")" + a + ")";
         case CastKind::Wrap:
             if (sema::is_signed(to)) return "((" + ct + ")dp_sbits((uint64_t)" + a + ", " + bits(to) + "))";
             return "((" + ct + ")dp_ubits((uint64_t)" + a + ", " + bits(to) + "))";
@@ -1154,7 +1228,13 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
     std::vector<std::string> ops;
     for (const Operand& o : rv.ops) ops.push_back(operand(o, false));
     switch (rv.intrinsic) {
-        case Intrinsic::Len: return "((int64_t)(" + ops[0] + ").len)";
+        case Intrinsic::CArenaMark: return "dp_carena_mark()";  // Р62
+        case Intrinsic::CArenaRelease: return "(dp_carena_release(" + ops[0] + "), (void)0)";
+        case Intrinsic::Len: {
+            const Type* t = op_type(rv.ops[0]);
+            if (t->kind == TK::Array) return "((void)" + ops[0] + ", (int64_t)" + std::to_string(t->len) + ")";
+            return "((int64_t)(" + ops[0] + ").len)";
+        }
         case Intrinsic::Repeat: {
             const Type* nt = op_type(rv.ops[1]);
             std::string n = fresh("dp_n");
@@ -1244,11 +1324,21 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         case RvKind::Unary: return unary(rv);
         case RvKind::Cast: return cast(rv);
         case RvKind::MakeStruct: {
+            if (sema::c_borrowing(rv.type)) return borrowing_struct(rv);
+            const sema::StructDef* sd = rv.type->sdef;
+            if (sd->union_) {  // Р62: только заданное поле; остальное — нули
+                std::string v = rv.variant > 0 ? operand(rv.ops[rv.variant - 1], true) : "";
+                std::string r = fresh("dp_r");
+                line(ctype(rv.type) + " " + r + ";");
+                line("memset(&" + r + ", 0, sizeof " + r + ");");
+                if (rv.variant > 0) line(r + ".f_" + sd->fields[rv.variant - 1].name + " = " + v + ";");
+                return r;
+            }
             std::vector<std::string> ops;
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
             std::string r = fresh("dp_r");
-            line(ctype(rv.type) + " " + r + " = {0};");
-            const sema::StructDef* sd = rv.type->sdef;
+            line(ctype(rv.type) + " " + r + ";");
+            line("memset(&" + r + ", 0, sizeof " + r + ");");
             for (size_t k = 0; k < ops.size() && k < sd->fields.size(); k++) {
                 line(r + ".f_" + sd->fields[k].name + " = " + ops[k] + ";");
             }
@@ -1272,6 +1362,10 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
             std::string r = fresh("dp_r"), ec = ctype(rv.type->elem);
             line(ctype(rv.type) + " " + r + " = {0};");
+            if (rv.type->kind == TK::Array) {  // Р62: на месте, без памяти
+                for (size_t k = 0; k < ops.size(); k++) line(r + ".v[" + std::to_string(k) + "] = " + ops[k] + ";");
+                return r;
+            }
             if (!ops.empty()) {
                 std::string n = std::to_string(ops.size());
                 line(r + ".ptr = (" + ec + "*)dp_alloc(" + n + ", sizeof(" + ec + "), " + loc_ + ");");
@@ -1283,13 +1377,14 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         }
         case RvKind::MakeSome: {
             std::string v = operand(rv.ops[0], true);
+            if (niche(rv.type)) return v;
             std::string r = fresh("dp_r");
             line(ctype(rv.type) + " " + r + " = {0};");
             line(r + ".has = true;");
             line(r + ".value = " + v + ";");
             return r;
         }
-        case RvKind::MakeNone: return "((" + ctype(rv.type) + "){0})";
+        case RvKind::MakeNone: return niche(rv.type) ? "((" + ctype(rv.type) + ")NULL)" : "((" + ctype(rv.type) + "){0})";
         case RvKind::MakeOk: case RvKind::MakeErr: {
             std::string v = rv.ops.empty() ? "" : operand(rv.ops[0], true);
             std::string r = fresh("dp_r");
@@ -1306,12 +1401,14 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             std::string lo = operand(rv.ops[0], false);
             std::string hi = rv.ops.size() > 1 ? operand(rv.ops[1], false) : "";
             Lv base = place(rv.place);
-            std::string h = hi.empty() ? "(" + base.expr + ").len" : "(int64_t)" + hi;
+            bool arr = base.type->kind == TK::Array;  // Р62: элементы — v, длина — в типе
+            std::string len = arr ? "(int64_t)" + std::to_string(base.type->len) : "(" + base.expr + ").len";
+            std::string h = hi.empty() ? len : "(int64_t)" + hi;
             if (base.type->kind == TK::Str) return "dp_str_slice(" + base.expr + ", (int64_t)" + lo + ", " + h + ", " + loc_ + ")";
             std::string r = fresh("dp_r");
-            line("dp_check_slice((int64_t)" + lo + ", " + h + ", (" + base.expr + ").len, " + loc_ + ");");
+            line("dp_check_slice((int64_t)" + lo + ", " + h + ", " + len + ", " + loc_ + ");");
             line(ctype(rv.type) + " " + r + " = {0};");
-            line(r + ".ptr = (" + base.expr + ").ptr + (int64_t)" + lo + ";");
+            line(r + ".ptr = (" + base.expr + (arr ? ").v" : ").ptr") + " + (int64_t)" + lo + ";");
             line(r + ".len = " + h + " - (int64_t)" + lo + ";");
             return r;
         }
@@ -1350,8 +1447,14 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
         }
         case RvKind::Intrinsic: return intrinsic(rv);
         case RvKind::Tag: return "((uint32_t)(" + place(rv.place).expr + ").tag)";
-        case RvKind::IsSome: return "((" + place(rv.place).expr + ").has)";
+        case RvKind::IsSome: {
+            Lv o = place(rv.place);
+            return niche(o.type) ? "((" + o.expr + ") != NULL)" : "((" + o.expr + ").has)";
+        }
         case RvKind::IsOk: return "(!(" + place(rv.place).expr + ").is_err)";
+        case RvKind::Zero: return is_composite(rv.type) || rv.type->kind == TK::Str ? "((" + ctype(rv.type) + "){0})"
+                                                                                   : "((" + ctype(rv.type) + ")0)";
+        case RvKind::AddrOf: return "(&" + place(rv.place).expr + ")";  // Р62
     }
     error("unknown rvalue");
     return "0";
@@ -1456,10 +1559,79 @@ std::string FnEmitter::run() {
 // []T и &mut List[T] — указатель на элементы, &T и &mut T — указатель,
 // ?H — дескриптор или NULL. Строка и дескриптор из C проверяются: NULL
 // там, где он не ожидается, — ловушка.
+// Заимствующая структура (Р62) — сразу в раскладке C: строка — копия с
+// нулём в арене вызова, срез — указатель на элементы (срез строк — массив
+// копий в арене), `?`-указатель — указатель или NULL; счётчик @count —
+// длина среза (проверка диапазона и равенства длин у общего счётчика).
+std::string FnEmitter::borrowing_struct(const Rvalue& rv) {
+    const sema::StructDef* sd = rv.type->sdef;
+    std::string r = fresh("dp_r");
+    line(ctype(rv.type) + " " + r + ";");
+    line("memset(&" + r + ", 0, sizeof " + r + ");");
+    std::vector<std::string> lens(sd->fields.size());
+    for (size_t k = 0; k < rv.ops.size() && k < sd->fields.size(); k++) {
+        const Type* ft = sd->fields[k].type;
+        const Operand& o = rv.ops[k];
+        std::string v = operand(o, false);
+        std::string f = r + ".f_" + sd->fields[k].name;
+        if (ft->kind == TK::Str) {
+            line(f + " = dp_carena_str(" + v + ", " + loc_ + ");");
+            if (o.kind == OpKind::Move) line(drop_of(ft, v));  // временное отдало байты арене
+        } else if (ft->kind == TK::Slice) {
+            std::string sv = fresh("dp_sl");
+            line(ctype(ft) + " " + sv + " = " + v + ";");
+            lens[k] = sv + ".len";
+            if (ft->elem->kind == TK::Str) {
+                line(f + " = (const char**)dp_carena_alloc(" + sv + ".len, sizeof(const char*), " + loc_ + ");");
+                line("for (int64_t i = 0; i < " + sv + ".len; i++) " + f + "[i] = dp_carena_str(" + sv + ".ptr[i], " +
+                     loc_ + ");");
+            } else {
+                line(f + " = " + sv + ".len ? " + sv + ".ptr : NULL;");
+            }
+        } else {
+            line(f + " = " + v + ";");
+        }
+    }
+    std::vector<int> first(sd->fields.size(), -1);  // счётчик → первый срез с ним
+    for (size_t k = 0; k < sd->fields.size(); k++) {
+        int c = sd->fields[k].count;
+        if (c < 0 || lens[k].empty()) continue;
+        const sema::FieldDef& cf = sd->fields[static_cast<size_t>(c)];
+        if (first[static_cast<size_t>(c)] >= 0) {
+            const sema::FieldDef& other = sd->fields[static_cast<size_t>(first[static_cast<size_t>(c)])];
+            line("if (" + lens[k] + " != " + lens[static_cast<size_t>(first[static_cast<size_t>(c)])] + ") dp_trapf(" + loc_ +
+                 ", \"slices '%s' and '%s' share the count '%s' but have different lengths\", " + cstr(other.name) + ", " +
+                 cstr(sd->fields[k].name) + ", " + cstr(cf.name) + ");");
+            continue;
+        }
+        first[static_cast<size_t>(c)] = static_cast<int>(k);
+        int b = sema::int_bits(cf.type);
+        uint64_t max = sema::is_signed(cf.type) ? (b >= 64 ? INT64_MAX : (uint64_t{1} << (b - 1)) - 1)
+                                                : (b >= 64 ? UINT64_MAX : (uint64_t{1} << b) - 1);
+        line("if ((uint64_t)" + lens[k] + " > UINT64_C(" + std::to_string(max) + ")) dp_trapf(" + loc_ +
+             ", \"a slice of %lld elements does not fit the count '%s'\", (long long)" + lens[k] + ", " + cstr(cf.name) + ");");
+        line(r + ".f_" + cf.name + " = (" + ctype(cf.type) + ")" + lens[k] + ";");
+    }
+    return r;
+}
+
 std::string FnEmitter::extern_call(const Rvalue& rv, const Function& g) {
     std::vector<CParam> params;
     for (uint32_t i = 0; i < g.param_count; i++) params.push_back(CParam{Emitter::mode_of(g.locals[i]), g.locals[i].type});
-    return c_call(rv, params, g.ret, Emitter::extern_name(g), "C function '" + g.c_name + "'", g.c_name);
+    std::string what = "C function '" + g.c_name + "'";
+    if (g.slot < 0) return c_call(rv, params, g.ret, Emitter::extern_name(g), what, g.c_name);
+    // `@slot(N)` (Р63): первое слово объекта — адрес таблицы, вызов — её запись N.
+    std::string obj = operand(rv.args[0].op, false);
+    std::string table = fresh("dp_t"), n = std::to_string(g.slot);
+    line("const dp_slot_fn* " + table + " = *(const dp_slot_fn* const*)" + obj + ";");
+    line("if (!" + table + "[" + n + "]) dp_trapf(" + loc_ + ", \"%s: entry %d of the table is NULL\", " + cstr(what) + ", " + n +
+         ");");
+    std::string type = Emitter::c_result_type(g.ret) + " (*)(";
+    for (uint32_t i = 0; i < g.param_count; i++) {
+        type += (i ? ", " : "") + Emitter::c_param_type(Emitter::mode_of(g.locals[i]), g.locals[i].type);
+    }
+    type += std::string(g.param_count == 0 ? "void" : "") + ")";
+    return c_call(rv, params, g.ret, "((" + type + ")" + table + "[" + n + "])", what, g.c_name);
 }
 
 // what — кто вызван, для ловушек: «C function 'SDL_Init'»; c_name — имя
@@ -1471,7 +1643,9 @@ std::string FnEmitter::c_call(const Rvalue& rv, const std::vector<CParam>& param
         const Arg& a = rv.args[i];
         if (a.kind != Arg::Kind::Value) {
             Lv lv = place(a.place);
-            args.push_back(params[i].type->kind == TK::List ? "(" + lv.expr + ").ptr" : "&" + lv.expr);
+            // Пустой список — NULL: так C отличает «только узнать число» (Р62).
+            args.push_back(params[i].type->kind == TK::List ? "((" + lv.expr + ").len ? (" + lv.expr + ").ptr : NULL)"
+                                                            : "&" + lv.expr);
             continue;
         }
         std::string v = operand(a.op, false);
@@ -1481,14 +1655,24 @@ std::string FnEmitter::c_call(const Rvalue& rv, const std::vector<CParam>& param
             line("char* " + c + " = dp_str_to_c(" + v + ", " + loc_ + ");");
             args.push_back(c);
             frees.push_back(c);
-        } else if (t->kind == TK::Slice) {
-            args.push_back("(" + v + ").ptr");
-        } else if (t->kind == TK::Optional) {
-            std::string o = fresh("dp_o");
+        } else if (t->kind == TK::Optional && t->elem->kind == TK::Str) {  // none — NULL
+            std::string o = fresh("dp_o"), c = fresh("dp_c");
             line(ctype(t) + " " + o + " = " + v + ";");
-            args.push_back("(" + o + ".has ? " + o + ".value : NULL)");
+            line("char* " + c + " = " + o + ".has ? dp_str_to_c(" + o + ".value, " + loc_ + ") : NULL;");
+            args.push_back(c);
+            frees.push_back(c);
+        } else if (t->kind == TK::Slice && t->elem->kind == TK::Str) {  // Р62: массив строк C в арене
+            std::string sv = fresh("dp_sl"), a = fresh("dp_a");
+            line(ctype(t) + " " + sv + " = " + v + ";");
+            line("const char** " + a + " = (const char**)dp_carena_alloc(" + sv + ".len, sizeof(const char*), " + loc_ + ");");
+            line("for (int64_t i = 0; i < " + sv + ".len; i++) " + a + "[i] = dp_carena_str(" + sv + ".ptr[i], " + loc_ + ");");
+            args.push_back(a);
+        } else if (t->kind == TK::Slice) {  // пустой срез — NULL
+            std::string sv = fresh("dp_sl");
+            line(ctype(t) + " " + sv + " = " + v + ";");
+            args.push_back("(" + sv + ".len ? " + sv + ".ptr : NULL)");
         } else {
-            args.push_back(v);
+            args.push_back(v);  // и ?H, ?extern fn, ?&T — указатель или NULL
         }
     }
     std::string call = callee + "(";
@@ -1511,10 +1695,10 @@ std::string FnEmitter::c_call(const Rvalue& rv, const std::vector<CParam>& param
         line("if (!" + r + ") dp_trapf(" + loc_ + ", \"%s returned NULL\", " + cstr(what) + ");");
         return r;
     }
-    if (t->kind == TK::Optional) {
+    if (t->kind == TK::Optional && t->elem->kind == TK::Str) {
         std::string o = fresh("dp_o");
         line(ctype(t) + " " + o + " = {0};");
-        std::string value = t->elem->kind == TK::Str ? "dp_str_from_c(" + r + ", " + cstr(c_name) + ", " + loc_ + ")" : r;
+        std::string value = "dp_str_from_c(" + r + ", " + cstr(c_name) + ", " + loc_ + ")";
         line("if (" + r + ") {\n            " + o + ".has = true;\n            " + o + ".value = " + value + ";\n        }");
         return o;
     }
@@ -1547,12 +1731,7 @@ std::string Emitter::export_wrapper(const Function& f) {
         } else if (t->kind == TK::Handle || t->kind == TK::CFn) {
             not_null();
             args.push_back(a);
-        } else if (t->kind == TK::Optional) {  // ?H, ?extern fn: NULL — none
-            std::string o = "o" + std::to_string(i);
-            out += "    " + ctype(t) + " " + o + " = {0};\n    if (" + a + ") {\n        " + o + ".has = true;\n        " + o +
-                   ".value = " + a + ";\n    }\n";
-            args.push_back(o);
-        } else {
+        } else {  // и ?H, ?extern fn: NULL — none
             args.push_back(a);
         }
     }
@@ -1562,7 +1741,6 @@ std::string Emitter::export_wrapper(const Function& f) {
     out += "    DP_CALL_CHECK(" + where + ");\n";
     if (f.ret->kind == TK::Void) return out + "    " + call + ";\n}\n\n";
     out += "    " + ctype(f.ret) + " r = " + call + ";\n";
-    if (f.ret->kind == TK::Optional) return out + "    return r.has ? r.value : NULL;\n}\n\n";
     return out + "    return r;\n}\n\n";
 }
 
@@ -1578,7 +1756,7 @@ std::string Emitter::header() {
     std::function<void(const Type*)> need = [&](const Type* t) {
         if (!t || seen.count(t)) return;
         seen.insert(t);
-        if (t->kind == TK::Optional) need(t->elem);
+        if (t->kind == TK::Optional || t->kind == TK::Array) need(t->elem);
         if (t->kind == TK::Struct) {
             for (const sema::FieldDef& fd : t->sdef->fields) need(fd.type);
             structs.push_back(t);
@@ -1599,7 +1777,8 @@ std::string Emitter::header() {
         return c_word(name_count[d->name] > 1 ? d->module->name + "_" + d->name : d->name);
     };
     hct = [&](const Type* t) -> std::string {
-        if (t->kind == TK::Struct) return "struct " + struct_name(t);
+        if (t->kind == TK::Optional && t->elem->kind == TK::CFn) t = t->elem;  // ?extern fn — указатель или NULL
+        if (t->kind == TK::Struct) return (t->sdef->union_ ? "union " : "struct ") + struct_name(t);
         if (t->kind == TK::CFn) return fn_names.count(t) ? fn_names[t] : "void*";
         return ctype(t);  // числа, bool, дескриптор — void*
     };
@@ -1618,12 +1797,20 @@ std::string Emitter::header() {
     out += "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n";
     // Сначала имена структур: их видят типы указателей на функции, затем
     // эти типы: их видят поля структур.
-    for (const Type* t : structs) out += "struct " + struct_name(t) + ";\n";
+    for (const Type* t : structs) out += hct(t) + ";\n";
     if (!structs.empty()) out += "\n";
     if (!fn_defs.empty()) out += fn_defs + "\n";
     for (const Type* t : structs) {
-        out += "struct " + struct_name(t) + " {\n";
-        for (const sema::FieldDef& fd : t->sdef->fields) out += "    " + hct(fd.type) + " " + c_word(fd.name) + ";\n";
+        out += hct(t) + " {\n";
+        for (const sema::FieldDef& fd : t->sdef->fields) {
+            const Type* ft = fd.type;
+            std::string dims;  // массив C (Р62): T name[N][M]
+            while (ft->kind == TK::Array) {
+                dims += "[" + std::to_string(ft->len) + "]";
+                ft = ft->elem;
+            }
+            out += "    " + hct(ft) + " " + c_word(fd.name) + dims + ";\n";
+        }
         out += "};\n\n";
     }
     for (const Function* f : exported) {

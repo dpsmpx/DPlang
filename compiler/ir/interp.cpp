@@ -7,6 +7,7 @@
 // (kMaxFrames), переполнение — ловушка.
 #include "ir/interp.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cfloat>
 #include <cmath>
@@ -65,6 +66,166 @@ Value str_value(std::string s) {
     v.k = Value::K::Str;
     v.s = std::move(s);
     return v;
+}
+
+Value seq_value(uint32_t tag);
+
+// --- объединения (Р62): байты раскладки C, поле — их прочтение.
+//
+// Значение объединения — Seq: items — поля, s — байты (размер объединения).
+// tag — 0: байты верны, поля прочтены из них; n > 0 — верно поле n - 1,
+// байты под ним устарели. Выбор поля записывает верное поле в байты и
+// читает из них выбранное. Раскладка — как у C на целях dpl (64 бита,
+// little-endian): указатель — 8 байт.
+
+uint64_t c_align(const Type* t);
+
+uint64_t c_size(const Type* t) {
+    if (sema::is_integer(t)) return static_cast<uint64_t>(sema::int_bits(t) / 8);
+    switch (t->kind) {
+        case TK::F32: return 4;
+        case TK::F64: return 8;
+        case TK::Bool: return 1;
+        case TK::Array: return t->len * c_size(t->elem);
+        case TK::Struct: {
+            uint64_t size = 0, align = c_align(t);
+            for (const sema::FieldDef& f : t->sdef->fields) {
+                uint64_t fs = c_size(f.type), fa = c_align(f.type);
+                if (t->sdef->union_) {
+                    size = std::max(size, fs);
+                } else {
+                    size = (size + fa - 1) / fa * fa + fs;
+                }
+            }
+            return (size + align - 1) / align * align;
+        }
+        default: return 8;  // дескриптор, указатель на функцию
+    }
+}
+
+uint64_t c_align(const Type* t) {
+    if (t->kind == TK::Array) return c_align(t->elem);
+    if (t->kind == TK::Struct) {
+        uint64_t a = 1;
+        for (const sema::FieldDef& f : t->sdef->fields) a = std::max(a, c_align(f.type));
+        return a;
+    }
+    return c_size(t);
+}
+
+void union_sync(Value& u, const Type* t);
+
+void encode(const Value& v0, const Type* t, std::string& bytes, uint64_t off) {
+    if (sema::is_integer(t) || t->kind == TK::Bool || t->kind == TK::Handle || t->kind == TK::CFn) {
+        uint64_t n = c_size(t);
+        for (uint64_t k = 0; k < n; k++) bytes[off + k] = static_cast<char>((v0.i >> (8 * k)) & 0xff);
+        return;
+    }
+    if (t->kind == TK::F32) {
+        float f = static_cast<float>(v0.f);
+        std::memcpy(&bytes[off], &f, 4);
+        return;
+    }
+    if (t->kind == TK::F64) {
+        std::memcpy(&bytes[off], &v0.f, 8);
+        return;
+    }
+    if (t->kind == TK::Array) {
+        uint64_t es = c_size(t->elem);
+        for (uint64_t k = 0; k < t->len && k < v0.items.size(); k++) encode(v0.items[k], t->elem, bytes, off + k * es);
+        return;
+    }
+    if (t->kind == TK::Struct && t->sdef->union_) {
+        Value v = v0;
+        union_sync(v, t);
+        bytes.replace(off, v.s.size(), v.s);
+        return;
+    }
+    if (t->kind == TK::Struct) {
+        uint64_t at = 0;
+        for (size_t k = 0; k < t->sdef->fields.size() && k < v0.items.size(); k++) {
+            const Type* ft = t->sdef->fields[k].type;
+            uint64_t fa = c_align(ft);
+            at = (at + fa - 1) / fa * fa;
+            encode(v0.items[k], ft, bytes, off + at);
+            at += c_size(ft);
+        }
+    }
+}
+
+Value decode(const std::string& bytes, uint64_t off, const Type* t) {
+    if (sema::is_integer(t) || t->kind == TK::Handle || t->kind == TK::CFn) {
+        uint64_t n = c_size(t), v = 0;
+        for (uint64_t k = 0; k < n; k++) v |= static_cast<uint64_t>(static_cast<uint8_t>(bytes[off + k])) << (8 * k);
+        if (sema::is_signed(t) && n < 8 && (v >> (8 * n - 1)) & 1) v |= ~uint64_t{0} << (8 * n);  // знак
+        return int_value(v);
+    }
+    if (t->kind == TK::Bool) return bool_value(bytes[off] != 0);
+    if (t->kind == TK::F32) {
+        float f;
+        std::memcpy(&f, &bytes[off], 4);
+        return float_value(static_cast<double>(f));
+    }
+    if (t->kind == TK::F64) {
+        double f;
+        std::memcpy(&f, &bytes[off], 8);
+        return float_value(f);
+    }
+    Value v = seq_value(0);
+    if (t->kind == TK::Array) {
+        uint64_t es = c_size(t->elem);
+        for (uint64_t k = 0; k < t->len; k++) v.items.push_back(decode(bytes, off + k * es, t->elem));
+        return v;
+    }
+    if (t->kind == TK::Struct && t->sdef->union_) {
+        v.s = bytes.substr(off, c_size(t));
+        for (const sema::FieldDef& f : t->sdef->fields) v.items.push_back(decode(v.s, 0, f.type));
+        return v;
+    }
+    uint64_t at = 0;
+    for (const sema::FieldDef& f : t->sdef->fields) {
+        uint64_t fa = c_align(f.type);
+        at = (at + fa - 1) / fa * fa;
+        v.items.push_back(decode(bytes, off + at, f.type));
+        at += c_size(f.type);
+    }
+    return v;
+}
+
+// Байты объединения — по верному полю (tag).
+void union_sync(Value& u, const Type* t) {
+    if (u.s.size() != c_size(t)) u.s.assign(c_size(t), '\0');
+    if (u.tag > 0 && u.tag <= u.items.size()) encode(u.items[u.tag - 1], t->sdef->fields[u.tag - 1].type, u.s, 0);
+}
+
+// Выбор поля field: верное — оно, прочтённое из байтов.
+void union_select(Value& u, const Type* t, uint32_t field) {
+    if (u.tag == field + 1) return;
+    union_sync(u, t);
+    u.items[field] = decode(u.s, 0, t->sdef->fields[field].type);
+    u.tag = field + 1;
+}
+
+// Ноль типа (Р62): пропущенное поле `@c`.
+Value zero_value(const Type* t) {
+    if (sema::is_float(t)) return float_value(0);
+    if (sema::is_integer(t)) return int_value(0);
+    switch (t->kind) {
+        case TK::Bool: return bool_value(false);
+        case TK::Str: return str_value("");
+        case TK::Array: {
+            Value v = seq_value(0);
+            for (uint64_t i = 0; i < t->len; i++) v.items.push_back(zero_value(t->elem));
+            return v;
+        }
+        case TK::Struct: {
+            Value v = seq_value(0);
+            for (const sema::FieldDef& f : t->sdef->fields) v.items.push_back(zero_value(f.type));
+            if (t->sdef->union_) v.s.assign(c_size(t), '\0');
+            return v;
+        }
+        default: return seq_value(0);  // ?T — none, срез — пустой
+    }
 }
 
 Value seq_value(uint32_t tag) {
@@ -341,13 +502,18 @@ private:
                 return Ref{};
             }
             switch (pr.kind) {
-                case ProjKind::Field:
+                case ProjKind::Field: {
                     if (v.k != Value::K::Seq || pr.index >= v.items.size()) {
                         internal("field of a non-struct");
                         return Ref{};
                     }
+                    // Р62: поле объединения — прочтение его байтов.
+                    Place prefix{pl.local, std::vector<Proj>(pl.proj.begin(), pl.proj.begin() + (&pr - pl.proj.data()))};
+                    const Type* st = place_type(p_, f, prefix);
+                    if (st && st->kind == TK::Struct && st->sdef->union_) union_select(v, st, pr.index);
                     r.v = &v.items[pr.index];
                     break;
+                }
                 case ProjKind::Index: {
                     const Value& iv = fr.locals[pr.index];
                     if (iv.k != Value::K::Int) {
@@ -582,9 +748,19 @@ private:
                 Value v = seq_value(tag);
                 for (const Operand& o : rv.ops) v.items.push_back(take(fr, o));
                 if (v.items.size() > kMaxLen) trap("out of memory");
+                if (rv.kind == RvKind::MakeStruct && rv.type->kind == TK::Struct && rv.type->sdef->union_) {
+                    v.s.assign(c_size(rv.type), '\0');  // Р62: байты — нули, верно заданное поле
+                    v.tag = rv.variant;
+                }
                 return v;
             }
             case RvKind::MakeMap: return seq_value(0);
+            case RvKind::Zero: return zero_value(rv.type);
+            case RvKind::AddrOf: {  // Р62: ссылку читает только C, а его интерпретатор не вызывает — копия
+                Ref r = resolve(fr, rv.place);
+                if (stop_) return Value{};
+                return r.byte >= 0 ? int_value(static_cast<uint64_t>(r.byte)) : *r.v;
+            }
             case RvKind::SliceOf: return slice(fr, rv);
             case RvKind::Intrinsic: return intrinsic(fr, rv);
             case RvKind::Tag: case RvKind::IsSome: case RvKind::IsOk: {
@@ -772,7 +948,7 @@ private:
         const Type* from = op_type(fr, rv.ops[0]);
         const Type* to = rv.type;
         switch (rv.cast) {
-            case CastKind::Widen: return a;
+            case CastKind::Widen: case CastKind::RefUp: return a;
             case CastKind::Wrap: return int_value(canon(a.i, to));
             case CastKind::ToStr:
                 if (from->kind == TK::Bool) return str_value(a.i ? "true" : "false");
@@ -905,6 +1081,8 @@ private:
                 if (i >= 0) out.items.push_back(m.items[2 * static_cast<size_t>(i) + 1]);
                 return out;
             }
+            case Intrinsic::CArenaMark: return int_value(0);  // Р62: арена — только у сборки
+            case Intrinsic::CArenaRelease: return Value{};
             case Intrinsic::MapKeys: {
                 const Value& m = arg(0, s0);
                 Value out = seq_value(0);

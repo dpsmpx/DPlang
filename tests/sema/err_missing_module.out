@@ -1,5 +1,5 @@
 --- stderr ---
-err_missing_module.dpm:2:8: error[E0302]: cannot find module 'nowhere' (looked in nowhere.dpm and the standard library)
+err_missing_module.dpm:2:8: error[E0302]: cannot find module 'nowhere' (looked in nowhere.dpm, the standard library and the bindings)
    2 | import nowhere
      |        ^~~~~~~
 [exit 1]

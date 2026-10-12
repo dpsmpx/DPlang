@@ -25,6 +25,8 @@ struct FieldDef {
     Span span;
     const Type* type = nullptr;
     const ast::Expr* default_value = nullptr;
+    int count = -1;        // `@count(n)` у среза (Р62): номер поля-счётчика n
+    bool counter = false;  // поле — счётчик среза: его пишет компилятор при передаче в C
 };
 
 struct StructDef {
@@ -33,6 +35,7 @@ struct StructDef {
     bool pub = false;
     bool c = false;       // `@c`: раскладка C (Р59)
     bool linear = false;  // `@linear`: значение закрывается ровно один раз (Р57)
+    bool union_ = false;  // `@union`: поля делят память, раскладка C (Р62); c тоже true
     Span span;
     std::vector<FieldDef> fields;
     const ast::StructItem* node = nullptr;
@@ -83,6 +86,8 @@ struct FnDef {
     bool test = false;  // @test (Р50)
     bool is_extern = false;  // `extern fn` — функция C (Р59): тела нет
     std::string link;        // `@link("lib")` — библиотека C; пусто — библиотека C по умолчанию
+    int32_t slot = -1;       // `@slot(N)` (Р63): запись N таблицы первого аргумента; -1 — символ C
+    Span slot_span;
     bool exported = false;   // `@export` (Р61): функцию зовёт C под именем export_name
     std::string export_name;
     Span export_span;        // атрибут `@export` — для сообщений о символе

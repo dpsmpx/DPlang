@@ -1,0 +1,94 @@
+// spec: ffi.types ffi.struct ffi.export
+// ?H и ?extern fn — указатель C или NULL (Р62): выходной дескриптор
+// `&mut ?H`, массив дескрипторов `&mut List[?H]` по образцу Vulkan (сначала
+// число, потом массив), `?H` и `?extern fn` в поле @c-структуры, которую
+// C заполняет и возвращает; список и словарь дескрипторов. Функции C — в
+// host.c; хост проверяет раскладку C. Параметр ?str — строка C или NULL.
+extern type Device
+
+@c
+struct Info {
+    id: u32
+    on_event: ?extern fn(i32) i32
+}
+
+@c
+struct Props {
+    device: ?Device
+    id: u32
+    on_event: ?extern fn(i32) i32
+    tag: [4]u8
+}
+
+extern fn host_create(info: &Info, out: &mut ?Device) i32
+extern fn host_enumerate(count: &mut u32, out: &mut List[?Device]) i32
+extern fn host_props(device: Device, out: &mut Props)
+extern fn host_info() Info
+extern fn host_same(a: ?Device, b: ?Device) bool
+extern fn host_name(name: ?str) i32
+
+// Не вызывается: её библиотеки нет, и в сборку она не идёт (ffi.extern).
+@link("dpl_no_such_library")
+extern fn never_called() i32
+
+@export
+fn twice(x: i32) i32 {
+    return x * 2
+}
+
+fn tag(bytes: []u8) str {
+    var s = ""
+    for b in &bytes {
+        if b != 0 {
+            s = s + str(b) + " "
+        }
+    }
+    return s
+}
+
+@export
+fn handles_run() i32 {
+    var dev: ?Device = none
+    let rc = host_create(&Info { id: 7, on_event: twice }, &mut dev)
+    println("create " + str(rc) + " " + str(dev != none))
+    var n: u32 = 0
+    var devs: List[?Device] = []
+    _ = host_enumerate(&mut n, &mut devs)
+    println("count " + str(n))
+    var i: u32 = 0
+    while i < n {
+        devs.push(none)
+        i = i + 1
+    }
+    _ = host_enumerate(&mut n, &mut devs)
+    var by_id: Map[u32, Device] = []
+    var stack: List[Device] = []
+    var total: i32 = 0
+    for d in &devs {
+        if let h = d {
+            var p = Props {}
+            host_props(h, &mut p)
+            by_id[p.id] = h
+            stack.push(h)
+            println("props " + str(p.id) + " " + str(p.device != none) + " " + tag(p.tag))
+            if let f = p.on_event {
+                total = total + f(i32(p.id))
+            }
+        }
+    }
+    if let h = by_id.get(2) {
+        println("same " + str(host_same(h, devs[1])) + " " + str(host_same(h, none)))
+    }
+    if let h = stack.pop() {
+        println("pop " + str(host_same(h, devs[2])))
+    }
+    let info = host_info()
+    var has_event = false
+    if let _ = info.on_event {
+        has_event = true
+    }
+    println("info " + str(info.id) + " " + str(has_event))
+    let layer: ?str = "abc"
+    println("name " + str(host_name(none)) + " " + str(host_name(layer)) + " " + str(host_name("hello")))
+    return total
+}

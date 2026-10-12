@@ -1,0 +1,34 @@
+// spec: ffi.slot
+// @slot(N) (Р63): функция C — запись таблицы, на которую указывает первое
+// слово объекта-дескриптора, как у JNIEnv и COM. Два объекта с разными
+// таблицами; параметры и результаты по ffi.types. Таблицы — в host.c.
+extern type Obj
+
+@slot(1)
+extern fn obj_add(o: Obj, a: i32, b: i32) i32
+
+@slot(2)
+extern fn obj_name(o: Obj) str
+
+@slot(3)
+extern fn obj_set(o: Obj, v: i32, out: &mut i32)
+
+@slot(4)
+extern fn obj_find(o: Obj, name: ?str) ?Obj
+
+extern fn host_obj(which: i32) Obj
+
+@export
+fn slots_run() i32 {
+    let a = host_obj(0)
+    let b = host_obj(1)
+    println(obj_name(a) + " " + str(obj_add(a, 2, 3)) + ", " + obj_name(b) + " " + str(obj_add(b, 2, 3)))
+    var got: i32 = 0
+    obj_set(b, 7, &mut got)
+    println("set " + str(got) + ", then " + str(obj_add(b, 0, 0)))
+    if let c = obj_find(a, "second") {
+        println("found " + obj_name(c))
+    }
+    println("none " + str(obj_find(a, none) == none))
+    return obj_add(a, 40, 2)
+}

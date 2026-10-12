@@ -49,7 +49,7 @@ struct Node {
 
 // --- типы
 
-enum class TypeKind : uint8_t { Name, Slice, Optional, Result, Fn, Error };
+enum class TypeKind : uint8_t { Name, Slice, Optional, Result, Fn, Array, Ref, Error };
 
 enum class ParamMode : uint8_t { Value, Ref, Mut };
 
@@ -85,6 +85,22 @@ struct ResultType : Type {  // `!T` или `E!T`
     ResultType() : Type(Kind) {}
     Type* error = nullptr;  // nullptr — `!T`, тип ошибки выводится (Р41)
     Type* value = nullptr;
+};
+
+// `[N]T` — массив C фиксированной длины (Р62): поле `@c`-структуры.
+struct ArrayType : Type {
+    static constexpr TypeKind Kind = TypeKind::Array;
+    ArrayType() : Type(Kind) {}
+    uint64_t len = 0;
+    std::string len_src;  // запись длины в исходнике
+    Type* elem = nullptr;
+};
+
+// `&T` — заимствующее поле `@c`-структуры (Р62): ссылка на время вызова C.
+struct RefType : Type {
+    static constexpr TypeKind Kind = TypeKind::Ref;
+    RefType() : Type(Kind) {}
+    Type* inner = nullptr;
 };
 
 // `extern fn(&i32, T) R` — указатель на функцию C (Р61): имён параметров нет.
@@ -523,10 +539,13 @@ struct Item : Node {
     explicit Item(ItemKind k) : kind(k) {}
 };
 
+
 struct Attr {
     std::string name;
     Span span;
-    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59)
+    bool has_arg = false;  // `@link("SDL3")` — аргумент-строка (Р59); `@count(n)` — имя (Р62); `@slot(4)` — число (Р63)
+    bool arg_ident = false;  // аргумент — имя, а не строка
+    bool arg_int = false;    // аргумент — целый литерал
     std::string arg;       // значение строки
     std::string arg_src;   // запись в исходнике, с кавычками
     std::string text() const { return "@" + name + (has_arg ? "(" + arg_src + ")" : ""); }
@@ -551,7 +570,9 @@ struct FnItem : Item {
     bool is_extern = false;  // `extern fn` — функция C без тела (Р59)
 };
 
+
 struct FieldDecl {
+    std::vector<Attr> attrs;  // `@count(n)` перед полем `@c` (Р62), на той же строке
     std::string name;
     Span name_span;
     Type* type = nullptr;

@@ -172,6 +172,7 @@ private:
             "remove", "clear", "sort", "contains", "trim", "find", "starts_with", "split",
             "__args_len", "__arg", "__read_file", "checked_add", "checked_sub", "checked_mul", "checked_div",
             "checked_neg", "map_set", "map_get", "map_contains", "map_remove", "map_clear", "map_keys",
+            "c_arena_mark", "c_arena_release",
         };
         return names[static_cast<size_t>(k)];
     }
@@ -188,7 +189,7 @@ private:
                        ops(rv.ops);
             case RvKind::Cast: {
                 const char* k = rv.cast == CastKind::Widen ? "widen" : rv.cast == CastKind::Check ? "check"
-                              : rv.cast == CastKind::Wrap ? "wrap" : "str";
+                              : rv.cast == CastKind::Wrap ? "wrap" : rv.cast == CastKind::RefUp ? "ref_up" : "str";
                 return std::string(k) + " " + ops(rv.ops) + " to " + type(rv.type);
             }
             case RvKind::MakeStruct: return type(rv.type) + " { " + ops(rv.ops) + " }";
@@ -227,6 +228,8 @@ private:
             case RvKind::Tag: return "tag " + place(rv.place);
             case RvKind::IsSome: return "is_some " + place(rv.place);
             case RvKind::IsOk: return "is_ok " + place(rv.place);
+            case RvKind::Zero: return "zero " + type(rv.type);
+            case RvKind::AddrOf: return "addr " + place(rv.place);
         }
         return "?";
     }

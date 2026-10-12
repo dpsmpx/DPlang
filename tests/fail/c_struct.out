@@ -1,0 +1,50 @@
+--- stderr ---
+c_struct.dpm:16:5: error[E0319]: '@count(missing)': 'BadCount' has no integer field 'missing'
+  16 |     @count(missing) xs: []i32
+     |     ^~~~~~~~~~~~~~~
+c_struct.dpm:17:5: error[E0319]: '@count(label)': 'BadCount' has no integer field 'label'
+  17 |     @count(label) ys: []i32
+     |     ^~~~~~~~~~~~~
+c_struct.dpm:19:5: error[E0319]: unknown attribute '@size' for a field; a '@c' slice takes '@count(n)'
+  19 |     @size(four) zs: []i32
+     |     ^~~~~~~~~~~
+c_struct.dpm:23:10: error[E0328]: '[4]u8' cannot be a field of a plain struct: '[N]T' and '&T' are fields of a '@c' struct (spec: ffi.struct)
+  23 |     arr: [4]u8
+     |          ^~~~~
+c_struct.dpm:24:11: error[E0328]: 'Name' has borrowed fields and cannot be a field of a plain struct: it lives only in a call argument (spec: ffi.struct)
+  24 |     name: Name
+     |           ^~~~
+c_struct.dpm:35:8: error[E0326]: field 's' of '@union' 'BadU' has type 'str'; a union holds only data: numbers, bool, handles, '[N]T' and '@c' structs of them (spec: ffi.struct)
+  35 |     s: str
+     |        ^~~
+c_struct.dpm:45:8: error[E0319]: a '@union' cannot be '@linear': its fields share memory
+  45 | struct LU {
+     |        ^~
+c_struct.dpm:51:17: error[E0328]: '[2]i32' cannot be a parameter: '[N]T' and '&T' are fields of a '@c' struct (spec: ffi.struct)
+  51 | fn arr_param(a: [2]i32) {
+     |                 ^~~~~~
+c_struct.dpm:54:12: error[E0328]: 'Name' has borrowed fields and cannot be a result: it lives only in a call argument (spec: ffi.struct)
+  54 | fn gives() Name {
+     |            ^~~~
+c_struct.dpm:59:14: error[E0328]: field 'text' of 'Name' is borrowed for C and cannot be read in dpl
+  59 |     return n.text
+     |              ^~~~
+c_struct.dpm:63:9: error[E0328]: 'v' cannot hold 'Name': it has borrowed fields and lives only in a call argument; build it in the call
+  63 |     let v = Name { text: "a" }
+     |         ^
+c_struct.dpm:64:9: error[E0328]: 'w' cannot hold '[3]i32': '[N]T' and '&T' are fields of a '@c' struct; index or pass them where they are
+  64 |     let w: [3]i32 = [1, 2, 3]
+     |         ^
+c_struct.dpm:65:33: error[E0413]: field 'n' is the length of 'parts' (@count); C gets it from the slice, remove it here
+  65 |     _ = take(&Name { text: "a", n: 3 })
+     |                                 ^
+c_struct.dpm:66:23: error[E0413]: a '@union' literal sets one field; 'U' shares the memory of its fields
+  66 |     let u = U { a: 1, b: 2 }
+     |                       ^
+c_struct.dpm:68:9: error[E0328]: 'short' cannot hold 'Name': it has borrowed fields and lives only in a call argument; build it in the call
+  68 |     let short: Name = Name { text: "b" }
+     |         ^~~~~
+c_struct.dpm:71:22: error[E0401]: '[3]i32' takes exactly 3 elements, found 2
+  71 |     let a = Arr { v: [1, 2] }
+     |                      ^~~~~~
+[exit 1]

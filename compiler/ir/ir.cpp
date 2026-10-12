@@ -18,7 +18,7 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
                 break;
             case ProjKind::Index:
                 if (pr.index >= f.locals.size() || f.locals[pr.index].type->kind != TK::I64) return nullptr;
-                if (t->kind == TK::List || t->kind == TK::Slice) {
+                if (t->kind == TK::List || t->kind == TK::Slice || t->kind == TK::Array) {
                     t = t->elem;
                 } else if (t->kind == TK::Str && k + 1 == p.proj.size()) {
                     t = prog.types->prim(TK::U8);  // байт строки — только последним
@@ -64,6 +64,8 @@ bool needs_drop(const Type* t) {
         case TK::Optional: return needs_drop(t->elem);
         case TK::Result: return needs_drop(t->elem) || needs_drop(t->err);
         case TK::Struct:
+            // Р62: заимствующая структура — раскладка C, её строки и массивы — в арене вызова.
+            if (sema::c_borrowing(t)) return false;
             for (const sema::FieldDef& f : t->sdef->fields) {
                 if (needs_drop(f.type)) return true;
             }

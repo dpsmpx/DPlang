@@ -62,6 +62,7 @@ private:
 
     Local* find_local(const std::string& name) const;
     Local* declare(const std::string& name, Span span, const Type* type, bool mutable_, bool is_ref, bool init);
+    bool declaring_params_ = false;  // параметры: заимствующий тип можно (Р62)
     void push_scope() { scopes_.emplace_back(); }
     void pop_scope() { scopes_.pop_back(); }
 
@@ -121,8 +122,8 @@ private:
     const Type* index_expr(ast::IndexExpr* i);
     const Type* slice_expr(ast::SliceExpr* s);
     const Type* try_expr(ast::TryExpr* t);
-    void field_inits(std::vector<ast::FieldInit>& inits, const std::vector<FieldDef>& fields, bool defaults_ok,
-                     Span span, const std::string& what);
+    void field_inits(std::vector<ast::FieldInit>& inits, const std::vector<FieldDef>& fields, bool defaults_ok, Span span,
+                     const std::string& what, bool c_zero = false);
     const EnumDef* enum_for_variant(const std::string& name, const Type* hint, Span span);
     bool ordered(const Type* t);
     bool equatable(const Type* t);

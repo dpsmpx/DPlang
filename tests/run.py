@@ -28,7 +28,10 @@ docs/compiler/README.md, docs/compiler/backend_c.md, docs/compiler/cli.md.
 Проход runtime — тесты runtime по функциям и запись плавающих против
 образца (tests/runtime.py). Проход example — программы examples/X/: их
 тесты, запуск интерпретатором и сборкой, канонический вид. Проход bench —
-эталонный набор задач на dpl (bench/tasks/X/dp/, bench/dp_check.py). Проходы limits, worker, sandbox и service —
+эталонный набор задач на dpl (bench/tasks/X/dp/, bench/dp_check.py). Проход
+bindings — привязки bindings/ против библиотек хоста (tests/bindings.py):
+раскладка структур Vulkan по vulkan.h и программа на lavapipe; без них
+случай пропускается, и итог говорит об этом. Проходы limits, worker, sandbox и service —
 tests/limits.py, tests/worker.py и tests/service.py; worker, sandbox и
 service идут на второй сборке, Release без санитайзеров (build/release/).
 
@@ -49,6 +52,7 @@ import subprocess
 import sys
 import tempfile
 
+import bindings
 import limits
 import runtime
 import schema
@@ -195,6 +199,14 @@ def discover(pattern):
     deep = [('limits', name) for name in limits.CASES if pattern in 'limits/' + name]
     deep += [('limits', 'scale/' + name) for name in limits.SCALE if pattern in 'limits/scale/' + name]
     deep += [('runtime', name) for name in runtime.CASES if pattern in 'runtime/' + name]
+    for case in bindings.CASES:
+        if pattern in 'bindings/' + case and not bindings.missing(case):
+            deep.append(('bindings', case))
+    bdir = os.path.join(TESTS, 'bindings')
+    for name in sorted(os.listdir(bdir)) if os.path.isdir(bdir) else []:
+        main_dpm = os.path.join(bdir, name, 'main.dpm')
+        if os.path.exists(main_dpm) and pattern in os.path.relpath(main_dpm, TESTS):
+            verify.append(('verify', main_dpm))
     if os.path.isdir(EXAMPLES):
         for ex in sorted(os.listdir(EXAMPLES)):
             if os.path.isdir(os.path.join(EXAMPLES, ex, 'expected')):
@@ -641,6 +653,8 @@ def run_one(suite, path, bless):
         return bench_one(path)
     if suite == 'runtime':
         return runtime.check_case(path, DPL, runtime_native, NATIVE)
+    if suite == 'bindings':
+        return bindings.check_case(path, DPL, bless)
     if suite == 'worker':
         return worker.worker_case(path, DPL_RELEASE, bless)
     if suite == 'sandbox':
@@ -712,13 +726,15 @@ def main():
     if fails:
         print(f'компилятор: сбоев {len(fails)} из {len(tests)}')
         for (suite, path), r in fails:
-            name = suite + '/' + path if suite in ('bench', 'example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
+            name = suite + '/' + path if suite in ('bench', 'bindings', 'example', 'limits', 'runtime', 'sandbox', 'service') else os.path.relpath(path, TESTS)
             if suite in ('build', 'ffi', 'lib') + tuple(CROSS):
                 name = suite + '/' + os.path.relpath(path, TESTS)
             print(f'  {name}: {r}')
         return 1
     verb = 'записано ожидаемое' if a.bless else 'прошли'
     note = ''.join(f'; {c} пропущен — нет {cross_tools(c)}' for c in CROSS if cross_tools(c) and not a.k)
+    note += ''.join(f'; bindings/{c} пропущен — нет {bindings.missing(c)}' for c in bindings.CASES
+                    if bindings.missing(c) and not a.k)
     print(f'компилятор: собран, тестов {len(tests)} {verb} ({summary}){note}')
     return 0
 

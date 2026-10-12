@@ -36,6 +36,7 @@ public:
         }
         export_symbols();
         linear_placement();
+        c_placement();
         self_containment();
     }
 
@@ -320,8 +321,9 @@ private:
         }
     }
 
+    // c_layout — поля `@c`-структуры: срез и типы C (Р62) там можно.
     void fields(Resolver& r, const std::vector<FieldDecl>& decls, std::vector<FieldDef>& out, bool pub,
-                const std::string& what) {
+                const std::string& what, bool c_layout = false) {
         for (const FieldDecl& fd : decls) {
             bool dup = false;
             for (const FieldDef& prev : out) {
@@ -332,17 +334,55 @@ private:
             }
             const sema::Type* t = r.type(fd.type);
             if (pub) public_type(fd.type, t, what);
-            no_slice(fd.type, t, "a field");
+            if (!c_layout) no_slice(fd.type, t, "a field");
             if (dup) continue;
             out.push_back(FieldDef{fd.name, fd.name_span, t, fd.value});
         }
     }
 
+    // `@count(n)` перед полем-срезом `@c` (Р62): n — целое поле той же
+    // структуры; его пишет компилятор из длины среза.
+    void counts(StructDef& d) {
+        for (size_t i = 0; i < d.node->fields.size() && i < d.fields.size(); i++) {
+            for (const Attr& a : d.node->fields[i].attrs) {
+                if (a.name != "count") {
+                    diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "' for a field; a '@c' slice takes '@count(n)'");
+                    continue;
+                }
+                FieldDef& f = d.fields[i];
+                if (!d.c || !f.type || f.type->kind != TK::Slice) {
+                    diags_.error(Code::E0319, a.span, "'@count' marks a slice field of a '@c' struct");
+                    continue;
+                }
+                if (!a.has_arg || !a.arg_ident) {
+                    diags_.error(Code::E0319, a.span, "'@count' needs the counter field: @count(len_field)");
+                    continue;
+                }
+                if (f.count >= 0) {
+                    diags_.error(Code::E0319, a.span, "attribute '@count' is given twice");
+                    continue;
+                }
+                int k = -1;
+                for (size_t j = 0; j < d.fields.size(); j++) {
+                    if (d.fields[j].name == a.arg) k = static_cast<int>(j);
+                }
+                if (k < 0 || !is_integer(d.fields[static_cast<size_t>(k)].type)) {
+                    diags_.error(Code::E0319, a.span, "'@count(" + a.arg + ")': '" + d.name + "' has no integer field '" +
+                                                          a.arg + "'");
+                    continue;
+                }
+                f.count = k;
+                d.fields[static_cast<size_t>(k)].counter = true;
+            }
+        }
+    }
+
     void struct_sig(Resolver& r, StructDef& d) {
         for (const Attr& a : d.node->attrs) {
-            bool* flag = a.name == "c" ? &d.c : a.name == "linear" ? &d.linear : nullptr;
+            bool* flag = a.name == "c" ? &d.c : a.name == "linear" ? &d.linear : a.name == "union" ? &d.union_ : nullptr;
             if (!flag) {
-                diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name + "' for a struct; use '@c' or '@linear'");
+                diags_.error(Code::E0319, a.span,
+                             "unknown attribute '@" + a.name + "' for a struct; use '@c', '@union' or '@linear'");
             } else if (*flag) {
                 diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' is given twice");
             } else if (a.has_arg) {
@@ -350,7 +390,12 @@ private:
             }
             if (flag) *flag = true;
         }
-        fields(r, d.node->fields, d.fields, d.pub, "struct");
+        if (d.union_) {  // Р62: объединение C — раскладка C
+            if (d.linear) diags_.error(Code::E0319, d.span, "a '@union' cannot be '@linear': its fields share memory");
+            d.c = true;
+        }
+        fields(r, d.node->fields, d.fields, d.pub, "struct", d.c);
+        counts(d);
     }
 
     // Где лежат линейные значения (Р60, E0514): поле — только у `@linear`,
@@ -404,27 +449,103 @@ private:
         }
     }
 
+    // Типы только для C (Р62, E0328): `[N]T` и `&T` — поля `@c` (`?&T` —
+    // ещё параметр функции C); заимствующая структура — параметр по
+    // значению или `&T` и поле `@c`, срез таких — поле `@c` и параметр
+    // функции C. Проверка — когда `@c` всех известен.
+    void c_placement() {
+        auto bad = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m, const std::string& where) {
+            if (!node || !t || t->kind == TK::Error) return;
+            if (contains_c_only(t)) {
+                diags_.error(Code::E0328, node->span, "'" + type_name(t, m) + "' cannot be " + where +
+                                                          ": '[N]T' and '&T' are fields of a '@c' struct (spec: ffi.struct)");
+            } else if (c_borrowing(t) || (t->kind != TK::Struct && borrowing_inside(t))) {
+                diags_.error(Code::E0328, node->span,
+                             "'" + type_name(t, m) + "' has borrowed fields and cannot be " + where +
+                                 ": it lives only in a call argument (spec: ffi.struct)");
+            }
+        };
+        for (StructDef& d : prog_.structs) {
+            if (!d.node || d.c) continue;
+            for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
+                bad(d.node->fields[i].type, d.fields[i].type, d.module, "a field of a plain struct");
+            }
+        }
+        for (EnumDef& d : prog_.enums) {
+            if (!d.node) continue;
+            for (size_t v = 0; v < d.variants.size() && v < d.node->variants.size(); v++) {
+                const VariantDecl& vd = d.node->variants[v];
+                for (size_t k = 0; k < d.variants[v].types.size() && k < vd.types.size(); k++) {
+                    bad(vd.types[k], d.variants[v].types[k], d.module, "a variant value");
+                }
+                for (size_t k = 0; k < d.variants[v].fields.size() && k < vd.fields.size(); k++) {
+                    bad(vd.fields[k].type, d.variants[v].fields[k].type, d.module, "a variant value");
+                }
+            }
+        }
+        for (FnDef& f : prog_.fns) {
+            if (!f.node) continue;
+            for (size_t i = 0; i < f.params.size() && i < f.node->params.size(); i++) {
+                const ParamDef& p = f.params[i];
+                const sema::Type* t = p.type;
+                // `?&T` — параметр функции C: указатель или NULL на время вызова.
+                bool opt_ref = f.is_extern && p.mode == ParamMode::Value && t->kind == TK::Optional &&
+                               t->elem->kind == TK::Ref && c_borrow_field(t);
+                if (opt_ref) continue;
+                // Срез заимствующих структур — параметр функции C, как поле `@c`:
+                // `vkQueueSubmit(q, 1, [VkSubmitInfo { ... }], none)`.
+                if (f.is_extern && p.mode == ParamMode::Value && t->kind == TK::Slice && c_borrowing(t->elem)) continue;
+                if (c_borrowing(t) && p.mode != ParamMode::Mut) continue;  // как срез: параметр
+                bad(f.node->params[i].type, t, f.module,
+                    p.mode == ParamMode::Mut ? "a '&mut' parameter (C would write into it)" : "a parameter");
+            }
+            bad(f.node->ret, f.ret, f.module, "a result");
+        }
+    }
+
+    // Заимствующая структура внутри другого типа: List, ?T, E!T, Map.
+    static bool borrowing_inside(const sema::Type* t) {
+        if (!t) return false;
+        if (c_borrowing(t)) return true;
+        if (t->kind == TK::Struct || t->kind == TK::Enum || t->kind == TK::CFn) return false;
+        return borrowing_inside(t->elem) || borrowing_inside(t->err) || borrowing_inside(t->key);
+    }
+
     // `@c` (Р59): поля — типы с видом в C; проверка — когда поля всех структур известны.
     void c_struct(const StructDef& d) {
         for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
             const FieldDef& f = d.fields[i];
-            if (f.type && f.type->kind != TK::Error && !c_value_type(f.type)) {
+            if (d.union_ && f.type && f.type->kind != TK::Error && !c_value_type(f.type)) {
+                diags_.error(Code::E0326, d.node->fields[i].type->span,
+                             "field '" + f.name + "' of '@union' '" + d.name + "' has type '" + type_name(f.type, d.module) +
+                                 "'; a union holds only data: numbers, bool, handles, '[N]T' and '@c' structs of them "
+                                 "(spec: ffi.struct)");
+                continue;
+            }
+            if (f.type && f.type->kind != TK::Error && !c_field_type(f.type)) {
                 diags_.error(Code::E0326, d.node->fields[i].type->span,
                              "field '" + f.name + "' of '@c' struct '" + d.name + "' has type '" + type_name(f.type, d.module) +
-                                 "', which has no C layout; use integers, floats, bool, 'extern type' or '@c' structs");
+                                 "', which has no C layout; use numbers, bool, handles, 'extern fn', '@c' structs, "
+                                 "'[N]T' or borrowed 'str', '[]T', '&T', '?&T' (spec: ffi.struct)");
             }
         }
     }
 
     // Тип параметра функции C (Р59): значение с видом в C; str — строка
     // с нулём в конце; []T — указатель на элементы; &T, &mut T — указатель;
-    // &mut List[T] — указатель на элементы для записи; ?H — дескриптор или NULL.
+    // &mut List[T] — указатель на элементы для записи; ?H — дескриптор или NULL;
+    // ?str — строка C или NULL.
     bool c_param(const sema::Type* t, ParamMode mode) {
         if (!t || t->kind == TK::Error) return true;
         if (mode == ParamMode::Value) {
-            return export_param(t, mode) || (t->kind == TK::Slice && c_value_type(t->elem));
+            // Срез, заимствующая структура и `?&T` переводятся в C на время вызова (Р62).
+            return export_param(t, mode) || (t->kind == TK::Slice && c_borrow_field(t)) || c_borrowing(t) ||
+                   (t->kind == TK::Optional && t->elem->kind == TK::Ref && c_borrow_field(t)) ||
+                   (t->kind == TK::Optional && t->elem->kind == TK::Str);  // ?str — строка C или NULL
         }
-        return c_value_type(t) || (mode == ParamMode::Mut && t->kind == TK::List && c_value_type(t->elem));
+        if (t->kind == TK::Array) return false;
+        return c_value_type(t) || (mode == ParamMode::Ref && c_borrowing(t)) ||
+               (mode == ParamMode::Mut && t->kind == TK::List && c_value_type(t->elem));
     }
 
     // Типы функции C — когда известны `@c` всех структур.
@@ -477,7 +598,7 @@ private:
     void export_symbols() {
         std::map<std::string, const FnDef*> taken;
         for (FnDef& f : prog_.fns) {
-            if (f.node && f.is_extern) taken.emplace(f.name, &f);
+            if (f.node && f.is_extern && f.slot < 0) taken.emplace(f.name, &f);  // у `@slot` символа нет
         }
         for (FnDef& f : prog_.fns) {
             if (!f.node || !f.exported) continue;
@@ -570,6 +691,30 @@ private:
                 }
                 continue;
             }
+            if (a.name == "slot") {  // `@slot(N)` — запись таблицы первого аргумента (Р63)
+                if (!n->is_extern) {
+                    diags_.error(Code::E0319, a.span, "'@slot' marks an 'extern fn' called through a table of C functions");
+                } else if (!a.has_arg || !a.arg_int) {
+                    diags_.error(Code::E0319, a.span, "'@slot' needs the entry number: @slot(4)");
+                } else if (f.slot >= 0) {
+                    diags_.error(Code::E0319, a.span, "attribute '@slot' is given twice");
+                } else {
+                    std::string digits;
+                    for (char c : a.arg) {
+                        if (c != '_') digits += c;
+                    }
+                    bool ok = !digits.empty() && digits.size() <= 5 &&
+                              digits.find_first_not_of("0123456789") == std::string::npos;
+                    long v = ok ? std::stol(digits) : -1;
+                    if (!ok || v > 65535) {
+                        diags_.error(Code::E0319, a.span, "'@slot' entry is a decimal number from 0 to 65535");
+                    } else {
+                        f.slot = static_cast<int32_t>(v);
+                        f.slot_span = a.span;
+                    }
+                }
+                continue;
+            }
             if (a.name == "link") {  // `@link("lib")` — только у `extern fn` (Р59)
                 if (!n->is_extern) {
                     diags_.error(Code::E0319, a.span, "'@link' names the C library of an 'extern fn'");
@@ -624,6 +769,19 @@ private:
         }
         if (f.test && f.exported) {
             diags_.error(Code::E0319, f.export_span, "a test cannot be '@export': 'dpl test' calls it");
+        }
+        if (f.slot >= 0) {  // Р63: первый аргумент — объект, его первое слово — адрес таблицы
+            if (linked) {
+                diags_.error(Code::E0319, f.slot_span, "an '@slot' function has no C symbol: '@link' does not apply");
+            }
+            const sema::Type* first = f.params.empty() ? nullptr : f.params[0].type;
+            if (!first || f.params[0].mode != ParamMode::Value || first->kind != TK::Handle) {
+                if (!first || first->kind != TK::Error) {
+                    diags_.error(Code::E0319, f.slot_span,
+                                 "'@slot' calls through the table of the first argument: it must be an 'extern type' "
+                                 "value");
+                }
+            }
         }
         if (f.test) {
             bool ok_ret = f.ret->kind == TK::Void || f.ret->kind == TK::Error ||

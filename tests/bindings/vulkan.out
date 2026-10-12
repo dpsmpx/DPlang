@@ -1,0 +1,14 @@
+loader 1.3+: true
+instance extensions: true
+vkCreateInstance: 0
+physical devices: true
+llvmpipe: true, cpu: true, 1.3: true, 2D images to 4096: true
+graphics queue family: true
+host-visible memory: true
+vkCreateDevice: 0
+vkBindBufferMemory: 0
+vkQueueSubmit: 0, vkQueueWaitIdle: 0
+vkMapMemory: 0
+filled: 1 2 3 4 1
+device destroyed
+instance destroyed

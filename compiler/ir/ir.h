@@ -105,6 +105,7 @@ enum class CastKind : uint8_t {
     Check,  // T(x) между числами: значение вне T — ловушка
     Wrap,   // T.wrap(x): по модулю 2^N
     ToStr,  // str(x)
+    RefUp,  // &S → &B по общему началу (Р62): тот же адрес
 };
 
 enum class Intrinsic : uint8_t {
@@ -122,6 +123,9 @@ enum class Intrinsic : uint8_t {
     // вставка или замена), MapRemove (ключ → ?V), MapClear. Читающие —
     // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K], ключи по возрастанию).
     MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys,
+    // Арена C на время вызова (Р62): строки и массивы заимствующих
+    // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
+    CArenaMark, CArenaRelease,
 };
 
 enum class RvKind : uint8_t {
@@ -144,6 +148,8 @@ enum class RvKind : uint8_t {
     Tag,          // номер варианта значения place (u32)
     IsSome,       // у place (?T) есть значение
     IsOk,         // place (E!T) — успех
+    Zero,         // ноль типа (Р62: пропущенное поле `@c`); операндов нет
+    AddrOf,       // ссылка на place (Р62): значение `&T` поля `@c` и параметра `?&T`
 };
 
 struct Arg {
@@ -159,7 +165,7 @@ struct Rvalue {
     UnKind un = UnKind::Neg;
     CastKind cast = CastKind::Widen;
     Intrinsic intrinsic = Intrinsic::Len;
-    uint32_t variant = 0;
+    uint32_t variant = 0;  // MakeVariant — номер варианта; MakeStruct объединения — заданное поле + 1, 0 — нет
     uint32_t fn = 0;  // номер функции в программе
     std::vector<Operand> ops;
     std::vector<Arg> args;
@@ -216,6 +222,7 @@ struct Function {
     bool det = false;           // класс D (Р55): после операций с плавающими — canon (Р56)
     bool is_extern = false;     // функция C (Р59): блоков нет, имя символа — c_name
     std::string c_name;         // символ C у extern и у экспортируемой
+    int32_t slot = -1;          // `@slot(N)` (Р63): вызов — запись N таблицы первого аргумента, символа нет
     bool exported = false;      // `@export` (Р61): у C-бэкенда — обёртка под символом c_name
 };
 

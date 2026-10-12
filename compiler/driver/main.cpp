@@ -283,6 +283,16 @@ std::string stdlib_dir(const char* argv0) {
     return dir + "/../../stdlib";
 }
 
+// Каталог привязок (Р58): $DPL_BINDINGS или bindings/ репозитория рядом
+// с каталогом сборки (build/compiler/dpl → bindings).
+std::string bindings_dir(const char* argv0) {
+    if (const char* env = std::getenv("DPL_BINDINGS")) return env;
+    std::string exe = argv0 ? argv0 : "";
+    size_t slash = exe.find_last_of('/');
+    std::string dir = slash == std::string::npos ? "." : exe.substr(0, slash);
+    return dir + "/../../bindings";
+}
+
 // Каталог runtime: $DPL_RUNTIME или runtime/ репозитория рядом с
 // каталогом сборки (build/compiler/dpl → runtime).
 std::string runtime_dir(const char* argv0) {
@@ -296,6 +306,7 @@ std::string runtime_dir(const char* argv0) {
 // Окружение запуска, общее для команд.
 struct Cli {
     std::string stdlib;
+    std::string bindings;
     std::string runtime;
 };
 
@@ -307,6 +318,7 @@ std::unique_ptr<dp::sema::Program> check_program(const Cli& cli, std::string_vie
                                                  dp::Diagnostics& diags) {
     dp::api::CompileOptions opt;
     opt.stdlib_dir = cli.stdlib;
+    opt.bindings_dir = cli.bindings;
     return dp::api::check(std::string(path), opt, sources, diags);
 }
 
@@ -578,6 +590,7 @@ int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
 static int run_cli(int argc, char** argv) {
     Cli cli;
     cli.stdlib = stdlib_dir(argv[0]);
+    cli.bindings = bindings_dir(argv[0]);
     cli.runtime = runtime_dir(argv[0]);
     std::vector<std::string_view> args(argv + 1, argv + argc);
     if (args.empty()) return usage_error("no command given");

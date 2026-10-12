@@ -8,9 +8,9 @@ ffi.dpm:5:24: error[E0326]: C function 'gives_list' returns 'List[u8]', which ca
 ffi.dpm:6:25: error[E0326]: parameter 's' of C function 'takes_ref' has type 'str', which cannot cross to C (spec: ffi.types)
    6 | extern fn takes_ref(s: &str) i32
      |                         ^~~
-ffi.dpm:10:11: error[E0326]: field 'name' of '@c' struct 'Bad' has type 'str', which has no C layout; use integers, floats, bool, 'extern type' or '@c' structs
-  10 |     name: str
-     |           ^~~
+ffi.dpm:10:11: error[E0326]: field 'name' of '@c' struct 'Bad' has type 'List[u8]', which has no C layout; use numbers, bool, handles, 'extern fn', '@c' structs, '[N]T' or borrowed 'str', '[]T', '&T', '?&T' (spec: ffi.struct)
+  10 |     name: List[u8]
+     |           ^~~~~~~~
 ffi.dpm:14:1: error[E0319]: '@link' names the C library of an 'extern fn'
   14 | @link("m")
      | ^~~~~~~~~~

@@ -1,0 +1,21 @@
+// spec: ffi.struct
+// Ноль пропущенного поля @c (Р62): числа, bool, вложенная структура, массив;
+// значение по умолчанию сильнее нуля.
+@c
+struct Inner {
+    a: i32
+    b: [3]u16
+}
+
+@c
+struct Outer {
+    kind: u32 = 7
+    flag: bool
+    x: f64
+    inner: Inner
+}
+
+fn main() {
+    let o = Outer { x: 1.5 }
+    println(str(o.kind) + " " + str(o.flag) + " " + str(o.x) + " " + str(o.inner.a) + " " + str(o.inner.b[2]))
+}

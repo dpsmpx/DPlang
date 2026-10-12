@@ -1,0 +1,35 @@
+// spec: ffi.struct
+// @union struct (Р62): поля делят память, чтение другого поля — его байты
+// в раскладке C; интерпретатор и сборка на трёх целях совпадают.
+@c
+struct Key {
+    kind: u32
+    code: i32
+    down: bool
+}
+
+@c
+struct Mouse {
+    kind: u32
+    x: f32
+    y: f32
+}
+
+@union
+struct Event {
+    kind: u32
+    key: Key
+    mouse: Mouse
+    raw: [16]u8
+}
+
+fn main() {
+    var e = Event { key: Key { kind: 2, code: -5, down: true } }
+    println(str(e.kind) + " " + str(e.key.code) + " " + str(e.raw[4]) + " " + str(e.raw[8]))
+    e.mouse.x = 1.5
+    println(str(e.kind) + " " + str(e.key.code) + " " + str(e.mouse.x))
+    e.kind = 7
+    println(str(e.mouse.kind) + " " + str(e.raw[0]) + " " + str(e.key.down))
+    let z = Event {}
+    println(str(z.mouse.y) + " " + str(z.raw[15]))
+}
