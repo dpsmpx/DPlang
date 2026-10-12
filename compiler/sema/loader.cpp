@@ -118,16 +118,24 @@ private:
             return it->second;
         }
         std::vector<std::string> places = {root_dir_ + name + ".dpm"};
-        if (!opt_.stdlib_dir.empty()) places.push_back(opt_.stdlib_dir + "/" + name + ".dpm");
+        size_t lib = std::string::npos;  // номер места стандартной библиотеки
+        if (!opt_.stdlib_dir.empty()) {
+            lib = places.size();
+            places.push_back(opt_.stdlib_dir + "/" + name + ".dpm");
+        }
+        if (!opt_.bindings_dir.empty()) places.push_back(opt_.bindings_dir + "/" + name + "/" + name + ".dpm");
         for (size_t i = 0; i < places.size(); i++) {
             std::string text;
             if (!read(places[i], text)) continue;
             ModuleInfo* m = load(name, places[i], std::move(text));
-            if (m && i == 1) m->stdlib = true;  // найден в стандартной библиотеке
+            if (m && i == lib) m->stdlib = true;  // найден в стандартной библиотеке
             return m;
         }
-        // Путь библиотеки зависит от установки — в сообщении только её название.
-        std::string looked = places[0] + (opt_.stdlib_dir.empty() ? "" : " and the standard library");
+        // Пути библиотеки и привязок зависят от установки — в сообщении
+        // только их названия.
+        std::string looked = places[0];
+        if (!opt_.stdlib_dir.empty()) looked += opt_.bindings_dir.empty() ? " and the standard library" : ", the standard library";
+        if (!opt_.bindings_dir.empty()) looked += " and the bindings";
         diags_.error(Code::E0302, span, "cannot find module '" + name + "' (looked in " + looked + ")");
         prog_.load_ok = false;
         return nullptr;

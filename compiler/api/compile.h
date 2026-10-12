@@ -26,7 +26,8 @@ struct CompileOptions {
     // Откуда модули: nullptr — файловая система, иначе — этот источник
     // (например, MemorySources).
     const sema::SourceReader* reader = nullptr;
-    std::string stdlib_dir;  // пусто — без стандартной библиотеки
+    std::string stdlib_dir;    // пусто — без стандартной библиотеки
+    std::string bindings_dir;  // пусто — без привязок (Р58)
     uint32_t max_nesting = kDefaultMaxNesting;
 };
 

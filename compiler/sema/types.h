@@ -101,8 +101,8 @@ std::string type_name(const Type* t, const ModuleInfo* from = nullptr);
 // Тип содержит срез `[]T` где-либо внутри (Р44: срез — только тип параметра).
 bool contains_slice(const Type* t);
 
-// Заимствующее поле `@c` (Р62): str, []T, &T, ?&T, ?H, ?extern fn — в C
-// переводится при вызове. Заимствующая структура — `@c` с таким полем
+// Заимствующее поле `@c` (Р62): str, []T, &T, ?&T — в C переводится при
+// вызове. Заимствующая структура — `@c` с таким полем
 // (или с полем-заимствующей структурой): живёт только в аргументе вызова.
 bool c_borrow_field(const Type* t);
 bool c_borrowing(const Type* t);
@@ -128,7 +128,8 @@ bool linear_type(const Type* t);
 bool linear_in_container(const Type* t);
 
 // Значение типа переходит границу C как есть (Р59): целое, плавающее,
-// bool, дескриптор `extern type`, структура `@c` из таких.
+// bool, дескриптор `extern type` и `?H`, `extern fn(...)` и `?extern fn`
+// (указатель или NULL), массив и структура `@c` из таких.
 bool c_value_type(const Type* t);
 
 // Тип параметра обратного вызова `extern fn(...)` и функции `@export`

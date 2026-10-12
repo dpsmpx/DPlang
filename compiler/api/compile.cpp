@@ -7,6 +7,7 @@ std::unique_ptr<sema::Program> check(const std::string& root_path, const Compile
                                      Diagnostics& diags) {
     sema::LoadOptions lo;
     lo.stdlib_dir = opt.stdlib_dir;
+    lo.bindings_dir = opt.bindings_dir;
     lo.reader = opt.reader;
     lo.max_nesting = opt.max_nesting;
     auto prog = sema::load_program(root_path, lo, sources, diags);

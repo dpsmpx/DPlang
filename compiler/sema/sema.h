@@ -15,7 +15,8 @@ namespace dp::sema {
 // Откуда загрузчик берёт текст модулей: файловая система (CLI) или память
 // (worker онлайн-сервиса, compiler/api). Путь — как его строит загрузчик:
 // главный модуль; каталог главного модуля + имя + ".dpm"; каталог
-// стандартной библиотеки + имя + ".dpm".
+// стандартной библиотеки + имя + ".dpm"; каталог привязок + имя + "/" +
+// имя + ".dpm".
 class SourceReader {
 public:
     virtual ~SourceReader() = default;
@@ -25,6 +26,7 @@ public:
 
 struct LoadOptions {
     std::string stdlib_dir;                // каталог стандартной библиотеки; пусто — без неё
+    std::string bindings_dir;              // каталог привязок (Р58); пусто — без них
     const SourceReader* reader = nullptr;  // nullptr — файловая система
     uint32_t max_nesting = kDefaultMaxNesting;  // предел вложенности разбора (ParseOptions)
 };

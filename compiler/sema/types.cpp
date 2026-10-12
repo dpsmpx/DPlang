@@ -134,9 +134,15 @@ bool linear_in_container(const Type* t) {
 
 bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str); }
 
+// ?H и ?extern fn — указатель или NULL.
+static bool nullable_pointer(const Type* t) {
+    return t->kind == TK::Optional && (t->elem->kind == TK::Handle || t->elem->kind == TK::CFn);
+}
+
 bool c_value_type(const Type* t) {
     if (!t) return false;
     if (is_numeric(t) || t->kind == TK::Bool || t->kind == TK::Handle || t->kind == TK::CFn) return true;
+    if (nullable_pointer(t)) return true;  // Р62: в C — указатель или NULL, как и в dpl
     if (t->kind == TK::Array) return c_value_type(t->elem);
     if (t->kind != TK::Struct || !t->sdef->c) return false;
     for (const FieldDef& f : t->sdef->fields) {
@@ -155,9 +161,7 @@ bool c_borrow_field(const Type* t) {
         // разбираем (её поле `?&Self` замкнуло бы обход).
         case TK::Slice: return c_value_type(t->elem) || t->elem->kind == TK::Str || c_struct_type(t->elem);
         case TK::Ref: return c_value_type(t->elem) || c_struct_type(t->elem);
-        case TK::Optional:
-            return t->elem->kind == TK::Handle || t->elem->kind == TK::CFn ||
-                   (t->elem->kind == TK::Ref && c_borrow_field(t->elem));
+        case TK::Optional: return t->elem->kind == TK::Ref && c_borrow_field(t->elem);
         default: return false;
     }
 }
@@ -200,22 +204,17 @@ bool c_prefix(const Type* b, const Type* s) {
     return true;
 }
 
-// ?H и ?extern fn — указатель или NULL.
-static bool nullable_pointer(const Type* t) {
-    return t->kind == TK::Optional && (t->elem->kind == TK::Handle || t->elem->kind == TK::CFn);
-}
-
 bool export_param(const Type* t, ast::ParamMode mode) {
     if (!t || t->kind == TK::Error) return true;
     if (t->kind == TK::Array) return false;  // массив C по значению не передаётся
     if (mode != ast::ParamMode::Value) return c_value_type(t);
-    return c_value_type(t) || t->kind == TK::Str || nullable_pointer(t);
+    return c_value_type(t) || t->kind == TK::Str;
 }
 
 bool export_result(const Type* t) {
     if (!t || t->kind == TK::Error || t->kind == TK::Void) return true;
     if (t->kind == TK::Array) return false;
-    return c_value_type(t) || nullable_pointer(t);
+    return c_value_type(t);
 }
 
 bool is_integer(const Type* t) { return t && t->kind >= TK::I8 && t->kind <= TK::U64; }
