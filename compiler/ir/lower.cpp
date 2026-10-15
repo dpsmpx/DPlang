@@ -154,6 +154,12 @@ private:
     uint32_t ret_ = UINT32_MAX;
     std::map<const sema::Local*, uint32_t> locals_;
     std::map<const sema::Local*, Place> aliases_;  // переменная `for x in &xs` — место xs[i]
+    // Правее понижаемого операнда есть действие (has_effect): вид, который
+    // строится внутри операнда, — срез или адрес `&T`, — берётся над копией
+    // изменяемого места (view_base). Иначе действие изменило бы операнд,
+    // вычисленный левее (expr.order), и вид указывал бы в память, которую оно
+    // освободило.
+    bool snap_ = false;
 
     struct Cleanup {
         bool is_defer = false;
@@ -375,6 +381,41 @@ private:
         return o;
     }
 
+    // Место, которое может изменить действие правее в выражении: переменная
+    // или параметр `&mut` и их части. Параметры-значения, `&T` и срезы
+    // только читаются, временные недоступны программе.
+    bool mutable_root(const Place& p) const {
+        LocalKind k = f_.locals[p.local].kind;
+        return k == LocalKind::Var || k == LocalKind::ParamMut;
+    }
+
+    // Операнд-основа вида при snap_: копия изменяемого места во временном.
+    Operand snapshot(Operand o, Span span) {
+        if (snap_ && o.kind == OpKind::Copy && mutable_root(o.place)) return to_temp(use(o, type_of(o)), span);
+        return o;
+    }
+
+    // Место, над которым строится вид — срез или адрес `&T` (snap_).
+    Place view_base(const Expr* obj, bool& fresh) {
+        Place p = object(obj, fresh);
+        if (snap_ && !fresh && mutable_root(p)) {
+            Operand c = snapshot(copy(std::move(p)), obj->span);
+            fresh = true;
+            return c.place;
+        }
+        return p;
+    }
+
+    // Понижает f() с snap_, включённым дополнительно к внешнему (on).
+    template <class F>
+    auto snapping(bool on, F f) {
+        bool saved = snap_;
+        snap_ = saved || on;
+        auto r = f();
+        snap_ = saved;
+        return r;
+    }
+
     // Место значения операнда; константа кладётся во временное.
     Place place_of(Operand o, Span span, bool& fresh) {
         if (o.kind == OpKind::Const) {
@@ -397,9 +438,9 @@ private:
     std::vector<Operand> exprs(const std::vector<const Expr*>& es) {
         std::vector<Operand> out;
         for (size_t i = 0; i < es.size(); i++) {
-            Operand o = expr(es[i]);
             bool later = false;
             for (size_t j = i + 1; j < es.size(); j++) later = later || has_effect(es[j]);
+            Operand o = snapping(later, [&] { return expr(es[i]); });
             if (later) o = stabilize(std::move(o), es[i]->span);
             out.push_back(std::move(o));
         }
@@ -423,7 +464,7 @@ private:
         if ((from->kind == TK::List || from->kind == TK::Array) && to->kind == TK::Slice) {
             bool fresh = false;
             Rvalue rv = make(RvKind::SliceOf, to);
-            rv.place = place_of(std::move(o), span, fresh);
+            rv.place = place_of(snapshot(std::move(o), span), span, fresh);
             rv.has_place = true;
             rv.ops.push_back(cint(0, prim(TK::I64)));
             return to_temp(std::move(rv), span);
@@ -464,7 +505,8 @@ private:
             return proj(std::move(base), ProjKind::Field, static_cast<uint32_t>(f->field));
         }
         auto* i = static_cast<const IndexExpr*>(e);
-        Place base = object(i->object, fresh);
+        // Объект-вид (`xs[a..b][i]`) не повисает, если индекс меняет xs.
+        Place base = snapping(has_effect(i->index), [&] { return object(i->object, fresh); });
         if (i->object->type->kind == TK::Map) {  // m[k]: ключ во временном (Р54)
             const Type* kt = i->object->type->key;
             uint32_t key = temp(kt);
@@ -551,7 +593,7 @@ private:
                 auto* r = static_cast<const RefExpr*>(e);
                 bool fresh = false;
                 Rvalue rv = make(RvKind::AddrOf, e->type);
-                rv.place = object(r->operand, fresh);
+                rv.place = view_base(r->operand, fresh);
                 rv.has_place = true;
                 return to_temp(std::move(rv), e->span);
             }
@@ -673,9 +715,15 @@ private:
     Operand slice(const SliceExpr* s) {
         bool fresh = false;
         Rvalue rv = make(RvKind::SliceOf, s->type);
-        rv.place = object(s->object, fresh);
+        bool lo_effect = has_effect(s->lo), hi_effect = has_effect(s->hi);
+        rv.place = snapping(lo_effect || hi_effect, [&] { return view_base(s->object, fresh); });
         rv.has_place = true;
-        rv.ops.push_back(s->lo ? rd(expr(s->lo)) : cint(0, prim(TK::I64)));
+        if (s->lo) {
+            Operand lo = snapping(hi_effect, [&] { return rd(expr(s->lo)); });
+            rv.ops.push_back(hi_effect ? rd(stabilize(std::move(lo), s->lo->span)) : std::move(lo));
+        } else {
+            rv.ops.push_back(cint(0, prim(TK::I64)));
+        }
         if (s->hi) rv.ops.push_back(rd(expr(s->hi)));
         return to_temp(std::move(rv), s->span);
     }
@@ -809,20 +857,24 @@ private:
                     rv.fn = fns_.at(c->fn);
                 } else {  // через указатель (Р61): значение вызываемого — первым
                     rv = make(RvKind::CallPtr, c->callee->type->sig->ret);
-                    rv.ops.push_back(rd(expr(c->callee)));
+                    bool later = false;
+                    for (const Expr* x : args) later = later || has_effect(x);
+                    Operand callee = snapping(later, [&] { return rd(expr(c->callee)); });
+                    rv.ops.push_back(later ? rd(stabilize(std::move(callee), c->callee->span)) : std::move(callee));
                 }
                 for (size_t i = 0; i < args.size(); i++) {
                     Arg a;
                     auto* r = as<const RefExpr>(args[i]);
                     bool by_ref = i < params.size() && params[i].first != ParamMode::Value;
+                    bool later = false;
+                    for (size_t j = i + 1; j < args.size(); j++) later = later || has_effect(args[j]);
                     if (r && by_ref) {
                         bool fresh = false;
                         a.kind = r->mut ? Arg::Kind::Mut : Arg::Kind::Ref;
-                        a.place = object(r->operand, fresh);  // Р62: `&S { ... }` — временное
+                        // Р62: `&S { ... }` — временное; виды в его полях — с snap_.
+                        a.place = snapping(later, [&] { return object(r->operand, fresh); });
                     } else {
-                        a.op = expr(args[i]);
-                        bool later = false;
-                        for (size_t j = i + 1; j < args.size(); j++) later = later || has_effect(args[j]);
+                        a.op = snapping(later, [&] { return expr(args[i]); });
                         if (later) a.op = stabilize(std::move(a.op), args[i]->span);
                     }
                     rv.args.push_back(std::move(a));
@@ -1213,7 +1265,9 @@ private:
             // `for x in &xs`: x — место xs[k]; длина проверяется на каждом шаге.
             // `for k in &m`: k — элемент снимка m.keys(), ключи по возрастанию (Р54).
             bool fresh = false;
-            Place base = object(s->iter, fresh);
+            // `for x in &xs[a..b]`: срез переменной — над снимком xs, тело
+            // может менять xs (stmt.for); `for x in &xs` — место xs.
+            Place base = snapping(true, [&] { return object(s->iter, fresh); });
             if (s->iter->type->kind == TK::Map) {
                 Rvalue keys = intrinsic(Intrinsic::MapKeys, tt_.list(s->iter->type->key));
                 keys.ops.push_back(copy(base));

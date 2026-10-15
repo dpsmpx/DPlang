@@ -32,4 +32,16 @@ slices.dpm:29:21: error[E0502]: 'list' is passed as '&mut' together with another
 slices.dpm:30:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
   30 |     grow(&mut list, list[1..])
      |                     ^~~~~~~~~
+slices.dpm:39:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  39 |     grow(&mut list, (list[1..]))
+     |                     ^~~~~~~~~~~
+slices.dpm:40:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  40 |     grow(&mut list, ((list)))
+     |                     ^~~~~~~~
+slices.dpm:42:14: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  42 |         read(&x, &mut list)
+     |              ^~
+slices.dpm:45:9: error[E0510]: a slice cannot be bound to 'part'; pass it to a function directly
+  45 |         part => grow(&mut list, part)
+     |         ^~~~
 [exit 1]

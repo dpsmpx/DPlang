@@ -1,0 +1,94 @@
+// spec: expr.order ref.slices stmt.for
+// Вид (срез) левее вызова, который меняет его список, не меняется: он
+// строится над копией (expr.order). Иначе вид указывал бы в память,
+// которую вызов освободил.
+fn total(xs: []str, extra: int) int {
+    var n = extra
+    for x in &xs {
+        n += len(x)
+    }
+    return n
+}
+
+fn sum(xs: []int, extra: int) int {
+    var t = extra
+    for x in &xs {
+        t += x
+    }
+    return t
+}
+
+fn drain(xs: &mut List[str]) int {
+    xs.clear()
+    for i in 0..1000 {
+        xs.push("z")
+    }
+    return 0
+}
+
+fn set_first(xs: &mut List[int]) int {
+    xs[0] = 100
+    return 0
+}
+
+fn take(xs: &mut List[str]) str {
+    return xs.remove(0)
+}
+
+fn zero(b: bool) int {
+    return 0
+}
+
+fn bump(i: &mut int) int {
+    i = 2
+    return 3
+}
+
+@export
+fn one(a: i32) i32 {
+    return 1
+}
+
+@export
+fn two(a: i32) i32 {
+    return 2
+}
+
+fn swap(f: &mut extern fn(i32) i32) i32 {
+    f = two
+    return 0
+}
+
+fn main() {
+    var words: List[str] = ["aa", "bbb", "c", "dddd"]
+    println("implicit: " + str(total(words, drain(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("explicit: " + str(total(words[1..3], drain(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("slice of slice: " + str(total(words[0..4][1..3], drain(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("method arg: " + str(total(words[0..2], len(take(&mut words)))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("in &&: " + str(total(words[2..], zero(true && drain(&mut words) == 0))))
+    var nums: List[int] = [1, 2, 3]
+    println("in place: " + str(sum(nums, set_first(&mut nums))) + ", after: " + str(nums[0]))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("receiver: " + str(words[0..3].contains(take(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("index of slice: " + words[1..4][drain(&mut words)])
+    let xs: List[int] = [10, 11, 12, 13]
+    var i = 0
+    println("bounds: " + str(sum(xs[i..bump(&mut i)], 0)))
+    var f: extern fn(i32) i32 = one
+    println("callee first: " + str(f(swap(&mut f))) + ", then: " + str(f(0)))
+    var loop: List[int] = [1, 2, 3]
+    var seen = 0
+    for x in &loop[0..3] {
+        loop.clear()
+        for k in 0..100 {
+            loop.push(7)
+        }
+        seen += x
+    }
+    println("for over slice: " + str(seen) + ", list now " + str(len(loop)))
+}

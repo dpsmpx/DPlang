@@ -1,0 +1,11 @@
+implicit: 10
+explicit: 4
+slice of slice: 4
+method arg: 7
+in &&: 5
+in place: 6, after: 100
+receiver: true
+index of slice: bbb
+bounds: 33
+callee first: 1, then: 2
+for over slice: 6, list now 100

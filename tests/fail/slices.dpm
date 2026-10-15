@@ -1,4 +1,4 @@
-// spec: ref.slices ref.alias
+// spec: ref.slices ref.alias stmt.for stmt.match
 struct Holder {
     view: []i32
 }
@@ -28,4 +28,20 @@ fn uses(xs: List[i32]) {
     var list: List[i32] = [1, 2]
     grow(&mut list, list)
     grow(&mut list, list[1..])
+}
+
+fn read(a: &i32, b: &mut List[i32]) {
+}
+
+// Обходы: срез в скобках, псевдоним цикла по срезу, имя образца со срезом.
+fn bypass(xs: List[i32]) {
+    var list: List[i32] = [1, 2, 3]
+    grow(&mut list, (list[1..]))
+    grow(&mut list, ((list)))
+    for x in &list[0..2] {
+        read(&x, &mut list)
+    }
+    match list[0..2] {
+        part => grow(&mut list, part)
+    }
 }

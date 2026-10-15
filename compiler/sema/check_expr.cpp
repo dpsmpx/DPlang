@@ -1301,6 +1301,7 @@ Local* Checker::root_local(Expr* e) {
     }
     if (auto* f = as<FieldExpr>(e)) return root_local(f->object);
     if (auto* i = as<IndexExpr>(e)) return root_local(i->object);
+    if (auto* s = as<SliceExpr>(e)) return root_local(s->object);  // срез xs[a..b] — корень xs
     return nullptr;
 }
 
@@ -1329,9 +1330,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             if (is_place(r->operand)) refs.push_back({root_local(r->operand), false, e->span});
             else borrowed(r->operand);
         } else if ((e->conv && e->conv->kind == TK::Slice) || as<SliceExpr>(e)) {
-            Expr* base = e;
-            while (auto* sl = as<SliceExpr>(base)) base = sl->object;
-            refs.push_back({root_local(base), false, e->span});
+            refs.push_back({root_local(e), false, e->span});
         }
     };
     for (size_t i = 0; i < c->args.size() && i < params.size(); i++) {
@@ -1340,9 +1339,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             if (params[i].mode != ParamMode::Value) refs.push_back({root_local(r->operand), r->mut, a->span});
             if (!is_place(r->operand)) borrowed(r->operand);
         } else if (params[i].type && params[i].type->kind == TK::Slice) {
-            Expr* base = a;
-            while (auto* s = as<SliceExpr>(base)) base = s->object;
-            refs.push_back({root_local(base), false, a->span});
+            refs.push_back({root_local(a), false, a->span});  // `(xs[1..])` — тоже корень xs
             if (as<ListLitExpr>(strip_paren(a))) borrowed(a);  // `[S { ... }]` — заимствования внутри
         } else if (params[i].type && (c_borrowing(params[i].type) || params[i].type->kind == TK::Optional)) {
             borrowed(a);

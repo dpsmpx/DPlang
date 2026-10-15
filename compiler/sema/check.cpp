@@ -57,6 +57,10 @@ Local* Checker::declare(const std::string& name, Span span, const Type* type, bo
         } else if (c_borrowing(type)) {
             error(Code::E0328, span, "'" + name + "' cannot hold '" + tn(type) +
                                          "': it has borrowed fields and lives only in a call argument; build it in the call");
+        } else if (contains_slice(type)) {
+            // Имя образца, `if let` и разбора — переменная: срез в ней пережил бы
+            // изменение своего списка (ref.slices, Р44).
+            error(Code::E0510, span, "a slice cannot be bound to '" + name + "'; pass it to a function directly");
         }
     }
     Local& l = prog_.locals.emplace_back();

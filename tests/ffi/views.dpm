@@ -1,0 +1,40 @@
+// spec: ffi.types ffi.struct expr.order
+// Указатель `&место` и срез, отданные C левее вызова, который растит их
+// список, указывают на значения до вызова, а не в освобождённую память.
+@c
+struct P {
+    a: u32
+    b: u32
+}
+
+extern fn memcmp(a: ?&P, b: ?&P, n: u64) i32
+extern fn memchr(s: []u8, c: i32, n: u64) ?Mem
+
+extern type Mem
+
+fn grow(xs: &mut List[P]) u64 {
+    for i in 0..1000 {
+        xs.push(P { a: 9, b: 9 })
+    }
+    xs[0] = P { a: 5, b: 5 }
+    return 8
+}
+
+fn fill(buf: &mut List[u8]) u64 {
+    buf.clear()
+    for i in 0..1000 {
+        buf.push(u8(122))
+    }
+    return 3
+}
+
+fn main() {
+    var xs: List[P] = [P { a: 1, b: 2 }]
+    let y = P { a: 1, b: 2 }
+    println("pointer: " + str(memcmp(&xs[0], &y, grow(&mut xs))) + ", now " + str(xs[0].a))
+    var buf: List[u8] = [u8(97), u8(98), u8(99)]
+    match memchr(buf, 122, fill(&mut buf)) {
+        some(_) => println("slice: found z")
+        none => println("slice: no z, now " + str(len(buf)))
+    }
+}
