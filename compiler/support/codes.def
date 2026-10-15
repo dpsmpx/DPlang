@@ -298,7 +298,8 @@ DP_CODE(E0509, "wrong return",
 DP_CODE(E0510, "slice cannot be stored",
         "A slice `[]T` is a view into a List owned by someone else, so it only exists as a parameter type "
         "(spec: ref.slices, decision R44). It cannot be a field, a variant value, a List element, a result, "
-        "a variable or a constant. Pass the slice straight to a function, or keep a `List[T]`.")
+        "a variable (also a pattern name, an `if let` name or a destructured field) or a constant. Pass the slice "
+        "straight to a function, or keep a `List[T]`.")
 DP_CODE(E0511, "resource not closed",
         "A value of a `@linear` type must be closed exactly once on every path: passed by value to a function, "
         "returned or moved (spec: ffi.linear, decisions R57, R60). It reaches the end of its block, a `return` "
