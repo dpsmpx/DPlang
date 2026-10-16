@@ -56,4 +56,7 @@ linear.dpm:144:11: error[E0513]: 'r' is a reference: its resource belongs to the
 linear.dpm:148:5: error[E0513]: 'r' is a reference: the caller's resource cannot be replaced
  148 |     r = open(18)
      |     ^
+linear.dpm:167:23: error[E0513]: 'r' is passed by reference earlier in this call and cannot be closed or moved before the call returns
+ 167 |     _ = peek(&r, give(r))
+     |                       ^
 [exit 1]

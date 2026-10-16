@@ -86,6 +86,8 @@ private:
     std::vector<Scope> scopes_;
     std::vector<size_t> loops_;      // число областей снаружи тела каждого цикла
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
+    std::vector<const Local*> held_;      // заимствованы аргументами левее в вызове (args)
+    std::vector<const Local*> borrowed_;  // журнал borrow() для held_
 
     void error(Code code, Span span, const std::string& msg) { diags_.error(code, span, msg); }
 
@@ -186,6 +188,13 @@ private:
     // --- переменные
 
     void consume(const Local* l, Span span) {
+        for (const Local* h : held_) {
+            if (h == l) {  // дальше — как поглощение: без лавины E0511
+                error(Code::E0513, span, "'" + l->name + "' is passed by reference earlier in this call and cannot be "
+                                         "closed or moved before the call returns");
+                break;
+            }
+        }
         St& st = flow_.st[l->id];
         if (defer_) {  // тело defer и errdefer исполнится позже: ресурс за ним
             if (st != St::Owned) {
@@ -227,8 +236,35 @@ private:
     }
 
     void borrow(const Local* l, Span span) {
+        borrowed_.push_back(l);
         St st = flow_.st[l->id];
         if (st == St::Consumed || st == St::Maybe || st == St::ErrMoved) used_after(l, span, st);
+    }
+
+    // Аргумент держит заимствование до конца вызова: ссылка `&x` или
+    // значение со ссылкой внутри — `?&T`, заимствующая структура `@c` (Р62).
+    static bool keeps_borrow(bool by_ref, const Type* t) {
+        if (by_ref) return true;
+        if (!t) return false;
+        if (t->kind == TK::Optional) t = t->elem;
+        return t->kind == TK::Ref || c_borrowing(t);
+    }
+
+    // Аргументы вызова по порядку: заимствования аргумента, который держит
+    // их до конца вызова, попадают в held_ — закрыть такой ресурс в
+    // аргументе правее нельзя (E0513), иначе вызов прочитал бы закрытое.
+    void args(CallExpr* c, const std::vector<bool>& by_ref) {
+        size_t held = held_.size(), log = borrowed_.size();
+        for (size_t i = 0; i < c->args.size(); i++) {
+            size_t from = borrowed_.size();
+            bool r = i < by_ref.size() && by_ref[i];
+            expr(c->args[i], r ? Use::Borrow : Use::Consume);
+            if (keeps_borrow(r, c->args[i]->type)) {
+                held_.insert(held_.end(), borrowed_.begin() + static_cast<long>(from), borrowed_.end());
+            }
+        }
+        held_.resize(held);
+        borrowed_.resize(log);  // заимствования вложенного вызова кончились с ним
     }
 
     // --- инструкции
@@ -519,19 +555,21 @@ private:
         auto* f = as<FieldExpr>(c->callee);
         switch (c->call) {
             case CallKind::Fn: {
+                std::vector<bool> by_ref;
                 for (size_t i = 0; i < c->args.size(); i++) {
-                    bool by_ref = c->fn && i < c->fn->params.size() && c->fn->params[i].mode != ParamMode::Value;
-                    expr(c->args[i], by_ref ? Use::Borrow : Use::Consume);
+                    by_ref.push_back(c->fn && i < c->fn->params.size() && c->fn->params[i].mode != ParamMode::Value);
                 }
+                args(c, by_ref);
                 return;
             }
             case CallKind::Ptr: {  // через `extern fn(...)` (Р61): режимы — по сигнатуре типа
                 expr(c->callee, Use::Read);
                 const sema::CFnSig* sig = c->callee->type && c->callee->type->kind == TK::CFn ? c->callee->type->sig : nullptr;
+                std::vector<bool> by_ref;
                 for (size_t i = 0; i < c->args.size(); i++) {
-                    bool by_ref = sig && i < sig->params.size() && sig->params[i].first != ParamMode::Value;
-                    expr(c->args[i], by_ref ? Use::Borrow : Use::Consume);
+                    by_ref.push_back(sig && i < sig->params.size() && sig->params[i].first != ParamMode::Value);
                 }
+                args(c, by_ref);
                 return;
             }
             case CallKind::Method:

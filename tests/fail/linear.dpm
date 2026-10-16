@@ -150,3 +150,21 @@ fn replace_ref(r: &mut Res) {
 
 fn main() {
 }
+
+fn peek(r: &Res, n: int) int {
+    return n
+}
+
+fn give(r: Res) int {
+    close(r)
+    return 0
+}
+
+// Ссылка аргументом левее живёт до конца вызова: закрыть ресурс правее
+// нельзя; ссылка во вложенном вызове кончается с ним.
+fn borrow_then_close() {
+    let r = open(19)
+    _ = peek(&r, give(r))
+    let q = open(20)
+    _ = peek(&q, peek(&q, 1)) + give(q)
+}

@@ -9,3 +9,5 @@ index of slice: bbb
 bounds: 33
 callee first: 1, then: 2
 for over slice: 6, list now 100
+element of a slice is a copy: bbb, source keeps bbb
+reference before a call: 1/8, cells now 0

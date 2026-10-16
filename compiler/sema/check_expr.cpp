@@ -1253,6 +1253,7 @@ bool Checker::mutable_place(Expr* e, const char* why) {
             return false;
         }
         Local* l = n->res.local;
+        touch(l);
         if (frozen(l)) {
             error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name +
                                             "' while 'for ... in &' iterates over its Map; iterate over a copy "
@@ -1282,6 +1283,13 @@ bool Checker::mutable_place(Expr* e, const char* why) {
     }
     error(Code::E0412, e->span, std::string("cannot ") + why + " this expression; it is not a variable, field or element");
     return false;
+}
+
+void Checker::touch(const Local* l) {
+    const Local* r = l->alias_of ? l->alias_of : l;
+    for (auto& w : watched_) {
+        if (w.first == r) w.second->body_mutates_root = true;
+    }
 }
 
 bool Checker::frozen(const Local* l) const {

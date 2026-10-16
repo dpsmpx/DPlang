@@ -1,0 +1,143 @@
+fn views.sum(%0 xs: []i64, %1 extra: i64) i64
+  tmp %2: i64
+  var %3 t: i64
+  tmp %4: i64
+  tmp %5: i64
+  tmp %6: bool
+bb0:
+  %3 = copy %1  @6:5
+  %4 = 0:i64  @7:9
+  jump bb1  @7:5
+bb1:
+  %5 = len(copy %0)  @7:15
+  %6 = lt copy %4, copy %5  @7:9
+  branch copy %6, bb2, bb4  @7:9
+bb2:
+  %3 = add copy %3, copy %0[%4]  @8:9
+  jump bb3  @7:5
+bb3:
+  %4 = add.wrap copy %4, 1:i64  @7:9
+  jump bb1  @7:5
+bb4:
+  %2 = copy %3  @10:5
+  return move %2  @10:5
+
+fn views.grow(%0 xs: &mut List[i64]) i64
+  tmp %1: i64
+bb0:
+  eval push(&mut %0, 0:i64)  @14:5
+  %1 = 0:i64  @15:5
+  return move %1  @15:5
+
+fn views.main()
+  var %0 xs: List[i64]
+  tmp %1: List[i64]
+  var %2 fixed: List[i64]
+  tmp %3: List[i64]
+  var %4 s: i64
+  tmp %5: i64
+  tmp %6: List[i64]
+  tmp %7: []i64
+  tmp %8: i64
+  tmp %9: i64
+  tmp %10: i64
+  tmp %11: []i64
+  tmp %12: i64
+  tmp %13: i64
+  tmp %14: i64
+  tmp %15: i64
+  tmp %16: []i64
+  tmp %17: i64
+  tmp %18: i64
+  tmp %19: []i64
+  tmp %20: i64
+  tmp %21: i64
+  tmp %22: bool
+  tmp %23: List[i64]
+  tmp %24: []i64
+  tmp %25: i64
+  tmp %26: i64
+  tmp %27: bool
+  var %28 src: str
+  var %29 t: str
+  tmp %30: str
+  tmp %31: i64
+  tmp %32: str
+  tmp %33: str
+  tmp %34: str
+  tmp %35: str
+bb0:
+  %1 = List[i64] [1:i64, 2:i64, 3:i64]  @19:25
+  %0 = move %1  @19:5
+  drop %1  @19:5
+  %3 = List[i64] [4:i64, 5:i64]  @20:28
+  %2 = move %3  @20:5
+  drop %3  @20:5
+  %4 = 0:i64  @21:5
+  %5 = copy %4  @22:5
+  %6 = copy %0  @22:14
+  %7 = slice %6[0:i64..]  @22:14
+  %8 = call views.grow(&mut %0)  @22:18
+  %9 = call views.sum(move %7, move %8)  @22:10
+  %4 = add copy %5, copy %9  @22:5
+  drop %6  @22:5
+  %10 = copy %4  @23:5
+  %11 = slice %0[1:i64..]  @23:14
+  %12 = call views.sum(move %11, 0:i64)  @23:10
+  %13 = call views.grow(&mut %0)  @23:28
+  %14 = add copy %12, copy %13  @23:26
+  %4 = add copy %10, copy %14  @23:5
+  %15 = copy %4  @24:5
+  %16 = slice %2[0:i64..]  @24:14
+  %17 = call views.grow(&mut %0)  @24:21
+  %18 = call views.sum(move %16, move %17)  @24:10
+  %4 = add copy %15, copy %18  @24:5
+  %19 = slice %0[0:i64..2:i64]  @25:15
+  %20 = 0:i64  @25:9
+  jump bb1  @25:5
+bb1:
+  %21 = len(copy %19)  @25:15
+  %22 = lt copy %20, copy %21  @25:9
+  branch copy %22, bb2, bb4  @25:9
+bb2:
+  %4 = add copy %4, copy %19[%20]  @26:9
+  jump bb3  @25:5
+bb3:
+  %20 = add.wrap copy %20, 1:i64  @25:9
+  jump bb1  @25:5
+bb4:
+  %23 = copy %0  @28:15
+  %24 = slice %23[0:i64..2:i64]  @28:15
+  %25 = 0:i64  @28:9
+  jump bb5  @28:5
+bb5:
+  %26 = len(copy %24)  @28:15
+  %27 = lt copy %25, copy %26  @28:9
+  branch copy %27, bb6, bb8  @28:9
+bb6:
+  eval push(&mut %0, copy %24[%25])  @29:9
+  jump bb7  @28:5
+bb7:
+  %25 = add.wrap copy %25, 1:i64  @28:9
+  jump bb5  @28:5
+bb8:
+  drop %23  @28:5
+  %28 = "abc"  @31:5
+  %30 = slice %28[0:i64..1:i64]  @32:13
+  %31 = call views.grow(&mut %0)  @32:29
+  %32 = str copy %31 to str  @32:25
+  %33 = concat copy %30, copy %32  @32:23
+  %29 = move %33  @32:5
+  drop %33  @32:5
+  drop %32  @32:5
+  drop %30  @32:5
+  %34 = str copy %4 to str  @33:13
+  %35 = concat copy %34, copy %29  @33:20
+  eval println(copy %35)  @33:5
+  drop %35  @33:5
+  drop %34  @33:5
+  drop %29  @34:1
+  drop %28  @34:1
+  drop %2  @34:1
+  drop %0  @34:1
+  return  @34:1

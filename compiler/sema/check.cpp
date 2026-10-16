@@ -269,6 +269,7 @@ void Checker::assign_stmt(AssignStmt* a) {
             Local* l = n->res.local;
             n->type = l->type;
             check(a->value, l->type);
+            touch(l);
             if (frozen(l)) {
                 error(Code::E0412, n->span, "cannot assign to '" + l->name +
                                                 "' while 'for ... in &' iterates over its Map; iterate over a copy "
@@ -398,9 +399,15 @@ void Checker::for_stmt(ForStmt* s) {
     // Обход Map: менять отображение в теле нельзя (Р54) — корень замораживается.
     Local* frozen_root = s->iter && s->iter->type && s->iter->type->kind == TK::Map ? root_local(s->iter) : nullptr;
     if (frozen_root) frozen_.push_back(frozen_root);
+    // Срез-выражение после in: меняет ли тело его корень (stmt.for).
+    Expr* iter = s->iter;
+    while (auto* p = as<ParenExpr>(iter)) iter = p->inner;
+    Local* watched_root = is_ref && as<SliceExpr>(iter) ? root_local(s->iter) : nullptr;
+    if (watched_root) watched_.emplace_back(watched_root, s);
     loops_.emplace_back();
     block(s->body);
     loops_.pop_back();
+    if (watched_root) watched_.pop_back();
     if (frozen_root) frozen_.pop_back();
     pop_scope();
     // Тело могло не выполниться ни разу.

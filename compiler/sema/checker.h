@@ -38,6 +38,10 @@ private:
     // Корни Map, которые обходит `for k in &m`: менять их в теле нельзя (Р54).
     std::vector<Local*> frozen_;
     bool frozen(const Local* l) const;
+    // Корни срезов, которые обходит `for x in &xs[a..b]`: изменение в теле
+    // отмечается в цикле (ForStmt::body_mutates_root), понижение обходит снимок.
+    std::vector<std::pair<const Local*, ast::ForStmt*>> watched_;
+    void touch(const Local* l);
     uint32_t next_local_ = 0;
     int or_depth_ = 0;
 

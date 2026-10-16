@@ -472,6 +472,7 @@ struct ForStmt : Stmt {
     Block* body = nullptr;
     sema::Local* local = nullptr;
     const sema::Type* elem = nullptr;  // тип переменной цикла
+    bool body_mutates_root = false;    // проверка: тело меняет корень среза после in — обход снимка (stmt.for)
 };
 
 struct MatchArm {

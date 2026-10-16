@@ -310,7 +310,8 @@ DP_CODE(E0512, "resource already closed or moved",
 DP_CODE(E0513, "cannot close or move a resource here",
         "A `@linear` value cannot be closed or moved here (spec: ffi.linear): inside a loop when it was opened "
         "outside, while `errdefer` holds it (only `return` may take it), as a single field (destructure the "
-        "struct with `let S { ... } = v`), or by assigning over a value that is not closed yet.")
+        "struct with `let S { ... } = v`), by assigning over a value that is not closed yet, or in an argument "
+        "of a call that gets a reference to it in an earlier argument (`f(&r, close(r))`).")
 DP_CODE(E0514, "linear type not allowed here",
         "A `@linear` value can live in a variable, a field of a `@linear` struct, `?T` and `E!T` (spec: "
         "ffi.linear, decision R60). Lists, maps, slices and enum variants cannot hold one until pools and "
