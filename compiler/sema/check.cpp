@@ -1,6 +1,7 @@
 // Проверка тел: инструкции и поток (docs/spec/core.md, разделы 6–8).
 // Выражения — check_expr.cpp, образцы — check_pat.cpp.
 #include <algorithm>
+#include <set>
 
 #include "sema/builtins.h"
 #include "sema/checker.h"
@@ -12,12 +13,118 @@ using namespace ast;
 Checker::Checker(Program& prog, ModuleInfo& m, Diagnostics& diags)
     : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags), tt_(prog.types) {}
 
+// Константы модуля, на которые ссылается значение c (по имени).
+std::vector<ConstDef*> Checker::const_deps(const ConstDef& c) {
+    std::vector<ConstDef*> out;
+    std::vector<const Expr*> st;
+    if (c.node && c.node->value) st.push_back(c.node->value);
+    auto push = [&](const Expr* e) {
+        if (e) st.push_back(e);
+    };
+    while (!st.empty()) {
+        const Expr* e = st.back();
+        st.pop_back();
+        switch (e->kind) {
+            case ExprKind::Name: {
+                const Symbol* s = r_.lookup(static_cast<const NameExpr*>(e)->name);
+                if (s && s->kind == SymKind::Const && s->cn->module == &m_) out.push_back(s->cn);
+                break;
+            }
+            case ExprKind::Field: push(static_cast<const FieldExpr*>(e)->object); break;
+            case ExprKind::Index:
+                push(static_cast<const IndexExpr*>(e)->object);
+                push(static_cast<const IndexExpr*>(e)->index);
+                break;
+            case ExprKind::Slice: {
+                auto* x = static_cast<const SliceExpr*>(e);
+                push(x->object);
+                push(x->lo);
+                push(x->hi);
+                break;
+            }
+            case ExprKind::Call: {
+                auto* x = static_cast<const CallExpr*>(e);
+                push(x->callee);
+                for (const Expr* a : x->args) push(a);
+                break;
+            }
+            case ExprKind::Unary: push(static_cast<const UnaryExpr*>(e)->operand); break;
+            case ExprKind::Binary:
+                push(static_cast<const BinaryExpr*>(e)->lhs);
+                push(static_cast<const BinaryExpr*>(e)->rhs);
+                break;
+            case ExprKind::Try: push(static_cast<const TryExpr*>(e)->operand); break;
+            case ExprKind::Paren: push(static_cast<const ParenExpr*>(e)->inner); break;
+            case ExprKind::Ref: push(static_cast<const RefExpr*>(e)->operand); break;
+            case ExprKind::StructLit:
+                for (const FieldInit& f : static_cast<const StructLitExpr*>(e)->fields) push(f.value ? f.value : f.shorthand);
+                break;
+            case ExprKind::VariantLit: {
+                auto* x = static_cast<const VariantLitExpr*>(e);
+                for (const Expr* a : x->args) push(a);
+                for (const FieldInit& f : x->fields) push(f.value ? f.value : f.shorthand);
+                break;
+            }
+            case ExprKind::ListLit:
+                for (const Expr* a : static_cast<const ListLitExpr*>(e)->items) push(a);
+                break;
+            default: break;
+        }
+    }
+    return out;
+}
+
+// Значение константы — после констант, на которые оно ссылается: обход
+// зависимостей явным стеком, поэтому проверка значения находит их
+// готовыми, и рекурсия не растёт с длиной цепочки констант. Ссылка назад
+// по стеку обхода — цикл: та константа на время проверки отмечается
+// вычисляемой, и const_value сообщает о цикле (E0421) на ней же, как без
+// обхода.
+void Checker::const_chain(ConstDef& root) {
+    if (root.state != 0) return;
+    struct Frame {
+        ConstDef* c;
+        std::vector<ConstDef*> deps;
+        size_t next = 0;
+    };
+    std::vector<Frame> st;
+    std::set<const ConstDef*> open;
+    st.push_back(Frame{&root, const_deps(root)});
+    open.insert(&root);
+    while (!st.empty()) {
+        Frame& f = st.back();
+        if (f.next < f.deps.size()) {
+            ConstDef* d = f.deps[f.next++];
+            if (d->state == 0 && !open.count(d)) {
+                std::vector<ConstDef*> deps = const_deps(*d);
+                st.push_back(Frame{d, std::move(deps)});  // f больше не действителен
+                open.insert(d);
+            }
+            continue;
+        }
+        ConstDef* c = f.c;
+        std::vector<ConstDef*> back;
+        for (ConstDef* d : f.deps) {
+            if (d != c && d->state == 0 && open.count(d)) {
+                d->state = 1;
+                back.push_back(d);
+            }
+        }
+        st.pop_back();
+        open.erase(c);
+        const_value(*c);
+        for (ConstDef* d : back) {
+            if (d->state == 1) d->state = 0;  // проверка до неё не дошла
+        }
+    }
+}
+
 void Checker::run() {
     // Константы — сначала: их значения нужны в телах.
     for (Item* it : m_.ast->items) {
         if (auto* c = as<ConstItem>(it)) {
             const Symbol* s = r_.lookup(c->name);
-            if (s && s->kind == SymKind::Const && s->cn->node == c) const_value(*s->cn);
+            if (s && s->kind == SymKind::Const && s->cn->node == c) const_chain(*s->cn);
         }
     }
     for (Item* it : m_.ast->items) {

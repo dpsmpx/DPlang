@@ -313,7 +313,8 @@ DP_CODE(E0513, "cannot close or move a resource here",
         "outside, while `errdefer` holds it (only `return` may take it), as a single field (destructure the "
         "struct with `let S { ... } = v`), by assigning over a value that is not closed yet, or in an argument "
         "of a call that gets a reference to it in the same or an earlier argument (`f(&r, take(r))`, where "
-        "`take` consumes `r`); reading a field or an index is not a reference.")
+        "`take` consumes `r`), in the arguments of a method called on it, or in a value assigned into it; reading a "
+        "field or an index is not a reference.")
 DP_CODE(E0514, "linear type not allowed here",
         "A `@linear` value can live in a variable, a field of a `@linear` struct, `?T` and `E!T` (spec: "
         "ffi.linear, decision R60). Lists, maps, slices and enum variants cannot hold one until pools and "

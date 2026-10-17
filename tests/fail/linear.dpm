@@ -172,6 +172,25 @@ fn borrow_then_close() {
     _ = at(&xs[h.id], give(h))
 }
 
+// Получатель метода и место присваивания вычислены до аргумента и
+// значения: поглотить их корень там нельзя.
+@linear
+struct Bag {
+    items: List[int]
+}
+
+fn drop_bag(b: Bag) int {
+    let Bag { items } = b
+    return len(items)
+}
+
+fn write_after_close() {
+    var b = Bag { items: [1] }
+    b.items.push(drop_bag(b))
+    var c = Bag { items: [1] }
+    c.items[0] = drop_bag(c)
+}
+
 fn at(x: &int, n: int) int {
     return x + n
 }
@@ -196,6 +215,7 @@ struct OptView {
 }
 
 extern fn see(v: &View) u32
+extern fn see_one(v: View, n: u32) u32
 extern fn see_all(vs: []View, n: u32) u32
 extern fn see_opts(vs: []OptView, n: u32) u32
 
@@ -208,4 +228,9 @@ fn borrow_in_literal(a: CRes, b: CRes, c: CRes) {
     _ = see_all([View { p: &a, n: 1 }], c_give(a))
     _ = see_opts([OptView { p: &b }], c_give(b))
     _ = see(&View { p: &c, n: c_give(c) })
+}
+
+fn borrow_in_part(a: CRes, b: CRes) {
+    _ = see_all([View { p: &a, n: 1 }, View { p: &a, n: 2 }][0..1], c_give(a))
+    _ = see_one([View { p: &b, n: 1 }][0], c_give(b))
 }

@@ -86,7 +86,13 @@ private:
     std::vector<Scope> scopes_;
     std::vector<size_t> loops_;      // число областей снаружи тела каждого цикла
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
-    std::vector<const Local*> held_;  // под ссылкой аргумента этого или левее в вызове (args)
+    // Нельзя поглотить до конца вызова или присваивания: под ссылкой
+    // аргумента (args), получатель изменяющего метода, место присваивания.
+    struct Held {
+        const Local* l;
+        bool assign;
+    };
+    std::vector<Held> held_;
 
     void error(Code code, Span span, const std::string& msg) { diags_.error(code, span, msg); }
 
@@ -187,12 +193,14 @@ private:
     // --- переменные
 
     void consume(const Local* l, Span span) {
-        for (const Local* h : held_) {
-            if (h == l) {  // дальше — как поглощение: без лавины E0511
-                error(Code::E0513, span, "'" + l->name + "' is held by a reference in this call and cannot be closed or "
-                                         "moved before the call returns");
-                break;
-            }
+        for (const Held& h : held_) {
+            if (h.l != l) continue;
+            // дальше — как поглощение: без лавины E0511
+            error(Code::E0513, span, h.assign ? "'" + l->name + "' is assigned into here and cannot be closed or moved "
+                                                "in the assigned value"
+                                              : "'" + l->name + "' is held by a reference in this call and cannot be "
+                                                "closed or moved before the call returns");
+            break;
         }
         St& st = flow_.st[l->id];
         if (defer_) {  // тело defer и errdefer исполнится позже: ресурс за ним
@@ -271,12 +279,16 @@ private:
         if (!e) return;
         if (by_ref) {  // аргумент параметра `&T`, `&mut T` — место
             if (auto* r = as<const RefExpr>(e)) e = r->operand;
-            if (const Local* l = place_root(e)) held_.push_back(l);
+            if (const Local* l = place_root(e)) held_.push_back(Held{l, false});
             else ref_roots(e, false);  // `&View { p: &r }` — ссылки в литерале
             return;
         }
         if (auto* p = as<const ParenExpr>(e)) return ref_roots(p->inner, false);
         if (auto* r = as<const RefExpr>(e)) return ref_roots(r->operand, true);
+        // Часть литерала — `[View { p: &r }][0..1]`, `W { v: View { ... } }.v`.
+        if (auto* f = as<const FieldExpr>(e)) return ref_roots(f->object, false);
+        if (auto* i = as<const IndexExpr>(e)) return ref_roots(i->object, false);
+        if (auto* x = as<const SliceExpr>(e)) return ref_roots(x->object, false);
         if (auto* s = as<const StructLitExpr>(e)) {
             for (const FieldInit& fi : s->fields) ref_roots(fi.value ? fi.value : fi.shorthand, false);
         } else if (auto* l = as<const ListLitExpr>(e)) {
@@ -411,7 +423,12 @@ private:
                     : std::string("a '@linear' field cannot be replaced; destructure the struct with "
                                   "'let S { ... } = v'"));
         }
+        // Место вычислено до значения (expr.order): поглотить его корень в
+        // значении нельзя — запись ушла бы в закрытое.
+        size_t held = held_.size();
+        if (const Local* l = place_root(a->target)) held_.push_back(Held{l, true});
         expr(a->value, Use::Consume);
+        held_.resize(held);
     }
 
     void if_stmt(IfStmt* s) {
@@ -610,10 +627,15 @@ private:
                 args(c, by_ref);
                 return;
             }
-            case CallKind::Method:
+            case CallKind::Method: {
                 if (f) expr(f->object, Use::Borrow);
+                // Получатель держится до конца вызова: изменяющий метод пишет в него.
+                size_t held = held_.size();
+                if (const Local* l = f ? place_root(f->object) : nullptr) held_.push_back(Held{l, false});
                 for (Expr* a : c->args) expr(a, Use::Consume);
+                held_.resize(held);
                 return;
+            }
             case CallKind::Variant:
                 for (Expr* a : c->args) expr(a, Use::Consume);
                 return;

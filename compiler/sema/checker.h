@@ -44,6 +44,11 @@ private:
     std::vector<Frozen> frozen_;
     // Хвост сообщения E0412, если корень l заморожен, иначе nullptr.
     const char* frozen(const Local* l) const;
+    // Константы раньше зависящих от них — обходом с явным стеком (check.cpp).
+    void const_chain(ConstDef& root);
+    std::vector<ConstDef*> const_deps(const ConstDef& c);
+    // Аргументы вызова с ошибкой — без сообщений о пометках `&`.
+    void infer_loose(const std::vector<ast::Expr*>& args);
     uint32_t next_local_ = 0;
     int or_depth_ = 0;
 
@@ -133,9 +138,8 @@ private:
     const EnumDef* enum_for_variant(const std::string& name, const Type* hint, Span span);
     bool ordered(const Type* t);
     bool equatable(const Type* t);
-    bool type_prop(const Type* t, bool ord, size_t& low);
+    bool type_prop(const Type* root, bool ord);
     std::map<const Type*, bool> prop_cache_[2];  // equatable, ordered
-    std::vector<const Type*> prop_stack_;
 
     // места: изменяемость и корень (Р44)
     bool is_place(ast::Expr* e);
