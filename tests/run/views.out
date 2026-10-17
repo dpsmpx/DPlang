@@ -11,4 +11,5 @@ callee first: 1, then: 2
 for over slice: 6, list now 100
 for over str slice: 195, text now zzzzzzzz
 element of a slice is a copy: bbb, source keeps bbb
+field root: 3, 18, method receiver: 6, &mut param: 9
 reference before a call: 1/8, cells now 0
