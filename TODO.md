@@ -47,7 +47,8 @@
   `bindings/triangle/windows` и `bindings/triangle/android`
   пропускаются; итог `tests/run.py` это называет.
 - `М` **Запуск треугольника на устройстве Android** (Р64, ворота v0.2):
-  поставить `triangle.apk` (из сессии или `examples/triangle/android/build.sh`)
+  поставить `triangle.apk` (передан в сессии 17 октября, SHA-256
+  `faae69a9…cfe9`; или `examples/triangle/android/build.sh`)
   на устройство с Vulkan — `adb install -r triangle.apk`, открыть «dpl
   triangle» и прислать в сессию текст сообщения (или снимок экрана).
   Ожидается `matches the reference: true`.
