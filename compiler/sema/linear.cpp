@@ -88,9 +88,10 @@ private:
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
     // Нельзя поглотить до конца вызова или присваивания: под ссылкой
     // аргумента (args), получатель изменяющего метода, место присваивания.
+    enum class Why : uint8_t { Call, Assign, Index };
     struct Held {
         const Local* l;
-        bool assign;
+        Why why;
     };
     std::vector<Held> held_;
 
@@ -196,10 +197,13 @@ private:
         for (const Held& h : held_) {
             if (h.l != l) continue;
             // дальше — как поглощение: без лавины E0511
-            error(Code::E0513, span, h.assign ? "'" + l->name + "' is assigned into here and cannot be closed or moved "
-                                                "in the assigned value"
-                                              : "'" + l->name + "' is held by a reference in this call and cannot be "
-                                                "closed or moved before the call returns");
+            error(Code::E0513, span,
+                  h.why == Why::Assign  ? "'" + l->name + "' is assigned into here and cannot be closed or moved in the "
+                                                          "assigned value"
+                  : h.why == Why::Index ? "'" + l->name + "' is indexed here and cannot be closed or moved in its own "
+                                                          "index"
+                                        : "'" + l->name + "' is held by a reference in this call and cannot be closed "
+                                                          "or moved before the call returns");
             break;
         }
         St& st = flow_.st[l->id];
@@ -279,7 +283,7 @@ private:
         if (!e) return;
         if (by_ref) {  // аргумент параметра `&T`, `&mut T` — место
             if (auto* r = as<const RefExpr>(e)) e = r->operand;
-            if (const Local* l = place_root(e)) held_.push_back(Held{l, false});
+            if (const Local* l = place_root(e)) held_.push_back(Held{l, Why::Call});
             else ref_roots(e, false);  // `&View { p: &r }` — ссылки в литерале
             return;
         }
@@ -301,6 +305,12 @@ private:
                 for (const Expr* a : c->args) ref_roots(a, false);
             }
         }
+    }
+
+    size_t hold_index(const Expr* object) {
+        size_t held = held_.size();
+        if (const Local* l = place_root(object)) held_.push_back(Held{l, Why::Index});
+        return held;
     }
 
     // Аргументы вызова по порядку: переменные под ссылкой аргумента, который
@@ -426,7 +436,7 @@ private:
         // Место вычислено до значения (expr.order): поглотить его корень в
         // значении нельзя — запись ушла бы в закрытое.
         size_t held = held_.size();
-        if (const Local* l = place_root(a->target)) held_.push_back(Held{l, true});
+        if (const Local* l = place_root(a->target)) held_.push_back(Held{l, Why::Assign});
         expr(a->value, Use::Consume);
         held_.resize(held);
     }
@@ -559,17 +569,23 @@ private:
                 expr(f->object, Use::Borrow);
                 return;
             }
+            // Место вычислено до индекса и границ, читается после них: поглотить
+            // его корень в них нельзя.
             case ExprKind::Index: {
                 auto* x = static_cast<IndexExpr*>(e);
                 expr(x->object, Use::Borrow);
+                size_t held = hold_index(x->object);
                 expr(x->index, Use::Read);
+                held_.resize(held);
                 return;
             }
             case ExprKind::Slice: {
                 auto* x = static_cast<SliceExpr*>(e);
                 expr(x->object, Use::Borrow);
+                size_t held = hold_index(x->object);
                 expr(x->lo, Use::Read);
                 expr(x->hi, Use::Read);
+                held_.resize(held);
                 return;
             }
             case ExprKind::Ref: expr(static_cast<RefExpr*>(e)->operand, Use::Borrow); return;
@@ -631,7 +647,7 @@ private:
                 if (f) expr(f->object, Use::Borrow);
                 // Получатель держится до конца вызова: изменяющий метод пишет в него.
                 size_t held = held_.size();
-                if (const Local* l = f ? place_root(f->object) : nullptr) held_.push_back(Held{l, false});
+                if (const Local* l = f ? place_root(f->object) : nullptr) held_.push_back(Held{l, Why::Call});
                 for (Expr* a : c->args) expr(a, Use::Consume);
                 held_.resize(held);
                 return;

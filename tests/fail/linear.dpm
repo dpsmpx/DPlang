@@ -189,6 +189,8 @@ fn write_after_close() {
     b.items.push(drop_bag(b))
     var c = Bag { items: [1] }
     c.items[0] = drop_bag(c)
+    var d = Bag { items: [1] }
+    d.items[drop_bag(d) - 1] = 5
 }
 
 fn at(x: &int, n: int) int {

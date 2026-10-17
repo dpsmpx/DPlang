@@ -1375,8 +1375,13 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         } else if (auto* r = as<RefExpr>(e)) {
             if (is_place(r->operand)) refs.push_back({root_local(r->operand), false, e->span});
             else borrowed(r->operand);
+        } else if (Local* root = root_local(e); !root && (as<FieldExpr>(e) || as<IndexExpr>(e) || as<SliceExpr>(e))) {
+            // Часть литерала — `[S { p: &x }][0..1]`: заимствования его элементов.
+            if (auto* f = as<FieldExpr>(e)) borrowed(f->object);
+            else if (auto* x = as<IndexExpr>(e)) borrowed(x->object);
+            else borrowed(static_cast<SliceExpr*>(e)->object);
         } else if ((e->conv && e->conv->kind == TK::Slice) || as<SliceExpr>(e)) {
-            refs.push_back({root_local(e), false, e->span});
+            refs.push_back({root, false, e->span});
         }
     };
     for (size_t i = 0; i < c->args.size() && i < params.size(); i++) {
@@ -1385,8 +1390,9 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             if (params[i].mode != ParamMode::Value) refs.push_back({root_local(r->operand), r->mut, a->span});
             if (!is_place(r->operand)) borrowed(r->operand);
         } else if (params[i].type && params[i].type->kind == TK::Slice) {
-            refs.push_back({root_local(a), false, a->span});  // `(xs[1..])` — тоже корень xs
-            if (as<ListLitExpr>(strip_paren(a))) borrowed(a);  // `[S { ... }]` — заимствования внутри
+            Local* root = root_local(a);  // `(xs[1..])` — тоже корень xs
+            if (root) refs.push_back({root, false, a->span});
+            else borrowed(a);  // `[S { ... }]`, `[S { ... }][0..1]` — заимствования внутри
         } else if (params[i].type && (c_borrowing(params[i].type) || params[i].type->kind == TK::Optional)) {
             borrowed(a);
         }
