@@ -1253,11 +1253,8 @@ bool Checker::mutable_place(Expr* e, const char* why) {
             return false;
         }
         Local* l = n->res.local;
-        touch(l);
-        if (frozen(l)) {
-            error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name +
-                                            "' while 'for ... in &' iterates over its Map; iterate over a copy "
-                                            "of the keys: 'for k in &m.keys()'");
+        if (const char* hint = frozen(l)) {
+            error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "'" + hint);
             return false;
         }
         if (l->mutable_) return true;
@@ -1285,19 +1282,16 @@ bool Checker::mutable_place(Expr* e, const char* why) {
     return false;
 }
 
-void Checker::touch(const Local* l) {
+const char* Checker::frozen(const Local* l) const {
     const Local* r = l->alias_of ? l->alias_of : l;
-    for (auto& w : watched_) {
-        if (w.first == r) w.second->body_mutates_root = true;
+    for (const Frozen& f : frozen_) {
+        if (f.root != r) continue;
+        return f.map ? " while 'for ... in &' iterates over its Map; iterate over a copy of the keys: "
+                       "'for k in &m.keys()'"
+                     : " while 'for ... in &' iterates over its slice; iterate over a slice of a copy "
+                       "made before the loop";
     }
-}
-
-bool Checker::frozen(const Local* l) const {
-    const Local* r = l->alias_of ? l->alias_of : l;
-    for (const Local* f : frozen_) {
-        if (f == r) return true;
-    }
-    return false;
+    return nullptr;
 }
 
 Local* Checker::root_local(Expr* e) {

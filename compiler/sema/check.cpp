@@ -269,11 +269,8 @@ void Checker::assign_stmt(AssignStmt* a) {
             Local* l = n->res.local;
             n->type = l->type;
             check(a->value, l->type);
-            touch(l);
-            if (frozen(l)) {
-                error(Code::E0412, n->span, "cannot assign to '" + l->name +
-                                                "' while 'for ... in &' iterates over its Map; iterate over a copy "
-                                                "of the keys: 'for k in &m.keys()'");
+            if (const char* hint = frozen(l)) {
+                error(Code::E0412, n->span, "cannot assign to '" + l->name + "'" + hint);
             } else if (!l->mutable_) {
                 error(Code::E0412, n->span, "cannot assign to '" + l->name + "': it is not declared with 'var'");
             }
@@ -396,18 +393,19 @@ void Checker::for_stmt(ForStmt* s) {
     push_scope();
     s->local = declare(s->var, s->var_span, elem, s->mode == ForMode::Mut, is_ref, true);
     if (s->local && is_ref) s->local->alias_of = root_local(s->iter);  // элемент xs — корень xs (Р44)
-    // Обход Map: менять отображение в теле нельзя (Р54) — корень замораживается.
-    Local* frozen_root = s->iter && s->iter->type && s->iter->type->kind == TK::Map ? root_local(s->iter) : nullptr;
-    if (frozen_root) frozen_.push_back(frozen_root);
-    // Срез-выражение после in: меняет ли тело его корень (stmt.for).
+    // Обход Map (Р54) и среза-выражения `&xs[a..b]` (Р65): менять корень в
+    // теле нельзя — корень замораживается. Срез вычислен до цикла и пережил
+    // бы изменение своего списка.
     Expr* iter = s->iter;
     while (auto* p = as<ParenExpr>(iter)) iter = p->inner;
-    Local* watched_root = is_ref && as<SliceExpr>(iter) ? root_local(s->iter) : nullptr;
-    if (watched_root) watched_.emplace_back(watched_root, s);
+    const Type* it = s->iter ? s->iter->type : nullptr;
+    bool map = it && it->kind == TK::Map;
+    bool view = is_ref && it && it->kind == TK::Slice && as<SliceExpr>(iter);
+    Local* frozen_root = map || view ? root_local(s->iter) : nullptr;
+    if (frozen_root) frozen_.push_back(Frozen{frozen_root, map});
     loops_.emplace_back();
     block(s->body);
     loops_.pop_back();
-    if (watched_root) watched_.pop_back();
     if (frozen_root) frozen_.pop_back();
     pop_scope();
     // Тело могло не выполниться ни разу.

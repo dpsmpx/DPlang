@@ -95,8 +95,9 @@ fn main() {
     var f: extern fn(i32) i32 = one
     println("callee first: " + str(f(swap(&mut f))) + ", then: " + str(f(0)))
     var loop: List[int] = [1, 2, 3]
+    let copy = loop
     var seen = 0
-    for x in &loop[0..3] {
+    for x in &copy[0..3] {
         loop.clear()
         for k in 0..100 {
             loop.push(7)
@@ -104,6 +105,13 @@ fn main() {
         seen += x
     }
     println("for over slice: " + str(seen) + ", list now " + str(len(loop)))
+    var text = "abc"
+    var bytes = 0
+    for b in &text[0..2] {
+        text = "zzzzzzzz"
+        bytes += int(b)
+    }
+    println("for over str slice: " + str(bytes) + ", text now " + text)
     words = ["aa", "bbb", "c", "dddd"]
     let first = words[1..3][0]
     println("element of a slice is a copy: " + first + ", source keeps " + words[1])

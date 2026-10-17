@@ -217,7 +217,8 @@ DP_CODE(E0411, "expression has no effect",
 DP_CODE(E0412, "cannot assign or mutate",
         "Only a place can be assigned or mutated: a `var` variable, a `&mut` parameter, a `for ... in &mut` "
         "variable, or a field or `List` element of one (spec: stmt.assign). `let` variables, value "
-        "parameters, `&` parameters, slices and strings are read-only.")
+        "parameters, `&` parameters, slices and strings are read-only. The body of `for k in &m` or "
+        "`for x in &xs[a..b]` cannot change `m` or `xs` (spec: stmt.for).")
 DP_CODE(E0413, "wrong fields in a literal",
         "A struct or record-variant literal must give each field once, and only fields that exist; struct "
         "fields with a default value may be left out (spec: expr.struct).")

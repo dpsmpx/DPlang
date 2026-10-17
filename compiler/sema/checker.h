@@ -35,13 +35,15 @@ private:
 
     // --- области и переменные
     std::vector<std::vector<Local*>> scopes_;
-    // Корни Map, которые обходит `for k in &m`: менять их в теле нельзя (Р54).
-    std::vector<Local*> frozen_;
-    bool frozen(const Local* l) const;
-    // Корни срезов, которые обходит `for x in &xs[a..b]`: изменение в теле
-    // отмечается в цикле (ForStmt::body_mutates_root), понижение обходит снимок.
-    std::vector<std::pair<const Local*, ast::ForStmt*>> watched_;
-    void touch(const Local* l);
+    // Корни, которые обходит `for ... in &`: менять их в теле нельзя —
+    // Map в `for k in &m` (Р54) и список в `for x in &xs[a..b]` (Р65).
+    struct Frozen {
+        const Local* root;
+        bool map;
+    };
+    std::vector<Frozen> frozen_;
+    // Хвост сообщения E0412, если корень l заморожен, иначе nullptr.
+    const char* frozen(const Local* l) const;
     uint32_t next_local_ = 0;
     int or_depth_ = 0;
 

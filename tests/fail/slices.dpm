@@ -45,3 +45,43 @@ fn bypass(xs: List[i32]) {
         part => grow(&mut list, part)
     }
 }
+
+struct Bag {
+    items: List[i32]
+    n: i32
+}
+
+fn bump(xs: &mut List[i32]) {
+}
+
+// Цикл по срезу: корень среза в теле не меняется (Р65).
+fn loops(bag: Bag) {
+    var list: List[i32] = [1, 2, 3]
+    var b = bag
+    for x in &list[0..2] {
+        list = []
+        list.push(x)
+        list[0] = 5
+        bump(&mut list)
+        if x > 0 {
+            list.clear()
+        }
+    }
+    for x in &(list[1..]) {
+        list.pop()
+    }
+    for x in &b.items[0..1] {
+        b.n = x
+    }
+    for x in &list {
+        list.push(x)
+    }
+    var other: List[i32] = []
+    for x in &list[0..1] {
+        other.push(x)
+    }
+    var text = "ab"
+    for c in &text[0..1] {
+        text = "c"
+    }
+}

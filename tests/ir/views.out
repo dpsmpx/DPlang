@@ -53,19 +53,14 @@ fn views.main()
   tmp %20: i64
   tmp %21: i64
   tmp %22: bool
-  tmp %23: List[i64]
-  tmp %24: []i64
-  tmp %25: i64
+  var %23 src: str
+  var %24 t: str
+  tmp %25: str
   tmp %26: i64
-  tmp %27: bool
-  var %28 src: str
-  var %29 t: str
+  tmp %27: str
+  tmp %28: str
+  tmp %29: str
   tmp %30: str
-  tmp %31: i64
-  tmp %32: str
-  tmp %33: str
-  tmp %34: str
-  tmp %35: str
 bb0:
   %1 = List[i64] [1:i64, 2:i64, 3:i64]  @19:25
   %0 = move %1  @19:5
@@ -106,38 +101,22 @@ bb3:
   %20 = add.wrap copy %20, 1:i64  @25:9
   jump bb1  @25:5
 bb4:
-  %23 = copy %0  @28:15
-  %24 = slice %23[0:i64..2:i64]  @28:15
-  %25 = 0:i64  @28:9
-  jump bb5  @28:5
-bb5:
-  %26 = len(copy %24)  @28:15
-  %27 = lt copy %25, copy %26  @28:9
-  branch copy %27, bb6, bb8  @28:9
-bb6:
-  eval push(&mut %0, copy %24[%25])  @29:9
-  jump bb7  @28:5
-bb7:
-  %25 = add.wrap copy %25, 1:i64  @28:9
-  jump bb5  @28:5
-bb8:
-  drop %23  @28:5
-  %28 = "abc"  @31:5
-  %30 = slice %28[0:i64..1:i64]  @32:13
-  %31 = call views.grow(&mut %0)  @32:29
-  %32 = str copy %31 to str  @32:25
-  %33 = concat copy %30, copy %32  @32:23
-  %29 = move %33  @32:5
-  drop %33  @32:5
-  drop %32  @32:5
-  drop %30  @32:5
-  %34 = str copy %4 to str  @33:13
-  %35 = concat copy %34, copy %29  @33:20
-  eval println(copy %35)  @33:5
-  drop %35  @33:5
-  drop %34  @33:5
-  drop %29  @34:1
-  drop %28  @34:1
-  drop %2  @34:1
-  drop %0  @34:1
-  return  @34:1
+  %23 = "abc"  @28:5
+  %25 = slice %23[0:i64..1:i64]  @29:13
+  %26 = call views.grow(&mut %0)  @29:29
+  %27 = str copy %26 to str  @29:25
+  %28 = concat copy %25, copy %27  @29:23
+  %24 = move %28  @29:5
+  drop %28  @29:5
+  drop %27  @29:5
+  drop %25  @29:5
+  %29 = str copy %4 to str  @30:13
+  %30 = concat copy %29, copy %24  @30:20
+  eval println(copy %30)  @30:5
+  drop %30  @30:5
+  drop %29  @30:5
+  drop %24  @31:1
+  drop %23  @31:1
+  drop %2  @31:1
+  drop %0  @31:1
+  return  @31:1

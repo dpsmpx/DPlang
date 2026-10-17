@@ -1305,9 +1305,9 @@ private:
             // `for x in &xs`: x — место xs[k]; длина проверяется на каждом шаге.
             // `for k in &m`: k — элемент снимка m.keys(), ключи по возрастанию (Р54).
             bool fresh = false;
-            // `for x in &xs[a..b]`: если тело меняет xs (отметка проверки), срез
-            // строится над снимком xs (stmt.for); `for x in &xs` — место xs.
-            Place base = snapping_from(s->body_mutates_root, [&] { return object(s->iter, fresh); });
+            // `for x in &xs[a..b]`: срез вычисляется раз; тело не меняет xs
+            // (E0412, Р65), поэтому он строится над самим xs без снимка.
+            Place base = snapping_from(false, [&] { return object(s->iter, fresh); });
             if (s->iter->type->kind == TK::Map) {
                 Rvalue keys = intrinsic(Intrinsic::MapKeys, tt_.list(s->iter->type->key));
                 keys.ops.push_back(copy(base));
