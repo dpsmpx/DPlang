@@ -68,4 +68,13 @@ slices.dpm:71:9: error[E0412]: cannot call 'pop' on 'list' while 'for ... in &' 
 slices.dpm:74:9: error[E0412]: cannot assign to 'b' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
   74 |         b.n = x
      |         ^
+slices.dpm:90:9: error[E0412]: cannot call 'push' on 'fixed': it is not declared with 'var'
+  90 |         fixed.push(x)
+     |         ^~~~~
+slices.dpm:91:9: error[E0412]: cannot assign to 'x': it is an element read through 'for ... in &'
+  91 |         x = 2
+     |         ^
+slices.dpm:106:17: error[E0510]: a slice cannot be bound to 's'; pass it to a function directly
+ 106 |     let Span8 { s } = p
+     |                 ^
 [exit 1]

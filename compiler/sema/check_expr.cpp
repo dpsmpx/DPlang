@@ -1253,14 +1253,18 @@ bool Checker::mutable_place(Expr* e, const char* why) {
             return false;
         }
         Local* l = n->res.local;
-        if (const char* hint = frozen(l)) {
+        // Заморозка — причина, только если без неё место изменяемо.
+        const char* hint = frozen(l);
+        if (l->mutable_ && hint) {
             error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "'" + hint);
             return false;
         }
         if (l->mutable_) return true;
+        // У элемента обхода Map и среза `&mut` нет (E0419, E0412).
         std::string reason = l->is_param ? (l->is_ref ? "it is a '&' parameter; make it '&mut'"
                                                       : "it is a value parameter; take it as '&mut' to change it")
-                             : l->is_ref ? "it is an element read through 'for ... in &'; use '&mut'"
+                             : l->is_ref ? (hint ? "it is an element read through 'for ... in &'"
+                                                 : "it is an element read through 'for ... in &'; use '&mut'")
                                          : "it is not declared with 'var'";
         error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "': " + reason);
         return false;
@@ -1303,7 +1307,9 @@ Local* Checker::root_local(Expr* e) {
     }
     if (auto* f = as<FieldExpr>(e)) return root_local(f->object);
     if (auto* i = as<IndexExpr>(e)) return root_local(i->object);
-    if (auto* s = as<SliceExpr>(e)) return root_local(s->object);  // срез xs[a..b] — корень xs
+    if (auto* s = as<SliceExpr>(e)) {  // срез xs[a..b] — корень xs; срез str — копия
+        return s->type && s->type->kind == TK::Str ? nullptr : root_local(s->object);
+    }
     return nullptr;
 }
 

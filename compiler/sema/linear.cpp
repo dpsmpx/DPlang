@@ -86,8 +86,7 @@ private:
     std::vector<Scope> scopes_;
     std::vector<size_t> loops_;      // число областей снаружи тела каждого цикла
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
-    std::vector<const Local*> held_;      // заимствованы аргументами левее в вызове (args)
-    std::vector<const Local*> borrowed_;  // журнал borrow() для held_
+    std::vector<const Local*> held_;  // под ссылкой аргумента этого или левее в вызове (args)
 
     void error(Code code, Span span, const std::string& msg) { diags_.error(code, span, msg); }
 
@@ -190,8 +189,8 @@ private:
     void consume(const Local* l, Span span) {
         for (const Local* h : held_) {
             if (h == l) {  // дальше — как поглощение: без лавины E0511
-                error(Code::E0513, span, "'" + l->name + "' is passed by reference earlier in this call and cannot be "
-                                         "closed or moved before the call returns");
+                error(Code::E0513, span, "'" + l->name + "' is held by a reference in this call and cannot be closed or "
+                                         "moved before the call returns");
                 break;
             }
         }
@@ -236,35 +235,74 @@ private:
     }
 
     void borrow(const Local* l, Span span) {
-        borrowed_.push_back(l);
         St st = flow_.st[l->id];
         if (st == St::Consumed || st == St::Maybe || st == St::ErrMoved) used_after(l, span, st);
     }
 
     // Аргумент держит заимствование до конца вызова: ссылка `&x` или
-    // значение со ссылкой внутри — `?&T`, заимствующая структура `@c` (Р62).
+    // значение со ссылкой внутри — `?&T`, заимствующая структура `@c` (Р62),
+    // их список или срез.
     static bool keeps_borrow(bool by_ref, const Type* t) {
         if (by_ref) return true;
         if (!t) return false;
         if (t->kind == TK::Optional) t = t->elem;
+        if ((t->kind == TK::List || t->kind == TK::Slice) && t->elem) return keeps_borrow(false, t->elem);
         return t->kind == TK::Ref || c_borrowing(t);
     }
 
-    // Аргументы вызова по порядку: заимствования аргумента, который держит
-    // их до конца вызова, попадают в held_ — закрыть такой ресурс в
-    // аргументе правее нельзя (E0513), иначе вызов прочитал бы закрытое.
-    void args(CallExpr* c, const std::vector<bool>& by_ref) {
-        size_t held = held_.size(), log = borrowed_.size();
-        for (size_t i = 0; i < c->args.size(); i++) {
-            size_t from = borrowed_.size();
-            bool r = i < by_ref.size() && by_ref[i];
-            expr(c->args[i], r ? Use::Borrow : Use::Consume);
-            if (keeps_borrow(r, c->args[i]->type)) {
-                held_.insert(held_.end(), borrowed_.begin() + static_cast<long>(from), borrowed_.end());
+    // Корень места: `r` у `r.f`, `r[i]`, `r[a..b]`. Индекс и границы — только
+    // чтение, их переменные ссылку не получают.
+    static const Local* place_root(const Expr* e) {
+        for (;;) {
+            if (auto* p = as<const ParenExpr>(e)) e = p->inner;
+            else if (auto* f = as<const FieldExpr>(e)) {
+                if (f->field < 0) return nullptr;
+                e = f->object;
+            } else if (auto* i = as<const IndexExpr>(e)) e = i->object;
+            else if (auto* s = as<const SliceExpr>(e)) e = s->object;
+            else if (auto* n = as<const NameExpr>(e)) return n->res.kind == ResKind::Local ? n->res.local : nullptr;
+            else return nullptr;
+        }
+    }
+
+    // Переменные, на которые держит ссылку аргумент: корень места под `&`,
+    // в том числе в полях и элементах литерала и в `some(...)`.
+    void ref_roots(const Expr* e, bool by_ref) {
+        if (!e) return;
+        if (by_ref) {  // аргумент параметра `&T`, `&mut T` — место
+            if (auto* r = as<const RefExpr>(e)) e = r->operand;
+            if (const Local* l = place_root(e)) held_.push_back(l);
+            else ref_roots(e, false);  // `&View { p: &r }` — ссылки в литерале
+            return;
+        }
+        if (auto* p = as<const ParenExpr>(e)) return ref_roots(p->inner, false);
+        if (auto* r = as<const RefExpr>(e)) return ref_roots(r->operand, true);
+        if (auto* s = as<const StructLitExpr>(e)) {
+            for (const FieldInit& fi : s->fields) ref_roots(fi.value ? fi.value : fi.shorthand, false);
+        } else if (auto* l = as<const ListLitExpr>(e)) {
+            for (const Expr* a : l->items) ref_roots(a, false);
+        } else if (auto* v = as<const VariantLitExpr>(e)) {
+            for (const Expr* a : v->args) ref_roots(a, false);
+            for (const FieldInit& fi : v->fields) ref_roots(fi.value ? fi.value : fi.shorthand, false);
+        } else if (auto* c = as<const CallExpr>(e)) {
+            if (c->call == CallKind::Wrap || c->call == CallKind::Variant) {
+                for (const Expr* a : c->args) ref_roots(a, false);
             }
         }
-        held_.resize(held);
-        borrowed_.resize(log);  // заимствования вложенного вызова кончились с ним
+    }
+
+    // Аргументы вызова по порядку: переменные под ссылкой аргумента, который
+    // держит её до конца вызова, попадают в held_ до его вычисления — закрыть
+    // такой ресурс в нём же или правее нельзя (E0513), иначе вызов прочитал
+    // бы закрытое.
+    void args(CallExpr* c, const std::vector<bool>& by_ref) {
+        size_t held = held_.size();
+        for (size_t i = 0; i < c->args.size(); i++) {
+            bool r = i < by_ref.size() && by_ref[i];
+            if (keeps_borrow(r, c->args[i]->type)) ref_roots(c->args[i], r);
+            expr(c->args[i], r ? Use::Borrow : Use::Consume);
+        }
+        held_.resize(held);  // ссылки вложенного вызова кончились с ним
     }
 
     // --- инструкции

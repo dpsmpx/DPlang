@@ -218,7 +218,7 @@ DP_CODE(E0412, "cannot assign or mutate",
         "Only a place can be assigned or mutated: a `var` variable, a `&mut` parameter, a `for ... in &mut` "
         "variable, or a field or `List` element of one (spec: stmt.assign). `let` variables, value "
         "parameters, `&` parameters, slices and strings are read-only. The body of `for k in &m` or "
-        "`for x in &xs[a..b]` cannot change `m` or `xs` (spec: stmt.for).")
+        "`for x in &xs[a..b]` cannot change `m` or `xs`; a slice of a `str` is a copy (spec: stmt.for).")
 DP_CODE(E0413, "wrong fields in a literal",
         "A struct or record-variant literal must give each field once, and only fields that exist; struct "
         "fields with a default value may be left out (spec: expr.struct).")
@@ -312,7 +312,8 @@ DP_CODE(E0513, "cannot close or move a resource here",
         "A `@linear` value cannot be closed or moved here (spec: ffi.linear): inside a loop when it was opened "
         "outside, while `errdefer` holds it (only `return` may take it), as a single field (destructure the "
         "struct with `let S { ... } = v`), by assigning over a value that is not closed yet, or in an argument "
-        "of a call that gets a reference to it in an earlier argument (`f(&r, close(r))`).")
+        "of a call that gets a reference to it in the same or an earlier argument (`f(&r, take(r))`, where "
+        "`take` consumes `r`); reading a field or an index is not a reference.")
 DP_CODE(E0514, "linear type not allowed here",
         "A `@linear` value can live in a variable, a field of a `@linear` struct, `?T` and `E!T` (spec: "
         "ffi.linear, decision R60). Lists, maps, slices and enum variants cannot hold one until pools and "

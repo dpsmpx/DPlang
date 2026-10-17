@@ -167,4 +167,45 @@ fn borrow_then_close() {
     _ = peek(&r, give(r))
     let q = open(20)
     _ = peek(&q, peek(&q, 1)) + give(q)
+    let xs = [1, 2]
+    let h = open(0)
+    _ = at(&xs[h.id], give(h))
+}
+
+fn at(x: &int, n: int) int {
+    return x + n
+}
+
+// Ссылка в литерале для C: в списке заимствующих структур и в том же
+// аргументе, что и закрытие.
+@c
+@linear
+struct CRes {
+    id: u32
+}
+
+@c
+struct View {
+    p: &CRes
+    n: u32
+}
+
+@c
+struct OptView {
+    p: ?&CRes
+}
+
+extern fn see(v: &View) u32
+extern fn see_all(vs: []View, n: u32) u32
+extern fn see_opts(vs: []OptView, n: u32) u32
+
+fn c_give(r: CRes) u32 {
+    let CRes { id } = r
+    return id
+}
+
+fn borrow_in_literal(a: CRes, b: CRes, c: CRes) {
+    _ = see_all([View { p: &a, n: 1 }], c_give(a))
+    _ = see_opts([OptView { p: &b }], c_give(b))
+    _ = see(&View { p: &c, n: c_give(c) })
 }

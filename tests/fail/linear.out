@@ -56,7 +56,16 @@ linear.dpm:144:11: error[E0513]: 'r' is a reference: its resource belongs to the
 linear.dpm:148:5: error[E0513]: 'r' is a reference: the caller's resource cannot be replaced
  148 |     r = open(18)
      |     ^
-linear.dpm:167:23: error[E0513]: 'r' is passed by reference earlier in this call and cannot be closed or moved before the call returns
+linear.dpm:167:23: error[E0513]: 'r' is held by a reference in this call and cannot be closed or moved before the call returns
  167 |     _ = peek(&r, give(r))
      |                       ^
+linear.dpm:208:48: error[E0513]: 'a' is held by a reference in this call and cannot be closed or moved before the call returns
+ 208 |     _ = see_all([View { p: &a, n: 1 }], c_give(a))
+     |                                                ^
+linear.dpm:209:46: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
+ 209 |     _ = see_opts([OptView { p: &b }], c_give(b))
+     |                                              ^
+linear.dpm:210:38: error[E0513]: 'c' is held by a reference in this call and cannot be closed or moved before the call returns
+ 210 |     _ = see(&View { p: &c, n: c_give(c) })
+     |                                      ^
 [exit 1]

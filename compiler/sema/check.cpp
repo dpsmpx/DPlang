@@ -269,11 +269,7 @@ void Checker::assign_stmt(AssignStmt* a) {
             Local* l = n->res.local;
             n->type = l->type;
             check(a->value, l->type);
-            if (const char* hint = frozen(l)) {
-                error(Code::E0412, n->span, "cannot assign to '" + l->name + "'" + hint);
-            } else if (!l->mutable_) {
-                error(Code::E0412, n->span, "cannot assign to '" + l->name + "': it is not declared with 'var'");
-            }
+            mutable_place(n, "assign to");
             if (flow_.init.size() > l->id) flow_.init[l->id] = 1;
             return;
         }

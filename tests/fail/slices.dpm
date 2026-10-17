@@ -83,5 +83,25 @@ fn loops(bag: Bag) {
     var text = "ab"
     for c in &text[0..1] {
         text = "c"
+        put(&c, &mut text)
     }
+    let fixed: List[i32] = [1]
+    for x in &fixed[0..1] {
+        fixed.push(x)
+        x = 2
+    }
+}
+
+fn put(c: &u8, s: &mut str) {
+}
+
+// Разбор: поле-срез — тоже переменная (ref.slices).
+@c
+@linear
+struct Span8 {
+    s: []u8
+}
+
+fn split(p: Span8) {
+    let Span8 { s } = p
 }
