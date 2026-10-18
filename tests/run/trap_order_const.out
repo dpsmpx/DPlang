@@ -1,0 +1,4 @@
+start
+--- stderr ---
+trap_order_const.dpm:8:17: trap: index 9 is out of bounds for length 2
+[exit 101]

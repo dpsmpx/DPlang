@@ -1,0 +1,18 @@
+// spec: expr.order trap.index
+// Значение поля по умолчанию — правее записанных полей.
+fn note() int {
+    println("default evaluated")
+    return 2
+}
+
+struct S {
+    a: int
+    b: int = note()
+}
+
+fn main() {
+    let xs: List[int] = [1]
+    println("start")
+    let s = S { a: xs[9] }
+    println(str(s.a + s.b))
+}

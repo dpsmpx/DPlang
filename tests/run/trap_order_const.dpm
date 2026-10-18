@@ -1,0 +1,9 @@
+// spec: expr.order trap.index
+// Место в константе-списке проверяется раньше ловушки правее.
+const XS: List[int] = [1, 2]
+
+fn main() {
+    var z = 0
+    println("start")
+    println(str(XS[9] + 1 / z))
+}

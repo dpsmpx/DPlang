@@ -1,0 +1,17 @@
+// spec: expr.order trap.index
+// Нижняя граница среза — раньше ловушки верхней.
+fn total(v: []int) int {
+    var s = 0
+    for x in &v {
+        s += x
+    }
+    return s
+}
+
+fn main() {
+    let xs: List[int] = [1, 2]
+    let ks: List[int] = [0]
+    var z = 0
+    println("start")
+    println(str(total(xs[ks[5]..(1 / z)])))
+}

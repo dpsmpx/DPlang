@@ -1,0 +1,12 @@
+// spec: expr.order trap.index
+// Индекс среза — раньше вызова правее: вызов не выполняется.
+fn note() int {
+    println("right operand evaluated")
+    return 1
+}
+
+fn main() {
+    let xs: List[int] = [1, 2, 3]
+    println("start")
+    println(str(xs[0..2][9] + note()))
+}

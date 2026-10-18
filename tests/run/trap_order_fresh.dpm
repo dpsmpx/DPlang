@@ -1,0 +1,11 @@
+// spec: expr.order trap.index
+// Место в значении вызова проверяется раньше ловушки правее.
+fn mk() List[int] {
+    return [1, 2]
+}
+
+fn main() {
+    var z = 0
+    println("start")
+    println(str(mk()[9] + 1 / z))
+}
