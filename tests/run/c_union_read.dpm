@@ -1,0 +1,34 @@
+// spec: ffi.struct
+// Чтение поля @union не меняет его байтов (Р62): сигнальный NaN f32 и байт
+// bool 2 остаются прежними, интерпретатор и сборка совпадают.
+@c
+struct Mouse {
+    kind: u32
+    x: f32
+    y: f32
+}
+
+@c
+struct Key {
+    kind: u32
+    code: i32
+    down: bool
+}
+
+@union
+struct Event {
+    kind: u32
+    mouse: Mouse
+    key: Key
+    raw: [16]u8
+}
+
+fn main() {
+    let e = Event { raw: [0, 0, 0, 0, 1, 0, 128, 127, 2, 0, 0, 0, 0, 0, 0, 0] }
+    let m = e.mouse
+    println(str(m.kind))
+    println("nan bytes: " + str(e.raw[6]) + " " + str(e.raw[7]))
+    let k = e.key
+    println(str(k.code))
+    println("bool byte: " + str(e.raw[8]))
+}
