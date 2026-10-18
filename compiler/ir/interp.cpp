@@ -1047,6 +1047,10 @@ private:
     }
 
     Value intrinsic(Frame& fr, const Rvalue& rv) {
+        if (rv.intrinsic == Intrinsic::Probe) {  // проверки места без чтения
+            resolve(fr, rv.place);
+            return Value{};
+        }
         // Операнды — копии: изменяющий метод не должен видеть их через себя.
         std::vector<Value> ops;
         for (size_t i = 0; i < rv.ops.size(); i++) {

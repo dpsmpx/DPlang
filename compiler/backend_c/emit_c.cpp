@@ -1197,6 +1197,10 @@ std::string FnEmitter::cast(const Rvalue& rv) {
 }
 
 std::string FnEmitter::intrinsic(const Rvalue& rv) {
+    if (rv.intrinsic == Intrinsic::Probe) {  // проверки места — строками place(), без чтения
+        Lv p = place(rv.place);
+        return "((void)" + p.expr + ")";
+    }
     if (rv.has_place && rv.intrinsic == Intrinsic::ReadFile) {
         // __read_file (Р51): путь читается, текст — в место; результат — код.
         std::string path = operand(rv.ops[0], false);

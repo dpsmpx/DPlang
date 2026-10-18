@@ -352,6 +352,12 @@ private:
                 same(op(0), prim(TK::I64), "arena mark");
                 same(rv.type, prim(TK::Void), "result");
                 break;
+            case Intrinsic::Probe:
+                args(0);
+                same(rv.type, prim(TK::Void), "result");
+                if (!rv.has_place) fail("probe without a place");
+                else place(rv.place);
+                break;
             case Intrinsic::MapKeys:
                 args(1);
                 if (const Type* m = map_operand(op(0))) {
@@ -407,7 +413,7 @@ private:
             rv.intrinsic != Intrinsic::ListInsert && rv.intrinsic != Intrinsic::ListRemove &&
             rv.intrinsic != Intrinsic::ListClear && rv.intrinsic != Intrinsic::ListSort &&
             rv.intrinsic != Intrinsic::MapSet && rv.intrinsic != Intrinsic::MapRemove &&
-            rv.intrinsic != Intrinsic::MapClear) {
+            rv.intrinsic != Intrinsic::MapClear && rv.intrinsic != Intrinsic::Probe) {
             fail("receiver place on a method that only reads");
         }
     }

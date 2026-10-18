@@ -1,0 +1,9 @@
+// spec: expr.order trap.index
+// Ловушка места левее — раньше ловушки правее (expr.order).
+fn main() {
+    var xs: List[i32] = [1]
+    var big: i32 = 2147483647
+    println("start")
+    let s = xs[5] + (big + 1)
+    println(str(s))
+}
