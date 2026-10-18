@@ -1,0 +1,57 @@
+// Рельеф по шуму с ключевой случайностью — нагрузка замера цены класса D
+// (bench/det/measure.py, Р56; docs/policy/BENCHMARKS.md, раздел 2).
+// Значение в узле решётки — хэш координат и ключа, между узлами —
+// сглаженная интерполяция, шесть октав.
+
+fn hash(key: u64, x: i64, y: i64) u64 {
+    var h = key ^ (u64(x) *% 11400714819323198485) ^ (u64(y) *% 14029467366897019727)
+    h = (h ^ (h >> 31)) *% 13787848793156543929
+    h = (h ^ (h >> 27)) *% 10723151780598845931
+    return h ^ (h >> 31)
+}
+
+// Число в [0, 1): 53 старших бита хэша.
+fn lattice(key: u64, x: i64, y: i64) f64 {
+    return f64(hash(key, x, y) >> 11) / 9007199254740992.0
+}
+
+fn smooth(t: f64) f64 {
+    return t * t * (3.0 - 2.0 * t)
+}
+
+fn noise(key: u64, x: f64, y: f64) f64 {
+    let xi = i64(x)
+    let yi = i64(y)
+    let tx = smooth(x - f64(xi))
+    let ty = smooth(y - f64(yi))
+    let a = lattice(key, xi, yi)
+    let b = lattice(key, xi + 1, yi)
+    let c = lattice(key, xi, yi + 1)
+    let d = lattice(key, xi + 1, yi + 1)
+    let top = a + (b - a) * tx
+    let bottom = c + (d - c) * tx
+    return top + (bottom - top) * ty
+}
+
+pub fn height(key: u64, x: f64, y: f64) f64 {
+    var sum = 0.0
+    var amp = 1.0
+    var freq = 1.0 / 64.0
+    for o in 0..6 {
+        sum += noise(key +% u64(o), x * freq, y * freq) * amp
+        amp *= 0.5
+        freq *= 2.0
+    }
+    return sum
+}
+
+// Сумма высот карты size × size — контрольное число замера.
+pub fn total(key: u64, size: int) f64 {
+    var t = 0.0
+    for y in 0..size {
+        for x in 0..size {
+            t += height(key, f64(x), f64(y))
+        }
+    }
+    return t
+}

@@ -11,6 +11,7 @@
 | проверка решения на компиляторе dpl (язык `dp`, проход `bench` в `tests/run.py`) | `dp_check.py` |
 | замеры онлайн-компилятора (Р49): worker, пределы, шлюз | `service/measure.py` — `docs/service/README.md`, раздел 11 |
 | замеры компилятора (шаг 13 v0.1): `check`, сборка, первая нагрузка, объём (Р-4) | `compiler/measure.py` |
+| цена класса D (Р56): нагрузки с `@det import` и без | `det/measure.py`, нагрузка `det/terrain.dpm` |
 | результаты прогонов | `results/<прогон>/` |
 
 Политика замеров — `docs/policy/BENCHMARKS.md`; как меряется работа ИИ
