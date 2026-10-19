@@ -9,21 +9,15 @@ fn det.mix(%0 a: f64, %1 b: f32) f64 det
   tmp %9: f64
 bb0:
   %4 = mul copy %0, 2:f64  @6:15
-  %4 = canon copy %4  @6:15
   %5 = check copy %1 to f64  @6:23
-  %5 = canon copy %5  @6:23
   %6 = add copy %4, copy %5  @6:21
-  %6 = canon copy %6  @6:21
   %3 = move %6  @6:5
   %3 = sub copy %3, 1.5:f64  @7:5
-  %3 = canon copy %3  @7:5
   %7 = neg copy %3  @8:16
-  %7 = canon copy %7  @8:16
   %8 = abs(copy %0)  @8:20
-  %8 = canon copy %8  @8:20
   %9 = max(copy %7, copy %8)  @8:12
-  %9 = canon copy %9  @8:12
   %2 = move %9  @8:5
+  %2 = canon copy %2  @8:5
   return move %2  @8:5
 
 fn det.plain(%0 a: f64) f64

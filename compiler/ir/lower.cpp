@@ -306,23 +306,99 @@ private:
     }
 
     void inst(InstKind k, Place dst, Rvalue rv, Span span) {
-        bool canon = k == InstKind::Assign && f_.det && makes_float(rv);
+        if (f_.det) seen(k, dst, rv, span);
+        // Класс D: NaN, записанный в память, — канонический (Р56).
+        bool canon = k == InstKind::Assign && f_.det && makes_float(rv) && !raw(dst);
         Inst i;
         i.kind = k;
         i.dst = dst;
         i.rv = std::move(rv);
         i.span = span;
         f_.blocks[cur_].insts.push_back(std::move(i));
-        if (!canon) return;
-        // Класс D: NaN после операции — канонический (Р56).
+        if (canon) push_canon(std::move(dst), span);
+    }
+
+    // dst = canon dst.
+    void push_canon(Place dst, Span span) {
         Inst c;
         c.kind = InstKind::Assign;
-        c.dst = dst;
-        c.rv = make(RvKind::Unary, f_.blocks[cur_].insts.back().rv.type);
+        c.rv = make(RvKind::Unary, place_type(out_, f_, dst));
         c.rv.un = UnKind::Canon;
-        c.rv.ops.push_back(copy(std::move(dst)));
+        c.rv.ops.push_back(copy(dst));
+        c.dst = std::move(dst);
         c.span = span;
         f_.blocks[cur_].insts.push_back(std::move(c));
+    }
+
+    // Класс D (Р56): переменная или временное с плавающим значением целиком
+    // может держать NaN с битами процессора — их не видно, пока значение
+    // идёт в арифметику, сравнения, приведения, abs, min, max и аргументы
+    // функций класса D. Память (поля, элементы, место по ссылке) — только
+    // канонический NaN.
+    bool raw(const Place& p) const {
+        if (!p.proj.empty() || p.local >= f_.locals.size()) return false;
+        const Local& l = f_.locals[p.local];
+        return (l.kind == LocalKind::Param || l.kind == LocalKind::Var || l.kind == LocalKind::Temp) &&
+               sema::is_float(l.type);
+    }
+
+    // Значение становится видно: операнд — каноническая копия во временном.
+    void seen_op(Operand& op, Span span) {
+        if (op.kind == OpKind::Const || !raw(op.place)) return;
+        uint32_t t = temp(f_.locals[op.place.local].type);
+        Rvalue c = make(RvKind::Unary, f_.locals[t].type);
+        c.un = UnKind::Canon;
+        c.ops.push_back(copy(op.place));
+        Inst i;
+        i.kind = InstKind::Assign;
+        i.dst = local(t);
+        i.rv = std::move(c);
+        i.span = span;
+        f_.blocks[cur_].insts.push_back(std::move(i));
+        op = Operand{op.kind, local(t), {}};
+    }
+
+    // Операнды rv, которые здесь становятся видны (Р56), — канонические.
+    void seen(InstKind k, const Place& dst, Rvalue& rv, Span span) {
+        bool see = true;
+        bool callee_det = false;
+        switch (rv.kind) {
+            case RvKind::Binary:
+            case RvKind::Unary: see = false; break;
+            case RvKind::Cast: see = rv.cast == CastKind::ToStr; break;
+            case RvKind::Use: see = !(k == InstKind::Assign && raw(dst)); break;
+            case RvKind::Intrinsic:
+                see = !(rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min ||
+                        rv.intrinsic == Intrinsic::Max);
+                break;
+            case RvKind::Call: {
+                const sema::FnDef* d = rv.fn < out_.fns.size() ? out_.fns[rv.fn].def : nullptr;
+                callee_det = d && !d->is_extern && sema::is_det(*d);
+                break;
+            }
+            default: break;
+        }
+        if (see)
+            for (Operand& op : rv.ops) seen_op(op, span);
+        for (Arg& a : rv.args) {
+            if (a.kind == Arg::Kind::Value) {
+                if (!callee_det) seen_op(a.op, span);
+            } else if (raw(a.place)) {
+                // По ссылке вызванная функция читает место как память.
+                if (a.kind == Arg::Kind::Mut) {
+                    push_canon(a.place, span);
+                } else {
+                    Operand op = copy(a.place);
+                    seen_op(op, span);
+                    a.place = op.place;
+                }
+            }
+        }
+        if (rv.has_place && raw(rv.place)) {  // AddrOf: адрес для C
+            Operand op = copy(rv.place);
+            seen_op(op, span);
+            rv.place = op.place;
+        }
     }
 
     // Операция, которая может дать NaN с битами процессора: арифметика,
@@ -379,6 +455,7 @@ private:
         Term t;
         t.kind = TermKind::Return;
         t.has_value = value;
+        if (value && f_.det && raw(local(ret_))) push_canon(local(ret_), span);  // Р56: возврат виден
         if (value) t.value = Operand{OpKind::Move, local(ret_), {}};
         t.span = span;
         terminate(t);
@@ -1827,6 +1904,7 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
         }
     }
     out->fns.resize(order.size());
+    for (size_t i = 0; i < order.size(); i++) out->fns[i].def = order[i];  // класс вызываемой — до её понижения
     std::unordered_map<std::string, uint32_t> strings;  // строка → номер в out->strings
     for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, strings, out->fns[i]).run(*order[i]);
     // Библиотеки `@link` — только у вызываемых функций C: импорт привязки
