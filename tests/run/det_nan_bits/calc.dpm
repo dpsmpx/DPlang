@@ -1,6 +1,9 @@
 // Класс D (Р56): NaN канонический там, где его видно; внутри выражения и
 // в локальных переменных — биты процессора. z — ноль из памяти: компилятор
 // C не свернёт z / z в постоянную.
+const N: f64 = 0.0 / 0.0
+const M: f32 = -(0.0 / 0.0)
+
 pub struct P {
     x: f64
     y: f32
@@ -85,4 +88,10 @@ pub fn accumulate(z: f64, n: i64) f64 {
         acc = acc + z / z
     }
     return acc
+}
+
+pub fn constants(xs: &mut List[f64]) f32 {
+    xs.push(N)
+    xs.push(-N)
+    return M
 }
