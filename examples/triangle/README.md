@@ -49,8 +49,8 @@ main.dpm`, рядом — `SDL3.dll`. Нужны SDL3 для MinGW и библи
 triangle`; `CLAUDE.md`, «Сборки APK»). Программа dpl — библиотека
 (`dpl build --lib`), из неё `libmain.so` с `SDL_main`, который зовёт
 `SDLActivity` из SDL3; пакет подписан ключом отладки, у каждой сборки
-новым (`TODO.md`). Инструменты — `tools/setup/cross_android.sh` и
-`tools/setup/graphics_android.sh`.
+новым (так и оставлено: слово автора, 19 октября 2026). Инструменты —
+`tools/setup/cross_android.sh` и `tools/setup/graphics_android.sh`.
 Запуск — на устройстве с Vulkan (Р64): `adb install -r triangle.apk`
 (если стоит прежняя сборка — сначала `adb uninstall org.dpl.triangle`),
 затем значок «dpl triangle». Сверка первого кадра показывается
