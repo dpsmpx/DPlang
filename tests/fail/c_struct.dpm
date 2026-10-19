@@ -70,3 +70,23 @@ fn main() {
     let r = z.a + 1
     let a = Arr { v: [1, 2] }
 }
+
+// Заимствование в части литерала — рядом с `&mut` того же корня (E0502).
+@c
+struct Pt {
+    v: u32
+}
+
+@c
+struct PtView {
+    p: &Pt
+}
+
+extern fn see_pts(vs: []PtView, q: &mut Pt) u32
+extern fn see_pt(v: PtView, q: &mut Pt) u32
+
+fn alias_in_part() {
+    var a = Pt { v: 1 }
+    _ = see_pts([PtView { p: &a }][0..1], &mut a)
+    _ = see_pt([PtView { p: &a }][0], &mut a)
+}

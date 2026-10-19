@@ -1,0 +1,4 @@
+start
+--- stderr ---
+trap_order_discard.dpm:7:9: trap: index 9 is out of bounds for length 1
+[exit 101]

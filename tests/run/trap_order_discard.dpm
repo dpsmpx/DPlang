@@ -1,0 +1,10 @@
+// spec: expr.order trap.index
+// `_ = xs[9]` проверяет место.
+fn main() {
+    let xs: List[int] = [1]
+    var m: Map[str, int] = []
+    println("start")
+    _ = xs[9]
+    _ = m["nope"]
+    println("end")
+}

@@ -1,0 +1,8 @@
+// spec: expr.order trap.index
+// Ловушка места левее — раньше ловушки правее (expr.order).
+fn main() {
+    var ys: List[List[int]] = [[1]]
+    var z = 0
+    println("start")
+    ys[4].push(100 / z)
+}

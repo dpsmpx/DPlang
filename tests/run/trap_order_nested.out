@@ -1,0 +1,4 @@
+start
+--- stderr ---
+trap_order_nested.dpm:7:17: trap: index 3 is out of bounds for length 1
+[exit 101]

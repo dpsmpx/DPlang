@@ -5,9 +5,6 @@ internal.dpm:4:13: error[E0307]: cannot find '__args_len' in this scope
 internal.dpm:6:16: error[E0307]: cannot find '__read_file' in this scope
    6 |     let code = __read_file("x", &mut text)
      |                ^~~~~~~~~~~
-internal.dpm:6:33: error[E0501]: '&' marks only call arguments for '&' and '&mut' parameters, and 'for ... in'
-   6 |     let code = __read_file("x", &mut text)
-     |                                 ^~~~~~~~~
 internal.dpm:7:13: error[E0307]: cannot find '__arg' in this scope
    7 |     println(__arg(0))
      |             ^~~~~

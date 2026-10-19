@@ -1,0 +1,23 @@
+// spec: expr.order trap.index trap.def
+// Выход `try` правее — после проверки места левее: ловушка, defer не выполняется.
+enum E {
+    Bad
+}
+
+fn bad() E!int {
+    fail .Bad
+}
+
+fn f(xs: &List[int], r: E!int) E!int {
+    defer println("defer ran")
+    return xs[9] + try r
+}
+
+fn main() {
+    let xs: List[int] = [1]
+    println("start")
+    match f(&xs, bad()) {
+        ok(v) => println("ok " + str(v))
+        err(_) => println("err")
+    }
+}

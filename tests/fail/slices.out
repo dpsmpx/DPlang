@@ -32,4 +32,49 @@ slices.dpm:29:21: error[E0502]: 'list' is passed as '&mut' together with another
 slices.dpm:30:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
   30 |     grow(&mut list, list[1..])
      |                     ^~~~~~~~~
+slices.dpm:39:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  39 |     grow(&mut list, (list[1..]))
+     |                     ^~~~~~~~~~~
+slices.dpm:40:21: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  40 |     grow(&mut list, ((list)))
+     |                     ^~~~~~~~
+slices.dpm:42:14: error[E0502]: 'list' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  42 |         read(&x, &mut list)
+     |              ^~
+slices.dpm:42:23: error[E0412]: cannot mutate 'list' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  42 |         read(&x, &mut list)
+     |                       ^~~~
+slices.dpm:45:9: error[E0510]: a slice cannot be bound to 'part'; pass it to a function directly
+  45 |         part => grow(&mut list, part)
+     |         ^~~~
+slices.dpm:62:9: error[E0412]: cannot assign to 'list' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  62 |         list = []
+     |         ^~~~
+slices.dpm:63:9: error[E0412]: cannot call 'push' on 'list' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  63 |         list.push(x)
+     |         ^~~~
+slices.dpm:64:9: error[E0412]: cannot assign to 'list' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  64 |         list[0] = 5
+     |         ^~~~
+slices.dpm:65:19: error[E0412]: cannot mutate 'list' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  65 |         bump(&mut list)
+     |                   ^~~~
+slices.dpm:67:13: error[E0412]: cannot call 'clear' on 'list' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  67 |             list.clear()
+     |             ^~~~
+slices.dpm:71:9: error[E0412]: cannot call 'pop' on 'list' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  71 |         list.pop()
+     |         ^~~~
+slices.dpm:74:9: error[E0412]: cannot assign to 'b' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+  74 |         b.n = x
+     |         ^
+slices.dpm:90:9: error[E0412]: cannot call 'push' on 'fixed': it is not declared with 'var'
+  90 |         fixed.push(x)
+     |         ^~~~~
+slices.dpm:91:9: error[E0412]: cannot assign to 'x': it is an element read through 'for ... in &'
+  91 |         x = 2
+     |         ^
+slices.dpm:106:17: error[E0510]: a slice cannot be bound to 's'; pass it to a function directly
+ 106 |     let Span8 { s } = p
+     |                 ^
 [exit 1]

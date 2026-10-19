@@ -31,6 +31,7 @@ constexpr size_t kMaxLen = 1u << 26;  // элементов List или байт
 struct Value {
     enum class K : uint8_t { Empty, Int, Float, Bool, Str, Seq, Slice };
     K k = K::Empty;
+    bool clean = false;  // объединение: поле tag только читалось — байты верны и для него
     uint32_t tag = 0;  // Seq: вариант перечисления; ?T — 0 нет, 1 есть; E!T — 0 успех, 1 ошибка
     uint64_t i = 0;    // Int: каноническая запись (знаковое — с расширением знака); Bool
     double f = 0;
@@ -73,9 +74,11 @@ Value seq_value(uint32_t tag);
 // --- объединения (Р62): байты раскладки C, поле — их прочтение.
 //
 // Значение объединения — Seq: items — поля, s — байты (размер объединения).
-// tag — 0: байты верны, поля прочтены из них; n > 0 — верно поле n - 1,
-// байты под ним устарели. Выбор поля записывает верное поле в байты и
-// читает из них выбранное. Раскладка — как у C на целях dpl (64 бита,
+// tag — 0: байты верны, поля прочтены из них; n > 0 — верно поле n - 1;
+// clean — оно только читалось, байты верны и для него, иначе устарели.
+// Выбор поля записывает изменённое поле в байты и читает из них
+// выбранное: прочтение в обе стороны теряло бы биты (сигнальный NaN f32
+// идёт через double, байт bool 2 — через true). Раскладка — как у C на целях dpl (64 бита,
 // little-endian): указатель — 8 байт.
 
 uint64_t c_align(const Type* t);
@@ -195,15 +198,21 @@ Value decode(const std::string& bytes, uint64_t off, const Type* t) {
 // Байты объединения — по верному полю (tag).
 void union_sync(Value& u, const Type* t) {
     if (u.s.size() != c_size(t)) u.s.assign(c_size(t), '\0');
-    if (u.tag > 0 && u.tag <= u.items.size()) encode(u.items[u.tag - 1], t->sdef->fields[u.tag - 1].type, u.s, 0);
+    if (u.tag > 0 && u.tag <= u.items.size() && !u.clean) {
+        encode(u.items[u.tag - 1], t->sdef->fields[u.tag - 1].type, u.s, 0);
+    }
 }
 
-// Выбор поля field: верное — оно, прочтённое из байтов.
-void union_select(Value& u, const Type* t, uint32_t field) {
-    if (u.tag == field + 1) return;
-    union_sync(u, t);
-    u.items[field] = decode(u.s, 0, t->sdef->fields[field].type);
-    u.tag = field + 1;
+// Выбор поля field для чтения или записи (write): верное — оно,
+// прочтённое из байтов; после записи байты под ним устарели.
+void union_select(Value& u, const Type* t, uint32_t field, bool write) {
+    if (u.tag != field + 1) {
+        union_sync(u, t);
+        u.items[field] = decode(u.s, 0, t->sdef->fields[field].type);
+        u.tag = field + 1;
+        u.clean = true;
+    }
+    if (write) u.clean = false;
 }
 
 // Ноль типа (Р62): пропущенное поле `@c`.
@@ -484,7 +493,8 @@ private:
 
     // --- места и операнды
 
-    Ref resolve(Frame& fr, const Place& pl) {
+    // Место pl; write — его меняют (присваивание, `&mut`, изменяющий метод).
+    Ref resolve(Frame& fr, const Place& pl, bool write = false) {
         const Function& f = fn(fr);
         const Local& l = f.locals[pl.local];
         Ref r;
@@ -510,7 +520,7 @@ private:
                     // Р62: поле объединения — прочтение его байтов.
                     Place prefix{pl.local, std::vector<Proj>(pl.proj.begin(), pl.proj.begin() + (&pr - pl.proj.data()))};
                     const Type* st = place_type(p_, f, prefix);
-                    if (st && st->kind == TK::Struct && st->sdef->union_) union_select(v, st, pr.index);
+                    if (st && st->kind == TK::Struct && st->sdef->union_) union_select(v, st, pr.index, write);
                     r.v = &v.items[pr.index];
                     break;
                 }
@@ -621,7 +631,7 @@ private:
         const Inst& in = b.insts[fr.inst];
         span_ = in.span;
         if (in.kind == InstKind::Drop) {
-            Ref r = resolve(fr, in.dst);
+            Ref r = resolve(fr, in.dst, true);
             if (!stop_) *r.v = Value{};
             fr.inst++;
             return;
@@ -630,7 +640,7 @@ private:
         Value v = rvalue(fr, in.rv);
         if (stop_) return;
         if (in.kind == InstKind::Assign) {
-            Ref r = resolve(fr, in.dst);
+            Ref r = resolve(fr, in.dst, true);
             if (stop_) return;
             *r.v = std::move(v);
         }
@@ -661,7 +671,7 @@ private:
             if (a.kind == Arg::Kind::Value) {
                 nf.locals[i] = take(fr, a.op);
             } else {
-                nf.refs[i] = resolve(fr, a.place);
+                nf.refs[i] = resolve(fr, a.place, a.kind == Arg::Kind::Mut);
                 if (!stop_ && nf.refs[i].byte < 0 && nf.refs[i].v->k == Value::K::Empty) {
                     internal("reference to an empty value");
                 }
@@ -688,7 +698,7 @@ private:
         Frame& caller = frames_.back();
         const Inst& in = fn(caller).blocks[caller.block].insts[caller.inst];
         if (in.kind == InstKind::Assign) {
-            Ref r = resolve(caller, in.dst);
+            Ref r = resolve(caller, in.dst, true);
             if (stop_) return;
             *r.v = std::move(v);
         }
@@ -1047,6 +1057,10 @@ private:
     }
 
     Value intrinsic(Frame& fr, const Rvalue& rv) {
+        if (rv.intrinsic == Intrinsic::Probe) {  // проверки места без чтения
+            resolve(fr, rv.place);
+            return Value{};
+        }
         // Операнды — копии: изменяющий метод не должен видеть их через себя.
         std::vector<Value> ops;
         for (size_t i = 0; i < rv.ops.size(); i++) {
@@ -1255,7 +1269,7 @@ private:
             }
         }
         if (code == 0) {
-            Ref r = resolve(fr, rv.place);
+            Ref r = resolve(fr, rv.place, true);
             if (stop_) return Value{};
             *r.v = str_value(std::move(text));
         }
@@ -1263,7 +1277,7 @@ private:
     }
 
     Value map_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
-        Ref r = resolve(fr, rv.place);
+        Ref r = resolve(fr, rv.place, true);
         if (stop_) return Value{};
         if (r.byte >= 0 || r.v->k != Value::K::Seq) {
             internal("map method on a non-Map");
@@ -1303,7 +1317,7 @@ private:
     }
 
     Value list_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
-        Ref r = resolve(fr, rv.place);
+        Ref r = resolve(fr, rv.place, true);
         if (stop_) return Value{};
         if (r.byte >= 0 || r.v->k != Value::K::Seq) {
             internal("list method on a non-List");

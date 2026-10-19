@@ -1,0 +1,10 @@
+// spec: expr.order trap.index
+// Образец `_` место не читает — ловушка места при `match`.
+fn main() {
+    let xs: List[int] = [1]
+    println("start")
+    match xs[9] {
+        _ => println("arm")
+    }
+    println("end")
+}

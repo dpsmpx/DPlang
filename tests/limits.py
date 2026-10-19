@@ -48,6 +48,19 @@ def _diamond(n):
                    '    println(str(xs == xs))\n}\n')
 
 
+def _eq_chain(n):
+    """Цепочка структур и `==` по первой: проверка обходит её явным стеком, время линейно."""
+    return (''.join(f'struct S{i} {{\n    x: S{i + 1}\n}}\n\n' for i in range(n)) +
+            f'struct S{n} {{\n    v: i32\n}}\n\nfn same(a: S0, b: S0) bool {{\n    return a == b\n}}\n\n'
+            'fn main() {\n}\n')
+
+
+def _const_chain(n):
+    """Обратная цепочка констант C0 = C1 + 1 …: под ASan рекурсия проверки переполняла стек 512 МБ."""
+    return (''.join(f'const C{i}: i64 = C{i + 1} + 1\n' for i in range(n)) + f'const C{n}: i64 = 0\n\n'
+            'fn main() {\n    println(str(C0))\n}\n')
+
+
 def _cycle(n):
     """Цикл из n структур: каждая — E0423."""
     return ''.join(f'struct S{i} {{\n    x: S{(i + 1) % n}\n}}\n\n' for i in range(n)) + 'fn main() {\n}\n'
@@ -68,6 +81,8 @@ def _try_chain(n):
 # Масштаб: имя → (исходник, команда, ожидаемый код, предел секунд под ASan).
 SCALE = {
     'chain': (_chain(20000), ['check'], 0, 30),
+    'eq_chain': (_eq_chain(60000), ['check'], 0, 20),
+    'const_chain': (_const_chain(200000), ['check'], 0, 60),
     'diamond': (_diamond(64), ['check'], 0, 10),
     'cycle': (_cycle(5000), ['check'], 1, 30),
     'strings': (_strings(40000), ['debug', 'ir'], 0, 5),

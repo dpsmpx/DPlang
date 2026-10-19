@@ -1,4 +1,4 @@
-// spec: ref.slices ref.alias
+// spec: ref.slices ref.alias stmt.for stmt.match
 struct Holder {
     view: []i32
 }
@@ -28,4 +28,80 @@ fn uses(xs: List[i32]) {
     var list: List[i32] = [1, 2]
     grow(&mut list, list)
     grow(&mut list, list[1..])
+}
+
+fn read(a: &i32, b: &mut List[i32]) {
+}
+
+// Обходы: срез в скобках, псевдоним цикла по срезу, имя образца со срезом.
+fn bypass(xs: List[i32]) {
+    var list: List[i32] = [1, 2, 3]
+    grow(&mut list, (list[1..]))
+    grow(&mut list, ((list)))
+    for x in &list[0..2] {
+        read(&x, &mut list)
+    }
+    match list[0..2] {
+        part => grow(&mut list, part)
+    }
+}
+
+struct Bag {
+    items: List[i32]
+    n: i32
+}
+
+fn bump(xs: &mut List[i32]) {
+}
+
+// Цикл по срезу: корень среза в теле не меняется (Р65).
+fn loops(bag: Bag) {
+    var list: List[i32] = [1, 2, 3]
+    var b = bag
+    for x in &list[0..2] {
+        list = []
+        list.push(x)
+        list[0] = 5
+        bump(&mut list)
+        if x > 0 {
+            list.clear()
+        }
+    }
+    for x in &(list[1..]) {
+        list.pop()
+    }
+    for x in &b.items[0..1] {
+        b.n = x
+    }
+    for x in &list {
+        list.push(x)
+    }
+    var other: List[i32] = []
+    for x in &list[0..1] {
+        other.push(x)
+    }
+    var text = "ab"
+    for c in &text[0..1] {
+        text = "c"
+        put(&c, &mut text)
+    }
+    let fixed: List[i32] = [1]
+    for x in &fixed[0..1] {
+        fixed.push(x)
+        x = 2
+    }
+}
+
+fn put(c: &u8, s: &mut str) {
+}
+
+// Разбор: поле-срез — тоже переменная (ref.slices).
+@c
+@linear
+struct Span8 {
+    s: []u8
+}
+
+fn split(p: Span8) {
+    let Span8 { s } = p
 }

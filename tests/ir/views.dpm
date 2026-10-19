@@ -1,0 +1,47 @@
+// spec: expr.order stmt.for ref.slices
+// Снимок основы вида — только когда он нужен: действие правее вида в том же
+// родителе меняет его корень (`&mut` или изменяющий метод). Вызов поглощает
+// свой срез раньше действий правее себя; let, срез str, срез после in (тело не
+// меняет его корень, Р65), вид перед чистым вызовом или перед `&mut` другой
+// переменной не копируются.
+fn sum(xs: []int, extra: int) int {
+    var t = extra
+    for x in &xs {
+        t += x
+    }
+    return t
+}
+
+fn grow(xs: &mut List[int]) int {
+    xs.push(0)
+    return 0
+}
+
+fn pure(k: int) int {
+    return k * 2
+}
+
+fn at(xs: &List[int], k: int) int {
+    return xs[0] + k
+}
+
+fn main() {
+    var xs: List[int] = [1, 2, 3]
+    var other: List[int] = []
+    let fixed: List[int] = [4, 5]
+    var s = 0
+    s += sum(xs, grow(&mut xs))
+    s += sum(xs[1..], 0) + grow(&mut xs)
+    s += sum(fixed, grow(&mut xs))
+    for x in &xs[0..2] {
+        s += x
+    }
+    s += sum(xs[0..1], pure(1)) + at(&xs, pure(2))
+    s += sum(xs, grow(&mut other)) + at(&xs, other.pop() ?? 0)
+    for x in &xs[0..pure(1)] {
+        s += x
+    }
+    var src = "abc"
+    let t = src[0..1] + str(grow(&mut xs))
+    println(str(s) + t)
+}

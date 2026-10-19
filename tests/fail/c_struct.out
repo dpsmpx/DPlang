@@ -47,4 +47,10 @@ c_struct.dpm:68:9: error[E0328]: 'short' cannot hold 'Name': it has borrowed fie
 c_struct.dpm:71:22: error[E0401]: '[3]i32' takes exactly 3 elements, found 2
   71 |     let a = Arr { v: [1, 2] }
      |                      ^~~~~~
+c_struct.dpm:90:30: error[E0502]: 'a' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  90 |     _ = see_pts([PtView { p: &a }][0..1], &mut a)
+     |                              ^~
+c_struct.dpm:91:29: error[E0502]: 'a' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  91 |     _ = see_pt([PtView { p: &a }][0], &mut a)
+     |                             ^~
 [exit 1]

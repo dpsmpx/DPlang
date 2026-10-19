@@ -139,7 +139,13 @@ VERIFY_FROM = ('.dpm',)
 
 def build_one(build_dir, build_type, sanitize):
     """Собирает компилятор в build_dir; None — успех, иначе текст ошибки."""
-    if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
+    want = f'DPL_SANITIZE:BOOL={"ON" if sanitize else "OFF"}'
+    cache = os.path.join(build_dir, 'CMakeCache.txt')
+    stale = False  # сборка настроена с другими санитайзерами — настроить заново
+    if os.path.exists(cache):
+        with open(cache, encoding='utf-8', errors='replace') as f:
+            stale = want not in f.read().splitlines()
+    if stale or not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         cxx = os.environ.get('CXX', 'g++')
         r = subprocess.run(['cmake', '-S', SRC, '-B', build_dir, '-G', 'Ninja', f'-DCMAKE_BUILD_TYPE={build_type}',
                             f'-DDPL_SANITIZE={"ON" if sanitize else "OFF"}', f'-DCMAKE_CXX_COMPILER={cxx}'],

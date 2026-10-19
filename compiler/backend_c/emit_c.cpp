@@ -175,8 +175,10 @@ std::string eq_of(const Type* t, const std::string& a, const std::string& b) {
 }
 
 std::string lt_of(const Type* t, const std::string& a, const std::string& b) {
-    // ?T и E!T интерпретатор не упорядочивает: «меньше» всегда ложно.
-    if (t->kind == TK::Optional || t->kind == TK::Result) return "false";
+    // ?T, E!T и указатель на функцию C интерпретатор не упорядочивает:
+    // «меньше» всегда ложно. Сравнение `<` указателей на функции C11
+    // запрещает (6.5.8), а сравнение списка его порождает.
+    if (t->kind == TK::Optional || t->kind == TK::Result || t->kind == TK::CFn) return "false";
     if (is_scalar(t)) return "(*(" + a + ") < *(" + b + "))";
     if (t->kind == TK::Str) return "dp_str_lt(*(" + a + "), *(" + b + "))";
     return "dp_lt__" + mangle(t) + "(" + a + ", " + b + ")";
@@ -1197,6 +1199,10 @@ std::string FnEmitter::cast(const Rvalue& rv) {
 }
 
 std::string FnEmitter::intrinsic(const Rvalue& rv) {
+    if (rv.intrinsic == Intrinsic::Probe) {  // проверки места — строками place(), без чтения
+        Lv p = place(rv.place);
+        return "((void)" + p.expr + ")";
+    }
     if (rv.has_place && rv.intrinsic == Intrinsic::ReadFile) {
         // __read_file (Р51): путь читается, текст — в место; результат — код.
         std::string path = operand(rv.ops[0], false);

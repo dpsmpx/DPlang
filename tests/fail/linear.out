@@ -56,4 +56,31 @@ linear.dpm:144:11: error[E0513]: 'r' is a reference: its resource belongs to the
 linear.dpm:148:5: error[E0513]: 'r' is a reference: the caller's resource cannot be replaced
  148 |     r = open(18)
      |     ^
+linear.dpm:167:23: error[E0513]: 'r' is held by a reference in this call and cannot be closed or moved before the call returns
+ 167 |     _ = peek(&r, give(r))
+     |                       ^
+linear.dpm:189:27: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
+ 189 |     b.items.push(drop_bag(b))
+     |                           ^
+linear.dpm:191:27: error[E0513]: 'c' is assigned into here and cannot be closed or moved in the assigned value
+ 191 |     c.items[0] = drop_bag(c)
+     |                           ^
+linear.dpm:193:22: error[E0513]: 'd' is indexed here and cannot be closed or moved in its own index
+ 193 |     d.items[drop_bag(d) - 1] = 5
+     |                      ^
+linear.dpm:230:48: error[E0513]: 'a' is held by a reference in this call and cannot be closed or moved before the call returns
+ 230 |     _ = see_all([View { p: &a, n: 1 }], c_give(a))
+     |                                                ^
+linear.dpm:231:46: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
+ 231 |     _ = see_opts([OptView { p: &b }], c_give(b))
+     |                                              ^
+linear.dpm:232:38: error[E0513]: 'c' is held by a reference in this call and cannot be closed or moved before the call returns
+ 232 |     _ = see(&View { p: &c, n: c_give(c) })
+     |                                      ^
+linear.dpm:236:76: error[E0513]: 'a' is held by a reference in this call and cannot be closed or moved before the call returns
+ 236 |     _ = see_all([View { p: &a, n: 1 }, View { p: &a, n: 2 }][0..1], c_give(a))
+     |                                                                            ^
+linear.dpm:237:51: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
+ 237 |     _ = see_one([View { p: &b, n: 1 }][0], c_give(b))
+     |                                                   ^
 [exit 1]

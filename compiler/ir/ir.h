@@ -126,6 +126,9 @@ enum class Intrinsic : uint8_t {
     // Арена C на время вызова (Р62): строки и массивы заимствующих
     // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
     CArenaMark, CArenaRelease,
+    // Probe: место (place) вычисляется со всеми проверками — индексы, ключ
+    // Map — и не читается. Ловушка места раньше ловушек правее (expr.order).
+    Probe,
 };
 
 enum class RvKind : uint8_t {

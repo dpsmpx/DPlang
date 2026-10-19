@@ -1,0 +1,14 @@
+--- stderr ---
+err_marks.dpm:10:5: error[E0307]: cannot find 'nope' in this scope
+  10 |     nope(&b, 1)
+     |     ^~~~
+err_marks.dpm:11:5: error[E0407]: 'one' takes 1 argument, found 2
+  11 |     one(&b, &mut b)
+     |     ^~~~~~~~~~~~~~~
+err_marks.dpm:12:8: error[E0410]: 'List[i32]' has no method 'nothing'
+  12 |     xs.nothing(&b)
+     |        ^~~~~~~
+err_marks.dpm:13:5: error[E0407]: 'len' takes 1 argument, found 2
+  13 |     len(&xs, 2)
+     |     ^~~~~~~~~~~
+[exit 1]

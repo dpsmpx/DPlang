@@ -1,0 +1,148 @@
+// spec: expr.order ref.slices stmt.for
+// Вид (срез) левее вызова, который меняет его список, не меняется: он
+// строится над копией (expr.order). Иначе вид указывал бы в память,
+// которую вызов освободил.
+fn total(xs: []str, extra: int) int {
+    var n = extra
+    for x in &xs {
+        n += len(x)
+    }
+    return n
+}
+
+fn sum(xs: []int, extra: int) int {
+    var t = extra
+    for x in &xs {
+        t += x
+    }
+    return t
+}
+
+fn drain(xs: &mut List[str]) int {
+    xs.clear()
+    for i in 0..1000 {
+        xs.push("z")
+    }
+    return 0
+}
+
+fn set_first(xs: &mut List[int]) int {
+    xs[0] = 100
+    return 0
+}
+
+fn take(xs: &mut List[str]) str {
+    return xs.remove(0)
+}
+
+fn zero(b: bool) int {
+    return 0
+}
+
+struct Cell {
+    v: int
+}
+
+fn show(c: &Cell, n: int) str {
+    return str(c.v) + "/" + str(n)
+}
+
+fn wipe(cs: &mut List[Cell]) int {
+    cs.clear()
+    return 8
+}
+
+fn bump(i: &mut int) int {
+    i = 2
+    return 3
+}
+
+@export
+fn one(a: i32) i32 {
+    return 1
+}
+
+@export
+fn two(a: i32) i32 {
+    return 2
+}
+
+fn swap(f: &mut extern fn(i32) i32) i32 {
+    f = two
+    return 0
+}
+
+struct Bag {
+    items: List[int]
+}
+
+fn refill(b: &mut Bag) int {
+    b.items = [9, 9, 9]
+    return 0
+}
+
+fn grow_int(xs: &mut List[int]) int {
+    xs.clear()
+    for i in 0..100 {
+        xs.push(5)
+    }
+    return 0
+}
+
+// Корень вида — параметр `&mut`: его меняет вызов правее.
+fn through(xs: &mut List[int]) int {
+    return sum(xs[0..2], grow_int(&mut xs))
+}
+
+fn main() {
+    var words: List[str] = ["aa", "bbb", "c", "dddd"]
+    println("implicit: " + str(total(words, drain(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("explicit: " + str(total(words[1..3], drain(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("slice of slice: " + str(total(words[0..4][1..3], drain(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("method arg: " + str(total(words[0..2], len(take(&mut words)))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("in &&: " + str(total(words[2..], zero(true && drain(&mut words) == 0))))
+    var nums: List[int] = [1, 2, 3]
+    println("in place: " + str(sum(nums, set_first(&mut nums))) + ", after: " + str(nums[0]))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("receiver: " + str(words[0..3].contains(take(&mut words))))
+    words = ["aa", "bbb", "c", "dddd"]
+    println("index of slice: " + words[1..4][drain(&mut words)])
+    let xs: List[int] = [10, 11, 12, 13]
+    var i = 0
+    println("bounds: " + str(sum(xs[i..bump(&mut i)], 0)))
+    var f: extern fn(i32) i32 = one
+    println("callee first: " + str(f(swap(&mut f))) + ", then: " + str(f(0)))
+    var loop: List[int] = [1, 2, 3]
+    let copy = loop
+    var seen = 0
+    for x in &copy[0..3] {
+        loop.clear()
+        for k in 0..100 {
+            loop.push(7)
+        }
+        seen += x
+    }
+    println("for over slice: " + str(seen) + ", list now " + str(len(loop)))
+    var text = "abc"
+    var bytes = 0
+    for b in &text[0..2] {
+        text = "zzzzzzzz"
+        bytes += int(b)
+    }
+    println("for over str slice: " + str(bytes) + ", text now " + text)
+    words = ["aa", "bbb", "c", "dddd"]
+    let first = words[1..3][0]
+    println("element of a slice is a copy: " + first + ", source keeps " + words[1])
+    var bag = Bag { items: [1, 2, 3] }
+    var ys: List[int] = [1, 2, 3]
+    var ps: List[int] = [4, 5, 6]
+    println("field root: " + str(sum(bag.items[0..2], refill(&mut bag))) + ", " +
+            str(sum(bag.items[1..], grow_int(&mut bag.items))) +
+            ", method receiver: " + str(sum(ys[0..2], ys.pop() ?? 0)) + ", &mut param: " + str(through(&mut ps)))
+    var cells: List[Cell] = [Cell { v: 1 }]
+    println("reference before a call: " + show(&cells[0], wipe(&mut cells)) + ", cells now " + str(len(cells)))
+}

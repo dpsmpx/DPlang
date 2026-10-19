@@ -1,0 +1,13 @@
+// spec: ffi.fn ffi.export expr.compare
+// Список указателей на функции собирается со строгими флагами C: сравнение
+// «меньше» для extern fn не порождается (E0422).
+@export
+fn add(a: i32, b: i32) i32 {
+    return a + b
+}
+
+fn main() {
+    var fps: List[extern fn(i32, i32) i32] = [add]
+    let fp = fps[0]
+    println(str(fp(1, 2)))
+}

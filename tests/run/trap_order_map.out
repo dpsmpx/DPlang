@@ -1,0 +1,4 @@
+start
+--- stderr ---
+trap_order_map.dpm:8:17: trap: key is not in the map
+[exit 101]

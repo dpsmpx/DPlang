@@ -2,6 +2,7 @@
 // константы (docs/spec/core.md, разделы 4, 5, 8, 9).
 #include <algorithm>
 #include <functional>
+#include <unordered_map>
 #include <cstdio>
 
 #include "sema/builtins.h"
@@ -134,57 +135,84 @@ bool Checker::literal_like(const Expr* e) const {
 // type.recursive) в процессе обхода считается подходящим — наибольшая
 // неподвижная точка. Ответ запоминается: «нет» — всегда, «да» — если он
 // не опирался на внешний тип, который ещё проверяется. Так обход
-// линеен и на «ромбах» `struct S0 { a: S1, b: S1 }`.
-bool Checker::type_prop(const Type* t, bool ord, size_t& low) {
-    switch (t->kind) {
-        case TK::Error: return true;
-        // Р54: отображения не сравниваются; указатель C (Р61), массив и ссылка-поле C (Р62) — тоже.
-        case TK::Void: case TK::Result: case TK::Map: case TK::CFn: case TK::Array: case TK::Ref: return false;
-        case TK::Bool: case TK::Str: return true;
-        case TK::List: case TK::Slice: return type_prop(t->elem, ord, low);
-        case TK::Optional: return !ord && type_prop(t->elem, ord, low);  // ?T не упорядочен
-        case TK::Struct: case TK::Enum: break;
-        default: return ord ? is_numeric(t) : true;
-    }
+// линеен и на «ромбах» `struct S0 { a: S1, b: S1 }`. Обход — явным стеком:
+// глубина не растёт с длиной цепочки структур.
+bool Checker::type_prop(const Type* root, bool ord) {
     std::map<const Type*, bool>& cache = prop_cache_[ord ? 1 : 0];
-    if (auto it = cache.find(t); it != cache.end()) return it->second;
-    for (size_t i = 0; i < prop_stack_.size(); i++) {
-        if (prop_stack_[i] == t) {
-            low = std::min(low, i);
-            return true;
-        }
-    }
-    size_t depth = prop_stack_.size();
-    prop_stack_.push_back(t);
-    size_t my_low = SIZE_MAX;
-    bool r = true;
-    auto part = [&](const Type* p) {
-        if (r && !type_prop(p, ord, my_low)) r = false;
+    struct Frame {
+        const Type* t;
+        std::vector<const Type*> parts;
+        size_t next = 0;
+        size_t low = SIZE_MAX;  // самый внешний тип стека, на который опёрся ответ
+        bool r = true;
     };
-    if (t->kind == TK::Struct) {
-        if (t->sdef->linear || t->sdef->union_) r = false;  // Р60: линейные; Р62: у объединения — байты
-        for (const FieldDef& f : t->sdef->fields) part(f.type);
-    } else {
-        for (const VariantDef& v : t->edef->variants) {
-            for (const Type* p : v.types) part(p);
-            for (const FieldDef& f : v.fields) part(f.type);
+    std::vector<Frame> st;
+    std::unordered_map<const Type*, size_t> at;  // тип на стеке → его номер
+    size_t outer = SIZE_MAX;
+    // Ответ для части p: 0 или 1 — сразу, 2 — тип положен на стек.
+    auto visit = [&](const Type* p, size_t& low) -> int {
+        for (;;) {
+            switch (p->kind) {
+                case TK::Error: return 1;
+                // Р54: отображения не сравниваются; указатель C (Р61), массив и ссылка-поле C (Р62) — тоже.
+                case TK::Void: case TK::Result: case TK::Map: case TK::CFn: case TK::Array: case TK::Ref: return 0;
+                case TK::Bool: case TK::Str: return 1;
+                case TK::List: case TK::Slice: p = p->elem; continue;
+                case TK::Optional:  // ?T не упорядочен
+                    if (ord) return 0;
+                    p = p->elem;
+                    continue;
+                case TK::Struct: case TK::Enum: break;
+                default: return ord ? is_numeric(p) : 1;
+            }
+            break;
         }
+        if (auto it = cache.find(p); it != cache.end()) return it->second ? 1 : 0;
+        if (auto it = at.find(p); it != at.end()) {
+            low = std::min(low, it->second);
+            return 1;
+        }
+        Frame f{p, {}};
+        if (p->kind == TK::Struct) {
+            if (p->sdef->linear || p->sdef->union_) f.r = false;  // Р60: линейные; Р62: у объединения — байты
+            for (const FieldDef& fd : p->sdef->fields) f.parts.push_back(fd.type);
+        } else {
+            for (const VariantDef& v : p->edef->variants) {
+                for (const Type* x : v.types) f.parts.push_back(x);
+                for (const FieldDef& fd : v.fields) f.parts.push_back(fd.type);
+            }
+        }
+        at[p] = st.size();
+        st.push_back(std::move(f));
+        return 2;
+    };
+    int v = visit(root, outer);
+    if (v != 2) return v == 1;
+    for (;;) {
+        size_t i = st.size() - 1;
+        if (st[i].r && st[i].next < st[i].parts.size()) {
+            const Type* p = st[i].parts[st[i].next++];
+            size_t low = st[i].low;
+            int r = visit(p, low);  // может положить кадр: st[i] — по номеру
+            st[i].low = low;
+            if (r == 0) st[i].r = false;
+            continue;
+        }
+        Frame done = std::move(st.back());
+        st.pop_back();
+        at.erase(done.t);
+        size_t depth = st.size();
+        if (!done.r || done.low >= depth) cache[done.t] = done.r;
+        size_t& low = st.empty() ? outer : st.back().low;
+        if (done.r && done.low < depth) low = std::min(low, done.low);
+        if (st.empty()) return done.r;
+        if (!done.r) st.back().r = false;
     }
-    prop_stack_.pop_back();
-    if (!r || my_low >= depth) cache[t] = r;
-    else low = std::min(low, my_low);
-    return r;
 }
 
-bool Checker::equatable(const Type* t) {
-    size_t low = SIZE_MAX;
-    return type_prop(t, false, low);
-}
+bool Checker::equatable(const Type* t) { return type_prop(t, false); }
 
-bool Checker::ordered(const Type* t) {
-    size_t low = SIZE_MAX;
-    return type_prop(t, true, low);
-}
+bool Checker::ordered(const Type* t) { return type_prop(t, true); }
 
 // --- имена и пути
 
@@ -515,17 +543,17 @@ const Type* Checker::call(CallExpr* c, const Type* hint) {
             }
             case ResKind::Struct:
                 error(Code::E0409, c->callee->span, "a struct is built with a literal: " + n->name + " { ... }");
-                for (Expr* a : c->args) infer(a, nullptr);
+                infer_loose(c->args);
                 return err();
             case ResKind::None:
-                for (Expr* a : c->args) infer(a, nullptr);
+                infer_loose(c->args);
                 return err();
             case ResKind::Local:
                 if (n->res.local->type->kind == TK::CFn) return ptr_call(c, *n->res.local);
                 [[fallthrough]];
             case ResKind::Const: case ResKind::Enum: case ResKind::Module:
                 error(Code::E0409, c->callee->span, "'" + n->name + "' is not a function");
-                for (Expr* a : c->args) infer(a, nullptr);
+                infer_loose(c->args);
                 return err();
             default: break;
         }
@@ -539,7 +567,7 @@ const Type* Checker::call(CallExpr* c, const Type* hint) {
             return variant_value(f->res.en, f->res.index, VariantForm::Tuple, &c->args, nullptr, c->span);
         }
         if (f->type && f->type->kind == TK::Error) {
-            for (Expr* a : c->args) infer(a, nullptr);
+            infer_loose(c->args);
             return err();
         }
         if (auto* obj = as<NameExpr>(f->object)) {
@@ -548,7 +576,7 @@ const Type* Checker::call(CallExpr* c, const Type* hint) {
                 if (f->name == "wrap" && k >= TK::I8 && k <= TK::U64) return convert_call(c, prim(k), true);
                 error(Code::E0409, f->span, "type '" + obj->name + "' has no function '" + f->name +
                                                  "'; integer types have '" + obj->name + ".wrap(x)'");
-                for (Expr* a : c->args) infer(a, nullptr);
+                infer_loose(c->args);
                 return err();
             }
             if (obj->res.kind == ResKind::Module || obj->res.kind == ResKind::Struct ||
@@ -558,15 +586,25 @@ const Type* Checker::call(CallExpr* c, const Type* hint) {
                 } else if (f->res.kind != ResKind::None) {
                     error(Code::E0409, f->span, "'" + f->name + "' is not a function");
                 }
-                for (Expr* a : c->args) infer(a, nullptr);
+                infer_loose(c->args);
                 return err();
             }
         }
         return method_call(c, f);
     }
     error(Code::E0409, c->callee->span, "this expression cannot be called");
-    for (Expr* a : c->args) infer(a, nullptr);
+    infer_loose(c->args);
     return err();
+}
+
+// Аргументы вызова, который не разрешился или не сошёлся по числу
+// аргументов: типы для дальнейших проверок, без сообщений о пометках `&` —
+// они следствие первой ошибки.
+void Checker::infer_loose(const std::vector<Expr*>& args) {
+    for (Expr* a : args) {
+        if (auto* r = as<RefExpr>(a)) r->type = infer(r->operand, nullptr);
+        else infer(a, nullptr);
+    }
 }
 
 const Type* Checker::user_call(CallExpr* c, const FnDef& f) {
@@ -588,7 +626,7 @@ const Type* Checker::user_call(CallExpr* c, const FnDef& f) {
     if (c->args.size() != f.params.size()) {
         error(Code::E0407, c->span, "'" + f.name + "' takes " + std::to_string(f.params.size()) + " argument" +
                                         (f.params.size() == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
-        for (Expr* a : c->args) infer(a, nullptr);
+        infer_loose(c->args);
         return f.ret ? f.ret : err();
     }
     check_args(c, f.params);
@@ -620,7 +658,7 @@ const Type* Checker::ptr_call(CallExpr* c, const Local& callee) {
     if (c->args.size() != sig.params.size()) {
         error(Code::E0407, c->span, "'" + callee.name + "' takes " + std::to_string(sig.params.size()) + " argument" +
                                         (sig.params.size() == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
-        for (Expr* a : c->args) infer(a, nullptr);
+        infer_loose(c->args);
         return sig.ret;
     }
     std::vector<ParamDef> params;
@@ -702,7 +740,7 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     if (c->args.size() != want) {
         error(Code::E0407, c->span, "'" + name + "' takes " + std::to_string(want) + " argument" +
                                         (want == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
-        for (Expr* a : c->args) infer(a, nullptr);
+        infer_loose(c->args);
         return err();
     }
     for (size_t i = 0; i < c->args.size(); i++) {
@@ -812,7 +850,7 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
 const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     const Type* t = infer(f->object, nullptr);
     if (t->kind == TK::Error) {
-        for (Expr* a : c->args) infer(a, nullptr);
+        infer_loose(c->args);
         return err();
     }
     const MethodInfo* mi = nullptr;
@@ -827,7 +865,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     bool ok = mi && (map ? map_method : (list_method && (list || slice)) || (str_method && str));
     if (!ok) {
         error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
-        for (Expr* a : c->args) infer(a, nullptr);
+        infer_loose(c->args);
         return err();
     }
     c->call = CallKind::Method;
@@ -844,7 +882,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     if (c->args.size() != arity) {
         error(Code::E0407, c->span, "method '" + f->name + "' takes " + std::to_string(arity) + " argument" +
                                         (arity == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
-        for (Expr* a : c->args) infer(a, nullptr);
+        infer_loose(c->args);
         return err();
     }
     bool mutating = map ? (mi->m == Method::Remove || mi->m == Method::Clear)
@@ -898,7 +936,7 @@ const Type* Checker::convert_call(CallExpr* c, const Type* target, bool wrap) {
     std::string what = wrap ? type_name(target) + ".wrap" : type_name(target);
     if (c->args.size() != 1) {
         error(Code::E0407, c->span, "'" + what + "' takes 1 argument, found " + std::to_string(c->args.size()));
-        for (Expr* a : c->args) infer(a, nullptr);
+        infer_loose(c->args);
         return target;
     }
     // Литерал в `T(5)` получает тип T сразу: вне диапазона — ошибка компиляции.
@@ -925,7 +963,7 @@ const Type* Checker::variant_value(const EnumDef* en, uint32_t index, VariantFor
                                                          : full + " { ... }";
         error(Code::E0414, span, "variant '" + v.name + "' is written " + how);
         if (args) {
-            for (Expr* a : *args) infer(a, nullptr);
+            infer_loose(*args);
         }
         if (fields) {
             for (FieldInit& fi : *fields) {
@@ -939,7 +977,7 @@ const Type* Checker::variant_value(const EnumDef* en, uint32_t index, VariantFor
             error(Code::E0407, span, "variant '" + v.name + "' takes " + std::to_string(v.types.size()) +
                                          " value" + (v.types.size() == 1 ? "" : "s") + ", found " +
                                          std::to_string(args->size()));
-            for (Expr* a : *args) infer(a, nullptr);
+            infer_loose(*args);
         } else {
             for (size_t i = 0; i < args->size(); i++) check((*args)[i], v.types[i]);
         }
@@ -1060,7 +1098,7 @@ const EnumDef* Checker::enum_for_variant(const std::string& name, const Type* hi
 const Type* Checker::variant_lit(VariantLitExpr* v, const Type* hint) {
     const EnumDef* en = enum_for_variant(v->name, hint, v->name_span);
     if (!en) {
-        for (Expr* a : v->args) infer(a, nullptr);
+        infer_loose(v->args);
         for (FieldInit& fi : v->fields) {
             if (fi.value) infer(fi.value, nullptr);
         }
@@ -1253,16 +1291,18 @@ bool Checker::mutable_place(Expr* e, const char* why) {
             return false;
         }
         Local* l = n->res.local;
-        if (frozen(l)) {
-            error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name +
-                                            "' while 'for ... in &' iterates over its Map; iterate over a copy "
-                                            "of the keys: 'for k in &m.keys()'");
+        // Заморозка — причина, только если без неё место изменяемо.
+        const char* hint = frozen(l);
+        if (l->mutable_ && hint) {
+            error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "'" + hint);
             return false;
         }
         if (l->mutable_) return true;
+        // У элемента обхода Map и среза `&mut` нет (E0419, E0412).
         std::string reason = l->is_param ? (l->is_ref ? "it is a '&' parameter; make it '&mut'"
                                                       : "it is a value parameter; take it as '&mut' to change it")
-                             : l->is_ref ? "it is an element read through 'for ... in &'; use '&mut'"
+                             : l->is_ref ? (hint ? "it is an element read through 'for ... in &'"
+                                                 : "it is an element read through 'for ... in &'; use '&mut'")
                                          : "it is not declared with 'var'";
         error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "': " + reason);
         return false;
@@ -1284,12 +1324,16 @@ bool Checker::mutable_place(Expr* e, const char* why) {
     return false;
 }
 
-bool Checker::frozen(const Local* l) const {
+const char* Checker::frozen(const Local* l) const {
     const Local* r = l->alias_of ? l->alias_of : l;
-    for (const Local* f : frozen_) {
-        if (f == r) return true;
+    for (const Frozen& f : frozen_) {
+        if (f.root != r) continue;
+        return f.map ? " while 'for ... in &' iterates over its Map; iterate over a copy of the keys: "
+                       "'for k in &m.keys()'"
+                     : " while 'for ... in &' iterates over its slice; iterate over a slice of a copy "
+                       "made before the loop";
     }
-    return false;
+    return nullptr;
 }
 
 Local* Checker::root_local(Expr* e) {
@@ -1301,6 +1345,9 @@ Local* Checker::root_local(Expr* e) {
     }
     if (auto* f = as<FieldExpr>(e)) return root_local(f->object);
     if (auto* i = as<IndexExpr>(e)) return root_local(i->object);
+    if (auto* s = as<SliceExpr>(e)) {  // срез xs[a..b] — корень xs; срез str — копия
+        return s->type && s->type->kind == TK::Str ? nullptr : root_local(s->object);
+    }
     return nullptr;
 }
 
@@ -1328,10 +1375,13 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         } else if (auto* r = as<RefExpr>(e)) {
             if (is_place(r->operand)) refs.push_back({root_local(r->operand), false, e->span});
             else borrowed(r->operand);
+        } else if (Local* root = root_local(e); !root && (as<FieldExpr>(e) || as<IndexExpr>(e) || as<SliceExpr>(e))) {
+            // Часть литерала — `[S { p: &x }][0..1]`: заимствования его элементов.
+            if (auto* f = as<FieldExpr>(e)) borrowed(f->object);
+            else if (auto* x = as<IndexExpr>(e)) borrowed(x->object);
+            else borrowed(static_cast<SliceExpr*>(e)->object);
         } else if ((e->conv && e->conv->kind == TK::Slice) || as<SliceExpr>(e)) {
-            Expr* base = e;
-            while (auto* sl = as<SliceExpr>(base)) base = sl->object;
-            refs.push_back({root_local(base), false, e->span});
+            refs.push_back({root, false, e->span});
         }
     };
     for (size_t i = 0; i < c->args.size() && i < params.size(); i++) {
@@ -1340,10 +1390,9 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             if (params[i].mode != ParamMode::Value) refs.push_back({root_local(r->operand), r->mut, a->span});
             if (!is_place(r->operand)) borrowed(r->operand);
         } else if (params[i].type && params[i].type->kind == TK::Slice) {
-            Expr* base = a;
-            while (auto* s = as<SliceExpr>(base)) base = s->object;
-            refs.push_back({root_local(base), false, a->span});
-            if (as<ListLitExpr>(strip_paren(a))) borrowed(a);  // `[S { ... }]` — заимствования внутри
+            Local* root = root_local(a);  // `(xs[1..])` — тоже корень xs
+            if (root) refs.push_back({root, false, a->span});
+            else borrowed(a);  // `[S { ... }]`, `[S { ... }][0..1]` — заимствования внутри
         } else if (params[i].type && (c_borrowing(params[i].type) || params[i].type->kind == TK::Optional)) {
             borrowed(a);
         }
