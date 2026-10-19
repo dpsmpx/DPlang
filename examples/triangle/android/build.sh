@@ -8,6 +8,8 @@
 # ключом отладки. Инструменты: tools/setup/cross_android.sh и
 # tools/setup/graphics_android.sh. Запуск — на устройстве с Vulkan:
 #   adb install -r triangle.apk
+# (ключ у каждой сборки новый: прежнюю — adb uninstall org.dpl.triangle).
+# Сборки для автора — в ветку apk-builds: tools/apk/publish.sh triangle.
 # Сверка первого кадра — сообщением на экране.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

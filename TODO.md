@@ -49,7 +49,8 @@
 - `М` **Запуск треугольника на устройстве Android** (Р64, ворота v0.2):
   поставить `triangle-78b83df.apk` из ветки `apk-builds` (SHA-256
   `13884ddc…58ab`; или свежую сборку — последнюю строку `README.md`
-  ветки) на устройство с Vulkan — `adb install -r triangle-78b83df.apk`,
+  ветки) на устройство с Vulkan — `adb install -r triangle-78b83df.apk`
+  (если стоит прежняя сборка — сначала `adb uninstall org.dpl.triangle`),
   открыть «dpl triangle» и прислать в сессию текст сообщения (или
   снимок экрана). Ожидается `matches the reference: true`.
 
@@ -72,10 +73,19 @@
   `examples/triangle/android/build.sh` удаляет каталог сборки вместе с
   `debug.keystore`, поэтому сборки в `apk-builds` подписаны разными
   ключами и новая не встаёт поверх прежней (`adb install -r` —
-  `INSTALL_FAILED_UPDATE_INCOMPATIBLE`), сначала `adb uninstall
-  org.dpl.triangle`. Постоянный ключ в репозитории запрещает
-  `tools/check/check_secrets.py` (`.keystore`) — решить автору: ключ в
+  `INSTALL_FAILED_UPDATE_INCOMPATIBLE`): сначала нужен `adb uninstall
+  org.dpl.triangle`. Хранить постоянный ключ в репозитории запрещает
+  `tools/check/check_secrets.py` (`.keystore`). Решить автору: ключ в
   секретах окружения, исключение для ключа отладки или оставить как есть.
+- `С` **Сборка не воспроизводима побайтно между каталогами**
+  (`docs/policy/DETERMINISM.md`, раздел 6 — проверка перед выпуском):
+  в отладочном профиле `dpl build` даёт `-g`, и пути каталога сборки и
+  временного `/tmp/dpl-build-…` остаются в DWARF (`libmain.so` пакета APK
+  не урезается); строки мест ловушек модулей `stdlib` несут абсолютный
+  путь (`/…/stdlib/os.dpm:16:18`), у главного модуля путь относительный.
+  Две сборки одного коммита в разных каталогах сверяются только после
+  `llvm-objcopy --strip-all` и с теми же путями `stdlib`. Нужны перенос
+  путей сборки и относительные пути `stdlib`.
 - `М` **t05: постановка молчит о краю `i32` у соседей** —
   `bench/tasks/t05_keyed_rng/task.md` не говорит, что делать, если
   координата соседа выходит за `i32` (`x ± 1` на краю). Драйвер этот
