@@ -11,6 +11,8 @@
 #include "ir/lower.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <map>
 #include <unordered_map>
 
@@ -482,6 +484,8 @@ private:
     Operand cfloat(double v, const Type* t) {
         Operand o;
         o.c.kind = Const::Kind::Float;
+        // NaN постоянной — канонический (Р56): так же пишет его и C-бэкенд (NAN).
+        if (std::isnan(v)) v = std::copysign(std::numeric_limits<double>::quiet_NaN(), 1.0);
         o.c.f = t->kind == TK::F32 ? static_cast<double>(static_cast<float>(v)) : v;
         o.c.type = t;
         return o;
