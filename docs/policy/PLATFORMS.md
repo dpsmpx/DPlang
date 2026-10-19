@@ -34,7 +34,7 @@
 |---|---|---|---|
 | Linux x86-64 | хост | `runtime/linux` | весь набор тестов |
 | Windows x86-64 | `windows-x86_64`: clang + lld поверх MinGW-w64 | `runtime/windows` | проход `windows` в `tests/run.py`: набор исполнения в профилях debug и release под Wine; инструменты — `tools/setup/cross_windows.sh` |
-| Android arm64 | `android-arm64`: clang из Android NDK r30, API 24, статическая программа; графическая — библиотека `dpl build --lib` в пакете APK с SDL3 (`examples/triangle/android/`) | `runtime/linux` (POSIX; bionic) | проход `android`: тот же набор под qemu-aarch64 (эмулятор пользовательского режима); инструменты — `tools/setup/cross_android.sh`; графика — сборка APK в сессии, запуск на устройстве автора (Р64) |
+| Android arm64 | `android-arm64`: clang из Android NDK r30, API 24, статическая программа; графическая — библиотека `dpl build --lib` в пакете APK с SDL3 (`examples/triangle/android/`) | `runtime/linux` (POSIX; bionic) | проход `android`: тот же набор под qemu-aarch64 (эмулятор пользовательского режима); инструменты — `tools/setup/cross_android.sh`; графика — сборка APK в сессии (сборки — ветка `apk-builds`, `tools/apk/publish.sh`), запуск на устройстве автора (Р64) |
 
 На настоящей Windows и на устройстве Android программы ещё не
 запускались (уровень 1 требует периодического запуска — до выпуска).

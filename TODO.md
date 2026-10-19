@@ -47,11 +47,11 @@
   `bindings/triangle/windows` и `bindings/triangle/android`
   пропускаются; итог `tests/run.py` это называет.
 - `М` **Запуск треугольника на устройстве Android** (Р64, ворота v0.2):
-  поставить `triangle.apk` (передан в сессии 17 октября, SHA-256
-  `faae69a9…cfe9`; или `examples/triangle/android/build.sh`)
-  на устройство с Vulkan — `adb install -r triangle.apk`, открыть «dpl
-  triangle» и прислать в сессию текст сообщения (или снимок экрана).
-  Ожидается `matches the reference: true`.
+  поставить `triangle-78b83df.apk` из ветки `apk-builds` (SHA-256
+  `13884ddc…58ab`; или свежую сборку — последнюю строку `README.md`
+  ветки) на устройство с Vulkan — `adb install -r triangle-78b83df.apk`,
+  открыть «dpl triangle» и прислать в сессию текст сообщения (или
+  снимок экрана). Ожидается `matches the reference: true`.
 
 ## Задачи
 
@@ -68,6 +68,14 @@
   шага 6 v0.2 зеркалят `SDL_Rect`, `VkExtent2D`), будет повторное
   определение. Решить с генераторами привязок: пометка «структура из
   заголовка C» и `#include` вместо определения.
+- `М` **Ключ отладки APK — новый у каждой сборки:**
+  `examples/triangle/android/build.sh` удаляет каталог сборки вместе с
+  `debug.keystore`, поэтому сборки в `apk-builds` подписаны разными
+  ключами и новая не встаёт поверх прежней (`adb install -r` —
+  `INSTALL_FAILED_UPDATE_INCOMPATIBLE`), сначала `adb uninstall
+  org.dpl.triangle`. Постоянный ключ в репозитории запрещает
+  `tools/check/check_secrets.py` (`.keystore`) — решить автору: ключ в
+  секретах окружения, исключение для ключа отладки или оставить как есть.
 - `М` **t05: постановка молчит о краю `i32` у соседей** —
   `bench/tasks/t05_keyed_rng/task.md` не говорит, что делать, если
   координата соседа выходит за `i32` (`x ± 1` на краю). Драйвер этот
