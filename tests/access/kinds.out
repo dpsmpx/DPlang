@@ -1,19 +1,21 @@
-{"file": "kinds.dpm", "line": 33, "col": 21, "rule": "call", "kind": "overlap", "root": "p", "detail": "mut_ref", "other": "33:15", "text": "p.x"}
-{"file": "kinds.dpm", "line": 34, "col": 21, "rule": "call", "kind": "fields", "root": "p", "detail": "mut_ref", "other": "34:15", "text": "p.y"}
-{"file": "kinds.dpm", "line": 35, "col": 23, "rule": "call", "kind": "const_index", "root": "xs", "detail": "mut_ref", "other": "35:15", "text": "xs[1]"}
-{"file": "kinds.dpm", "line": 36, "col": 23, "rule": "call", "kind": "computed_index", "root": "xs", "detail": "mut_ref", "other": "36:15", "text": "xs[0]"}
-{"file": "kinds.dpm", "line": 46, "col": 9, "rule": "loop", "kind": "structural", "root": "xs", "detail": "list mut", "other": "45:19", "text": "xs"}
-{"file": "kinds.dpm", "line": 47, "col": 9, "rule": "loop", "kind": "element", "root": "xs", "detail": "list mut", "other": "45:19", "text": "xs[0]"}
-{"file": "kinds.dpm", "line": 48, "col": 19, "rule": "loop", "kind": "element", "root": "xs", "detail": "list mut", "other": "45:19", "text": "xs[1]"}
-{"file": "kinds.dpm", "line": 49, "col": 14, "rule": "loop", "kind": "read", "root": "xs", "detail": "list mut", "other": "45:19", "text": "xs"}
-{"file": "kinds.dpm", "line": 55, "col": 9, "rule": "loop", "kind": "structural", "root": "xs", "detail": "list", "other": "54:15", "text": "xs"}
-{"file": "kinds.dpm", "line": 65, "col": 19, "rule": "loop", "kind": "read", "root": "rows", "detail": "list mut", "other": "59:19", "text": "rows"}
-{"file": "kinds.dpm", "line": 65, "col": 19, "rule": "loop", "kind": "nested", "root": "rows", "detail": "list mut, inner read", "other": "59:19", "text": "rows"}
-{"file": "kinds.dpm", "line": 77, "col": 9, "rule": "loop", "kind": "structural", "root": "m", "detail": "map", "other": "76:15", "text": "m"}
-{"file": "kinds.dpm", "line": 86, "col": 9, "rule": "par", "kind": "var", "root": "total", "detail": "range", "other": "85:23", "text": "total"}
-{"file": "kinds.dpm", "line": 87, "col": 9, "rule": "par", "kind": "index_loopvar", "root": "out", "detail": "range", "other": "85:23", "text": "out[i]"}
-{"file": "kinds.dpm", "line": 88, "col": 9, "rule": "par", "kind": "index_computed", "root": "out", "detail": "range", "other": "85:23", "text": "out[i + 1]"}
-{"file": "kinds.dpm", "line": 89, "col": 9, "rule": "par", "kind": "structural", "root": "out", "detail": "range", "other": "85:23", "text": "out"}
-{"file": "kinds.dpm", "line": 96, "col": 14, "rule": "loop", "kind": "read", "root": "xs", "detail": "list mut", "other": "94:28", "text": "xs"}
-{"file": "kinds.dpm", "line": 96, "col": 14, "rule": "par", "kind": "read_root", "root": "xs", "detail": "list", "other": "94:28", "text": "xs"}
-{"file": "kinds.dpm", "line": 102, "col": 21, "rule": "view", "kind": "slice", "root": "", "detail": "", "other": "", "text": "xs"}
+{"file": "kinds.dpm", "line": 38, "col": 21, "rule": "call", "kind": "overlap", "root": "p", "rel": "overlap", "detail": "mut_ref", "other": "38:15", "text": "p.x"}
+{"file": "kinds.dpm", "line": 39, "col": 21, "rule": "call", "kind": "fields", "root": "p", "rel": "fields", "detail": "mut_ref", "other": "39:15", "text": "p.y"}
+{"file": "kinds.dpm", "line": 40, "col": 23, "rule": "call", "kind": "const_index", "root": "xs", "rel": "const_index", "detail": "mut_ref", "other": "40:15", "text": "xs[1]"}
+{"file": "kinds.dpm", "line": 41, "col": 23, "rule": "call", "kind": "computed_index", "root": "xs", "rel": "computed_index", "detail": "mut_ref", "other": "41:15", "text": "xs[0]"}
+{"file": "kinds.dpm", "line": 51, "col": 9, "rule": "loop", "kind": "structural", "root": "xs", "rel": "overlap", "detail": "list mut", "other": "50:19", "text": "xs"}
+{"file": "kinds.dpm", "line": 52, "col": 9, "rule": "loop", "kind": "element", "root": "xs", "rel": "overlap", "detail": "list mut", "other": "50:19", "text": "xs[0]"}
+{"file": "kinds.dpm", "line": 53, "col": 19, "rule": "loop", "kind": "element", "root": "xs", "rel": "overlap", "detail": "list mut", "other": "50:19", "text": "xs[1]"}
+{"file": "kinds.dpm", "line": 54, "col": 14, "rule": "loop", "kind": "read", "root": "xs", "rel": "overlap", "detail": "list mut", "other": "50:19", "text": "xs[0]"}
+{"file": "kinds.dpm", "line": 60, "col": 9, "rule": "loop", "kind": "structural", "root": "xs", "rel": "overlap", "detail": "list", "other": "59:15", "text": "xs"}
+{"file": "kinds.dpm", "line": 70, "col": 19, "rule": "loop", "kind": "nested", "root": "rows", "rel": "overlap", "detail": "list mut, inner read", "other": "64:19", "text": "rows"}
+{"file": "kinds.dpm", "line": 70, "col": 19, "rule": "loop", "kind": "read", "root": "rows", "rel": "overlap", "detail": "list mut", "other": "64:19", "text": "rows"}
+{"file": "kinds.dpm", "line": 82, "col": 9, "rule": "loop", "kind": "structural", "root": "m", "rel": "overlap", "detail": "map", "other": "81:15", "text": "m"}
+{"file": "kinds.dpm", "line": 87, "col": 9, "rule": "loop", "kind": "element", "root": "w", "rel": "fields", "detail": "list mut", "other": "86:19", "text": "w.hits"}
+{"file": "kinds.dpm", "line": 88, "col": 21, "rule": "loop", "kind": "read", "root": "w", "rel": "fields", "detail": "list mut", "other": "86:19", "text": "w.hits"}
+{"file": "kinds.dpm", "line": 97, "col": 9, "rule": "par", "kind": "var", "root": "total", "rel": "", "detail": "range", "other": "96:23", "text": "total"}
+{"file": "kinds.dpm", "line": 98, "col": 9, "rule": "par", "kind": "index_loopvar", "root": "out", "rel": "", "detail": "range", "other": "96:23", "text": "out[i]"}
+{"file": "kinds.dpm", "line": 99, "col": 9, "rule": "par", "kind": "index_computed", "root": "out", "rel": "", "detail": "range", "other": "96:23", "text": "out[i + 1]"}
+{"file": "kinds.dpm", "line": 100, "col": 9, "rule": "par", "kind": "structural", "root": "out", "rel": "", "detail": "range", "other": "96:23", "text": "out"}
+{"file": "kinds.dpm", "line": 107, "col": 14, "rule": "loop", "kind": "read", "root": "xs", "rel": "overlap", "detail": "list mut", "other": "105:28", "text": "xs[0]"}
+{"file": "kinds.dpm", "line": 107, "col": 14, "rule": "par", "kind": "read_root", "root": "xs", "rel": "overlap", "detail": "list", "other": "105:28", "text": "xs[0]"}
+{"file": "kinds.dpm", "line": 113, "col": 21, "rule": "view", "kind": "slice", "root": "", "rel": "", "detail": "", "other": "", "text": "xs"}

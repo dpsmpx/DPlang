@@ -437,6 +437,8 @@ int cmd_debug_access(const Cli& cli, const std::vector<std::string_view>& args) 
         dp::json_string(out, e.kind);
         out += ", \"root\": ";
         dp::json_string(out, e.root);
+        out += ", \"rel\": ";
+        dp::json_string(out, e.rel);
         out += ", \"detail\": ";
         dp::json_string(out, e.detail);
         out += ", \"other\": \"" + (e.other.end ? std::to_string(other.line) + ":" + std::to_string(other.col) : "") +

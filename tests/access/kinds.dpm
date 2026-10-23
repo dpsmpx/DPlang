@@ -10,6 +10,11 @@ struct Row {
     items: List[int]
 }
 
+struct World {
+    items: List[int]
+    hits: int
+}
+
 fn bump(a: &mut int) {
     a += 1
 }
@@ -75,6 +80,12 @@ fn loops() {
     var m: Map[int, int] = []
     for k in &m {
         m[k] = 1
+    }
+    // События со связью fields: другое поле корня.
+    var w = World { items: [1], hits: 0 }
+    for x in &mut w.items {
+        w.hits += x
+        println(str(w.hits))
     }
 }
 

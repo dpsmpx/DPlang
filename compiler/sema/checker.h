@@ -159,9 +159,17 @@ private:
         bool parallel = false;
         uint32_t first_inner = 0;  // переменные с номером не меньше — объявлены в теле
         Span head;
+        ast::Expr* iter = nullptr;
         const char* coll = "";  // list, map, slice, str, range
     };
     std::vector<ProbeLoop> probe_loops_;
+    // Чтение корня `&mut`-обхода: событие — в конце обхода, когда место
+    // продлено полями и индексами (`w.seed` — не обходимое `w.bodies`).
+    struct ProbeRead {
+        ast::Expr* place = nullptr;
+        size_t loop = 0;  // номер в probe_loops_
+    };
+    std::vector<ProbeRead> probe_reads_;
     // Переменная обхода — выражение его коллекции: `for y in &x.items`.
     std::map<const Local*, ast::Expr*> probe_iter_;
     // Запись в место: присваивание; метод, меняющий длину или ключи (и
@@ -169,6 +177,7 @@ private:
     enum class Write : uint8_t { Assign, Shape, Method, Ref };
     void note_write(ast::Expr* place, Write how);
     void note_use(ast::NameExpr* n);
+    void note_extend(ast::Expr* object, ast::Expr* place);
     void probe_loop_begin(ast::ForStmt* s);
     void probe_loop_end();
     // Пара аргументов-ссылок с общим корнем: событие call; true — E0502 не

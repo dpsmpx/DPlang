@@ -1,6 +1,7 @@
 // Замер О4 (sema/access.h): доступы, которые отвергли бы правила-кандидаты,
 // — событиями журнала вместо отказа. Ведётся только у `dpl debug access`.
 #include <algorithm>
+#include <string_view>
 
 #include "sema/checker.h"
 
@@ -82,14 +83,26 @@ bool derived(const Local* l, const Local* var, const Iters& iters) {
 
 bool within(Span a, Span b) { return a.file == b.file && a.begin >= b.begin && a.end <= b.end; }
 
+// Связь двух путей от одного корня по первому расхождению: overlap — одно
+// место или часть и целое; fields, const_index — места не пересекаются;
+// computed_index — могут совпасть.
+const char* relation(const std::vector<Step>& a, const std::vector<Step>& b) {
+    for (size_t i = 0; i < a.size() && i < b.size(); i++) {
+        if (a[i].kind != b[i].kind || a[i].kind == Step::Index || a[i].kind == Step::Slice) return "computed_index";
+        if (a[i].value != b[i].value) return a[i].kind == Step::Field ? "fields" : "const_index";
+    }
+    return "overlap";
+}
+
 void push(AccessLog& log, const char* rule, const char* kind, Span span, Span other, const Local* root,
-          std::string detail) {
+          std::string detail, const char* rel = "") {
     AccessEvent e;
     e.rule = rule;
     e.kind = kind;
     e.span = span;
     e.other = other;
     e.root = root ? root->name : "";
+    e.rel = rel;
     e.detail = std::move(detail);
     log.events.push_back(std::move(e));
 }
@@ -106,20 +119,21 @@ void Checker::note_write(Expr* place, Write how) {
     const Local* base = raw_base(place);
     if (!root || !base) return;
     // Цель записи при выводе её типа прочитана — это не чтение корня.
-    auto& ev = log->events;
-    ev.erase(std::remove_if(ev.begin(), ev.end(),
-                            [&](const AccessEvent& e) {
-                                return (e.kind == "read" || e.kind == "read_root") && within(e.span, place->span);
-                            }),
-             ev.end());
-    // Длина или ключи корня: метод формы или `&mut` над корнем целиком,
-    // присваивание корню.
-    bool structural = steps.empty() && how != Write::Method;
+    probe_reads_.erase(std::remove_if(probe_reads_.begin(), probe_reads_.end(),
+                                      [&](const ProbeRead& r) { return within(r.place->span, place->span); }),
+                       probe_reads_.end());
     for (const ProbeLoop& L : probe_loops_) {
         if (derived(base, L.var, probe_iter_)) continue;
         if (L.root && root == L.root) {
+            // Длина или ключи обходимой коллекции: метод формы, `&mut` или
+            // присваивание над ней целиком или над тем, что её содержит.
+            std::vector<Step> coll;
+            path(L.iter, probe_iter_, coll);
+            const char* rel = relation(steps, coll);
+            bool apart = std::string_view(rel) == "fields" || std::string_view(rel) == "const_index";
+            bool structural = !apart && steps.size() <= coll.size() && how != Write::Method;
             push(*log, "loop", structural ? "structural" : "element", place->span, L.head, root,
-                 loop_detail(L.coll, L.mut));
+                 loop_detail(L.coll, L.mut), rel);
         }
         if (!L.parallel || base->id >= L.first_inner) continue;
         // Запись во внешнюю переменную из тела `parallel for` (развилка 6).
@@ -142,13 +156,15 @@ void Checker::note_write(Expr* place, Write how) {
 }
 
 void Checker::note_use(NameExpr* n) {
-    AccessLog* log = probe();
-    if (!log || probe_loops_.empty() || n->res.kind != ResKind::Local) return;
-    for (const ProbeLoop& L : probe_loops_) {
-        if (!L.mut || L.root != n->res.local) continue;
-        push(*log, "loop", "read", n->span, L.head, L.root, loop_detail(L.coll, true));
-        // Тело `parallel for x in &mut xs` читает xs, который пишут другие итерации.
-        if (L.parallel) push(*log, "par", "read_root", n->span, L.head, L.root, L.coll);
+    if (!probe() || probe_loops_.empty() || n->res.kind != ResKind::Local) return;
+    for (size_t k = 0; k < probe_loops_.size(); k++) {
+        if (probe_loops_[k].mut && probe_loops_[k].root == n->res.local) probe_reads_.push_back(ProbeRead{n, k});
+    }
+}
+
+void Checker::note_extend(Expr* object, Expr* place) {
+    for (ProbeRead& r : probe_reads_) {
+        if (r.place == object) r.place = place;
     }
 }
 
@@ -161,6 +177,7 @@ void Checker::probe_loop_begin(ForStmt* s) {
     L.parallel = s->parallel;
     L.first_inner = s->local ? s->local->id : next_local_;
     L.head = s->iter ? s->iter->span : s->var_span;
+    L.iter = s->iter;
     L.coll = "range";
     if ((s->mode == ForMode::Ref || L.mut) && s->iter) {
         std::vector<Step> steps;
@@ -172,8 +189,10 @@ void Checker::probe_loop_begin(ForStmt* s) {
         const Local* base = raw_base(s->iter);
         for (const ProbeLoop& o : probe_loops_) {
             if (!o.root || o.root != L.root || !(o.mut || L.mut) || derived(base, o.var, probe_iter_)) continue;
+            std::vector<Step> outer;
+            path(o.iter, probe_iter_, outer);
             push(*log, "loop", "nested", s->iter->span, o.head, L.root,
-                 loop_detail(o.coll, o.mut) + (L.mut ? ", inner mut" : ", inner read"));
+                 loop_detail(o.coll, o.mut) + (L.mut ? ", inner mut" : ", inner read"), relation(steps, outer));
         }
         // `for x in &mut outer` в теле `parallel for` — запись во внешнюю переменную.
         if (L.mut) {
@@ -188,7 +207,25 @@ void Checker::probe_loop_begin(ForStmt* s) {
 }
 
 void Checker::probe_loop_end() {
-    if (probe() && !probe_loops_.empty()) probe_loops_.pop_back();
+    AccessLog* log = probe();
+    if (!log || probe_loops_.empty()) return;
+    size_t k = probe_loops_.size() - 1;
+    const ProbeLoop& L = probe_loops_[k];
+    std::vector<Step> coll;
+    path(L.iter, probe_iter_, coll);
+    for (const ProbeRead& r : probe_reads_) {
+        if (r.loop != k) continue;
+        std::vector<Step> steps;
+        path(r.place, probe_iter_, steps);
+        const char* rel = relation(steps, coll);
+        push(*log, "loop", "read", r.place->span, L.head, L.root, loop_detail(L.coll, true), rel);
+        // Тело `parallel for x in &mut xs` читает xs, который пишут другие итерации.
+        if (L.parallel) push(*log, "par", "read_root", r.place->span, L.head, L.root, L.coll, rel);
+    }
+    probe_reads_.erase(std::remove_if(probe_reads_.begin(), probe_reads_.end(),
+                                      [&](const ProbeRead& r) { return r.loop == k; }),
+                       probe_reads_.end());
+    probe_loops_.pop_back();
 }
 
 bool Checker::probe_call(Expr* a, bool a_mut, bool a_view, Expr* b, bool b_mut, bool b_view) {
@@ -197,20 +234,9 @@ bool Checker::probe_call(Expr* a, bool a_mut, bool a_view, Expr* b, bool b_mut, 
     std::vector<Step> pa, pb;
     const Local* root = path(a, probe_iter_, pa);
     path(b, probe_iter_, pb);
-    // Первое расхождение путей решает, пересекаются ли места.
-    const char* rel = "overlap";
-    for (size_t i = 0; i < pa.size() && i < pb.size(); i++) {
-        if (pa[i].kind != pb[i].kind || pa[i].kind == Step::Index || pa[i].kind == Step::Slice) {
-            rel = "computed_index";
-            break;
-        }
-        if (pa[i].value != pb[i].value) {
-            rel = pa[i].kind == Step::Field ? "fields" : "const_index";
-            break;
-        }
-    }
+    const char* rel = relation(pa, pb);
     const char* mode = a_mut && b_mut ? "mut_mut" : a_view || b_view ? "mut_view" : "mut_ref";
-    push(*log, "call", rel, b ? b->span : Span{}, a ? a->span : Span{}, root, mode);
+    push(*log, "call", rel, b ? b->span : Span{}, a ? a->span : Span{}, root, mode, rel);
     return true;
 }
 

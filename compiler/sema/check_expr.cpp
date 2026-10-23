@@ -372,6 +372,7 @@ const Type* Checker::field_expr(FieldExpr* f, const Type* /*hint*/) {
         for (size_t i = 0; i < s->fields.size(); i++) {
             if (s->fields[i].name == f->name) {
                 f->field = static_cast<int>(i);
+                note_extend(f->object, f);
                 // Р62: заимствованное поле пишется для C; в dpl его не прочесть.
                 if (c_borrowing(t) && c_borrow_field(s->fields[i].type)) {
                     error(Code::E0328, f->name_span, "field '" + f->name + "' of '" + tn(t) +
@@ -1160,6 +1161,7 @@ const Type* Checker::list_lit(ListLitExpr* l, const Type* hint) {
 
 const Type* Checker::index_expr(IndexExpr* i) {
     const Type* t = infer(i->object, nullptr);
+    note_extend(i->object, i);
     if (t->kind == TK::Map) {  // Р54: m[k] — значение ключа
         check(i->index, t->key);
         return t->elem;
@@ -1181,6 +1183,7 @@ const Type* Checker::index_expr(IndexExpr* i) {
 
 const Type* Checker::slice_expr(SliceExpr* s) {
     const Type* t = infer(s->object, nullptr);
+    note_extend(s->object, s);
     for (Expr* bound : {s->lo, s->hi}) {
         if (!bound) continue;
         const Type* k = infer(bound, prim(TK::I64));

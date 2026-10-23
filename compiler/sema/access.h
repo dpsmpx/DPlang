@@ -31,6 +31,9 @@ struct AccessEvent {
     Span span;           // доступ
     Span other;          // второй аргумент; заголовок цикла
     std::string root;    // имя корня
+    // Связь пути доступа с путём коллекции обхода (loop) или второго
+    // аргумента (call): overlap, fields, const_index, computed_index.
+    std::string rel;
     std::string detail;  // call: mut_mut, mut_ref, mut_view; loop: list, map, slice и mut у `&mut`-обхода
 };
 

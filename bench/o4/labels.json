@@ -1,0 +1,23 @@
+[
+ {"match": {"segment": "тесты", "program": "(run|ffi|ir)/views\\.dpm", "rule": "view"},
+  "label": "тест правила",
+  "fix": "тест снимка вида (#27); при В — вид из копии до вызова: `let old = xs` (1 строка)"},
+ {"match": {"segment": "тесты", "program": "run/views\\.dpm", "line": "133", "rule": "loop"},
+  "label": "тест правила",
+  "fix": "тест: срез str — копия (Р65); при Б — обход копии `let t = text` до цикла (1 строка)"},
+ {"match": {"segment": "тесты", "program": "run/refs\\.dpm", "line": "38", "rule": "loop"},
+  "label": "тест правила",
+  "fix": "тест: список растёт в `for x in &xs` и обход видит новые элементы (Р65); при Б — `while i < len(xs)` по индексу (4 строки, смысл тот же)"},
+ {"match": {"segment": "тесты", "program": "run/det_sim", "rule": "loop", "kind": "element"},
+  "label": "ложный отказ",
+  "fix": "только без путей (Б2 по корню): другое поле корня; счётчик в переменной и `w.hits += hits` после цикла (3 строки)"},
+ {"match": {"segment": "эталоны", "program": "t14_parallel_fold", "line": "18", "rule": "par"},
+  "label": "ложный отказ",
+  "fix": "при 6а: индекс блока вычислен (`b = t`, `b += threads`), блоки потоков не пересекаются; обход блоков `parallel for b in 0..blocks` (5 строк, не машинно); при 6б — проверка при выполнении"},
+ {"match": {"segment": "эталоны", "program": "t14_parallel_fold", "line": "37", "rule": "par"},
+  "label": "ложный отказ",
+  "fix": "при 6г: `local[t]` по переменной цикла; свёртка библиотеки вместо цикла (переписать функцию)"},
+ {"match": {"segment": "модели", "program": "k2-r1/t14/attempt-1", "rule": "par", "kind": "index_loopvar"},
+  "label": "ложный отказ",
+  "fix": "при 6г: `parts[w]` по переменной цикла; свёртка библиотеки вместо цикла (переписать функцию)"}
+]
