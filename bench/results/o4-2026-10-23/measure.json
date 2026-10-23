@@ -1,0 +1,2284 @@
+{
+ "commit": "af066ea",
+ "programs": [
+  {
+   "segment": "эталоны",
+   "program": "t01_ring",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t02_toml_line",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t03_npc_fsm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t04_handle_pool",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t05_keyed_rng",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t06_greedy_mesh",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t07_grid_path",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t08_aabb_pairs",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t09_inventory",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t10_delta_codec",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t11_fixed_physics",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t12_bugfix_average",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t13_refactor_modules",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t14_parallel_fold",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 2
+  },
+  {
+   "segment": "эталоны",
+   "program": "t15_ledger",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t16_calc",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t17_wrap",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t18_scheduler_fix",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "эталоны",
+   "program": "t19_refactor_shop",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c1/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c1/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c1/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c1/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c1/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c2/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c2/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c2/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c2/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c2/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c3/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c3/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c3/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c3/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-c3/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g1/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g1/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g1/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g1/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g1/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g2/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g2/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g2/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g2/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g2/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g3/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g3/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g3/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g3/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-g3/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h1/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h1/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h1/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h1/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h1/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h2/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h2/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h2/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h2/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h2/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h3/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h3/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h3/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h3/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-h3/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m1/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m1/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m1/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m1/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m1/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m2/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m2/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m2/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m2/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m2/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m3/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m3/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m3/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m3/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-m3/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t01/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t02/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t03/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t04/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t05/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t06/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t07/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t08/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t09/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t10/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t11/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t12/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t13/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t14/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 2
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-r1/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s1/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s1/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s1/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s1/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s1/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s2/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s2/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s2/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s2/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s2/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s3/t15/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s3/t16/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s3/t17/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s3/t18/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "модели",
+   "program": "k2-s3/t19/attempt-1",
+   "ok": true,
+   "codes": [],
+   "class": "принято",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/arith.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/c_arrays.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/c_union.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/c_union_read.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/c_zero.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/checked.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/defers.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/det_nan_bits",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/det_sim",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 2
+  },
+  {
+   "segment": "тесты",
+   "program": "run/errors.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/fn_list.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/linear.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/lists.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/main_error.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/main_missing.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/main_params.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/map_order.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/maps.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/modules",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/names",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/order.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/os_io.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/os_noargs.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/recursive.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/recursive_compare.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/refs.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 1
+  },
+  {
+   "segment": "тесты",
+   "program": "run/strings.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/structs.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_abs_min.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_assert.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_compound.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_convert.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_defer.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_div_zero.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_f32.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_float_int.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_index.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_index_neg.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_insert.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_map_key.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_memory.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_min_div.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_nan_int.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_neg_min.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_assign.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_binary.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_call.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_compound.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_const.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_default.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_discard.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_fresh.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_map.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_match.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_method.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_nested.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_ref.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_slice_lo.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_str.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_try.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_order_view.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_overflow.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_rem_zero.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_remove.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_repeat.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_shift.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_shift_neg.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_slice.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_split.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_stack.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/trap_str_slice.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/unused_fn.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "run/views.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 14
+  },
+  {
+   "segment": "тесты",
+   "program": "ffi/callback.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ffi/libc.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ffi/linear_buf.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ffi/views.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 2
+  },
+  {
+   "segment": "тесты",
+   "program": "lib/borrow",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "lib/game",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "lib/handles",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "lib/slots",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ir/calls.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ir/control.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ir/det.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ir/drops.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ir/errors.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ir/matches.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "ir/views.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 1
+  },
+  {
+   "segment": "тесты",
+   "program": "types/calls.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "types/control.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "types/conversions.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "types/errors.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "types/literals.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "types/modules",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "sema/ok_export_linear.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "sema/ok_modules",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "sema/ok_scopes.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "test/empty.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "test/lib",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "test/outcomes.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "test/timeout.dpm",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "summary/lib",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "bindings/jni",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "bindings/sdl3",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "тесты",
+   "program": "bindings/vulkan",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "примеры",
+   "program": "tomlcheck",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "примеры",
+   "program": "triangle",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 0
+  },
+  {
+   "segment": "атаки",
+   "program": "attacks",
+   "ok": true,
+   "codes": [],
+   "class": "",
+   "events": 31
+  }
+ ],
+ "rules": {
+  "сейчас": {
+   "desc": "E0502 по корню; E0412 у Map и среза",
+   "sites": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "programs": 0,
+   "labels": {},
+   "caught": [
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "А": {
+   "desc": "пути с полями",
+   "sites": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "programs": 0,
+   "labels": {},
+   "caught": [
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "А+": {
+   "desc": "пути с полями и постоянными индексами",
+   "sites": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "programs": 0,
+   "labels": {},
+   "caught": [
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "Б1": {
+   "desc": "А+ и длина обходимой коллекции",
+   "sites": [
+    0,
+    0,
+    2,
+    0
+   ],
+   "programs": 2,
+   "labels": {
+    "тест правила": 2
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "Б2": {
+   "desc": "А+ и любое изменение обходимой коллекции",
+   "sites": [
+    0,
+    0,
+    2,
+    0
+   ],
+   "programs": 2,
+   "labels": {
+    "тест правила": 2
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "Б2 по корню": {
+   "desc": "Б2 без путей: любое изменение корня",
+   "sites": [
+    0,
+    0,
+    4,
+    0
+   ],
+   "programs": 3,
+   "labels": {
+    "ложный отказ": 2,
+    "тест правила": 2
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "Б3": {
+   "desc": "Б2 и чтение коллекции в обходе &mut",
+   "sites": [
+    0,
+    0,
+    2,
+    0
+   ],
+   "programs": 2,
+   "labels": {
+    "тест правила": 2
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_read_root_in_mut_loop",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_par_read_root",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "В": {
+   "desc": "Б2 и вид левее действия над его корнем",
+   "sites": [
+    0,
+    0,
+    18,
+    0
+   ],
+   "programs": 4,
+   "labels": {
+    "тест правила": 18
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias",
+    "a_view_implicit",
+    "a_view_explicit",
+    "a_view_slice_of_slice",
+    "a_view_method_arg",
+    "a_view_in_and",
+    "a_view_receiver",
+    "a_view_index_of_slice",
+    "a_view_field_root",
+    "a_view_method_receiver",
+    "a_view_mut_param",
+    "a_view_ref_before_call",
+    "a_view_addr_for_c"
+   ]
+  },
+  "6а": {
+   "desc": "parallel for: только out[i] по переменной цикла",
+   "sites": [
+    1,
+    0,
+    0,
+    0
+   ],
+   "programs": 1,
+   "labels": {
+    "ложный отказ": 1
+   },
+   "caught": [
+    "a_par_accumulate",
+    "a_par_push",
+    "a_par_shared_index",
+    "a_par_read_root",
+    "a_par_computed_index"
+   ]
+  },
+  "6б": {
+   "desc": "parallel for: и вычисленный индекс с проверкой",
+   "sites": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "programs": 0,
+   "labels": {},
+   "caught": [
+    "a_par_accumulate",
+    "a_par_push",
+    "a_par_read_root"
+   ]
+  },
+  "6г": {
+   "desc": "parallel for: только свёртка библиотеки",
+   "sites": [
+    2,
+    2,
+    0,
+    0
+   ],
+   "programs": 2,
+   "labels": {
+    "ложный отказ": 4
+   },
+   "caught": [
+    "a_par_accumulate",
+    "a_par_push",
+    "a_par_shared_index",
+    "a_par_read_root",
+    "a_par_computed_index"
+   ]
+  },
+  "Б3 + 6а": {
+   "desc": "Б3 и 6а",
+   "sites": [
+    1,
+    0,
+    2,
+    0
+   ],
+   "programs": 3,
+   "labels": {
+    "ложный отказ": 1,
+    "тест правила": 2
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_read_root_in_mut_loop",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_par_accumulate",
+    "a_par_push",
+    "a_par_shared_index",
+    "a_par_read_root",
+    "a_par_computed_index",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "Б3 + 6б": {
+   "desc": "Б3 и 6б",
+   "sites": [
+    0,
+    0,
+    2,
+    0
+   ],
+   "programs": 2,
+   "labels": {
+    "тест правила": 2
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_read_root_in_mut_loop",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_par_accumulate",
+    "a_par_push",
+    "a_par_read_root",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias"
+   ]
+  },
+  "В на Б3 + 6а": {
+   "desc": "Б3, вид левее действия и 6а",
+   "sites": [
+    1,
+    0,
+    18,
+    0
+   ],
+   "programs": 5,
+   "labels": {
+    "ложный отказ": 1,
+    "тест правила": 18
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_read_root_in_mut_loop",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_par_accumulate",
+    "a_par_push",
+    "a_par_shared_index",
+    "a_par_read_root",
+    "a_par_computed_index",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias",
+    "a_view_implicit",
+    "a_view_explicit",
+    "a_view_slice_of_slice",
+    "a_view_method_arg",
+    "a_view_in_and",
+    "a_view_receiver",
+    "a_view_index_of_slice",
+    "a_view_field_root",
+    "a_view_method_receiver",
+    "a_view_mut_param",
+    "a_view_ref_before_call",
+    "a_view_addr_for_c"
+   ]
+  },
+  "В на Б3 + 6б": {
+   "desc": "Б3, вид левее действия и 6б",
+   "sites": [
+    0,
+    0,
+    18,
+    0
+   ],
+   "programs": 4,
+   "labels": {
+    "тест правила": 18
+   },
+   "caught": [
+    "a_grow_in_mut_loop",
+    "a_shrink_in_mut_loop",
+    "a_clear_in_read_loop",
+    "a_push_in_read_loop",
+    "a_nested_mut_loops",
+    "a_read_root_in_mut_loop",
+    "a_map_insert_in_loop",
+    "a_slice_loop_mutation",
+    "a_par_accumulate",
+    "a_par_push",
+    "a_par_read_root",
+    "a_call_same",
+    "a_call_part_whole",
+    "a_call_computed_alias",
+    "a_view_implicit",
+    "a_view_explicit",
+    "a_view_slice_of_slice",
+    "a_view_method_arg",
+    "a_view_in_and",
+    "a_view_receiver",
+    "a_view_index_of_slice",
+    "a_view_field_root",
+    "a_view_method_receiver",
+    "a_view_mut_param",
+    "a_view_ref_before_call",
+    "a_view_addr_for_c"
+   ]
+  }
+ },
+ "attacks": {
+  "a_grow_in_mut_loop": {
+   "family": "обход",
+   "now": "тихая запись не в тот элемент"
+  },
+  "a_shrink_in_mut_loop": {
+   "family": "обход",
+   "now": "ловушка"
+  },
+  "a_clear_in_read_loop": {
+   "family": "обход",
+   "now": "ловушка"
+  },
+  "a_push_in_read_loop": {
+   "family": "обход",
+   "now": "рост до нехватки памяти"
+  },
+  "a_nested_mut_loops": {
+   "family": "обход",
+   "now": "итог зависит от порядка"
+  },
+  "a_read_root_in_mut_loop": {
+   "family": "обход",
+   "now": "итог зависит от порядка"
+  },
+  "a_map_insert_in_loop": {
+   "family": "обход",
+   "now": "E0412"
+  },
+  "a_slice_loop_mutation": {
+   "family": "обход",
+   "now": "E0412"
+  },
+  "a_par_accumulate": {
+   "family": "parallel for",
+   "now": "гонка с потоками"
+  },
+  "a_par_push": {
+   "family": "parallel for",
+   "now": "гонка с потоками"
+  },
+  "a_par_shared_index": {
+   "family": "parallel for",
+   "now": "гонка с потоками"
+  },
+  "a_par_read_root": {
+   "family": "parallel for",
+   "now": "гонка с потоками"
+  },
+  "a_par_computed_index": {
+   "family": "parallel for",
+   "now": "гонка с потоками"
+  },
+  "a_call_same": {
+   "family": "вызов",
+   "now": "E0502"
+  },
+  "a_call_part_whole": {
+   "family": "вызов",
+   "now": "E0502"
+  },
+  "a_call_computed_alias": {
+   "family": "вызов",
+   "now": "E0502"
+  },
+  "a_view_implicit": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_explicit": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_slice_of_slice": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_method_arg": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_in_and": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_receiver": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_index_of_slice": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_field_root": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_method_receiver": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_mut_param": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_ref_before_call": {
+   "family": "вид",
+   "now": "снимок"
+  },
+  "a_view_addr_for_c": {
+   "family": "вид",
+   "now": "снимок"
+  }
+ }
+}
