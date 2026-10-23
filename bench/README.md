@@ -13,6 +13,7 @@
 | замеры компилятора (шаг 13 v0.1): `check`, сборка, первая нагрузка, объём (Р-4) | `compiler/measure.py` |
 | цена класса D (Р56): нагрузки с `@det import` и без, в нескольких раскладках кода (`--layouts`), `--before` — прежним компилятором | `det/measure.py`, нагрузка `det/terrain.dpm` |
 | исключительный доступ (О4): события `dpl debug access` на корпусе, наборы правил, атаки, разметка | `o4/measure.py`, `o4/attacks.dpm`, `o4/labels.json` — `docs/research/notes/8_exclusive_access.md`, раздел 7 |
+| серия сессий с правилом О4: `prepare --doc o4` — руководство серий k2-h с разделом о правиле, проверка правила прототипом | `o4/guide.md`, `o4/rule.py` |
 | результаты прогонов | `results/<прогон>/` |
 
 Политика замеров — `docs/policy/BENCHMARKS.md`; как меряется работа ИИ

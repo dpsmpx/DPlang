@@ -25,6 +25,7 @@ dp/expected.txt, если он есть, иначе expected.txt задачи.
 import os
 import re
 import subprocess
+import sys
 
 BENCH = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(BENCH)
@@ -90,9 +91,10 @@ def compare(want, got):
     return None
 
 
-def evaluate(files, driver_text, want, build_dir, compiler=None):
+def evaluate(files, driver_text, want, build_dir, compiler=None, o4=False):
     """Собирает файлы решения (имя → текст) с драйвером в build_dir,
-    запускает и сверяет с want: (класс, сообщение)."""
+    запускает и сверяет с want: (класс, сообщение). o4 — до сборки правило
+    О4 прототипом (bench/o4/rule.py): его отказ — класс «сборка»."""
     compiler = compiler or dpl()
     for name in files:
         if name == DRIVER:
@@ -103,6 +105,12 @@ def evaluate(files, driver_text, want, build_dir, compiler=None):
     for name, text in list(files.items()) + [(DRIVER, driver_text)]:
         with open(os.path.join(build_dir, name), 'w', encoding='utf-8') as f:
             f.write(text)
+    if o4:
+        sys.path.insert(0, os.path.join(BENCH, 'o4'))
+        import rule as o4_rule  # noqa: PLC0415 — только для замера О4
+        errs = o4_rule.errors(compiler, build_dir, DRIVER, set(files))
+        if errs:
+            return 'сборка', errs[0] + (f'\n(всего ошибок: {len(errs)})' if len(errs) > 1 else '')
     exe = os.path.join(build_dir, 'program')
     try:
         r = subprocess.run([compiler, 'build', '-o', exe, DRIVER], capture_output=True, text=True,
