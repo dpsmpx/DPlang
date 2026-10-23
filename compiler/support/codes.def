@@ -217,8 +217,12 @@ DP_CODE(E0411, "expression has no effect",
 DP_CODE(E0412, "cannot assign or mutate",
         "Only a place can be assigned or mutated: a `var` variable, a `&mut` parameter, a `for ... in &mut` "
         "variable, or a field or `List` element of one (spec: stmt.assign). `let` variables, value "
-        "parameters, `&` parameters, slices and strings are read-only. The body of `for k in &m` or "
-        "`for x in &xs[a..b]` cannot change `m` or `xs`; a slice of a `str` is a copy (spec: stmt.for).")
+        "parameters, `&` parameters, slices and strings are read-only. While `for x in &c` or "
+        "`for x in &mut c` runs, the body changes `c` only through `x`, and a `&mut` loop reads `c` only "
+        "through `x`; other fields of the same root are free; to change a collection while walking it, "
+        "iterate over indexes: `for i in 0..len(xs)`. The body of `parallel for` writes outside variables "
+        "only through an element indexed by the loop variable, `out[i]`. A slice of a `str` is a copy "
+        "(spec: stmt.for).")
 DP_CODE(E0413, "wrong fields in a literal",
         "A struct or record-variant literal must give each field once, and only fields that exist; struct "
         "fields with a default value may be left out (spec: expr.struct).")
@@ -271,9 +275,11 @@ DP_CODE(E0501, "reference mark not allowed here",
         "`&x` and `&mut x` only mark an argument for a `&` or `&mut` parameter, and follow `for ... in` "
         "(spec: ref.marks, decision R44). References cannot be stored or returned; to keep a value, copy it.")
 DP_CODE(E0502, "conflicting references in one call",
-        "One call passes `&mut x` together with another reference into the same variable `x` (spec: "
-        "ref.alias). The callee could change `x` and leave the other reference dangling. Pass a copy of the "
-        "value instead of the second reference.")
+        "One call passes `&mut x` together with another reference or slice into the same place, or a view "
+        "(a slice, `&x`, `&place` for C) is followed in the same expression by a call that changes its "
+        "place (spec: ref.alias, expr.order). The callee could change `x` and leave the other reference "
+        "dangling. Different fields and different constant indexes are different places: "
+        "`swap(&mut p.x, &mut p.y)` is fine. Pass a copy of the value, made before the call.")
 DP_CODE(E0503, "use before initialization",
         "A `var` declared without a value is read before it is assigned on every path to this place "
         "(spec: stmt.init).")
