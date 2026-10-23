@@ -1,0 +1,192 @@
+{
+ "run": "k2-n1",
+ "commit": "0b2850e26dd9d592180a4fde9856c4145b507f77",
+ "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+ "flags": [
+  "-std=c++20",
+  "-O1",
+  "-pthread",
+  "-Wall",
+  "-Wextra",
+  "-Werror",
+  "-fno-exceptions",
+  "-fno-rtti",
+  "-fsanitize=address,undefined",
+  "-fno-sanitize-recover=all"
+ ],
+ "attempts_max": 5,
+ "agent_model": "claude-opus-5-5",
+ "doc": "o4base",
+ "lang": "dp",
+ "tasks": [
+  "t15",
+  "t16",
+  "t17",
+  "t18",
+  "t19"
+ ],
+ "created": "2026-10-23T21:01:31",
+ "usage": {
+  "base": 47968,
+  "prompt": 17967,
+  "work": 49147,
+  "final": 115082,
+  "calls": 18,
+  "per_check": [
+   11110,
+   18823,
+   6790,
+   5799
+  ],
+  "steps": [
+   {
+    "context": 47968,
+    "read": 0,
+    "wrote": 0,
+    "tools": []
+   },
+   {
+    "context": 65935,
+    "read": 34229,
+    "wrote": 73,
+    "tools": [
+     "Read"
+    ]
+   },
+   {
+    "context": 66582,
+    "read": 643,
+    "wrote": 231,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 75793,
+    "read": 161,
+    "wrote": 6922,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 76722,
+    "read": 184,
+    "wrote": 358,
+    "tools": [
+     "Edit",
+     "check"
+    ]
+   },
+   {
+    "context": 77045,
+    "read": 239,
+    "wrote": 197,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 93370,
+    "read": 161,
+    "wrote": 9131,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 95076,
+    "read": 437,
+    "wrote": 560,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 95496,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   },
+   {
+    "context": 95868,
+    "read": 381,
+    "wrote": 169,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 100134,
+    "read": 161,
+    "wrote": 3537,
+    "tools": [
+     "Write"
+    ]
+   },
+   {
+    "context": 100556,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   },
+   {
+    "context": 102658,
+    "read": 4224,
+    "wrote": 190,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 104875,
+    "read": 182,
+    "wrote": 838,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 105272,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   },
+   {
+    "context": 108457,
+    "read": 6344,
+    "wrote": 262,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 114496,
+    "read": 302,
+    "wrote": 5795,
+    "tools": [
+     "Bash"
+    ]
+   },
+   {
+    "context": 115082,
+    "read": 23,
+    "wrote": 159,
+    "tools": [
+     "check"
+    ]
+   }
+  ]
+ },
+ "session": {
+  "total_tokens": 116513,
+  "tool_uses": 19,
+  "seconds": 384.2
+ }
+}
