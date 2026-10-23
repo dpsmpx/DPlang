@@ -1749,6 +1749,9 @@ std::string Emitter::export_wrapper(const Function& f) {
     out += "    DP_CALL_CHECK(" + where + ");\n";
     if (f.ret->kind == TK::Void) return out + "    " + call + ";\n}\n\n";
     out += "    " + ctype(f.ret) + " r = " + call + ";\n";
+    if (f.det && (f.ret->kind == TK::F32 || f.ret->kind == TK::F64)) {  // Р56: результат уходит из класса D в C
+        return out + "    return " + (f.ret->kind == TK::F32 ? "dp_canon_f32(r)" : "dp_canon_f64(r)") + ";\n}\n\n";
+    }
     return out + "    return r;\n}\n\n";
 }
 

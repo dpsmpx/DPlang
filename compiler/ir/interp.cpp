@@ -703,12 +703,16 @@ private:
             }
         }
         const Type* ret = f.ret;
+        bool det = f.det;
         frames_.pop_back();
         if (frames_.empty()) return finish_main(v, ret);
         Frame& caller = frames_.back();
         const Inst& in = fn(caller).blocks[caller.block].insts[caller.inst];
         if (in.kind == InstKind::Assign) {
-            Value w = in.canon ? canonical(v) : v;
+            // Через указатель — обёртка `@export`: результат функции класса D
+            // уходит в C каноническим (Р56).
+            bool wrapper = in.rv.kind == RvKind::CallPtr && det && sema::is_float(ret);
+            Value w = in.canon || wrapper ? canonical(v) : v;
             Ref r = resolve(caller, in.dst, true);
             if (stop_) return;
             *r.v = std::move(w);

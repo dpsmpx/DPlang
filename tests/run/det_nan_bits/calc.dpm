@@ -95,3 +95,12 @@ pub fn constants(xs: &mut List[f64]) f32 {
     xs.push(-N)
     return M
 }
+
+// Значение функции — обёртка `@export`: результат уходит из класса D в C.
+@export
+pub fn exported(z: f64, neg: bool) f64 {
+    if neg {
+        return -(z / z)
+    }
+    return z / z
+}

@@ -17,7 +17,6 @@ bb0:
   %8 = abs(copy %0)  @8:20
   %9 = max(copy %7, copy %8)  @8:12
   %2 = move %9  @8:5
-  %2 = canon copy %2  @8:5
   return move %2  @8:5
 
 fn det.plain(%0 a: f64) f64
@@ -36,7 +35,7 @@ fn det.main()
   tmp %4: str
   tmp %5: str
 bb0:
-  %0 = call det.mix(1:f64, 2:f32)  @16:17
+  %0 = canon(call det.mix(1:f64, 2:f32))  @16:17
   %1 = str copy %0 to str  @16:13
   %2 = concat copy %1, " "  @16:32
   %3 = call det.plain(3:f64)  @16:44

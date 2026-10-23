@@ -311,6 +311,12 @@ private:
         if (f_.det) seen(k, dst, rv, span);
         // Класс D: NaN, записанный в память, — канонический (Р56).
         bool canon = k == InstKind::Assign && f_.det && makes_float(rv) && !raw(dst);
+        // Результат функции класса D выходит из класса D — канон на месте
+        // вызова (Р56). Через указатель зовут обёртку `@export`, канон — в ней.
+        if (k == InstKind::Assign && !f_.det && rv.kind == RvKind::Call && rv.type && sema::is_float(rv.type) &&
+            det_callee(rv)) {
+            canon = true;
+        }
         Inst i;
         i.kind = k;
         i.dst = dst;
@@ -373,11 +379,7 @@ private:
                 see = !(rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min ||
                         rv.intrinsic == Intrinsic::Max);
                 break;
-            case RvKind::Call: {
-                const sema::FnDef* d = rv.fn < out_.fns.size() ? out_.fns[rv.fn].def : nullptr;
-                callee_det = d && !d->is_extern && sema::is_det(*d);
-                break;
-            }
+            case RvKind::Call: callee_det = det_callee(rv); break;
             default: break;
         }
         if (see)
@@ -403,12 +405,21 @@ private:
         }
     }
 
-    // Операция, которая может дать NaN с битами процессора: арифметика,
-    // смена знака, приведение к плавающему, abs, min и max плавающих.
+    // Вызов функции dpl класса D.
+    bool det_callee(const Rvalue& rv) const {
+        const sema::FnDef* d = rv.fn < out_.fns.size() ? out_.fns[rv.fn].def : nullptr;
+        return d && !d->is_extern && sema::is_det(*d);
+    }
+
+    // Плавающий результат, который может нести NaN с битами процессора:
+    // арифметика, смена знака, приведение к плавающему, abs, min и max
+    // плавающих, вызов (результат функции класса D в классе D — без
+    // канона, Р56).
     static bool makes_float(const Rvalue& rv) {
         if (!rv.type || !sema::is_float(rv.type)) return false;
         switch (rv.kind) {
             case RvKind::Binary: return true;
+            case RvKind::Call: return true;
             case RvKind::Unary: return rv.un == UnKind::Neg;
             case RvKind::Cast: return true;
             case RvKind::Intrinsic:
@@ -457,7 +468,7 @@ private:
         Term t;
         t.kind = TermKind::Return;
         t.has_value = value;
-        if (value && f_.det && raw(local(ret_))) push_canon(local(ret_), span);  // Р56: возврат виден
+        // Р56: возврат из класса D — канон на месте вызова вне класса D и в обёртке `@export`.
         if (value) t.value = Operand{OpKind::Move, local(ret_), {}};
         t.span = span;
         terminate(t);
