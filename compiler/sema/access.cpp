@@ -337,11 +337,14 @@ bool Checker::view_at(Expr* place, Expr* at, const std::vector<Expr*>& right) {
     return false;
 }
 
+// Операнды по порядку: у каждого — места, которые меняют операнды правее
+// (и right у родителя, который хранит их виды). Один проход с конца:
+// список-литерал в сотни тысяч элементов — линейно.
 void Checker::view_operands(const std::vector<Expr*>& ops, const std::vector<Expr*>& right, bool keep) {
-    for (size_t i = 0; i < ops.size(); i++) {
-        std::vector<Expr*> later = keep ? right : std::vector<Expr*>{};
-        for (size_t j = i + 1; j < ops.size(); j++) changes(ops[j], later, true);
+    std::vector<Expr*> later = keep ? right : std::vector<Expr*>{};
+    for (size_t i = ops.size(); i-- > 0;) {
         view_check(ops[i], later);
+        changes(ops[i], later, true);
     }
 }
 
