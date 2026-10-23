@@ -640,11 +640,21 @@ private:
         Value v = rvalue(fr, in.rv);
         if (stop_) return;
         if (in.kind == InstKind::Assign) {
+            if (in.canon) v = canonical(v);
             Ref r = resolve(fr, in.dst, true);
             if (stop_) return;
             *r.v = std::move(v);
         }
         fr.inst++;
+    }
+
+    // Р56: NaN — положительный тихий без полезной нагрузки, остальное — как есть.
+    static Value canonical(const Value& v) {
+        if (!std::isnan(v.f)) return v;
+        uint64_t bits = 0x7ff8000000000000ull;
+        double d = 0;
+        std::memcpy(&d, &bits, sizeof d);
+        return float_value(d);
     }
 
     void call(Frame& fr, const Rvalue& rv) {
@@ -698,9 +708,10 @@ private:
         Frame& caller = frames_.back();
         const Inst& in = fn(caller).blocks[caller.block].insts[caller.inst];
         if (in.kind == InstKind::Assign) {
+            Value w = in.canon ? canonical(v) : v;
             Ref r = resolve(caller, in.dst, true);
             if (stop_) return;
-            *r.v = std::move(v);
+            *r.v = std::move(w);
         }
         caller.inst++;
     }
@@ -933,13 +944,7 @@ private:
         switch (rv.un) {
             case UnKind::Not: return bool_value(!a.i);
             case UnKind::BitNot: return int_value(canon(~a.i, t));
-            case UnKind::Canon: {  // Р56: положительный тихий NaN без полезной нагрузки
-                if (!std::isnan(a.f)) return float_value(a.f);
-                uint64_t bits = 0x7ff8000000000000ull;
-                double d = 0;
-                std::memcpy(&d, &bits, sizeof d);
-                return float_value(d);
-            }
+            case UnKind::Canon: return canonical(float_value(a.f));  // Р56
             case UnKind::Neg:
                 if (sema::is_float(t)) return float_value(-a.f);
                 if (canon(a.i, t) == canon(1ull << (sema::int_bits(t) - 1), t)) {

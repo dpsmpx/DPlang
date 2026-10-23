@@ -316,8 +316,8 @@ private:
         i.dst = dst;
         i.rv = std::move(rv);
         i.span = span;
+        i.canon = canon;  // до записи: место не читается и не пишется второй раз
         f_.blocks[cur_].insts.push_back(std::move(i));
-        if (canon) push_canon(std::move(dst), span);
     }
 
     // dst = canon dst.

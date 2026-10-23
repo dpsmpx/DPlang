@@ -588,9 +588,13 @@ private:
                 if (!writable(i.dst)) fail("assignment to a read-only place %" + std::to_string(i.dst.local));
                 rvalue(i.rv);
                 same(i.rv.type, t, "assignment");
+                if (i.canon && !sema::is_float(i.rv.type)) fail("canon assignment of a non-float value");
                 break;
             }
-            case InstKind::Eval: rvalue(i.rv); break;
+            case InstKind::Eval:
+                if (i.canon) fail("canon on an evaluation");
+                rvalue(i.rv);
+                break;
             case InstKind::Drop: {
                 if (!i.dst.proj.empty() || i.dst.local >= f_.locals.size()) return fail("drop of a non-variable");
                 const Local& l = f_.locals[i.dst.local];

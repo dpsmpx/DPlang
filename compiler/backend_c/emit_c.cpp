@@ -1493,6 +1493,8 @@ std::string FnEmitter::inst(const Inst& in) {
             Lv dst;
             if (is_void) {
                 error("assignment of a void value");
+            } else if (in.canon) {  // Р56: канон до записи в память
+                line(ctype(t) + " " + r + " = " + (t->kind == TK::F32 ? "dp_canon_f32(" : "dp_canon_f64(") + v + ");");
             } else {
                 line(ctype(t) + " " + r + " = " + v + ";");
             }
