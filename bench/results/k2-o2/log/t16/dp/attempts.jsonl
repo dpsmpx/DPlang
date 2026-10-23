@@ -1,0 +1,2 @@
+{"n": 1, "time": "2026-10-23T17:43:29", "seconds": 0.2, "class": "сборка", "output": "попытка 1 из 5: сборка\nsol.dpm:377:15: error[E0506]: the result of type 'PErr!List[i64]' must be handled: use 'try', 'match' or '_ ='\n 377 |     let res = parse_program(&mut p)\n     |               ^~~~~~~~~~~~~~~~~~~~~\n(всего ошибок: 2)", "files": {"sol.dpm": "44f2cfe88296dae4"}}
+{"n": 2, "time": "2026-10-23T17:43:56", "seconds": 0.7, "class": "принято", "output": "попытка 2 из 5: принято", "files": {"sol.dpm": "ba39b07a9cab0732"}}

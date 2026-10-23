@@ -1,0 +1,50 @@
+// spec: ref.alias stmt.for expr.order
+// Доступы, которые Р66 пропускает: разные поля и постоянные индексы в одном
+// вызове, другое поле корня в обходе, обход части через переменную внешнего
+// обхода, `parallel for` с записью элемента по переменной цикла.
+struct P {
+    x: int
+    y: int
+}
+
+struct World {
+    items: List[int]
+    hits: int
+}
+
+fn swap2(a: &mut int, b: &mut int) {
+    let t = a
+    a = b
+    b = t
+}
+
+fn main() {
+    var p = P { x: 1, y: 2 }
+    swap2(&mut p.x, &mut p.y)
+    var xs: List[int] = [10, 20, 30]
+    swap2(&mut xs[0], &mut xs[2])
+    println("call: " + str(p.x) + " " + str(p.y) + ", " + str(xs[0]) + " " + str(xs[2]))
+    var w = World { items: [1, 2, 3], hits: 0 }
+    for x in &mut w.items {
+        x *= 2
+        w.hits += x
+    }
+    println("other field: " + str(w.hits) + ", items " + str(w.items[2]))
+    var rows: List[List[int]] = [[1, 2], [3]]
+    for r in &mut rows {
+        for v in &mut r {
+            v += 1
+        }
+        r.push(0)
+    }
+    println("part of the loop variable: " + str(len(rows[0])) + " " + str(rows[1][0]))
+    var out: List[int] = [0, 0, 0, 0]
+    var parts: List[List[int]] = [[], []]
+    parallel for i in 0..4 {
+        out[i] = i * i
+    }
+    parallel for t in 0..2 {
+        parts[t].push(t + 7)
+    }
+    println("parallel: " + str(out[3]) + " " + str(parts[1][0]))
+}

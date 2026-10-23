@@ -178,6 +178,13 @@ static bool c_borrowing_at(const Type* t, int depth) {
 
 bool c_borrowing(const Type* t) { return c_borrowing_at(t, 0); }
 
+bool holds_view(const Type* t) {
+    for (int depth = 0; t && depth < 64; depth++, t = t->elem) {
+        if (t->kind != TK::List && t->kind != TK::Array) return t->kind == TK::Slice || t->kind == TK::Ref || c_borrowing(t);
+    }
+    return false;
+}
+
 bool c_field_type(const Type* t) { return c_value_type(t) || c_borrow_field(t) || c_borrowing(t); }
 
 static bool zeroable_at(const Type* t, int depth) {

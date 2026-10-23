@@ -82,8 +82,14 @@ SPEC_DP_TITLE = "# Спецификация dpl (ядро v0.1)"
 # Вместо спецификации задание может нести краткое руководство (--doc guide):
 # приёмы с примерами, docs/guide/README.md.
 GUIDE_DP = os.path.join(ROOT, 'docs', 'guide', 'README.md')
-DOCS = ('spec', 'guide')
-DOC_WORD = {'spec': 'спецификации', 'guide': 'руководству'}
+# Замер О4 (--doc o4): руководство серий k2-h с разделом о правиле
+# исключительного доступа (Р66); контроль (--doc o4base) — то же
+# руководство без этого раздела. Правило проверяет компилятор (до Р66 —
+# прототип bench/o4/rule.py, коммит 2bfd91d).
+GUIDE_O4 = os.path.join(BENCH, 'o4', 'guide.md')
+O4_SECTION = '## Обход и изменение\n'
+DOCS = ('spec', 'guide', 'o4', 'o4base')
+DOC_WORD = {'spec': 'спецификации', 'guide': 'руководству', 'o4': 'руководству', 'o4base': 'руководству'}
 ATTEMPTS = 5
 RUN_TIMEOUT = 20
 COUNT_MODEL = 'claude-opus-5-5'
@@ -356,6 +362,12 @@ def dp_spec(doc='spec'):
     краткое руководство docs/guide/README.md целиком."""
     if doc == 'guide':
         return read(GUIDE_DP)
+    if doc == 'o4':
+        return read(GUIDE_O4)
+    if doc == 'o4base':
+        text = read(GUIDE_O4)
+        start = text.index(O4_SECTION)
+        return text[:start] + text[text.index('\n## ', start + 1) + 1:]
     body = read(SPEC_DP)
     return SPEC_DP_TITLE + '\n\n' + body[body.index('\n## 1.') + 1:]
 

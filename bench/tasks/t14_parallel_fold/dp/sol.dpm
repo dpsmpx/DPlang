@@ -5,7 +5,10 @@ const BLOCK: i32 = 4096
 pub fn parallel_sum(values: []f64, threads: i32) f64 {
     let n = i32(len(values))
     let blocks = (n + BLOCK - 1) / BLOCK
-    var partial = repeat(0.0, blocks)
+    // Поток t считает блоки t, t + threads, ...: их суммы — в sums[t] (у
+    // каждой итерации свой элемент, Р66). Блок b — sums[b % threads][b / threads].
+    let empty: List[f64] = []
+    var sums = repeat(empty, threads)
     parallel for t in 0..threads {
         var b = t
         while b < blocks {
@@ -15,13 +18,13 @@ pub fn parallel_sum(values: []f64, threads: i32) f64 {
             for i in lo..hi {
                 s += values[i]
             }
-            partial[b] = s
+            sums[t].push(s)
             b += threads
         }
     }
     var total = 0.0
-    for p in &partial {
-        total += p
+    for b in 0..blocks {
+        total += sums[b % threads][b / threads]
     }
     return total
 }

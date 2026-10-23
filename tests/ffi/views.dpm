@@ -1,6 +1,7 @@
-// spec: ffi.types ffi.struct expr.order
-// Указатель `&место` и срез, отданные C левее вызова, который растит их
-// список, указывают на значения до вызова, а не в освобождённую память.
+// spec: ffi.types ffi.struct expr.order ref.alias
+// Указатель `&место` и срез, отданные C, и вызов правее, который растит их
+// список, — в одном выражении нельзя (E0502, Р66). С копией до вызова C
+// видит значения до вызова, а не освобождённую память.
 @c
 struct P {
     a: u32
@@ -31,9 +32,11 @@ fn fill(buf: &mut List[u8]) u64 {
 fn main() {
     var xs: List[P] = [P { a: 1, b: 2 }]
     let y = P { a: 1, b: 2 }
-    println("pointer: " + str(memcmp(&xs[0], &y, grow(&mut xs))) + ", now " + str(xs[0].a))
+    let old = xs
+    println("pointer: " + str(memcmp(&old[0], &y, grow(&mut xs))) + ", now " + str(xs[0].a))
     var buf: List[u8] = [u8(97), u8(98), u8(99)]
-    match memchr(buf, 122, fill(&mut buf)) {
+    let before = buf
+    match memchr(before, 122, fill(&mut buf)) {
         some(_) => println("slice: found z")
         none => println("slice: no z, now " + str(len(buf)))
     }

@@ -155,14 +155,6 @@ const Expr* strip_parens(const Expr* e) {
     return e;
 }
 
-// Значение хранит вид до вызова, который его поглотит: срез, `&T`,
-// заимствующая структура `@c` (Р62) или список таких (массив для C).
-bool holds_view(const sema::Type* t) {
-    if (!t) return false;
-    if (t->kind == TK::List || t->kind == TK::Array) return holds_view(t->elem);
-    return t->kind == TK::Slice || t->kind == TK::Ref || sema::c_borrowing(t);
-}
-
 class FnLower {
 public:
     FnLower(Program& out, sema::Program& prog, const std::map<const sema::FnDef*, uint32_t>& fns,
@@ -235,19 +227,10 @@ private:
     uint32_t ret_ = UINT32_MAX;
     std::map<const sema::Local*, uint32_t> locals_;
     std::map<const sema::Local*, Place> aliases_;  // переменная `for x in &xs` — место xs[i]
-    // Переменные (номера мест), которые меняет действие правее понижаемого
-    // операнда (changed): вид, который строится внутри операнда над такой
-    // переменной, — срез или адрес `&T`, — берётся над её копией (view_base).
-    // Иначе действие изменило бы операнд, вычисленный левее (expr.order), и
-    // вид указывал бы в память, которую оно освободило. Вызов, встроенное,
-    // операция и литерал без видов поглощают операнды раньше действий правее
-    // себя: в их операндах snap_ считается заново (snapping_from); литерал с
-    // видами и место (`xs[a..b][i]`) хранят вид дальше — там snap_
-    // наследуется (snapping).
+    // Переменные (номера мест), которые меняет действие правее операнда
+    // (changed): от них зависит порядок проверок места (probe). Вида левее
+    // действия над его местом нет — его отвергает проверка типов (Р66).
     using Roots = std::vector<uint32_t>;
-    Roots snap_;
-    // Переменные `let`: их не меняет никакое действие, снимок не нужен.
-    std::vector<char> fixed_;
 
     struct Cleanup {
         bool is_defer = false;
@@ -286,8 +269,6 @@ private:
     uint32_t var(const sema::Local* sl) {
         uint32_t l = add_local(sl->type, LocalKind::Var, sl->name);
         locals_[sl] = l;
-        if (fixed_.size() <= l) fixed_.resize(l + 1, 0);
-        fixed_[l] = !sl->mutable_;
         return l;
     }
 
@@ -561,15 +542,6 @@ private:
         return o;
     }
 
-    // Место, которое может изменить действие правее в выражении: переменная
-    // или параметр `&mut` и их части. Параметры-значения, `&T` и срезы
-    // только читаются, временные недоступны программе.
-    bool mutable_root(const Place& p) const {
-        LocalKind k = f_.locals[p.local].kind;
-        if (k == LocalKind::Var) return p.local >= fixed_.size() || !fixed_[p.local];
-        return k == LocalKind::ParamMut;
-    }
-
     // Корень места `x.f`, `x[i]`, `x[a..b]` — номер места x (у переменной
     // `for x in &xs` — корень её места); UINT32_MAX, если это не место.
     uint32_t root_of(const Expr* e) const {
@@ -699,49 +671,6 @@ private:
         return o;
     }
 
-    // Операнд-основа вида: копия изменяемого места во временном, если его
-    // меняет действие правее (need).
-    Operand snapshot(Operand o, Span span, const Roots& need) {
-        if (o.kind == OpKind::Copy && mutable_root(o.place) && hits(need, o.place)) {
-            return to_temp(use(o, type_of(o)), span);
-        }
-        return o;
-    }
-
-    // Место, над которым строится вид — срез или адрес `&T`; копия, если его
-    // меняет действие правее (need).
-    Place view_base(const Expr* obj, bool& fresh, const Roots& need) {
-        Place p = object(obj, fresh);
-        if (!fresh && mutable_root(p) && hits(need, p)) {
-            Operand o = copy(std::move(p));
-            Operand c = to_temp(use(o, type_of(o)), obj->span);
-            fresh = true;
-            return c.place;
-        }
-        return p;
-    }
-
-    // Понижает f() с snap_, дополненным к внешнему (on).
-    template <class F>
-    auto snapping(const Roots& on, F f) {
-        Roots saved = snap_;
-        snap_.insert(snap_.end(), on.begin(), on.end());
-        auto r = f();
-        snap_ = std::move(saved);
-        return r;
-    }
-
-    // То же для операнда, который поглощается раньше действий правее
-    // родителя: внешний snap_ не нужен, решают только соседи справа (on).
-    template <class F>
-    auto snapping_from(const Roots& on, F f) {
-        Roots saved = std::move(snap_);
-        snap_ = on;
-        auto r = f();
-        snap_ = std::move(saved);
-        return r;
-    }
-
     // Место значения операнда; константа кладётся во временное.
     Place place_of(Operand o, Span span, bool& fresh) {
         if (o.kind == OpKind::Const) {
@@ -763,20 +692,15 @@ private:
     }
 
     // Операнды по порядку: место левее выражения с действием читается сразу.
-    // keep — значение родителя хранит виды операндов (литерал с видами):
-    // внешний snap_ наследуется; иначе операнды поглощаются родителем.
-    std::vector<Operand> exprs(const std::vector<const Expr*>& es, bool keep = false, bool tail_trap = false) {
+    std::vector<Operand> exprs(const std::vector<const Expr*>& es, bool tail_trap = false) {
         std::vector<Operand> out;
         for (size_t i = 0; i < es.size(); i++) {
             bool later = false, trap = tail_trap;
-            Roots roots;
             for (size_t j = i + 1; j < es.size(); j++) {
                 later = later || has_effect(es[j]);
                 trap = trap || may_trap(es[j]);
-                changed(es[j], roots);
             }
-            Operand o = keep ? snapping(roots, [&] { return expr(es[i]); })
-                             : snapping_from(roots, [&] { return expr(es[i]); });
+            Operand o = expr(es[i]);
             if (later) o = stabilize(std::move(o), es[i]->span);
             if (trap) o = force(std::move(o), es[i]->span);
             out.push_back(std::move(o));
@@ -801,7 +725,7 @@ private:
         if ((from->kind == TK::List || from->kind == TK::Array) && to->kind == TK::Slice) {
             bool fresh = false;
             Rvalue rv = make(RvKind::SliceOf, to);
-            rv.place = place_of(snapshot(std::move(o), span, snap_), span, fresh);
+            rv.place = place_of(std::move(o), span, fresh);
             rv.has_place = true;
             rv.ops.push_back(cint(0, prim(TK::I64)));
             return to_temp(std::move(rv), span);
@@ -843,7 +767,7 @@ private:
         }
         auto* i = static_cast<const IndexExpr*>(e);
         // Объект-вид (`xs[a..b][i]`) не повисает, если индекс меняет xs.
-        Place base = snapping(changed(i->index), [&] { return object(i->object, fresh); });
+        Place base = object(i->object, fresh);
         if ((may_trap(i->index) || has_effect(i->index)) && !hits(changed(i->index), base)) {
             probe(base, i->object->span);  // `xs[9][1 / z]`: сперва xs[9]
         }
@@ -926,14 +850,14 @@ private:
                 if (e->type->kind == TK::Map) return to_temp(make(RvKind::MakeMap, e->type), e->span);
                 Rvalue rv = make(RvKind::MakeList, e->type);
                 std::vector<const Expr*> items(l->items.begin(), l->items.end());
-                rv.ops = exprs(items, holds_view(e->type));
+                rv.ops = exprs(items);
                 return to_temp(std::move(rv), e->span);
             }
             case ExprKind::Ref: {  // Р62: значение `&T` — адрес места или временного литерала
                 auto* r = static_cast<const RefExpr*>(e);
                 bool fresh = false;
                 Rvalue rv = make(RvKind::AddrOf, e->type);
-                rv.place = view_base(r->operand, fresh, snap_);
+                rv.place = object(r->operand, fresh);
                 rv.has_place = true;
                 return to_temp(std::move(rv), e->span);
             }
@@ -1060,16 +984,13 @@ private:
         bounds.insert(bounds.end(), hi_roots.begin(), hi_roots.end());
         // Срез str копирует строку сразу: действие правее среза его не меняет,
         // снимок нужен только при действии в границах.
-        bool str = s->object->type && s->object->type->kind == TK::Str;
-        Roots need = bounds;
-        if (!str) need.insert(need.end(), snap_.begin(), snap_.end());
-        rv.place = snapping(bounds, [&] { return view_base(s->object, fresh, need); });
+        rv.place = object(s->object, fresh);
         rv.has_place = true;
         if ((may_trap(s->lo) || may_trap(s->hi) || has_effect(s->lo) || has_effect(s->hi)) && !hits(bounds, rv.place)) {
             probe(rv.place, s->object->span);
         }
         if (s->lo) {
-            Operand lo = snapping(hi_roots, [&] { return rd(expr(s->lo)); });
+            Operand lo = rd(expr(s->lo));
             if (hi_effect) lo = rd(stabilize(std::move(lo), s->lo->span));
             if (may_trap(s->hi)) lo = rd(force(std::move(lo), s->lo->span));
             rv.ops.push_back(std::move(lo));
@@ -1107,7 +1028,7 @@ private:
     // Значения полей в порядке записи, затем значения по умолчанию;
     // в правой части — по порядку объявления.
     std::vector<Operand> field_values(const std::vector<FieldInit>& inits, const std::vector<sema::FieldDef>& fields,
-                                      Span span, bool keep = false) {
+                                      Span span) {
         std::vector<const Expr*> es;
         for (const FieldInit& fi : inits) es.push_back(fi.value ? fi.value : fi.shorthand);
         // Значения по умолчанию вычисляются после записанных: их ловушки —
@@ -1118,7 +1039,7 @@ private:
             for (const FieldInit& fi : inits) given_here = given_here || fi.name == fd.name;
             if (!given_here && fd.default_value) tail = tail || may_trap(fd.default_value);
         }
-        std::vector<Operand> given = exprs(es, keep, tail);
+        std::vector<Operand> given = exprs(es, tail);
         std::vector<Operand> out(fields.size());
         std::vector<char> have(fields.size(), 0);
         for (size_t i = 0; i < inits.size(); i++) {
@@ -1146,7 +1067,7 @@ private:
             return to_temp(std::move(rv), s->span);
         }
         Rvalue rv = make(RvKind::MakeStruct, s->type);
-        rv.ops = field_values(s->fields, s->res.st->fields, s->span, holds_view(s->type));
+        rv.ops = field_values(s->fields, s->res.st->fields, s->span);
         if (s->res.st->union_ && !s->fields.empty()) {  // Р62: заданное поле объединения — его номер + 1
             const auto& fs = s->res.st->fields;
             for (size_t k = 0; k < fs.size(); k++) {
@@ -1224,7 +1145,7 @@ private:
                         trap = trap || may_trap(x);
                         changed(x, roots);
                     }
-                    Operand callee = snapping_from(roots, [&] { return rd(expr(c->callee)); });
+                    Operand callee = rd(expr(c->callee));
                     if (later) callee = rd(stabilize(std::move(callee), c->callee->span));
                     if (trap) callee = rd(force(std::move(callee), c->callee->span));
                     rv.ops.push_back(std::move(callee));
@@ -1243,16 +1164,14 @@ private:
                     if (r && by_ref) {
                         bool fresh = false;
                         a.kind = r->mut ? Arg::Kind::Mut : Arg::Kind::Ref;
-                        // `&x` только для чтения при действии правее — ссылка на
-                        // снимок x (expr.order); `&mut x` — место на время вызова.
-                        // Р62: `&S { ... }` — временное; виды в его полях — с snap_.
-                        a.place = snapping_from(roots, [&] {
-                            return r->mut ? object(r->operand, fresh) : view_base(r->operand, fresh, roots);
-                        });
+                        // `&x`, `&mut x` — место на время вызова; действие правее,
+                        // которое меняет `x`, отвергла проверка типов (Р66). Р62:
+                        // `&S { ... }` — временное.
+                        a.place = object(r->operand, fresh);
                         // `f(&xs[9], 1 / z)`: сперва xs[9]
                         if ((trap || later) && !hits(roots, a.place)) probe(a.place, args[i]->span);
                     } else {
-                        a.op = snapping_from(roots, [&] { return expr(args[i]); });
+                        a.op = expr(args[i]);
                         if (later) a.op = stabilize(std::move(a.op), args[i]->span);
                         if (trap) a.op = force(std::move(a.op), args[i]->span);
                     }
@@ -1664,7 +1583,7 @@ private:
             bool fresh = false;
             // `for x in &xs[a..b]`: срез вычисляется раз; тело не меняет xs
             // (E0412, Р65), поэтому он строится над самим xs без снимка.
-            Place base = snapping_from(Roots{}, [&] { return object(s->iter, fresh); });
+            Place base = object(s->iter, fresh);
             if (s->iter->type->kind == TK::Map) {
                 Rvalue keys = intrinsic(Intrinsic::MapKeys, tt_.list(s->iter->type->key));
                 keys.ops.push_back(copy(base));

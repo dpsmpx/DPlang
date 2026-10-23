@@ -28,6 +28,7 @@ add_library(dpcore STATIC
     support/source.cpp
     support/diag.cpp
     support/json_read.cpp
+    sema/access.cpp
     sema/check.cpp
     sema/check_expr.cpp
     sema/check_pat.cpp

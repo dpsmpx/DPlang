@@ -281,6 +281,7 @@ void Checker::stmt(Stmt* s) {
         case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
         case StmtKind::Error: break;
     }
+    views(s);  // Р66: вид левее действия над его местом
 }
 
 void Checker::let_stmt(LetStmt* l) {
@@ -376,13 +377,19 @@ void Checker::assign_stmt(AssignStmt* a) {
             Local* l = n->res.local;
             n->type = l->type;
             check(a->value, l->type);
-            mutable_place(n, "assign to");
+            if (mutable_place(n, "assign to")) note_write(n, "assign to");
             if (flow_.init.size() > l->id) flow_.init[l->id] = 1;
             return;
         }
     }
     const Type* t = infer(a->target, nullptr);
-    mutable_place(a->target, "assign to");
+    if (mutable_place(a->target, "assign to")) {  // Р66; `m[k] = v` может добавить ключ — меняет m
+        Expr* target = a->target;
+        while (auto* p = as<ParenExpr>(target)) target = p->inner;
+        auto* ix = as<IndexExpr>(target);
+        if (ix && ix->object->type && ix->object->type->kind == TK::Map) note_write(ix->object, "assign to");
+        else note_write(target, "assign to");
+    }
     if (a->op == AssignOp::Set) {
         check(a->value, t);
         return;
@@ -496,20 +503,13 @@ void Checker::for_stmt(ForStmt* s) {
     push_scope();
     s->local = declare(s->var, s->var_span, elem, s->mode == ForMode::Mut, is_ref, true);
     if (s->local && is_ref) s->local->alias_of = root_local(s->iter);  // элемент xs — корень xs (Р44)
-    // Обход Map (Р54) и среза-выражения `&xs[a..b]` (Р65): менять корень в
-    // теле нельзя — корень замораживается. Срез вычислен до цикла и пережил
-    // бы изменение своего списка.
-    Expr* iter = s->iter;
-    while (auto* p = as<ParenExpr>(iter)) iter = p->inner;
-    const Type* it = s->iter ? s->iter->type : nullptr;
-    bool map = it && it->kind == TK::Map;
-    bool view = is_ref && it && it->kind == TK::Slice && as<SliceExpr>(iter);
-    Local* frozen_root = map || view ? root_local(s->iter) : nullptr;
-    if (frozen_root) frozen_.push_back(Frozen{frozen_root, map});
+    // Р66: в теле коллекцию меняют и (в `&mut`-обходе) читают только через
+    // переменную цикла; `parallel for` пишет снаружи только `out[i]`.
+    loop_begin(s);
     loops_.emplace_back();
     block(s->body);
     loops_.pop_back();
-    if (frozen_root) frozen_.pop_back();
+    loop_end();
     pop_scope();
     // Тело могло не выполниться ни разу.
     flow_ = before;

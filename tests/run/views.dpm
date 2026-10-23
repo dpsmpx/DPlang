@@ -1,7 +1,8 @@
-// spec: expr.order ref.slices stmt.for
-// Вид (срез) левее вызова, который меняет его список, не меняется: он
-// строится над копией (expr.order). Иначе вид указывал бы в память,
-// которую вызов освободил.
+// spec: expr.order ref.slices stmt.for ref.alias
+// Вид (срез, `&x`) и вызов правее, который меняет его список, — в одном
+// выражении нельзя (E0502, Р66): копия делается явно, до вызова, и вид
+// видит значение до вызова. Без копии — действие в границах другой
+// переменной, вызов по указателю, обход среза копии, срез str (копия).
 fn total(xs: []str, extra: int) int {
     var n = extra
     for x in &xs {
@@ -89,28 +90,37 @@ fn grow_int(xs: &mut List[int]) int {
     return 0
 }
 
-// Корень вида — параметр `&mut`: его меняет вызов правее.
+// Корень вида — параметр `&mut`: копия до вызова, который его меняет.
 fn through(xs: &mut List[int]) int {
-    return sum(xs[0..2], grow_int(&mut xs))
+    let old = xs
+    return sum(old[0..2], grow_int(&mut xs))
 }
 
 fn main() {
     var words: List[str] = ["aa", "bbb", "c", "dddd"]
-    println("implicit: " + str(total(words, drain(&mut words))))
+    var old = words
+    println("implicit: " + str(total(old, drain(&mut words))))
     words = ["aa", "bbb", "c", "dddd"]
-    println("explicit: " + str(total(words[1..3], drain(&mut words))))
+    old = words
+    println("explicit: " + str(total(old[1..3], drain(&mut words))))
     words = ["aa", "bbb", "c", "dddd"]
-    println("slice of slice: " + str(total(words[0..4][1..3], drain(&mut words))))
+    old = words
+    println("slice of slice: " + str(total(old[0..4][1..3], drain(&mut words))))
     words = ["aa", "bbb", "c", "dddd"]
-    println("method arg: " + str(total(words[0..2], len(take(&mut words)))))
+    old = words
+    println("method arg: " + str(total(old[0..2], len(take(&mut words)))))
     words = ["aa", "bbb", "c", "dddd"]
-    println("in &&: " + str(total(words[2..], zero(true && drain(&mut words) == 0))))
+    old = words
+    println("in &&: " + str(total(old[2..], zero(true && drain(&mut words) == 0))))
     var nums: List[int] = [1, 2, 3]
-    println("in place: " + str(sum(nums, set_first(&mut nums))) + ", after: " + str(nums[0]))
+    let before = nums
+    println("in place: " + str(sum(before, set_first(&mut nums))) + ", after: " + str(nums[0]))
     words = ["aa", "bbb", "c", "dddd"]
-    println("receiver: " + str(words[0..3].contains(take(&mut words))))
+    old = words
+    println("receiver: " + str(old[0..3].contains(take(&mut words))))
     words = ["aa", "bbb", "c", "dddd"]
-    println("index of slice: " + words[1..4][drain(&mut words)])
+    old = words
+    println("index of slice: " + old[1..4][drain(&mut words)])
     let xs: List[int] = [10, 11, 12, 13]
     var i = 0
     println("bounds: " + str(sum(xs[i..bump(&mut i)], 0)))
@@ -140,9 +150,13 @@ fn main() {
     var bag = Bag { items: [1, 2, 3] }
     var ys: List[int] = [1, 2, 3]
     var ps: List[int] = [4, 5, 6]
-    println("field root: " + str(sum(bag.items[0..2], refill(&mut bag))) + ", " +
-            str(sum(bag.items[1..], grow_int(&mut bag.items))) +
-            ", method receiver: " + str(sum(ys[0..2], ys.pop() ?? 0)) + ", &mut param: " + str(through(&mut ps)))
+    let bag0 = bag
+    let field = sum(bag0.items[0..2], refill(&mut bag))
+    let items = bag.items
+    let ys0 = ys
+    println("field root: " + str(field) + ", " + str(sum(items[1..], grow_int(&mut bag.items))) +
+            ", method receiver: " + str(sum(ys0[0..2], ys.pop() ?? 0)) + ", &mut param: " + str(through(&mut ps)))
     var cells: List[Cell] = [Cell { v: 1 }]
-    println("reference before a call: " + show(&cells[0], wipe(&mut cells)) + ", cells now " + str(len(cells)))
+    let cell = cells[0]
+    println("reference before a call: " + show(&cell, wipe(&mut cells)) + ", cells now " + str(len(cells)))
 }

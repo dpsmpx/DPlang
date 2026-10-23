@@ -1,0 +1,371 @@
+// t16: калькулятор целых выражений с переменными.
+
+enum TK {
+    Num
+    Name
+    Op
+    End
+    Bad
+}
+
+struct Tok {
+    kind: TK
+    text: str
+    val: i64
+    // столбец, с 1
+    col: int
+    // у Bad — сообщение ошибки лексики
+    msg: str
+}
+
+enum NK {
+    Num
+    Var
+    Neg
+    Bin
+    Assign
+}
+
+struct Node {
+    kind: NK
+    op: str
+    val: i64
+    name: str
+    a: int
+    b: int
+    col: int
+}
+
+struct P {
+    toks: List[Tok]
+    pos: int
+    nodes: List[Node]
+}
+
+enum CalcErr {
+    At(int, str)
+}
+
+fn is_lower(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn is_op_char(c: u8) bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '(' || c == ')' || c == '=' || c == ';'
+}
+
+fn mk_tok(kind: TK, text: str, val: i64, col: int, msg: str) Tok {
+    return Tok { kind, text, val, col, msg }
+}
+
+// Лексемы до первой ошибки лексики; в конце — End или Bad.
+fn lex(src: str) List[Tok] {
+    var toks: List[Tok] = []
+    let n = len(src)
+    var i = 0
+    while i < n {
+        let c = src[i]
+        if c == ' ' {
+            i += 1
+        } else if is_digit(c) {
+            let start = i
+            var v: i64 = 0
+            var big = false
+            while i < n && is_digit(src[i]) {
+                let d = i64(src[i] - '0')
+                if let m = checked_mul(v, 10) {
+                    if let s = checked_add(m, d) {
+                        v = s
+                    } else {
+                        big = true
+                    }
+                } else {
+                    big = true
+                }
+                i += 1
+            }
+            if big {
+                toks.push(mk_tok(TK.Bad, "", 0, start + 1, "number too large"))
+                return toks
+            }
+            toks.push(mk_tok(TK.Num, src[start..i], v, start + 1, ""))
+        } else if is_lower(c) {
+            let nstart = i
+            while i < n && (is_lower(src[i]) || is_digit(src[i])) {
+                i += 1
+            }
+            toks.push(mk_tok(TK.Name, src[nstart..i], 0, nstart + 1, ""))
+        } else if is_op_char(c) {
+            toks.push(mk_tok(TK.Op, src[i..i + 1], 0, i + 1, ""))
+            i += 1
+        } else {
+            toks.push(mk_tok(TK.Bad, "", 0, i + 1, "unexpected character '" + src[i..i + 1] + "'"))
+            return toks
+        }
+    }
+    toks.push(mk_tok(TK.End, "", 0, n + 1, ""))
+    return toks
+}
+
+fn mk(kind: NK, op: str, val: i64, name: str, a: int, b: int, col: int) Node {
+    return Node { kind, op, val, name, a, b, col }
+}
+
+fn add_node(p: &mut P, nd: Node) int {
+    p.nodes.push(nd)
+    return len(p.nodes) - 1
+}
+
+fn cur(p: &P) Tok {
+    return p.toks[p.pos]
+}
+
+fn is_op(t: Tok, op: str) bool {
+    return t.kind == TK.Op && t.text == op
+}
+
+// Сообщение для лексемы, которая не может стоять на своём месте.
+fn unexp(t: Tok) str {
+    if t.kind == TK.Bad {
+        return t.msg
+    }
+    if t.kind == TK.End {
+        return "unexpected end"
+    }
+    return "unexpected '" + t.text + "'"
+}
+
+fn parse_program(p: &mut P) CalcErr!List[int] {
+    var stmts: List[int] = []
+    let first = try parse_stmt(&mut p)
+    stmts.push(first)
+    var done = false
+    while !done {
+        let t = cur(&p)
+        if t.kind == TK.End {
+            done = true
+        } else if is_op(t, ";") {
+            p.pos += 1
+            let st = try parse_stmt(&mut p)
+            stmts.push(st)
+        } else {
+            fail .At(t.col, unexp(t))
+        }
+    }
+    return stmts
+}
+
+fn parse_stmt(p: &mut P) CalcErr!int {
+    let t = cur(&p)
+    if t.kind == TK.Name {
+        let nx = p.toks[p.pos + 1]
+        if is_op(nx, "=") {
+            p.pos += 2
+            let rhs = try parse_expr(&mut p)
+            return add_node(&mut p, mk(NK.Assign, "", 0, t.text, rhs, -1, t.col))
+        }
+    }
+    let e = try parse_expr(&mut p)
+    return e
+}
+
+fn parse_expr(p: &mut P) CalcErr!int {
+    var left = try parse_term(&mut p)
+    while is_op(cur(&p), "+") || is_op(cur(&p), "-") {
+        let t = cur(&p)
+        p.pos += 1
+        let right = try parse_term(&mut p)
+        left = add_node(&mut p, mk(NK.Bin, t.text, 0, "", left, right, t.col))
+    }
+    return left
+}
+
+fn parse_term(p: &mut P) CalcErr!int {
+    var left = try parse_unary(&mut p)
+    while is_op(cur(&p), "*") || is_op(cur(&p), "/") || is_op(cur(&p), "%") {
+        let t = cur(&p)
+        p.pos += 1
+        let right = try parse_unary(&mut p)
+        left = add_node(&mut p, mk(NK.Bin, t.text, 0, "", left, right, t.col))
+    }
+    return left
+}
+
+fn parse_unary(p: &mut P) CalcErr!int {
+    let t = cur(&p)
+    if is_op(t, "-") {
+        p.pos += 1
+        let inner = try parse_unary(&mut p)
+        return add_node(&mut p, mk(NK.Neg, "-", 0, "", inner, -1, t.col))
+    }
+    let pw = try parse_power(&mut p)
+    return pw
+}
+
+fn parse_power(p: &mut P) CalcErr!int {
+    let base = try parse_atom(&mut p)
+    let t = cur(&p)
+    if is_op(t, "^") {
+        p.pos += 1
+        let ex = try parse_unary(&mut p)
+        return add_node(&mut p, mk(NK.Bin, "^", 0, "", base, ex, t.col))
+    }
+    return base
+}
+
+fn parse_atom(p: &mut P) CalcErr!int {
+    let t = cur(&p)
+    if t.kind == TK.Num {
+        p.pos += 1
+        return add_node(&mut p, mk(NK.Num, "", t.val, "", -1, -1, t.col))
+    }
+    if t.kind == TK.Name {
+        p.pos += 1
+        return add_node(&mut p, mk(NK.Var, "", 0, t.text, -1, -1, t.col))
+    }
+    if is_op(t, "(") {
+        p.pos += 1
+        let inner = try parse_expr(&mut p)
+        let c = cur(&p)
+        if is_op(c, ")") {
+            p.pos += 1
+            return inner
+        }
+        if c.kind == TK.Bad {
+            fail .At(c.col, c.msg)
+        }
+        fail .At(c.col, "expected ')'")
+    }
+    fail .At(t.col, unexp(t))
+}
+
+// Степень с точной проверкой выхода за i64; ex >= 0.
+fn ipow(base: i64, ex: i64) ?i64 {
+    var result: i64 = 1
+    var b = base
+    var e = ex
+    while e > 0 {
+        if e % 2 == 1 {
+            if let r = checked_mul(result, b) {
+                result = r
+            } else {
+                return none
+            }
+        }
+        e = e / 2
+        if e > 0 {
+            if let sq = checked_mul(b, b) {
+                b = sq
+            } else {
+                return none
+            }
+        }
+    }
+    return result
+}
+
+fn eval(nodes: []Node, idx: int, vars: &mut Map[str, i64]) CalcErr!i64 {
+    let nd = nodes[idx]
+    if nd.kind == NK.Num {
+        return nd.val
+    }
+    if nd.kind == NK.Var {
+        if let v = vars.get(nd.name) {
+            return v
+        }
+        fail .At(nd.col, "unknown variable '" + nd.name + "'")
+    }
+    if nd.kind == NK.Assign {
+        let av = try eval(nodes, nd.a, &mut vars)
+        vars[nd.name] = av
+        return av
+    }
+    if nd.kind == NK.Neg {
+        let nv = try eval(nodes, nd.a, &mut vars)
+        if let r1 = checked_neg(nv) {
+            return r1
+        }
+        fail .At(nd.col, "overflow")
+    }
+    let x = try eval(nodes, nd.a, &mut vars)
+    let y = try eval(nodes, nd.b, &mut vars)
+    let op = nd.op
+    if op == "+" {
+        if let r2 = checked_add(x, y) {
+            return r2
+        }
+        fail .At(nd.col, "overflow")
+    }
+    if op == "-" {
+        if let r3 = checked_sub(x, y) {
+            return r3
+        }
+        fail .At(nd.col, "overflow")
+    }
+    if op == "*" {
+        if let r4 = checked_mul(x, y) {
+            return r4
+        }
+        fail .At(nd.col, "overflow")
+    }
+    if op == "/" {
+        if y == 0 {
+            fail .At(nd.col, "division by zero")
+        }
+        if let r5 = checked_div(x, y) {
+            return r5
+        }
+        fail .At(nd.col, "overflow")
+    }
+    if op == "%" {
+        if y == 0 {
+            fail .At(nd.col, "division by zero")
+        }
+        if y == -1 {
+            return 0
+        }
+        return x % y
+    }
+    if y < 0 {
+        fail .At(nd.col, "negative exponent")
+    }
+    if let r6 = ipow(x, y) {
+        return r6
+    }
+    fail .At(nd.col, "overflow")
+}
+
+fn run(p: &mut P) CalcErr!i64 {
+    let stmts = try parse_program(&mut p)
+    var vars: Map[str, i64] = []
+    var last: i64 = 0
+    for s in &stmts {
+        last = try eval(p.nodes, s, &mut vars)
+    }
+    return last
+}
+
+fn fmt_err(e: CalcErr) str {
+    var out = ""
+    match e {
+        .At(c, m) => {
+            out = "error at " + str(c) + ": " + m
+        }
+    }
+    return out
+}
+
+pub fn calc(src: str) str {
+    let toks = lex(src)
+    var p = P { toks, pos: 0, nodes: [] }
+    var out = ""
+    match run(&mut p) {
+        ok(v) => {
+            out = str(v)
+        }
+        err(e) => {
+            out = fmt_err(e)
+        }
+    }
+    return out
+}
