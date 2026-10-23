@@ -12,6 +12,7 @@
 | замеры онлайн-компилятора (Р49): worker, пределы, шлюз | `service/measure.py` — `docs/service/README.md`, раздел 11 |
 | замеры компилятора (шаг 13 v0.1): `check`, сборка, первая нагрузка, объём (Р-4) | `compiler/measure.py` |
 | цена класса D (Р56): нагрузки с `@det import` и без, в нескольких раскладках кода (`--layouts`), `--before` — прежним компилятором | `det/measure.py`, нагрузка `det/terrain.dpm` |
+| исключительный доступ (О4): события `dpl debug access` на корпусе, наборы правил, атаки, разметка | `o4/measure.py`, `o4/attacks.dpm`, `o4/labels.json` — `docs/research/notes/8_exclusive_access.md`, раздел 7 |
 | результаты прогонов | `results/<прогон>/` |
 
 Политика замеров — `docs/policy/BENCHMARKS.md`; как меряется работа ИИ
