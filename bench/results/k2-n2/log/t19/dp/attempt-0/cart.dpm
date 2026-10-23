@@ -1,0 +1,81 @@
+// Модуль cart (до рефакторинга): корзина.
+import catalog
+
+// Строка корзины i — товар items[i] в количестве qtys[i]; строки — в
+// порядке первого добавления.
+pub struct Cart {
+    items: List[i32]
+    qtys: List[i32]
+    // скидка в процентах
+    discount: i32 = 0
+}
+
+fn line_of(cart: &Cart, item: i32) i32 {
+    for i in 0..len(cart.items) {
+        if cart.items[i] == item {
+            return i32(i)
+        }
+    }
+    return -1
+}
+
+// Кладёт qty штук товара code (к его строке, если она есть).
+// Код: 0 — ок; -1 — нет такого товара; -2 — qty < 1.
+pub fn cart_add(cart: &mut Cart, c: &catalog.Catalog, code: str, qty: i32) i32 {
+    let item = catalog.catalog_find(&c, code)
+    if item < 0 {
+        return -1
+    }
+    if qty < 1 {
+        return -2
+    }
+    let line = line_of(&cart, item)
+    if line >= 0 {
+        cart.qtys[line] += qty
+    } else {
+        cart.items.push(item)
+        cart.qtys.push(qty)
+    }
+    return 0
+}
+
+// Убирает qty штук; строка с 0 штук удаляется.
+// Код: 0 — ок; -1 — товара нет в корзине; -2 — qty < 1 или больше, чем лежит.
+pub fn cart_remove(cart: &mut Cart, c: &catalog.Catalog, code: str, qty: i32) i32 {
+    let item = catalog.catalog_find(&c, code)
+    var line: i32 = -1
+    if item >= 0 {
+        line = line_of(&cart, item)
+    }
+    if line < 0 {
+        return -1
+    }
+    if qty < 1 || qty > cart.qtys[line] {
+        return -2
+    }
+    cart.qtys[line] -= qty
+    if cart.qtys[line] == 0 {
+        _ = cart.items.remove(line)
+        _ = cart.qtys.remove(line)
+    }
+    return 0
+}
+
+// Скидка от 0 до 50 процентов; false — вне диапазона (скидка не меняется).
+pub fn cart_discount(cart: &mut Cart, percent: i32) bool {
+    if percent < 0 || percent > 50 {
+        return false
+    }
+    cart.discount = percent
+    return true
+}
+
+// Сумма строк price * qty минус скидка: (сумма * процент) / 100 с
+// отбрасыванием дробной части.
+pub fn cart_total(cart: &Cart, c: &catalog.Catalog) i64 {
+    var sum: i64 = 0
+    for i in 0..len(cart.items) {
+        sum += catalog.catalog_price(&c, cart.items[i]) * i64(cart.qtys[i])
+    }
+    return sum - sum * i64(cart.discount) / 100
+}
