@@ -1,0 +1,319 @@
+// Атаки замера О4 (docs/research/notes/8_exclusive_access.md, разделы 1 и
+// 5; аудит v0.2, висячий вид). Атака — функция `a_<имя>`; что с ней сейчас
+// — в комментарии над ней и в ATTACKS у bench/o4/measure.py. Без режима
+// замера (`dpl debug access`) файл не проходит проверку: E0502 и E0412
+// здесь нарочно. Программа не запускается.
+@c
+struct C {
+    a: u32
+    b: u32
+}
+
+extern fn memcmp(a: ?&C, b: ?&C, n: u64) i32
+
+struct P {
+    x: int
+    y: int
+}
+
+struct Bag {
+    items: List[int]
+}
+
+struct Cell {
+    v: int
+}
+
+fn grow(xs: &mut List[int]) int {
+    xs.insert(0, 100)
+    return 100
+}
+
+fn shrink(xs: &mut List[int]) int {
+    xs.clear()
+    return 0
+}
+
+fn clear_list(xs: &mut List[int]) {
+    xs.clear()
+}
+
+fn swap2(a: &mut int, b: &mut int) {
+    let t = a
+    a = b
+    b = t
+}
+
+fn put_p(p: &mut P, v: &int) {
+    p.x = v
+}
+
+fn total(xs: []str, extra: int) int {
+    var n = extra
+    for x in &xs {
+        n += len(x)
+    }
+    return n
+}
+
+fn sum(xs: []int, extra: int) int {
+    var t = extra
+    for x in &xs {
+        t += x
+    }
+    return t
+}
+
+fn drain(xs: &mut List[str]) int {
+    xs.clear()
+    for i in 0..1000 {
+        xs.push("z")
+    }
+    return 0
+}
+
+fn take(xs: &mut List[str]) str {
+    return xs.remove(0)
+}
+
+fn zero(b: bool) int {
+    return 0
+}
+
+fn refill(b: &mut Bag) int {
+    b.items = [9, 9, 9]
+    return 0
+}
+
+fn grow_int(xs: &mut List[int]) int {
+    xs.clear()
+    for i in 0..100 {
+        xs.push(5)
+    }
+    return 0
+}
+
+fn show(c: &Cell, n: int) str {
+    return str(c.v) + "/" + str(n)
+}
+
+fn wipe(cs: &mut List[Cell]) int {
+    cs.clear()
+    return 8
+}
+
+fn grow_c(xs: &mut List[C]) u64 {
+    for i in 0..1000 {
+        xs.push(C { a: 9, b: 9 })
+    }
+    return 8
+}
+
+// --- обход: тело меняет корень не через переменную цикла
+
+// Сейчас: тихая запись не в тот элемент.
+fn a_grow_in_mut_loop() {
+    var xs: List[int] = [1, 2, 3]
+    for x in &mut xs {
+        x = grow(&mut xs)
+    }
+}
+
+// Сейчас: ловушка «index out of bounds».
+fn a_shrink_in_mut_loop() {
+    var ys: List[int] = [1, 2, 3]
+    for y in &mut ys {
+        y = shrink(&mut ys)
+    }
+}
+
+// Сейчас: ловушка «index out of bounds».
+fn a_clear_in_read_loop() {
+    var xs: List[int] = [1, 2, 3]
+    for x in &xs {
+        clear_list(&mut xs)
+        println(str(x))
+    }
+}
+
+// Сейчас: рост до нехватки памяти (trap.memory).
+fn a_push_in_read_loop() {
+    var ws: List[int] = [1, 2]
+    for w in &ws {
+        ws.push(w)
+    }
+}
+
+// Сейчас: итог зависит от порядка.
+fn a_nested_mut_loops() {
+    var zs: List[int] = [1, 2, 3]
+    for a in &mut zs {
+        for b in &mut zs {
+            a += b
+        }
+    }
+}
+
+// Сейчас: первый элемент прибавил старое xs[0], остальные — новое.
+fn a_read_root_in_mut_loop() {
+    var xs: List[int] = [1, 4, 0]
+    for x in &mut xs {
+        x += xs[0]
+    }
+}
+
+// Сейчас: E0412 (Р54).
+fn a_map_insert_in_loop() {
+    var m: Map[int, int] = []
+    m[1] = 1
+    for k in &m {
+        m[k + 10] = 1
+    }
+}
+
+// Сейчас: E0412 (Р65).
+fn a_slice_loop_mutation() {
+    var xs: List[int] = [1, 2, 3]
+    for x in &xs[0..2] {
+        xs.clear()
+    }
+}
+
+// --- parallel for: с потоками v0.3 — гонка
+
+// Сейчас: принят; с потоками — гонка.
+fn a_par_accumulate() {
+    var total = 0
+    parallel for i in 0..100 {
+        total += i
+    }
+}
+
+// Сейчас: принят; с потоками — гонка.
+fn a_par_push() {
+    var acc: List[int] = []
+    parallel for i in 0..100 {
+        acc.push(i)
+    }
+}
+
+// Сейчас: принят; с потоками — гонка.
+fn a_par_shared_index() {
+    var acc: List[int] = [0]
+    parallel for i in 0..100 {
+        acc[0] += i
+    }
+}
+
+// Сейчас: принят; с потоками — гонка.
+fn a_par_read_root() {
+    var xs: List[int] = [1, 2, 3]
+    parallel for x in &mut xs {
+        x += xs[0]
+    }
+}
+
+// Сейчас: принят; с потоками — гонка: индексы совпадают.
+fn a_par_computed_index() {
+    var out: List[int] = [0, 0]
+    parallel for t in 0..100 {
+        out[t % 2] += 1
+    }
+}
+
+// --- вызов: две ссылки в один корень
+
+// Сейчас: E0502.
+fn a_call_same() {
+    var x = 1
+    swap2(&mut x, &mut x)
+}
+
+// Сейчас: E0502.
+fn a_call_part_whole() {
+    var p = P { x: 1, y: 2 }
+    put_p(&mut p, &p.x)
+}
+
+// Сейчас: E0502; индексы могут совпасть.
+fn a_call_computed_alias(i: int, j: int) {
+    var xs: List[int] = [1, 2]
+    swap2(&mut xs[i], &mut xs[j])
+}
+
+// --- вид левее действия, которое меняет его корень (висячий вид, #27)
+
+// Сейчас: снимок (скрытая копия списка).
+fn a_view_implicit() {
+    var words: List[str] = ["aa", "bbb"]
+    println(str(total(words, drain(&mut words))))
+}
+
+// Сейчас: снимок.
+fn a_view_explicit() {
+    var words: List[str] = ["aa", "bbb", "c"]
+    println(str(total(words[1..3], drain(&mut words))))
+}
+
+// Сейчас: снимок.
+fn a_view_slice_of_slice() {
+    var words: List[str] = ["aa", "bbb", "c", "dddd"]
+    println(str(total(words[0..4][1..3], drain(&mut words))))
+}
+
+// Сейчас: снимок.
+fn a_view_method_arg() {
+    var words: List[str] = ["aa", "bbb"]
+    println(str(total(words[0..2], len(take(&mut words)))))
+}
+
+// Сейчас: снимок.
+fn a_view_in_and() {
+    var words: List[str] = ["aa", "bbb", "c"]
+    println(str(total(words[2..], zero(true && drain(&mut words) == 0))))
+}
+
+// Сейчас: снимок.
+fn a_view_receiver() {
+    var words: List[str] = ["aa", "bbb", "c"]
+    println(str(words[0..3].contains(take(&mut words))))
+}
+
+// Сейчас: снимок.
+fn a_view_index_of_slice() {
+    var words: List[str] = ["aa", "bbb", "c", "dddd"]
+    println(words[1..4][drain(&mut words)])
+}
+
+// Сейчас: снимок.
+fn a_view_field_root() {
+    var bag = Bag { items: [1, 2, 3] }
+    println(str(sum(bag.items[0..2], refill(&mut bag))))
+}
+
+// Сейчас: снимок.
+fn a_view_method_receiver() {
+    var ys: List[int] = [1, 2, 3]
+    println(str(sum(ys[0..2], ys.pop() ?? 0)))
+}
+
+// Сейчас: снимок.
+fn a_view_mut_param(xs: &mut List[int]) {
+    println(str(sum(xs[0..2], grow_int(&mut xs))))
+}
+
+// Сейчас: снимок.
+fn a_view_ref_before_call() {
+    var cells: List[Cell] = [Cell { v: 1 }]
+    println(show(&cells[0], wipe(&mut cells)))
+}
+
+// Сейчас: снимок (адрес для C).
+fn a_view_addr_for_c() {
+    var xs: List[C] = [C { a: 1, b: 2 }]
+    let y = C { a: 1, b: 2 }
+    println(str(memcmp(&xs[0], &y, grow_c(&mut xs))))
+}
+
+fn main() {
+}

@@ -19,6 +19,7 @@
 namespace dp::sema {
 
 struct ModuleInfo;
+struct AccessLog;
 
 struct FieldDef {
     std::string name;
@@ -175,6 +176,7 @@ struct Program {
     std::vector<std::unique_ptr<ModuleInfo>> modules;
     ModuleInfo* root = nullptr;
     bool load_ok = true;  // все модули найдены и разобраны, циклов нет
+    AccessLog* access = nullptr;  // замер О4 (sema/access.h): журнал доступа `debug access`
     TypeTable types;
     std::deque<StructDef> structs;
     std::deque<EnumDef> enums;

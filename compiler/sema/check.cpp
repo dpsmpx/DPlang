@@ -377,12 +377,20 @@ void Checker::assign_stmt(AssignStmt* a) {
             n->type = l->type;
             check(a->value, l->type);
             mutable_place(n, "assign to");
+            note_write(n, Write::Assign);
             if (flow_.init.size() > l->id) flow_.init[l->id] = 1;
             return;
         }
     }
     const Type* t = infer(a->target, nullptr);
     mutable_place(a->target, "assign to");
+    if (probe()) {  // замер О4: `m[k] = v` может добавить ключ
+        Expr* target = a->target;
+        while (auto* p = as<ParenExpr>(target)) target = p->inner;
+        auto* ix = as<IndexExpr>(target);
+        if (ix && ix->object->type && ix->object->type->kind == TK::Map) note_write(ix->object, Write::Shape);
+        else note_write(target, Write::Assign);
+    }
     if (a->op == AssignOp::Set) {
         check(a->value, t);
         return;
@@ -496,6 +504,7 @@ void Checker::for_stmt(ForStmt* s) {
     push_scope();
     s->local = declare(s->var, s->var_span, elem, s->mode == ForMode::Mut, is_ref, true);
     if (s->local && is_ref) s->local->alias_of = root_local(s->iter);  // элемент xs — корень xs (Р44)
+    probe_loop_begin(s);
     // Обход Map (Р54) и среза-выражения `&xs[a..b]` (Р65): менять корень в
     // теле нельзя — корень замораживается. Срез вычислен до цикла и пережил
     // бы изменение своего списка.
@@ -509,6 +518,7 @@ void Checker::for_stmt(ForStmt* s) {
     loops_.emplace_back();
     block(s->body);
     loops_.pop_back();
+    probe_loop_end();
     if (frozen_root) frozen_.pop_back();
     pop_scope();
     // Тело могло не выполниться ни разу.

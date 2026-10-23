@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 
+#include "sema/access.h"
 #include "sema/resolve.h"
 #include "sema/sema.h"
 
@@ -147,6 +148,32 @@ private:
     bool mutable_place(ast::Expr* e, const char* why);
     Local* root_local(ast::Expr* e);
     void ref_args(ast::CallExpr* c, const std::vector<ParamDef>& params);
+
+    // --- замер О4 (access.cpp, sema/access.h): журнал доступа, если его ведут
+    AccessLog* probe() const { return m_.stdlib ? nullptr : prog_.access; }
+    // Обход в теле которого идёт проверка: корень, переменная, режим.
+    struct ProbeLoop {
+        const Local* root = nullptr;  // корень коллекции; nullptr — диапазон
+        const Local* var = nullptr;   // переменная цикла
+        bool mut = false;             // `for … in &mut`
+        bool parallel = false;
+        uint32_t first_inner = 0;  // переменные с номером не меньше — объявлены в теле
+        Span head;
+        const char* coll = "";  // list, map, slice, str, range
+    };
+    std::vector<ProbeLoop> probe_loops_;
+    // Переменная обхода — выражение его коллекции: `for y in &x.items`.
+    std::map<const Local*, ast::Expr*> probe_iter_;
+    // Запись в место: присваивание; метод, меняющий длину или ключи (и
+    // новый ключ `m[k] = v` — место m); другой изменяющий метод; `&mut`.
+    enum class Write : uint8_t { Assign, Shape, Method, Ref };
+    void note_write(ast::Expr* place, Write how);
+    void note_use(ast::NameExpr* n);
+    void probe_loop_begin(ast::ForStmt* s);
+    void probe_loop_end();
+    // Пара аргументов-ссылок с общим корнем: событие call; true — E0502 не
+    // нужно (журнал ведётся).
+    bool probe_call(ast::Expr* a, bool a_mut, bool a_view, ast::Expr* b, bool b_mut, bool b_view);
 
     // --- образцы и match (check_pat.cpp)
     void pat(ast::Pat* p, const Type* subject);

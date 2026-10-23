@@ -29,6 +29,7 @@ struct CompileOptions {
     std::string stdlib_dir;    // пусто — без стандартной библиотеки
     std::string bindings_dir;  // пусто — без привязок (Р58)
     uint32_t max_nesting = kDefaultMaxNesting;
+    sema::AccessLog* access = nullptr;  // замер О4: журнал доступа (sema/access.h)
 };
 
 // Проверка программы с главным модулем root_path: загрузка модулей,

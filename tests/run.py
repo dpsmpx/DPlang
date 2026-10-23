@@ -119,6 +119,8 @@ SUITES = {
     'fail': ('.dpm', DPL, lambda name, path: ['check', name]),
     'diag': ('.dpm', DPL, lambda name, path: ['check', '--format=json', name]),
     'ir': ('.dpm', DPL, lambda name, path: ['debug', 'ir', name]),
+    # Замер О4: события доступа `debug access` (compiler/sema/access.h).
+    'access': ('.dpm', DPL, lambda name, path: ['debug', 'access', name]),
     'run': ('.dpm', DPL, lambda name, path: ['debug', 'run', name] + program_args(path)),
     'fmt': ('.dpm', DPL, lambda name, path: ['fmt', name]),
     # X.args рядом — флаги команды (например, --timeout).

@@ -26,6 +26,7 @@
 #include "ir/interp.h"
 #include "ir/lower.h"
 #include "ir/verify.h"
+#include "sema/access.h"
 #include "sema/sema.h"
 #include "support/diag.h"
 #include "support/json.h"
@@ -69,7 +70,8 @@ constexpr std::string_view kUsage =
     "  debug ir <file.dpm>      print the Core IR of a program\n"
     "  debug run <file.dpm> [args...]\n"
     "                           run a program in the reference interpreter\n"
-    "  debug c <file.dpm>       print the C code of a program (C backend)\n";
+    "  debug c <file.dpm>       print the C code of a program (C backend)\n"
+    "  debug access <file.dpm>  print the accesses that stricter exclusive-access rules would reject\n";
 
 void put(std::string_view s, FILE* f = stdout) { std::fwrite(s.data(), 1, s.size(), f); }
 
@@ -398,6 +400,54 @@ int cmd_debug_ir(const Cli& cli, const std::vector<std::string_view>& args) {
     return finish(diags, sources);
 }
 
+// debug access: замер О4 (sema/access.h) — события доступа строками JSON;
+// E0502 и заморозка корня в обходе их не отвергают. Снимки вида — после
+// понижения, если ошибок нет.
+int cmd_debug_access(const Cli& cli, const std::vector<std::string_view>& args) {
+    if (args.size() != 1) return usage_error("debug access takes one file");
+    dp::SourceMap sources;
+    dp::Diagnostics diags;
+    dp::sema::AccessLog log;
+    dp::api::CompileOptions opt;
+    opt.stdlib_dir = cli.stdlib;
+    opt.bindings_dir = cli.bindings;
+    opt.access = &log;
+    auto prog = dp::api::check(std::string(args[0]), opt, sources, diags);
+    if (prog && !diags.has_errors()) {
+        auto ir = lower_program(*prog, sources);
+        if (!ir) return 3;
+    }
+    auto& ev = log.events;
+    std::stable_sort(ev.begin(), ev.end(), [&](const dp::sema::AccessEvent& a, const dp::sema::AccessEvent& b) {
+        const std::string& pa = sources.file(a.span.file).path();
+        const std::string& pb = sources.file(b.span.file).path();
+        return pa != pb ? pa < pb : a.span.begin < b.span.begin;
+    });
+    std::string out;
+    for (const dp::sema::AccessEvent& e : ev) {
+        const dp::SourceFile& f = sources.file(e.span.file);
+        dp::LineCol at = f.line_col(e.span.begin), other = f.line_col(e.other.begin);
+        std::string text = f.text().substr(e.span.begin, std::min<uint32_t>(e.span.end - e.span.begin, 80));
+        if (size_t nl = text.find('\n'); nl != std::string::npos) text.resize(nl);
+        out += "{\"file\": ";
+        dp::json_string(out, f.path());
+        out += ", \"line\": " + std::to_string(at.line) + ", \"col\": " + std::to_string(at.col) + ", \"rule\": ";
+        dp::json_string(out, e.rule);
+        out += ", \"kind\": ";
+        dp::json_string(out, e.kind);
+        out += ", \"root\": ";
+        dp::json_string(out, e.root);
+        out += ", \"detail\": ";
+        dp::json_string(out, e.detail);
+        out += ", \"other\": \"" + (e.other.end ? std::to_string(other.line) + ":" + std::to_string(other.col) : "") +
+               "\", \"text\": ";
+        dp::json_string(out, text);
+        out += "}\n";
+    }
+    put(out);
+    return finish(diags, sources);
+}
+
 // debug run: исполнение программы эталонным интерпретатором (Р43).
 // Код выхода — код программы (docs/ir/README.md, «Интерпретатор»).
 int cmd_debug_run(const Cli& cli, const std::vector<std::string_view>& args) {
@@ -582,6 +632,7 @@ int cmd_debug(const Cli& cli, const std::vector<std::string_view>& args) {
     if (args[0] == "ir") return cmd_debug_ir(cli, rest);
     if (args[0] == "run") return cmd_debug_run(cli, rest);
     if (args[0] == "c") return cmd_debug_c(cli, rest);
+    if (args[0] == "access") return cmd_debug_access(cli, rest);
     return usage_error("unknown debug subcommand '" + std::string(args[0]) + "'");
 }
 

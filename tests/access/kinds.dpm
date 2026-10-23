@@ -1,0 +1,108 @@
+// Замер О4 (`dpl debug access`, compiler/sema/access.h): события каждого
+// вида и доступы без событий. E0502 и E0412 здесь нарочно — в режиме
+// замера они события.
+struct P {
+    x: int
+    y: int
+}
+
+struct Row {
+    items: List[int]
+}
+
+fn bump(a: &mut int) {
+    a += 1
+}
+
+fn pair(a: &mut int, b: &int) {
+    a = b
+}
+
+fn sum(xs: []int, k: int) int {
+    return k
+}
+
+fn grow(xs: &mut List[int]) int {
+    xs.push(1)
+    return 0
+}
+
+fn calls(i: int) {
+    var p = P { x: 1, y: 2 }
+    var xs: List[int] = [1, 2]
+    pair(&mut p.x, &p.x)
+    pair(&mut p.x, &p.y)
+    pair(&mut xs[0], &xs[1])
+    pair(&mut xs[i], &xs[0])
+    // Без событий: разные корни.
+    var q = P { x: 3, y: 4 }
+    pair(&mut p.x, &q.x)
+}
+
+fn loops() {
+    var xs: List[int] = [1, 2, 3]
+    var rows: List[Row] = [Row { items: [1] }]
+    for x in &mut xs {
+        xs.push(1)
+        xs[0] = 2
+        bump(&mut xs[1])
+        x += xs[0]
+        // Без событий: запись через переменную цикла.
+        x = 5
+        bump(&mut x)
+    }
+    for x in &xs {
+        xs = []
+        // Без событий: чтение корня в обходе для чтения.
+        println(str(len(xs) + x))
+    }
+    for r in &mut rows {
+        // Без событий: обход части через переменную внешнего обхода.
+        for v in &mut r.items {
+            v += 1
+        }
+        r.items.push(2)
+        for s in &rows {
+            println(str(len(s.items)))
+        }
+    }
+    for a in &xs {
+        // Без событий: два обхода для чтения.
+        for b in &xs {
+            println(str(a + b))
+        }
+    }
+    var m: Map[int, int] = []
+    for k in &m {
+        m[k] = 1
+    }
+}
+
+fn par(n: int) {
+    var total = 0
+    var out: List[int] = [0, 0, 0]
+    var xs: List[int] = [1, 2]
+    parallel for i in 0..n {
+        total += i
+        out[i] = i
+        out[i + 1] = i
+        out.push(i)
+        // Без событий: переменная тела.
+        var local = i
+        local += 1
+    }
+    parallel for x in &mut xs {
+        x += 1
+        x += xs[0]
+    }
+}
+
+fn views() {
+    var xs: List[int] = [1, 2]
+    println(str(sum(xs, grow(&mut xs))))
+    // Без событий: справа нет действия над корнем.
+    println(str(sum(xs, len(xs))))
+}
+
+fn main() {
+}

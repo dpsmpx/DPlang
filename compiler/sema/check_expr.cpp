@@ -307,6 +307,7 @@ const Type* Checker::name_expr(NameExpr* n) {
     switch (n->res.kind) {
         case ResKind::Local: {
             Local* l = n->res.local;
+            note_use(n);
             if (fn_ && flow_.live && l->id < flow_.init.size() && !flow_.init[l->id]) {
                 error(Code::E0503, n->span, "'" + l->name + "' is used before it has a value");
                 flow_.init[l->id] = 1;
@@ -711,7 +712,10 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
             }
             continue;
         }
-        if (r->mut) mutable_place(r->operand, "mutate");
+        if (r->mut) {
+            mutable_place(r->operand, "mutate");
+            note_write(r->operand, Write::Ref);
+        }
         bool prefix = !r->mut && c_prefix(p.type, t);  // Р62: `&S` в `&B` по общему началу
         if (t != p.type && !prefix && t->kind != TK::Error && p.type->kind != TK::Error) {
             error(Code::E0401, r->operand->span, "expected '" + tn(p.type) + "', found '" + tn(t) + "'");
@@ -759,6 +763,7 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
                 error(Code::E0501, r->operand->span, "a reference needs a variable, a field or an element");
             } else {
                 mutable_place(r->operand, "mutate");
+                note_write(r->operand, Write::Ref);
             }
             continue;
         }
@@ -892,6 +897,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
             error(Code::E0412, f->name_span, "slices are read-only; '" + f->name + "' needs a List");
         } else {
             mutable_place(f->object, ("call '" + f->name + "' on").c_str());
+            note_write(f->object, mi->m == Method::Sort ? Write::Method : Write::Shape);  // замер О4
         }
     }
     const Type* elem = t->elem;
@@ -1293,7 +1299,7 @@ bool Checker::mutable_place(Expr* e, const char* why) {
         Local* l = n->res.local;
         // Заморозка — причина, только если без неё место изменяемо.
         const char* hint = frozen(l);
-        if (l->mutable_ && hint) {
+        if (l->mutable_ && hint && !probe()) {  // замер О4: событие loop вместо отказа
             error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "'" + hint);
             return false;
         }
@@ -1361,6 +1367,8 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         Local* root = nullptr;
         bool mut = false;
         Span span;
+        Expr* place = nullptr;  // замер О4: путь аргумента
+        bool view = false;      // срез
     };
     std::vector<Ref> refs;
     // Р62: заимствования внутри аргумента — структуры с полями-ссылками и
@@ -1373,7 +1381,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         } else if (auto* l = as<ListLitExpr>(e)) {
             for (Expr* x : l->items) borrowed(x);
         } else if (auto* r = as<RefExpr>(e)) {
-            if (is_place(r->operand)) refs.push_back({root_local(r->operand), false, e->span});
+            if (is_place(r->operand)) refs.push_back({root_local(r->operand), false, e->span, r->operand});
             else borrowed(r->operand);
         } else if (Local* root = root_local(e); !root && (as<FieldExpr>(e) || as<IndexExpr>(e) || as<SliceExpr>(e))) {
             // Часть литерала — `[S { p: &x }][0..1]`: заимствования его элементов.
@@ -1381,17 +1389,17 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             else if (auto* x = as<IndexExpr>(e)) borrowed(x->object);
             else borrowed(static_cast<SliceExpr*>(e)->object);
         } else if ((e->conv && e->conv->kind == TK::Slice) || as<SliceExpr>(e)) {
-            refs.push_back({root, false, e->span});
+            refs.push_back({root, false, e->span, e, true});
         }
     };
     for (size_t i = 0; i < c->args.size() && i < params.size(); i++) {
         Expr* a = c->args[i];
         if (auto* r = as<RefExpr>(a)) {
-            if (params[i].mode != ParamMode::Value) refs.push_back({root_local(r->operand), r->mut, a->span});
+            if (params[i].mode != ParamMode::Value) refs.push_back({root_local(r->operand), r->mut, a->span, r->operand});
             if (!is_place(r->operand)) borrowed(r->operand);
         } else if (params[i].type && params[i].type->kind == TK::Slice) {
             Local* root = root_local(a);  // `(xs[1..])` — тоже корень xs
-            if (root) refs.push_back({root, false, a->span});
+            if (root) refs.push_back({root, false, a->span, a, true});
             else borrowed(a);  // `[S { ... }]`, `[S { ... }][0..1]` — заимствования внутри
         } else if (params[i].type && (c_borrowing(params[i].type) || params[i].type->kind == TK::Optional)) {
             borrowed(a);
@@ -1401,6 +1409,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         for (size_t j = 0; j < refs.size(); j++) {
             if (i == j || !refs[i].root || refs[i].root != refs[j].root || !refs[i].mut) continue;
             if (j < i && refs[j].mut) continue;  // пара двух &mut — одно сообщение
+            if (probe_call(refs[i].place, refs[i].mut, refs[i].view, refs[j].place, refs[j].mut, refs[j].view)) continue;
             error(Code::E0502, refs[j].span, "'" + refs[i].root->name + "' is passed as '&mut' together with "
                                                  "another reference into it; pass a copy of the value instead");
         }

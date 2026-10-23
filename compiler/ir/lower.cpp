@@ -16,6 +16,7 @@
 #include <map>
 #include <unordered_map>
 
+#include "sema/access.h"
 #include "sema/builtins.h"
 
 namespace dp::ir {
@@ -703,6 +704,7 @@ private:
     // меняет действие правее (need).
     Operand snapshot(Operand o, Span span, const Roots& need) {
         if (o.kind == OpKind::Copy && mutable_root(o.place) && hits(need, o.place)) {
+            note_snapshot("slice", span);
             return to_temp(use(o, type_of(o)), span);
         }
         return o;
@@ -710,15 +712,26 @@ private:
 
     // Место, над которым строится вид — срез или адрес `&T`; копия, если его
     // меняет действие правее (need).
-    Place view_base(const Expr* obj, bool& fresh, const Roots& need) {
+    Place view_base(const Expr* obj, bool& fresh, const Roots& need, const char* kind) {
         Place p = object(obj, fresh);
         if (!fresh && mutable_root(p) && hits(need, p)) {
+            note_snapshot(kind, obj->span);
             Operand o = copy(std::move(p));
             Operand c = to_temp(use(o, type_of(o)), obj->span);
             fresh = true;
             return c.place;
         }
         return p;
+    }
+
+    // Замер О4 (sema/access.h): снимок вида — событие view.
+    void note_snapshot(const char* kind, Span span) {
+        if (!prog_.access || !f_.def || f_.def->module->stdlib) return;
+        sema::AccessEvent ev;
+        ev.rule = "view";
+        ev.kind = kind;
+        ev.span = span;
+        prog_.access->events.push_back(std::move(ev));
     }
 
     // Понижает f() с snap_, дополненным к внешнему (on).
@@ -933,7 +946,7 @@ private:
                 auto* r = static_cast<const RefExpr*>(e);
                 bool fresh = false;
                 Rvalue rv = make(RvKind::AddrOf, e->type);
-                rv.place = view_base(r->operand, fresh, snap_);
+                rv.place = view_base(r->operand, fresh, snap_, "addr");
                 rv.has_place = true;
                 return to_temp(std::move(rv), e->span);
             }
@@ -1063,7 +1076,7 @@ private:
         bool str = s->object->type && s->object->type->kind == TK::Str;
         Roots need = bounds;
         if (!str) need.insert(need.end(), snap_.begin(), snap_.end());
-        rv.place = snapping(bounds, [&] { return view_base(s->object, fresh, need); });
+        rv.place = snapping(bounds, [&] { return view_base(s->object, fresh, need, "slice"); });
         rv.has_place = true;
         if ((may_trap(s->lo) || may_trap(s->hi) || has_effect(s->lo) || has_effect(s->hi)) && !hits(bounds, rv.place)) {
             probe(rv.place, s->object->span);
@@ -1247,7 +1260,7 @@ private:
                         // снимок x (expr.order); `&mut x` — место на время вызова.
                         // Р62: `&S { ... }` — временное; виды в его полях — с snap_.
                         a.place = snapping_from(roots, [&] {
-                            return r->mut ? object(r->operand, fresh) : view_base(r->operand, fresh, roots);
+                            return r->mut ? object(r->operand, fresh) : view_base(r->operand, fresh, roots, "ref");
                         });
                         // `f(&xs[9], 1 / z)`: сперва xs[9]
                         if ((trap || later) && !hits(roots, a.place)) probe(a.place, args[i]->span);
