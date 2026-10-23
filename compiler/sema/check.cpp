@@ -377,7 +377,7 @@ void Checker::assign_stmt(AssignStmt* a) {
             Local* l = n->res.local;
             n->type = l->type;
             check(a->value, l->type);
-            if (mutable_place(n, "assign to")) note_write(n, Write::Assign, "assign to");
+            if (mutable_place(n, "assign to")) note_write(n, "assign to");
             if (flow_.init.size() > l->id) flow_.init[l->id] = 1;
             return;
         }
@@ -387,8 +387,8 @@ void Checker::assign_stmt(AssignStmt* a) {
         Expr* target = a->target;
         while (auto* p = as<ParenExpr>(target)) target = p->inner;
         auto* ix = as<IndexExpr>(target);
-        if (ix && ix->object->type && ix->object->type->kind == TK::Map) note_write(ix->object, Write::Shape, "assign to");
-        else note_write(target, Write::Assign, "assign to");
+        if (ix && ix->object->type && ix->object->type->kind == TK::Map) note_write(ix->object, "assign to");
+        else note_write(target, "assign to");
     }
     if (a->op == AssignOp::Set) {
         check(a->value, t);

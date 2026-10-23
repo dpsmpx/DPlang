@@ -1,8 +1,9 @@
-// Атаки замера О4 (docs/research/notes/8_exclusive_access.md, разделы 1 и
-// 5; аудит v0.2, висячий вид). Атака — функция `a_<имя>`; что с ней сейчас
-// — в комментарии над ней и в ATTACKS у bench/o4/measure.py. Без режима
-// замера (`dpl debug access`) файл не проходит проверку: E0502 и E0412
-// здесь нарочно. Программа не запускается.
+// spec: ref.alias stmt.for expr.order
+// Исключительный изменяемый доступ (Р66): каждая функция `a_<имя>` —
+// нарушение, которое компилятор отвергает; функция `ok_<имя>` — доступ,
+// который правило пропускает. Атаки взяты из замера О4
+// (docs/research/notes/8_exclusive_access.md, разделы 1 и 7; семейство
+// висячего вида — #27); что с атакой было до Р66 — в комментарии над ней.
 @c
 struct C {
     a: u32
@@ -313,6 +314,68 @@ fn a_view_addr_for_c() {
     var xs: List[C] = [C { a: 1, b: 2 }]
     let y = C { a: 1, b: 2 }
     println(str(memcmp(&xs[0], &y, grow_c(&mut xs))))
+}
+
+// --- правило пропускает
+
+// Разные поля и разные постоянные индексы в одном вызове.
+fn ok_disjoint_call() {
+    var p = P { x: 1, y: 2 }
+    swap2(&mut p.x, &mut p.y)
+    var xs: List[int] = [1, 2]
+    swap2(&mut xs[0], &mut xs[1])
+}
+
+// Изменение через переменную цикла, другое поле корня, обход части через
+// переменную внешнего обхода, два обхода для чтения.
+fn ok_loops(bag: Bag) {
+    var b = bag
+    var total = 0
+    for x in &mut b.items {
+        x += 1
+        total += x
+    }
+    var ws: List[Bag] = [bag]
+    for w in &mut ws {
+        for v in &mut w.items {
+            v += 1
+        }
+        w.items.push(0)
+    }
+    for x in &b.items {
+        for y in &b.items {
+            total += x * y
+        }
+    }
+    var cells: List[Cell] = [Cell { v: 1 }]
+    var hits = 0
+    for c in &mut cells {
+        c.v += 1
+        hits += 1
+    }
+    println(str(total + hits))
+}
+
+// Значение-аргумент вычисляется до доступа; действие левее вида; вид в
+// вызове, который кончился раньше действия.
+fn ok_order() {
+    var xs: List[int] = [1, 2, 3]
+    xs.push(len(xs))
+    let n = grow(&mut xs) + sum(xs, 0)
+    let m = sum(xs[0..2], 0) + grow(&mut xs)
+    println(str(n + m))
+}
+
+// parallel for пишет снаружи только элемент по переменной цикла.
+fn ok_parallel() {
+    var out: List[int] = [0, 0, 0, 0]
+    parallel for i in 0..4 {
+        out[i] = i * i
+    }
+    var rows: List[List[int]] = [[0], [0]]
+    parallel for r in &mut rows {
+        r[0] += 1
+    }
 }
 
 fn main() {

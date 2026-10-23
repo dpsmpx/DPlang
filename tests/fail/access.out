@@ -1,0 +1,86 @@
+--- stderr ---
+access.dpm:119:23: error[E0412]: cannot mutate 'xs' while 'for ... in &mut' iterates over it; change it through the loop variable, or iterate over indexes: 'for i in 0..len(xs)'
+ 119 |         x = grow(&mut xs)
+     |                       ^~
+access.dpm:127:25: error[E0412]: cannot mutate 'ys' while 'for ... in &mut' iterates over it; change it through the loop variable, or iterate over indexes: 'for i in 0..len(ys)'
+ 127 |         y = shrink(&mut ys)
+     |                         ^~
+access.dpm:135:25: error[E0412]: cannot mutate 'xs' while 'for ... in &' iterates over it; change it through the loop variable, or iterate over indexes: 'for i in 0..len(xs)'
+ 135 |         clear_list(&mut xs)
+     |                         ^~
+access.dpm:144:9: error[E0412]: cannot call 'push' on 'ws' while 'for ... in &' iterates over it; change it through the loop variable, or iterate over indexes: 'for i in 0..len(ws)'
+ 144 |         ws.push(w)
+     |         ^~
+access.dpm:152:23: error[E0412]: cannot iterate over 'zs' with '&mut' while 'for ... in &mut' iterates over it; iterate over indexes: 'for i in 0..len(zs)'
+ 152 |         for b in &mut zs {
+     |                       ^~
+access.dpm:162:14: error[E0412]: cannot read 'xs[0]' while 'for ... in &mut' changes it; read the value before the loop: 'let v = xs[0]'
+ 162 |         x += xs[0]
+     |              ^~~~~
+access.dpm:171:9: error[E0412]: cannot assign to 'm' while 'for ... in &' iterates over its Map; iterate over a copy of the keys: 'for k in &m.keys()'
+ 171 |         m[k + 10] = 1
+     |         ^
+access.dpm:179:9: error[E0412]: cannot call 'clear' on 'xs' while 'for ... in &' iterates over its slice; iterate over a slice of a copy made before the loop
+ 179 |         xs.clear()
+     |         ^~
+access.dpm:189:9: error[E0412]: cannot assign to 'total' inside 'parallel for': iterations run at the same time; write each result to an element indexed by the loop variable, such as 'out[i]', and combine them after the loop
+ 189 |         total += i
+     |         ^~~~~
+access.dpm:197:9: error[E0412]: cannot call 'push' on 'acc' inside 'parallel for': iterations run at the same time; write each result to an element indexed by the loop variable, such as 'out[i]', and combine them after the loop
+ 197 |         acc.push(i)
+     |         ^~~
+access.dpm:205:9: error[E0412]: cannot assign to 'acc[0]' inside 'parallel for': iterations run at the same time; write each result to an element indexed by the loop variable, such as 'out[i]', and combine them after the loop
+ 205 |         acc[0] += i
+     |         ^~~~~~
+access.dpm:213:14: error[E0412]: cannot read 'xs[0]' while 'for ... in &mut' changes it; read the value before the loop: 'let v = xs[0]'
+ 213 |         x += xs[0]
+     |              ^~~~~
+access.dpm:221:9: error[E0412]: cannot assign to 'out[...]' inside 'parallel for': iterations run at the same time; write each result to an element indexed by the loop variable, such as 'out[t]', and combine them after the loop
+ 221 |         out[t % 2] += 1
+     |         ^~~~~~~~~~
+access.dpm:230:19: error[E0502]: 'x' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+ 230 |     swap2(&mut x, &mut x)
+     |                   ^~~~~~
+access.dpm:236:19: error[E0502]: 'p' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+ 236 |     put_p(&mut p, &p.x)
+     |                   ^~~~
+access.dpm:242:23: error[E0502]: 'xs' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+ 242 |     swap2(&mut xs[i], &mut xs[j])
+     |                       ^~~~~~~~~~
+access.dpm:250:23: error[E0502]: 'words' is viewed here and 'words' changes later in the same expression; copy it before: 'let old = words'
+ 250 |     println(str(total(words, drain(&mut words))))
+     |                       ^~~~~
+access.dpm:256:23: error[E0502]: 'words' is viewed here and 'words' changes later in the same expression; copy it before: 'let old = words'
+ 256 |     println(str(total(words[1..3], drain(&mut words))))
+     |                       ^~~~~~~~~~~
+access.dpm:262:23: error[E0502]: 'words[..]' is viewed here and 'words' changes later in the same expression; copy it before: 'let old = words'
+ 262 |     println(str(total(words[0..4][1..3], drain(&mut words))))
+     |                       ^~~~~~~~~~~~~~~~~
+access.dpm:268:23: error[E0502]: 'words' is viewed here and 'words' changes later in the same expression; copy it before: 'let old = words'
+ 268 |     println(str(total(words[0..2], len(take(&mut words)))))
+     |                       ^~~~~~~~~~~
+access.dpm:274:23: error[E0502]: 'words' is viewed here and 'words' changes later in the same expression; copy it before: 'let old = words'
+ 274 |     println(str(total(words[2..], zero(true && drain(&mut words) == 0))))
+     |                       ^~~~~~~~~~
+access.dpm:280:17: error[E0502]: 'words' is viewed here and 'words' changes later in the same expression; copy it before: 'let old = words'
+ 280 |     println(str(words[0..3].contains(take(&mut words))))
+     |                 ^~~~~~~~~~~
+access.dpm:286:13: error[E0502]: 'words' is viewed here and 'words' changes later in the same expression; copy it before: 'let old = words'
+ 286 |     println(words[1..4][drain(&mut words)])
+     |             ^~~~~~~~~~~
+access.dpm:292:21: error[E0502]: 'bag.items' is viewed here and 'bag' changes later in the same expression; copy it before: 'let old = bag'
+ 292 |     println(str(sum(bag.items[0..2], refill(&mut bag))))
+     |                     ^~~~~~~~~~~~~~~
+access.dpm:298:21: error[E0502]: 'ys' is viewed here and 'ys' changes later in the same expression; copy it before: 'let old = ys'
+ 298 |     println(str(sum(ys[0..2], ys.pop() ?? 0)))
+     |                     ^~~~~~~~
+access.dpm:303:21: error[E0502]: 'xs' is viewed here and 'xs' changes later in the same expression; copy it before: 'let old = xs'
+ 303 |     println(str(sum(xs[0..2], grow_int(&mut xs))))
+     |                     ^~~~~~~~
+access.dpm:309:18: error[E0502]: 'cells[0]' is viewed here and 'cells' changes later in the same expression; copy it before: 'let old = cells'
+ 309 |     println(show(&cells[0], wipe(&mut cells)))
+     |                  ^~~~~~~~~
+access.dpm:316:24: error[E0502]: 'xs[0]' is viewed here and 'xs' changes later in the same expression; copy it before: 'let old = xs'
+ 316 |     println(str(memcmp(&xs[0], &y, grow_c(&mut xs))))
+     |                        ^~~~~~
+[exit 1]

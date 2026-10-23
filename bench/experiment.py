@@ -83,9 +83,9 @@ SPEC_DP_TITLE = "# Спецификация dpl (ядро v0.1)"
 # приёмы с примерами, docs/guide/README.md.
 GUIDE_DP = os.path.join(ROOT, 'docs', 'guide', 'README.md')
 # Замер О4 (--doc o4): руководство серий k2-h с разделом о правиле
-# исключительного доступа и проверка правила прототипом (bench/o4/rule.py);
-# контроль (--doc o4base) — то же руководство без этого раздела и без
-# проверки правила.
+# исключительного доступа (Р66); контроль (--doc o4base) — то же
+# руководство без этого раздела. Правило проверяет компилятор (до Р66 —
+# прототип bench/o4/rule.py, коммит 2bfd91d).
 GUIDE_O4 = os.path.join(BENCH, 'o4', 'guide.md')
 O4_SECTION = '## Обход и изменение\n'
 DOCS = ('spec', 'guide', 'o4', 'o4base')
@@ -616,9 +616,8 @@ def source_files(files, lang):
     return {n: t for n, t in files.items() if n.endswith(ext)}
 
 
-def evaluate(task, lang, files, build_dir, flags, build=True, doc='spec'):
-    """Проверка решения: (класс, сообщение). build=False — только разбор и
-    перевод; doc o4 — ещё и правило О4 (прототип, bench/o4/rule.py)."""
+def evaluate(task, lang, files, build_dir, flags, build=True):
+    """Проверка решения: (класс, сообщение). build=False — только разбор и перевод."""
     files = source_files(files, lang)
     if not files:
         return 'разбор', 'в src/ нет файлов ' + ' '.join('*' + e for e in SRC_EXT[ext_key(lang)])
@@ -632,7 +631,7 @@ def evaluate(task, lang, files, build_dir, flags, build=True, doc='spec'):
         if not build:
             return None, ''
         driver = read(os.path.join(task.dp, dp_check.DRIVER))
-        return dp_check.evaluate(files, driver, dp_check.expected(task.path), build_dir, o4=doc == 'o4')
+        return dp_check.evaluate(files, driver, dp_check.expected(task.path), build_dir)
     if is_proto(lang):
         mods = []
         for name, text in files.items():
@@ -727,7 +726,7 @@ def check(sandbox):
     task = find_task(meta['task'])
     t0 = time.monotonic()
     with tempfile.TemporaryDirectory() as tmp:
-        cls, msg = evaluate(task, meta['lang'], files, tmp, meta['flags'], doc=meta.get('doc', 'spec'))
+        cls, msg = evaluate(task, meta['lang'], files, tmp, meta['flags'])
     out = f'попытка {n} из {meta["attempts_max"]}: {cls}' + (f'\n{msg.rstrip()}' if msg else '')
     entry = {'n': n, 'time': datetime.datetime.now().isoformat(timespec='seconds'),
              'seconds': round(time.monotonic() - t0, 1), 'class': cls, 'output': out,

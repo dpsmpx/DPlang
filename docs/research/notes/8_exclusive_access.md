@@ -938,6 +938,11 @@ v0.3 по `ROADMAP/ROADMAP.md`), а не само решение: здесь в�
 
 ## 7. Итог замера (23 октября 2026)
 
+Инструменты замера — режим `dpl debug access`, `bench/o4/measure.py`,
+разметка `bench/o4/labels.json`, прототип `bench/o4/rule.py` — убраны с
+реализацией Р66; последний коммит с ними — `2bfd91d`. Атаки
+(`bench/o4/attacks.dpm`) стали тестом отказов `tests/fail/access.dpm`.
+
 Замер по разделу 5, статическая часть: `dpl debug access` (режим счёта,
 `compiler/sema/access.h`) и `bench/o4/measure.py`; данные, места и
 разметка — `bench/results/o4-2026-10-23/`, `bench/o4/labels.json`. Сессии

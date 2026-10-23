@@ -160,12 +160,10 @@ private:
         size_t loop = 0;  // номер в access_loops_
     };
     std::vector<LoopRead> loop_reads_;
-    // Запись в место: присваивание; метод, меняющий длину или ключи (и
-    // новый ключ `m[k] = v` — место m); другой изменяющий метод; `&mut`.
-    enum class Write : uint8_t { Assign, Shape, Method, Ref };
-    // why — действие для сообщения («assign to»); loops = false — только
-    // правило `parallel for` (обход сверяет loop_begin).
-    void note_write(ast::Expr* place, Write how, const char* why, bool loops = true);
+    // Запись в место: присваивание, изменяющий метод, `&mut` (новый ключ
+    // `m[k] = v` — запись в m). why — действие для сообщения («assign to»);
+    // loops = false — только правило `parallel for` (обход сверяет loop_begin).
+    void note_write(ast::Expr* place, const char* why, bool loops = true);
     void note_use(ast::NameExpr* n);
     void note_extend(ast::Expr* object, ast::Expr* place);
     void loop_begin(ast::ForStmt* s);

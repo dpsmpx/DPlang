@@ -30,13 +30,18 @@ fn swap(a: &mut i32, b: &mut i32) {
     b = t
 }
 
+// Список растёт, пока его читают: обход по индексу, длина — на каждом шаге
+// (в `for x in &xs` менять xs нельзя, Р66).
 fn grow_while_reading(xs: &mut List[i32]) int {
     var seen = 0
-    for x in &xs {
+    var i = 0
+    while i < len(xs) {
+        let x = xs[i]
         seen += 1
         if x < 3 {
             xs.push(x + 10)
         }
+        i += 1
     }
     return seen
 }

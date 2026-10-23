@@ -150,7 +150,7 @@ bool Checker::overlap(Expr* a, Expr* b) const {
     return !ra || !rb || ra != rb || crosses(pa, pb);
 }
 
-void Checker::note_write(Expr* place, Write how, const char* why, bool loops) {
+void Checker::note_write(Expr* place, const char* why, bool loops) {
     if (access_loops_.empty() || !place) return;
     std::vector<Step> steps;
     const Local* root = path(place, loop_iters_, steps);
@@ -174,13 +174,14 @@ void Checker::note_write(Expr* place, Write how, const char* why, bool loops) {
         }
         if (!L.parallel || base->id >= L.first_inner) continue;
         // Снаружи тела `parallel for` пишется только элемент по переменной
-        // цикла (`out[i]`): итерации идут одновременно.
+        // цикла (`out[i]`, `out[i].push(x)`): итерации идут одновременно, и
+        // у каждой свой элемент.
         bool by_var = false;
         for (const Step& s : steps) {
             auto* n = s.kind == Step::Index ? as<NameExpr>(const_cast<Expr*>(s.index)) : nullptr;
             if (n && n->res.kind == ResKind::Local && n->res.local == L.var) by_var = true;
         }
-        if (by_var && how != Write::Shape) continue;
+        if (by_var) continue;
         std::string var = L.var ? L.var->name : "i";
         error(Code::E0412, place->span,
               head + " inside 'parallel for': iterations run at the same time; write each result to an element "
@@ -238,7 +239,7 @@ void Checker::loop_begin(ForStmt* s) {
             break;
         }
         // `for x in &mut outer` в теле `parallel for` — запись во внешнюю переменную.
-        if (L.mut) note_write(s->iter, Write::Ref, "mutate", false);
+        if (L.mut) note_write(s->iter, "mutate", false);
     }
     access_loops_.push_back(L);
 }

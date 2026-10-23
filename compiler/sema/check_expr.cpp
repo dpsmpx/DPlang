@@ -713,7 +713,7 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
             }
             continue;
         }
-        if (r->mut && mutable_place(r->operand, "mutate")) note_write(r->operand, Write::Ref, "mutate");
+        if (r->mut && mutable_place(r->operand, "mutate")) note_write(r->operand, "mutate");
         bool prefix = !r->mut && c_prefix(p.type, t);  // Р62: `&S` в `&B` по общему началу
         if (t != p.type && !prefix && t->kind != TK::Error && p.type->kind != TK::Error) {
             error(Code::E0401, r->operand->span, "expected '" + tn(p.type) + "', found '" + tn(t) + "'");
@@ -760,7 +760,7 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
             if (!is_place(r->operand)) {
                 error(Code::E0501, r->operand->span, "a reference needs a variable, a field or an element");
             } else if (mutable_place(r->operand, "mutate")) {
-                note_write(r->operand, Write::Ref, "mutate");
+                note_write(r->operand, "mutate");
             }
             continue;
         }
@@ -895,7 +895,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         } else {
             std::string why = "call '" + f->name + "' on";
             if (mutable_place(f->object, why.c_str())) {
-                note_write(f->object, mi->m == Method::Sort ? Write::Method : Write::Shape, why.c_str());
+                note_write(f->object, why.c_str());
             }
         }
     }
