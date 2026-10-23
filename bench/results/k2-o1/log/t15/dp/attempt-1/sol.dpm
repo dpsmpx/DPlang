@@ -1,0 +1,269 @@
+// t15: книга счетов с вложенными транзакциями.
+
+pub struct Acc {
+    bal: i64
+    limit: i64
+}
+
+pub struct Book {
+    accs: Map[str, Acc]
+}
+
+pub struct Ledger {
+    // текущее состояние книги
+    book: Book
+    // снимки на момент каждого открытого begin
+    stack: List[Book]
+}
+
+const MAX_ABS: i64 = 1000000000000000
+const MAX_DEPTH: int = 8
+
+pub fn ledger_new() Ledger {
+    let accs: Map[str, Acc] = []
+    let stack: List[Book] = []
+    return Ledger { book: Book { accs }, stack }
+}
+
+fn words(s: str) List[str] {
+    var out: List[str] = []
+    for w in &s.split(" ") {
+        if len(w) > 0 {
+            out.push(w)
+        }
+    }
+    return out
+}
+
+fn is_name(w: str) bool {
+    let n = len(w)
+    if n < 1 || n > 16 {
+        return false
+    }
+    for i in 0..n {
+        let c = w[i]
+        let lower = c >= 'a' && c <= 'z'
+        if i == 0 {
+            if !lower {
+                return false
+            }
+        } else {
+            if !lower && !is_digit(c) && c != '_' {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+// Число из 1..18 цифр; иначе none.
+fn parse_num(w: str) ?i64 {
+    let n = len(w)
+    if n < 1 || n > 18 {
+        return none
+    }
+    var v: i64 = 0
+    for c in &w {
+        if !is_digit(c) {
+            return none
+        }
+        v = v * 10 + i64(c - '0')
+    }
+    return v
+}
+
+fn cmd_open(l: &mut Ledger, name: str, lim: str) str {
+    if !is_name(name) {
+        return "error syntax"
+    }
+    let limit = parse_num(lim) ?? -1
+    if limit < 0 {
+        return "error syntax"
+    }
+    if l.book.accs.contains(name) {
+        return "error exists " + name
+    }
+    l.book.accs[name] = Acc { bal: 0, limit }
+    return "ok"
+}
+
+fn cmd_change(l: &mut Ledger, is_dep: bool, name: str, amt: str) str {
+    if !is_name(name) {
+        return "error syntax"
+    }
+    let amount = parse_num(amt) ?? -1
+    if amount < 0 {
+        return "error syntax"
+    }
+    if amount == 0 {
+        return "error amount"
+    }
+    if !l.book.accs.contains(name) {
+        return "error unknown " + name
+    }
+    var acc = l.book.accs[name]
+    var nb = acc.bal + amount
+    if !is_dep {
+        nb = acc.bal - amount
+    }
+    if nb < -acc.limit {
+        return "error funds"
+    }
+    if abs(nb) > MAX_ABS {
+        return "error bound"
+    }
+    acc.bal = nb
+    l.book.accs[name] = acc
+    return "ok " + str(nb)
+}
+
+fn cmd_transfer(l: &mut Ledger, src_name: str, dst_name: str, amt: str) str {
+    if !is_name(src_name) || !is_name(dst_name) {
+        return "error syntax"
+    }
+    let amount = parse_num(amt) ?? -1
+    if amount < 0 {
+        return "error syntax"
+    }
+    if amount == 0 {
+        return "error amount"
+    }
+    if !l.book.accs.contains(src_name) {
+        return "error unknown " + src_name
+    }
+    if !l.book.accs.contains(dst_name) {
+        return "error unknown " + dst_name
+    }
+    if src_name == dst_name {
+        return "error same"
+    }
+    var fee = amount / 100
+    if fee < 1 {
+        fee = 1
+    }
+    var fa = l.book.accs[src_name]
+    var ta = l.book.accs[dst_name]
+    let fb = fa.bal - (amount + fee)
+    let tb = ta.bal + amount
+    if fb < -fa.limit {
+        return "error funds"
+    }
+    if abs(fb) > MAX_ABS {
+        return "error bound"
+    }
+    if abs(tb) > MAX_ABS {
+        return "error bound"
+    }
+    fa.bal = fb
+    ta.bal = tb
+    l.book.accs[src_name] = fa
+    l.book.accs[dst_name] = ta
+    return "ok " + str(fb) + " " + str(tb)
+}
+
+fn cmd_balance(l: &Ledger, name: str) str {
+    if !is_name(name) {
+        return "error syntax"
+    }
+    if !l.book.accs.contains(name) {
+        return "error unknown " + name
+    }
+    return str(l.book.accs[name].bal)
+}
+
+fn cmd_close(l: &mut Ledger, name: str) str {
+    if !is_name(name) {
+        return "error syntax"
+    }
+    if !l.book.accs.contains(name) {
+        return "error unknown " + name
+    }
+    let acc = l.book.accs[name]
+    if acc.bal != 0 {
+        return "error nonzero"
+    }
+    _ = l.book.accs.remove(name)
+    return "ok"
+}
+
+fn cmd_begin(l: &mut Ledger) str {
+    if len(l.stack) >= MAX_DEPTH {
+        return "error depth"
+    }
+    let snap = l.book
+    l.stack.push(snap)
+    return "ok depth " + str(len(l.stack))
+}
+
+fn cmd_commit(l: &mut Ledger) str {
+    if len(l.stack) == 0 {
+        return "error depth"
+    }
+    _ = l.stack.pop()
+    return "ok depth " + str(len(l.stack))
+}
+
+fn cmd_rollback(l: &mut Ledger) str {
+    if let s = l.stack.pop() {
+        l.book = s
+    } else {
+        return "error depth"
+    }
+    return "ok depth " + str(len(l.stack))
+}
+
+fn cmd_report(l: &Ledger) str {
+    if len(l.book.accs) == 0 {
+        return "(empty)"
+    }
+    var out = ""
+    for k in &l.book.accs {
+        if len(out) > 0 {
+            out += " "
+        }
+        out += k + ":" + str(l.book.accs[k].bal)
+    }
+    return out
+}
+
+pub fn ledger_exec(l: &mut Ledger, line: str) str {
+    let ws = words(line)
+    let n = len(ws)
+    if n == 0 {
+        return "error syntax"
+    }
+    let cmd = ws[0]
+    if cmd == "open" && n == 3 {
+        return cmd_open(&mut l, ws[1], ws[2])
+    }
+    if cmd == "deposit" && n == 3 {
+        return cmd_change(&mut l, true, ws[1], ws[2])
+    }
+    if cmd == "withdraw" && n == 3 {
+        return cmd_change(&mut l, false, ws[1], ws[2])
+    }
+    if cmd == "transfer" && n == 4 {
+        return cmd_transfer(&mut l, ws[1], ws[2], ws[3])
+    }
+    if cmd == "balance" && n == 2 {
+        return cmd_balance(&l, ws[1])
+    }
+    if cmd == "close" && n == 2 {
+        return cmd_close(&mut l, ws[1])
+    }
+    if n == 1 {
+        if cmd == "begin" {
+            return cmd_begin(&mut l)
+        }
+        if cmd == "commit" {
+            return cmd_commit(&mut l)
+        }
+        if cmd == "rollback" {
+            return cmd_rollback(&mut l)
+        }
+        if cmd == "report" {
+            return cmd_report(&l)
+        }
+    }
+    return "error syntax"
+}
