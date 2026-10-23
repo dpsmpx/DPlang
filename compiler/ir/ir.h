@@ -189,6 +189,9 @@ struct Inst {
     Place dst;
     Rvalue rv;
     Span span;
+    // Р56: Assign плавающего значения в память класса D — значение
+    // становится каноническим NaN до записи (место вычисляется один раз).
+    bool canon = false;
 };
 
 enum class TermKind : uint8_t {

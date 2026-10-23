@@ -8,6 +8,8 @@
 # ключом отладки. Инструменты: tools/setup/cross_android.sh и
 # tools/setup/graphics_android.sh. Запуск — на устройстве с Vulkan:
 #   adb install -r triangle.apk
+# (ключ у каждой сборки новый: прежнюю — adb uninstall org.dpl.triangle).
+# Сборки для автора — в ветку apk-builds: tools/apk/publish.sh triangle.
 # Сверка первого кадра — сообщением на экране.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -30,8 +32,10 @@ libs="$(sed -n 's|^// Компоновка хоста (android-arm64): libtriang
     -Wl,-z,max-page-size=16384 -L"$SDL/lib" $libs
 "$LLVM/llvm-strip" --strip-unneeded -o "$OUT/stage/lib/arm64-v8a/libSDL3.so" "$SDL/lib/libSDL3.so"
 # 2. Классы Java SDL3 → classes.dex.
-javac -nowarn -source 11 -target 11 -cp "$JAR" -d "$OUT/classes" $(find "$SDL/java" -name '*.java') 2> "$OUT/javac.log"
-"$BT/d8" --release --min-api 24 --lib "$JAR" --output "$OUT/stage" $(find "$OUT/classes" -name '*.class')
+mapfile -d '' java < <(find "$SDL/java" -name '*.java' -print0)
+javac -nowarn -source 11 -target 11 -cp "$JAR" -d "$OUT/classes" "${java[@]}" 2> "$OUT/javac.log"
+mapfile -d '' classes < <(find "$OUT/classes" -name '*.class' -print0)
+"$BT/d8" --release --min-api 24 --lib "$JAR" --output "$OUT/stage" "${classes[@]}"
 # 3. Пакет: манифест, dex, библиотеки; выравнивание и подпись.
 "$BT/aapt2" link -o "$OUT/base.apk" -I "$JAR" --manifest "$HERE/AndroidManifest.xml" \
     --min-sdk-version 24 --target-sdk-version 35

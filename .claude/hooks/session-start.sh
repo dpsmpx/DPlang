@@ -6,7 +6,8 @@
 #   * то, что нужно tools/check/run.sh: python3 и git (зависимостей
 #     у проверок пока нет);
 #   * ветки с работой, не влитой в main, — свежие первыми: с них
-#     продолжают, а не делают заново.
+#     продолжают, а не делают заново; apk-builds — хранилище сборок
+#     (CLAUDE.md, «Сборки APK»), не работа.
 #
 # Только в веб-сессии; повторный запуск ничего не ставит заново.
 # ============================================================
@@ -40,7 +41,7 @@ fi
         found=1
         echo "  ${ref#origin/}: коммитов $n, последний — $(git -C "$PROJ" log -1 --format='%cr: %s' "$ref")"
     done < <(git -C "$PROJ" for-each-ref --sort=-committerdate --format='%(refname:short)' \
-                 refs/remotes/origin | grep -v -e '^origin$' -e '^origin/HEAD$' -e '^origin/main$' | head -8)
+                 refs/remotes/origin | grep -v -e '^origin$' -e '^origin/HEAD$' -e '^origin/main$' -e '^origin/apk-builds$' | head -8)
     [ "$found" -eq 1 ] || echo "  нет"
     echo "  Перед работой сверить с ними задачу: git log origin/main..origin/<ветка>."
 } || true

@@ -11,6 +11,8 @@
 #include "ir/lower.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <map>
 #include <unordered_map>
 
@@ -306,31 +308,118 @@ private:
     }
 
     void inst(InstKind k, Place dst, Rvalue rv, Span span) {
-        bool canon = k == InstKind::Assign && f_.det && makes_float(rv);
+        if (f_.det) seen(k, dst, rv, span);
+        // Класс D: NaN, записанный в память, — канонический (Р56).
+        bool canon = k == InstKind::Assign && f_.det && makes_float(rv) && !raw(dst);
+        // Результат функции класса D выходит из класса D — канон на месте
+        // вызова (Р56). Через указатель зовут обёртку `@export`, канон — в ней.
+        if (k == InstKind::Assign && !f_.det && rv.kind == RvKind::Call && rv.type && sema::is_float(rv.type) &&
+            det_callee(rv)) {
+            canon = true;
+        }
         Inst i;
         i.kind = k;
         i.dst = dst;
         i.rv = std::move(rv);
         i.span = span;
+        i.canon = canon;  // до записи: место не читается и не пишется второй раз
         f_.blocks[cur_].insts.push_back(std::move(i));
-        if (!canon) return;
-        // Класс D: NaN после операции — канонический (Р56).
+    }
+
+    // dst = canon dst.
+    void push_canon(Place dst, Span span) {
         Inst c;
         c.kind = InstKind::Assign;
-        c.dst = dst;
-        c.rv = make(RvKind::Unary, f_.blocks[cur_].insts.back().rv.type);
+        c.rv = make(RvKind::Unary, place_type(out_, f_, dst));
         c.rv.un = UnKind::Canon;
-        c.rv.ops.push_back(copy(std::move(dst)));
+        c.rv.ops.push_back(copy(dst));
+        c.dst = std::move(dst);
         c.span = span;
         f_.blocks[cur_].insts.push_back(std::move(c));
     }
 
-    // Операция, которая может дать NaN с битами процессора: арифметика,
-    // смена знака, приведение к плавающему, abs, min и max плавающих.
+    // Класс D (Р56): переменная или временное с плавающим значением целиком
+    // может держать NaN с битами процессора — их не видно, пока значение
+    // идёт в арифметику, сравнения, приведения, abs, min, max и аргументы
+    // функций класса D. Память (поля, элементы, место по ссылке) — только
+    // канонический NaN.
+    bool raw(const Place& p) const {
+        if (!p.proj.empty() || p.local >= f_.locals.size()) return false;
+        const Local& l = f_.locals[p.local];
+        return (l.kind == LocalKind::Param || l.kind == LocalKind::Var || l.kind == LocalKind::Temp) &&
+               sema::is_float(l.type);
+    }
+
+    // Значение становится видно: операнд — каноническая копия во временном.
+    void seen_op(Operand& op, Span span) {
+        if (op.kind == OpKind::Const || !raw(op.place)) return;
+        uint32_t t = temp(f_.locals[op.place.local].type);
+        Rvalue c = make(RvKind::Unary, f_.locals[t].type);
+        c.un = UnKind::Canon;
+        c.ops.push_back(copy(op.place));
+        Inst i;
+        i.kind = InstKind::Assign;
+        i.dst = local(t);
+        i.rv = std::move(c);
+        i.span = span;
+        f_.blocks[cur_].insts.push_back(std::move(i));
+        op = Operand{op.kind, local(t), {}};
+    }
+
+    // Операнды rv, которые здесь становятся видны (Р56), — канонические.
+    void seen(InstKind k, const Place& dst, Rvalue& rv, Span span) {
+        bool see = true;
+        bool callee_det = false;
+        switch (rv.kind) {
+            case RvKind::Binary:
+            case RvKind::Unary: see = false; break;
+            case RvKind::Cast: see = rv.cast == CastKind::ToStr; break;
+            case RvKind::Use: see = !(k == InstKind::Assign && raw(dst)); break;
+            case RvKind::Intrinsic:
+                see = !(rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min ||
+                        rv.intrinsic == Intrinsic::Max);
+                break;
+            case RvKind::Call: callee_det = det_callee(rv); break;
+            default: break;
+        }
+        if (see)
+            for (Operand& op : rv.ops) seen_op(op, span);
+        for (Arg& a : rv.args) {
+            if (a.kind == Arg::Kind::Value) {
+                if (!callee_det) seen_op(a.op, span);
+            } else if (raw(a.place)) {
+                // По ссылке вызванная функция читает место как память.
+                if (a.kind == Arg::Kind::Mut) {
+                    push_canon(a.place, span);
+                } else {
+                    Operand op = copy(a.place);
+                    seen_op(op, span);
+                    a.place = op.place;
+                }
+            }
+        }
+        if (rv.has_place && raw(rv.place)) {  // AddrOf: адрес для C
+            Operand op = copy(rv.place);
+            seen_op(op, span);
+            rv.place = op.place;
+        }
+    }
+
+    // Вызов функции dpl класса D.
+    bool det_callee(const Rvalue& rv) const {
+        const sema::FnDef* d = rv.fn < out_.fns.size() ? out_.fns[rv.fn].def : nullptr;
+        return d && !d->is_extern && sema::is_det(*d);
+    }
+
+    // Плавающий результат, который может нести NaN с битами процессора:
+    // арифметика, смена знака, приведение к плавающему, abs, min и max
+    // плавающих, вызов (результат функции класса D в классе D — без
+    // канона, Р56).
     static bool makes_float(const Rvalue& rv) {
         if (!rv.type || !sema::is_float(rv.type)) return false;
         switch (rv.kind) {
             case RvKind::Binary: return true;
+            case RvKind::Call: return true;
             case RvKind::Unary: return rv.un == UnKind::Neg;
             case RvKind::Cast: return true;
             case RvKind::Intrinsic:
@@ -379,6 +468,7 @@ private:
         Term t;
         t.kind = TermKind::Return;
         t.has_value = value;
+        // Р56: возврат из класса D — канон на месте вызова вне класса D и в обёртке `@export`.
         if (value) t.value = Operand{OpKind::Move, local(ret_), {}};
         t.span = span;
         terminate(t);
@@ -405,6 +495,8 @@ private:
     Operand cfloat(double v, const Type* t) {
         Operand o;
         o.c.kind = Const::Kind::Float;
+        // NaN постоянной — канонический (Р56): так же пишет его и C-бэкенд (NAN).
+        if (std::isnan(v)) v = std::copysign(std::numeric_limits<double>::quiet_NaN(), 1.0);
         o.c.f = t->kind == TK::F32 ? static_cast<double>(static_cast<float>(v)) : v;
         o.c.type = t;
         return o;
@@ -1827,6 +1919,7 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
         }
     }
     out->fns.resize(order.size());
+    for (size_t i = 0; i < order.size(); i++) out->fns[i].def = order[i];  // класс вызываемой — до её понижения
     std::unordered_map<std::string, uint32_t> strings;  // строка → номер в out->strings
     for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, strings, out->fns[i]).run(*order[i]);
     // Библиотеки `@link` — только у вызываемых функций C: импорт привязки

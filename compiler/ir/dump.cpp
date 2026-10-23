@@ -238,7 +238,9 @@ private:
 
     void inst(const Inst& i) {
         switch (i.kind) {
-            case InstKind::Assign: line(place(i.dst) + " = " + rvalue(i.rv), i.span); break;
+            case InstKind::Assign:  // Р56: canon(…) — канон до записи
+                line(place(i.dst) + " = " + (i.canon ? "canon(" + rvalue(i.rv) + ")" : rvalue(i.rv)), i.span);
+                break;
             case InstKind::Eval: line("eval " + rvalue(i.rv), i.span); break;
             case InstKind::Drop: line("drop " + place(i.dst), i.span); break;
         }

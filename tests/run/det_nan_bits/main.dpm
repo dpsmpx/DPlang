@@ -1,0 +1,73 @@
+// spec: module.det trap.float ffi.struct
+// Биты NaN из кода класса D там, где их видно (Р56): возврат, поле,
+// литерал, элемент, место по ссылке, встроенный метод, `some`, `Map`,
+// постоянная, обёртка `@export`. Все цели и интерпретатор дают
+// канонический NaN: f64 — 9221120237041090560 (0x7FF8000000000000), f32 —
+// 2143289344 (0x7FC00000). Без канона x86-64 дал бы отрицательный NaN у
+// z / z, arm64 — у -(z / z), интерпретатор — у отрицательной постоянной.
+@det import calc
+
+@union
+struct B64 {
+    f: f64
+    u: u64
+}
+
+@union
+struct B32 {
+    f: f32
+    u: u32
+}
+
+fn b(x: f64) str {
+    let v = B64 { f: x }
+    return str(v.u)
+}
+
+fn b32(x: f32) str {
+    let v = B32 { f: x }
+    return str(v.u)
+}
+
+fn main() {
+    var zs: List[f64] = []
+    zs.push(0.0)
+    let z = zs[0]
+    println("ret " + b(calc.ret(z)))
+    println("neg_local " + b(calc.neg_local(z)))
+    let p = calc.fields(z)
+    println("fields " + b(p.x) + " " + b32(p.y))
+    let q = calc.literal(z)
+    println("literal " + b(q.x) + " " + b32(q.y))
+    var xs: List[f64] = []
+    calc.push(&mut xs, z)
+    println("push " + b(xs[0]) + " " + b(xs[1]))
+    calc.element(&mut xs, z)
+    println("element " + b(xs[0]))
+    var r: f64 = 1.0
+    calc.through(&mut r, z)
+    println("through " + b(r))
+    println("via_call " + b(calc.via_call(z)))
+    println("via_ref " + b(calc.via_ref(z)))
+    if let w = calc.wrapped(z) {
+        println("some " + b(w))
+    }
+    let m = calc.in_map(z)
+    if let v = m.get(1) {
+        println("map " + b(v))
+    }
+    println("accumulate " + b(calc.accumulate(z, 3)))
+    var cs: List[f64] = []
+    let cm = calc.constants(&mut cs)
+    println("constants " + b(cs[0]) + " " + b(cs[1]) + " " + b32(cm))
+    let e: extern fn(f64, bool) f64 = calc.exported
+    println("export " + b(e(z, false)) + " " + b(e(z, true)))
+    // NaN из кода вне класса D — с битами процессора; класс D делает его
+    // каноническим, когда он становится виден.
+    let raw = z / z
+    println("keep " + b(calc.keep(raw)) + " " + b(calc.keep(-raw)))
+    var ys: List[f64] = []
+    calc.store_param(&mut ys, raw)
+    calc.store_param(&mut ys, -raw)
+    println("store_param " + b(ys[0]) + " " + b(ys[1]))
+}

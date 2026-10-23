@@ -1,0 +1,106 @@
+// Класс D (Р56): NaN канонический там, где его видно; внутри выражения и
+// в локальных переменных — биты процессора. z — ноль из памяти: компилятор
+// C не свернёт z / z в постоянную.
+const N: f64 = 0.0 / 0.0
+const M: f32 = -(0.0 / 0.0)
+
+pub struct P {
+    x: f64
+    y: f32
+}
+
+pub fn ret(z: f64) f64 {
+    return z / z
+}
+
+pub fn neg_local(z: f64) f64 {
+    let n = z / z
+    return -n
+}
+
+pub fn fields(z: f64) P {
+    var p = P { x: 0.0, y: 0.0 }
+    p.x = z / z
+    p.y = f32(-(z / z))
+    return p
+}
+
+pub fn literal(z: f64) P {
+    let n = z / z
+    return P { x: -n, y: f32(n) }
+}
+
+pub fn push(xs: &mut List[f64], z: f64) {
+    let n = z / z
+    xs.push(n)
+    xs.push(-n)
+}
+
+pub fn element(xs: &mut List[f64], z: f64) {
+    xs[0] = -(z / z)
+}
+
+pub fn through(r: &mut f64, z: f64) {
+    r = -(z / z)
+}
+
+pub fn keep(x: f64) f64 {
+    var acc = x
+    acc = acc * 1.0
+    return acc
+}
+
+pub fn store_param(xs: &mut List[f64], x: f64) {
+    xs.push(x)
+}
+
+fn pass(a: f64) f64 {
+    return a
+}
+
+pub fn via_call(z: f64) f64 {
+    let n = -(z / z)
+    return pass(n)
+}
+
+fn read(r: &f64) f64 {
+    return r
+}
+
+pub fn via_ref(z: f64) f64 {
+    let n = -(z / z)
+    return read(&n)
+}
+
+pub fn wrapped(z: f64) ?f64 {
+    return -(z / z)
+}
+
+pub fn in_map(z: f64) Map[i64, f64] {
+    var m: Map[i64, f64] = []
+    m[1] = -(z / z)
+    return m
+}
+
+pub fn accumulate(z: f64, n: i64) f64 {
+    var acc: f64 = 0.0
+    for i in 0..n {
+        acc = acc + z / z
+    }
+    return acc
+}
+
+pub fn constants(xs: &mut List[f64]) f32 {
+    xs.push(N)
+    xs.push(-N)
+    return M
+}
+
+// Значение функции — обёртка `@export`: результат уходит из класса D в C.
+@export
+pub fn exported(z: f64, neg: bool) f64 {
+    if neg {
+        return -(z / z)
+    }
+    return z / z
+}
