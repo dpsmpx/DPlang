@@ -1,0 +1,95 @@
+fn copies.f(%0 x: i64) i64
+  tmp %1: i64
+  tmp %2: i64
+bb0:
+  %2 = add copy %0, 1:i64  @6:14
+  %1 = move %2  @6:5
+  return move %1  @6:5
+
+fn copies.grow(%0 xs: &mut List[i64]) i64
+  tmp %1: i64
+  tmp %2: i64
+bb0:
+  eval push(&mut %0, 1:i64)  @10:5
+  %2 = len(copy %0)  @11:12
+  %1 = move %2  @11:5
+  return move %1  @11:5
+
+fn copies.first(%0 xs: List[i64], %1 n: i64) i64
+  tmp %2: i64
+  tmp %3: i64
+  tmp %4: i64
+bb0:
+  %3 = 0:i64  @15:15
+  %4 = add copy %0[%3], copy %1  @15:18
+  %2 = move %4  @15:5
+  drop %0  @15:5
+  return move %2  @15:5
+
+fn copies.main()
+  var %0 m: Map[i64, i64]
+  tmp %1: Map[i64, i64]
+  tmp %2: i64
+  var %3 xs: List[i64]
+  tmp %4: List[i64]
+  var %5 s: str
+  var %6 a: bool
+  tmp %7: i64
+  tmp %8: bool
+  var %9 b: i64
+  tmp %10: i64
+  tmp %11: i64
+  tmp %12: i64
+  tmp %13: str
+  var %14 c: i64
+  tmp %15: List[i64]
+  tmp %16: i64
+  tmp %17: i64
+  tmp %18: str
+  tmp %19: str
+  tmp %20: str
+  tmp %21: str
+  tmp %22: str
+  tmp %23: str
+bb0:
+  %1 = Map[i64, i64] []  @19:28
+  %0 = move %1  @19:5
+  drop %1  @19:5
+  %2 = 1:i64  @20:7
+  eval map_set(&mut %0, copy %2, 2:i64)  @20:5
+  %4 = List[i64] [5:i64]  @21:25
+  %3 = move %4  @21:5
+  drop %4  @21:5
+  %5 = "a"  @22:5
+  %7 = call copies.f(1:i64)  @24:24
+  %8 = map_contains(copy %0, copy %7)  @24:13
+  %6 = move %8  @24:5
+  %10 = call copies.f(2:i64)  @25:23
+  %11 = call copies.first(copy %3, move %10)  @25:13
+  %9 = move %11  @25:5
+  %12 = call copies.f(3:i64)  @26:14
+  %13 = str copy %12 to str  @26:10
+  %5 = concat copy %5, copy %13  @26:5
+  drop %13  @26:5
+  %15 = copy %3  @28:19
+  %16 = call copies.grow(&mut %3)  @28:23
+  %17 = call copies.first(move %15, move %16)  @28:13
+  %14 = move %17  @28:5
+  drop %15  @28:5
+  %18 = str copy %6 to str  @29:13
+  %19 = str copy %9 to str  @29:22
+  %20 = concat copy %18, copy %19  @29:20
+  %21 = concat copy %20, copy %5  @29:29
+  %22 = str copy %14 to str  @29:35
+  %23 = concat copy %21, copy %22  @29:33
+  eval println(copy %23)  @29:5
+  drop %23  @29:5
+  drop %22  @29:5
+  drop %21  @29:5
+  drop %20  @29:5
+  drop %19  @29:5
+  drop %18  @29:5
+  drop %5  @30:1
+  drop %3  @30:1
+  drop %0  @30:1
+  return  @30:1

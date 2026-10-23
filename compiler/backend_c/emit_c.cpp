@@ -747,8 +747,9 @@ private:
     }
 
     // Методы Map (Р54). Поиск — открытая адресация по индексу slots
-    // (заполнен не больше чем наполовину). Пары лежат в порядке вставки, но
-    // наружу он не виден: ключи отдаются по возрастанию (dp_mkeys).
+    // (заполнен не больше чем наполовину). Пары лежат в порядке вставки, на
+    // место удалённой встаёт последняя; наружу порядок не виден: ключи
+    // отдаются по возрастанию (dp_mkeys).
     std::string map_methods(const Type* t) {
         std::string n = ctype(t), m = mangle(t), kc = ctype(t->key), vc = ctype(t->elem);
         std::string km = mangle(t->key), vm = mangle(t->elem);
@@ -802,14 +803,24 @@ private:
             b += "    " + o + " r = {0};\n    int64_t p = dp_mfind__" + m + "(m, key);\n";
             b += "    if (p >= 0) {\n        " + set_some(t->elem, "r", copy_of(t->elem, "m->vals[p]"), "        ") +
                  "\n    }\n    return r;\n}\n\n";
-            // Удаление сохраняет порядок остальных пар: сдвиг и индекс заново — O(n).
+            // Удаление — O(1) в среднем: слот пары убирается сдвигом назад
+            // (линейное пробирование), на место пары встаёт последняя.
             b += "DP_INLINE " + o + " dp_mremove__" + m + "(" + n + "* m, " + kc + " key, const char* loc) {\n";
-            b += "    " + o + " r = {0};\n    int64_t p = dp_mfind__" + m + "(m, &key);\n" + drop_stmt(t->key, "key");
-            b += "    if (p < 0) return r;\n    " + set_some(t->elem, "r", "m->vals[p]", "    ") + "\n" +
-                 drop_stmt(t->key, "m->keys[p]");
-            b += "    memmove(&m->keys[p], &m->keys[p + 1], (size_t)(m->len - 1 - p) * sizeof(" + kc + "));\n";
-            b += "    memmove(&m->vals[p], &m->vals[p + 1], (size_t)(m->len - 1 - p) * sizeof(" + vc + "));\n";
-            b += "    m->len--;\n    dp_mindex__" + m + "(m, loc);\n    return r;\n}\n\n";
+            b += "    (void)loc;\n    " + o + " r = {0};\n    int64_t p = dp_mfind__" + m + "(m, &key);\n" +
+                 drop_stmt(t->key, "key");
+            b += "    if (p < 0) return r;\n    " + set_some(t->elem, "r", "m->vals[p]", "    ") + "\n";
+            b += "    uint64_t mask = (uint64_t)m->nslots - 1;\n";
+            b += "    uint64_t i = " + hash_of(t->key, "m->keys[p]") + " & mask;\n";
+            b += "    while (m->slots[i] != p + 1) i = (i + 1) & mask;\n" + drop_stmt(t->key, "m->keys[p]");
+            b += "    for (uint64_t j = (i + 1) & mask; m->slots[j] != 0; j = (j + 1) & mask) {\n";
+            b += "        uint64_t h = " + hash_of(t->key, "m->keys[m->slots[j] - 1]") + " & mask;\n";
+            b += "        if (((j - h) & mask) >= ((j - i) & mask)) {\n";
+            b += "            m->slots[i] = m->slots[j];\n            i = j;\n        }\n    }\n";
+            b += "    m->slots[i] = 0;\n    int64_t last = m->len - 1;\n    if (p != last) {\n";
+            b += "        uint64_t k = " + hash_of(t->key, "m->keys[last]") + " & mask;\n";
+            b += "        while (m->slots[k] != last + 1) k = (k + 1) & mask;\n";
+            b += "        m->slots[k] = p + 1;\n        m->keys[p] = m->keys[last];\n        m->vals[p] = m->vals[last];\n";
+            b += "    }\n    m->len--;\n    return r;\n}\n\n";
         }
         if (mangled_.count("L_" + km)) {
             std::string l = "dp_L_" + km;

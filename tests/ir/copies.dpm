@@ -1,0 +1,30 @@
+// spec: expr.order memory.values
+// Место левее вызова читается заранее (копия во временное), только если
+// правее его меняют: `&mut` или изменяющий метод. Вызов без них место не
+// меняет — копии `Map`, `List`, `str` нет.
+fn f(x: i64) i64 {
+    return x + 1
+}
+
+fn grow(xs: &mut List[i64]) i64 {
+    xs.push(1)
+    return len(xs)
+}
+
+fn first(xs: List[i64], n: i64) i64 {
+    return xs[0] + n
+}
+
+fn main() {
+    var m: Map[i64, i64] = []
+    m[1] = 2
+    var xs: List[i64] = [5]
+    var s = "a"
+    // без копии: f не меняет m, xs, s
+    let a = m.contains(f(1))
+    let b = first(xs, f(2))
+    s += str(f(3))
+    // с копией: grow меняет xs правее
+    let c = first(xs, grow(&mut xs))
+    println(str(a) + str(b) + s + str(c))
+}

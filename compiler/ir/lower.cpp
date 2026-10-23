@@ -691,17 +691,20 @@ private:
         return o;
     }
 
-    // Операнды по порядку: место левее выражения с действием читается сразу.
+    // Операнды по порядку: место левее выражения, которое меняет его корень,
+    // читается сразу. Иначе — без копии: другого пути изменить переменную
+    // нет (changed), а копия `List`, `Map` или `str` стоит O(n).
     std::vector<Operand> exprs(const std::vector<const Expr*>& es, bool tail_trap = false) {
         std::vector<Operand> out;
         for (size_t i = 0; i < es.size(); i++) {
-            bool later = false, trap = tail_trap;
+            bool trap = tail_trap;
+            Roots roots;
             for (size_t j = i + 1; j < es.size(); j++) {
-                later = later || has_effect(es[j]);
                 trap = trap || may_trap(es[j]);
+                changed(es[j], roots);
             }
             Operand o = expr(es[i]);
-            if (later) o = stabilize(std::move(o), es[i]->span);
+            if (o.kind == OpKind::Copy && hits(roots, o.place)) o = stabilize(std::move(o), es[i]->span);
             if (trap) o = force(std::move(o), es[i]->span);
             out.push_back(std::move(o));
         }
@@ -1172,7 +1175,9 @@ private:
                         if ((trap || later) && !hits(roots, a.place)) probe(a.place, args[i]->span);
                     } else {
                         a.op = expr(args[i]);
-                        if (later) a.op = stabilize(std::move(a.op), args[i]->span);
+                        if (a.op.kind == OpKind::Copy && hits(roots, a.op.place)) {
+                            a.op = stabilize(std::move(a.op), args[i]->span);
+                        }
                         if (trap) a.op = force(std::move(a.op), args[i]->span);
                     }
                     rv.args.push_back(std::move(a));
@@ -1475,7 +1480,7 @@ private:
         }
         // `x op= e` — `x = x op e`; x читается до e.
         Operand cur = copy(p);
-        if (has_effect(a->value)) cur = stabilize(std::move(cur), a->target->span);
+        if (hits(changed(a->value), p)) cur = stabilize(std::move(cur), a->target->span);
         if (may_trap(a->value)) cur = force(std::move(cur), a->target->span);
         Operand rhs = expr(a->value);
         BinKind k = BinKind::Add;
