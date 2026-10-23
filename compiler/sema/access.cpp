@@ -81,8 +81,6 @@ bool derived(const Local* l, const Local* var, const Iters& iters) {
     return false;
 }
 
-bool within(Span a, Span b) { return a.file == b.file && a.begin >= b.begin && a.end <= b.end; }
-
 // Связь двух путей от одного корня по первому расхождению: overlap — одно
 // место или часть и целое; fields, const_index — места не пересекаются;
 // computed_index — могут совпасть.
@@ -118,9 +116,21 @@ void Checker::note_write(Expr* place, Write how) {
     const Local* root = path(place, probe_iter_, steps);
     const Local* base = raw_base(place);
     if (!root || !base) return;
-    // Цель записи при выводе её типа прочитана — это не чтение корня.
+    // Цель записи при выводе её типа прочитана — это не чтение корня; индекс
+    // в ней (`xs[xs[0]] = 1`) — чтение.
+    std::vector<const Expr*> chain;
+    for (Expr* e = place; e;) {
+        e = bare(e);
+        chain.push_back(e);
+        if (auto* f = as<FieldExpr>(e)) e = f->object;
+        else if (auto* i = as<IndexExpr>(e)) e = i->object;
+        else if (auto* sl = as<SliceExpr>(e)) e = sl->object;
+        else e = nullptr;
+    }
     probe_reads_.erase(std::remove_if(probe_reads_.begin(), probe_reads_.end(),
-                                      [&](const ProbeRead& r) { return within(r.place->span, place->span); }),
+                                      [&](const ProbeRead& r) {
+                                          return std::find(chain.begin(), chain.end(), r.place) != chain.end();
+                                      }),
                        probe_reads_.end());
     for (const ProbeLoop& L : probe_loops_) {
         if (derived(base, L.var, probe_iter_)) continue;
