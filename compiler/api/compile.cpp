@@ -12,7 +12,6 @@ std::unique_ptr<sema::Program> check(const std::string& root_path, const Compile
     lo.max_nesting = opt.max_nesting;
     auto prog = sema::load_program(root_path, lo, sources, diags);
     if (!prog || !prog->load_ok) return prog;
-    prog->access = opt.access;
     sema::collect(*prog, diags);
     sema::check(*prog, diags);
     return prog;

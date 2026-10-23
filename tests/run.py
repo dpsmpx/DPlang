@@ -119,8 +119,6 @@ SUITES = {
     'fail': ('.dpm', DPL, lambda name, path: ['check', name]),
     'diag': ('.dpm', DPL, lambda name, path: ['check', '--format=json', name]),
     'ir': ('.dpm', DPL, lambda name, path: ['debug', 'ir', name]),
-    # Замер О4: события доступа `debug access` (compiler/sema/access.h).
-    'access': ('.dpm', DPL, lambda name, path: ['debug', 'access', name]),
     'run': ('.dpm', DPL, lambda name, path: ['debug', 'run', name] + program_args(path)),
     'fmt': ('.dpm', DPL, lambda name, path: ['fmt', name]),
     # X.args рядом — флаги команды (например, --timeout).
@@ -338,9 +336,9 @@ def build_pass_one(arg, cross=None, bless=False):
         r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'build: [timeout {TIMEOUT} s]'
-    if r.returncode == 1:
+    if r.returncode == 1 and suite == 'run':
         return None  # программа не проходит проверку: её диагностику сверяет набор run
-    if r.returncode != 0:
+    if r.returncode != 0:  # у набора ffi диагностику никто не сверяет: отказ — сбой
         return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
     try:
         p = subprocess.run(runner + [exe] + program_args(path), capture_output=True, text=True,

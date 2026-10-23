@@ -1,7 +1,9 @@
-// Замер О4 (sema/access.h): доступы, которые отвергли бы правила-кандидаты,
-// — событиями журнала вместо отказа. Ведётся только у `dpl debug access`.
+// Исключительный изменяемый доступ (Р66; docs/spec/core.md, ref.alias,
+// stmt.for, expr.order). Место — путь от переменной: поля и постоянные
+// индексы; два места пересекаются, если одно — начало другого или их
+// индексы вычислены. Правило одно для вызова (E0502), обхода и `parallel
+// for` (E0412) и вида левее действия (E0502).
 #include <algorithm>
-#include <string_view>
 
 #include "sema/checker.h"
 
@@ -81,43 +83,36 @@ bool derived(const Local* l, const Local* var, const Iters& iters) {
     return false;
 }
 
-// Связь двух путей от одного корня по первому расхождению: overlap — одно
-// место или часть и целое; fields, const_index — места не пересекаются;
-// computed_index — могут совпасть.
-const char* relation(const std::vector<Step>& a, const std::vector<Step>& b) {
+// Пути от одного корня пересекаются: до первого расхождения одинаковы, и
+// расхождение — не разные поля и не разные постоянные индексы.
+bool crosses(const std::vector<Step>& a, const std::vector<Step>& b) {
     for (size_t i = 0; i < a.size() && i < b.size(); i++) {
-        if (a[i].kind != b[i].kind || a[i].kind == Step::Index || a[i].kind == Step::Slice) return "computed_index";
-        if (a[i].value != b[i].value) return a[i].kind == Step::Field ? "fields" : "const_index";
+        if (a[i].kind != b[i].kind || a[i].kind == Step::Index || a[i].kind == Step::Slice) return true;
+        if (a[i].value != b[i].value) return false;
     }
-    return "overlap";
+    return true;
 }
 
-void push(AccessLog& log, const char* rule, const char* kind, Span span, Span other, const Local* root,
-          std::string detail, const char* rel = "") {
-    AccessEvent e;
-    e.rule = rule;
-    e.kind = kind;
-    e.span = span;
-    e.other = other;
-    e.root = root ? root->name : "";
-    e.rel = rel;
-    e.detail = std::move(detail);
-    log.events.push_back(std::move(e));
+// Запись места для сообщения: `xs`, `w.bodies`, `xs[0]`, `xs[i]`.
+std::string text(Expr* e) {
+    e = bare(e);
+    if (auto* n = as<NameExpr>(e)) return n->name;
+    if (auto* f = as<FieldExpr>(e)) return text(f->object) + "." + f->name;
+    if (auto* i = as<IndexExpr>(e)) {
+        Expr* ix = bare(i->index);
+        if (auto* k = as<IntExpr>(ix)) return text(i->object) + "[" + std::to_string(k->value) + "]";
+        if (auto* n = as<NameExpr>(ix)) return text(i->object) + "[" + n->name + "]";
+        return text(i->object) + "[...]";
+    }
+    if (auto* s = as<SliceExpr>(e)) return text(s->object) + "[..]";
+    return "...";
 }
 
-std::string loop_detail(const char* coll, bool mut) { return std::string(coll) + (mut ? " mut" : ""); }
-
-}  // namespace
-
-void Checker::note_write(Expr* place, Write how) {
-    AccessLog* log = probe();
-    if (!log || probe_loops_.empty() || !place) return;
-    std::vector<Step> steps;
-    const Local* root = path(place, probe_iter_, steps);
-    const Local* base = raw_base(place);
-    if (!root || !base) return;
-    // Цель записи при выводе её типа прочитана — это не чтение корня; индекс
-    // в ней (`xs[xs[0]] = 1`) — чтение.
+// Чтения коллекции обхода, которые сами — место записи или обхода, и
+// цепочка его объектов: это не чтения. Индекс в месте (`xs[xs[0]] = 1`) —
+// чтение.
+template <class Reads>
+void drop_reads(Reads& reads, Expr* place) {
     std::vector<const Expr*> chain;
     for (Expr* e = place; e;) {
         e = bare(e);
@@ -127,127 +122,338 @@ void Checker::note_write(Expr* place, Write how) {
         else if (auto* sl = as<SliceExpr>(e)) e = sl->object;
         else e = nullptr;
     }
-    probe_reads_.erase(std::remove_if(probe_reads_.begin(), probe_reads_.end(),
-                                      [&](const ProbeRead& r) {
-                                          return std::find(chain.begin(), chain.end(), r.place) != chain.end();
-                                      }),
-                       probe_reads_.end());
-    for (const ProbeLoop& L : probe_loops_) {
-        if (derived(base, L.var, probe_iter_)) continue;
-        if (L.root && root == L.root) {
-            // Длина или ключи обходимой коллекции: метод формы, `&mut` или
-            // присваивание над ней целиком или над тем, что её содержит.
+    reads.erase(std::remove_if(reads.begin(), reads.end(),
+                               [&](const auto& r) { return std::find(chain.begin(), chain.end(), r.place) != chain.end(); }),
+                reads.end());
+}
+
+// Что обходит цикл — для сообщения.
+std::string over(TK coll) {
+    if (coll == TK::Map) return "its Map; iterate over a copy of the keys: 'for k in &m.keys()'";
+    if (coll == TK::Slice) return "its slice; iterate over a slice of a copy made before the loop";
+    return "it";
+}
+
+}  // namespace
+
+bool Checker::read_only_loop(const Local* l) const {
+    auto it = loop_iters_.find(l);
+    if (it == loop_iters_.end() || !it->second->type) return false;
+    TK k = it->second->type->kind;
+    return k == TK::Map || k == TK::Slice || k == TK::Str;
+}
+
+bool Checker::overlap(Expr* a, Expr* b) const {
+    std::vector<Step> pa, pb;
+    const Local* ra = path(a, loop_iters_, pa);
+    const Local* rb = path(b, loop_iters_, pb);
+    return !ra || !rb || ra != rb || crosses(pa, pb);
+}
+
+void Checker::note_write(Expr* place, Write how, const char* why, bool loops) {
+    if (access_loops_.empty() || !place) return;
+    std::vector<Step> steps;
+    const Local* root = path(place, loop_iters_, steps);
+    const Local* base = raw_base(place);
+    if (!root || !base) return;
+    drop_reads(loop_reads_, place);  // цель записи при выводе её типа прочитана
+    std::string head = std::string("cannot ") + why + " '" + text(place) + "'";
+    for (const AccessLoop& L : access_loops_) {
+        if (derived(base, L.var, loop_iters_)) continue;
+        if (loops && L.root && root == L.root && L.coll != TK::Error) {
             std::vector<Step> coll;
-            path(L.iter, probe_iter_, coll);
-            const char* rel = relation(steps, coll);
-            bool apart = std::string_view(rel) == "fields" || std::string_view(rel) == "const_index";
-            bool structural = !apart && steps.size() <= coll.size() && how != Write::Method;
-            push(*log, "loop", structural ? "structural" : "element", place->span, L.head, root,
-                 loop_detail(L.coll, L.mut), rel);
+            path(L.iter, loop_iters_, coll);
+            if (crosses(steps, coll)) {
+                std::string loop = L.mut ? "'for ... in &mut'" : "'for ... in &'";
+                std::string hint = L.coll == TK::List ? "; change it through the loop variable, or iterate over indexes: "
+                                                        "'for i in 0..len(" + text(L.iter) + ")'"
+                                                      : "";
+                error(Code::E0412, place->span, head + " while " + loop + " iterates over " + over(L.coll) + hint);
+                return;
+            }
         }
         if (!L.parallel || base->id >= L.first_inner) continue;
-        // Запись во внешнюю переменную из тела `parallel for` (развилка 6).
-        const char* kind = "var";
-        if (steps.empty()) {
-            if (how == Write::Shape) kind = "structural";
-        } else {
-            bool by_var = false, indexed = false;
-            for (const Step& s : steps) {
-                if (s.kind == Step::Field) continue;
-                indexed = true;
-                auto* n = s.index ? as<NameExpr>(const_cast<Expr*>(s.index)) : nullptr;
-                if (n && n->res.kind == ResKind::Local && n->res.local == L.var) by_var = true;
-            }
-            if (by_var) kind = "index_loopvar";
-            else if (indexed) kind = "index_computed";
+        // Снаружи тела `parallel for` пишется только элемент по переменной
+        // цикла (`out[i]`): итерации идут одновременно.
+        bool by_var = false;
+        for (const Step& s : steps) {
+            auto* n = s.kind == Step::Index ? as<NameExpr>(const_cast<Expr*>(s.index)) : nullptr;
+            if (n && n->res.kind == ResKind::Local && n->res.local == L.var) by_var = true;
         }
-        push(*log, "par", kind, place->span, L.head, root, L.coll);
+        if (by_var && how != Write::Shape) continue;
+        std::string var = L.var ? L.var->name : "i";
+        error(Code::E0412, place->span,
+              head + " inside 'parallel for': iterations run at the same time; write each result to an element "
+                     "indexed by the loop variable, such as 'out[" + var + "]', and combine them after the loop");
+        return;
     }
 }
 
 void Checker::note_use(NameExpr* n) {
-    if (!probe() || probe_loops_.empty() || n->res.kind != ResKind::Local) return;
-    for (size_t k = 0; k < probe_loops_.size(); k++) {
-        if (probe_loops_[k].mut && probe_loops_[k].root == n->res.local) probe_reads_.push_back(ProbeRead{n, k});
+    if (access_loops_.empty() || n->res.kind != ResKind::Local) return;
+    for (size_t k = 0; k < access_loops_.size(); k++) {
+        if (access_loops_[k].mut && access_loops_[k].root == n->res.local) loop_reads_.push_back(LoopRead{n, k});
     }
 }
 
 void Checker::note_extend(Expr* object, Expr* place) {
-    for (ProbeRead& r : probe_reads_) {
+    for (LoopRead& r : loop_reads_) {
         if (r.place == object) r.place = place;
     }
 }
 
-void Checker::probe_loop_begin(ForStmt* s) {
-    AccessLog* log = probe();
-    if (!log) return;
-    ProbeLoop L;
+void Checker::loop_begin(ForStmt* s) {
+    AccessLoop L;
     L.var = s->local;
     L.mut = s->mode == ForMode::Mut;
     L.parallel = s->parallel;
     L.first_inner = s->local ? s->local->id : next_local_;
-    L.head = s->iter ? s->iter->span : s->var_span;
     L.iter = s->iter;
-    L.coll = "range";
-    if ((s->mode == ForMode::Ref || L.mut) && s->iter) {
+    if ((s->mode == ForMode::Ref || L.mut) && s->iter && s->iter->type) {
+        TK k = s->iter->type->kind;
+        if (k == TK::List || k == TK::Map || k == TK::Slice) L.coll = k;
+        // Строка — как список байтов; её срез — копия (ref.slices): обход
+        // среза строки корень не держит.
+        if (k == TK::Str && !as<SliceExpr>(bare(s->iter))) L.coll = TK::List;
         std::vector<Step> steps;
-        L.root = path(s->iter, probe_iter_, steps);
-        const Type* t = s->iter->type;
-        L.coll = !t ? "?" : t->kind == TK::List ? "list" : t->kind == TK::Map ? "map" : t->kind == TK::Str ? "str" : "slice";
-        if (s->local) probe_iter_[s->local] = s->iter;
-        // Второй обход того же корня, если хоть один из двух меняет его.
+        L.root = path(s->iter, loop_iters_, steps);
+        if (s->local) loop_iters_[s->local] = s->iter;
+        // Второй обход той же коллекции, если хоть один из двух её меняет; её
+        // чтение в заголовке сверяет это правило, а не правило чтения.
         const Local* base = raw_base(s->iter);
-        for (const ProbeLoop& o : probe_loops_) {
-            if (!o.root || o.root != L.root || !(o.mut || L.mut) || derived(base, o.var, probe_iter_)) continue;
+        drop_reads(loop_reads_, s->iter);
+        for (const AccessLoop& o : access_loops_) {
+            if (!o.root || o.root != L.root || o.coll == TK::Error || !(o.mut || L.mut) ||
+                derived(base, o.var, loop_iters_)) {
+                continue;
+            }
             std::vector<Step> outer;
-            path(o.iter, probe_iter_, outer);
-            push(*log, "loop", "nested", s->iter->span, o.head, L.root,
-                 loop_detail(o.coll, o.mut) + (L.mut ? ", inner mut" : ", inner read"), relation(steps, outer));
+            path(o.iter, loop_iters_, outer);
+            if (!crosses(steps, outer)) continue;
+            error(Code::E0412, s->iter->span,
+                  "cannot iterate over '" + text(s->iter) + "' " + (L.mut ? "with '&mut' " : "") + "while 'for ... in " +
+                      (o.mut ? "&mut" : "&") + "' iterates over it; iterate over indexes: 'for i in 0..len(" +
+                      text(o.iter) + ")'");
+            L.coll = TK::Error;  // тело этого обхода — следствие той же ошибки
+            break;
         }
         // `for x in &mut outer` в теле `parallel for` — запись во внешнюю переменную.
-        if (L.mut) {
-            for (const ProbeLoop& o : probe_loops_) {
-                if (o.parallel && base && base->id < o.first_inner && !derived(base, o.var, probe_iter_)) {
-                    push(*log, "par", steps.empty() ? "var" : "index_computed", s->iter->span, o.head, L.root, o.coll);
-                }
-            }
-        }
+        if (L.mut) note_write(s->iter, Write::Ref, "mutate", false);
     }
-    probe_loops_.push_back(L);
+    access_loops_.push_back(L);
 }
 
-void Checker::probe_loop_end() {
-    AccessLog* log = probe();
-    if (!log || probe_loops_.empty()) return;
-    size_t k = probe_loops_.size() - 1;
-    const ProbeLoop& L = probe_loops_[k];
+void Checker::loop_end() {
+    if (access_loops_.empty()) return;
+    size_t k = access_loops_.size() - 1;
+    const AccessLoop& L = access_loops_[k];
     std::vector<Step> coll;
-    path(L.iter, probe_iter_, coll);
-    for (const ProbeRead& r : probe_reads_) {
+    path(L.iter, loop_iters_, coll);
+    for (const LoopRead& r : loop_reads_) {
         if (r.loop != k) continue;
         std::vector<Step> steps;
-        path(r.place, probe_iter_, steps);
-        const char* rel = relation(steps, coll);
-        push(*log, "loop", "read", r.place->span, L.head, L.root, loop_detail(L.coll, true), rel);
-        // Тело `parallel for x in &mut xs` читает xs, который пишут другие итерации.
-        if (L.parallel) push(*log, "par", "read_root", r.place->span, L.head, L.root, L.coll, rel);
+        path(r.place, loop_iters_, steps);
+        if (!crosses(steps, coll)) continue;
+        error(Code::E0412, r.place->span,
+              "cannot read '" + text(r.place) + "' while 'for ... in &mut' changes it; read the value before the "
+                                                "loop: 'let v = " + text(r.place) + "'");
     }
-    probe_reads_.erase(std::remove_if(probe_reads_.begin(), probe_reads_.end(),
-                                      [&](const ProbeRead& r) { return r.loop == k; }),
-                       probe_reads_.end());
-    probe_loops_.pop_back();
+    loop_reads_.erase(std::remove_if(loop_reads_.begin(), loop_reads_.end(),
+                                     [&](const LoopRead& r) { return r.loop == k; }),
+                      loop_reads_.end());
+    access_loops_.pop_back();
 }
 
-bool Checker::probe_call(Expr* a, bool a_mut, bool a_view, Expr* b, bool b_mut, bool b_view) {
-    AccessLog* log = probe();
-    if (!log) return false;
-    std::vector<Step> pa, pb;
-    const Local* root = path(a, probe_iter_, pa);
-    path(b, probe_iter_, pb);
-    const char* rel = relation(pa, pb);
-    const char* mode = a_mut && b_mut ? "mut_mut" : a_view || b_view ? "mut_view" : "mut_ref";
-    push(*log, "call", rel, b ? b->span : Span{}, a ? a->span : Span{}, root, mode, rel);
-    return true;
+// --- вид левее действия
+
+void Checker::changes(Expr* e, std::vector<Expr*>& out, bool top) const {
+    e = bare(e);
+    if (!e) return;
+    auto place = [&](Expr* p) {
+        if (raw_base(p)) out.push_back(p);
+    };
+    switch (e->kind) {
+        case ExprKind::Call: {
+            auto* c = static_cast<CallExpr*>(e);
+            auto* f = as<FieldExpr>(c->callee);
+            if (c->call == CallKind::Method && f && c->method < Method::Contains) place(f->object);
+            changes(c->callee, out);
+            for (Expr* a : c->args) changes(a, out);
+            return;
+        }
+        case ExprKind::Ref: {
+            auto* r = static_cast<RefExpr*>(e);
+            if (r->mut && !top) place(r->operand);
+            changes(r->operand, out);
+            return;
+        }
+        case ExprKind::Field: changes(static_cast<FieldExpr*>(e)->object, out); return;
+        case ExprKind::Index:
+            changes(static_cast<IndexExpr*>(e)->object, out);
+            changes(static_cast<IndexExpr*>(e)->index, out);
+            return;
+        case ExprKind::Slice: {
+            auto* s = static_cast<SliceExpr*>(e);
+            changes(s->object, out);
+            changes(s->lo, out);
+            changes(s->hi, out);
+            return;
+        }
+        case ExprKind::Unary: changes(static_cast<UnaryExpr*>(e)->operand, out); return;
+        case ExprKind::Binary:
+            changes(static_cast<BinaryExpr*>(e)->lhs, out);
+            changes(static_cast<BinaryExpr*>(e)->rhs, out);
+            return;
+        case ExprKind::Try: changes(static_cast<TryExpr*>(e)->operand, out); return;
+        case ExprKind::StructLit:
+            for (FieldInit& f : static_cast<StructLitExpr*>(e)->fields) changes(f.value, out);
+            return;
+        case ExprKind::VariantLit: {
+            auto* v = static_cast<VariantLitExpr*>(e);
+            for (FieldInit& f : v->fields) changes(f.value, out);
+            for (Expr* a : v->args) changes(a, out);
+            return;
+        }
+        case ExprKind::ListLit:
+            for (Expr* a : static_cast<ListLitExpr*>(e)->items) changes(a, out);
+            return;
+        default: return;
+    }
+}
+
+bool Checker::view_at(Expr* place, Expr* at, const std::vector<Expr*>& right) {
+    std::vector<Step> pv;
+    const Local* rv = path(place, loop_iters_, pv);
+    if (!rv) return false;
+    for (Expr* r : right) {
+        std::vector<Step> pr;
+        if (path(r, loop_iters_, pr) != rv || !crosses(pv, pr)) continue;
+        error(Code::E0502, at->span, "'" + text(place) + "' is viewed here and '" + text(r) +
+                                         "' changes later in the same expression; copy it before: 'let old = " +
+                                         text(place).substr(0, text(place).find_first_of(".[")) + "'");
+        return true;
+    }
+    return false;
+}
+
+void Checker::view_operands(const std::vector<Expr*>& ops, const std::vector<Expr*>& right, bool keep) {
+    for (size_t i = 0; i < ops.size(); i++) {
+        std::vector<Expr*> later = keep ? right : std::vector<Expr*>{};
+        for (size_t j = i + 1; j < ops.size(); j++) changes(ops[j], later, true);
+        view_check(ops[i], later);
+    }
+}
+
+// Вид — срез, список как срез, `&x` и `&место` — читает своё место, пока
+// живёт: в операнде — до конца родителя. right — места, которые меняют
+// действия правее (операнды родителя правее; у среза — ещё границы, у
+// индекса — сам индекс).
+void Checker::view_check(Expr* e, const std::vector<Expr*>& right) {
+    e = bare(e);
+    if (!e) return;
+    if (e->conv && e->conv->kind == TK::Slice && e->type && (e->type->kind == TK::List || e->type->kind == TK::Array)) {
+        view_at(e, e, right);
+    }
+    switch (e->kind) {
+        case ExprKind::Call: {
+            auto* c = static_cast<CallExpr*>(e);
+            std::vector<Expr*> ops;
+            auto* f = as<FieldExpr>(c->callee);
+            // Получатель метода, который не меняет его, — первый операнд.
+            if (c->call == CallKind::Method && f && c->method >= Method::Contains) ops.push_back(f->object);
+            ops.insert(ops.end(), c->args.begin(), c->args.end());
+            view_operands(ops, {}, false);
+            return;
+        }
+        case ExprKind::Ref: {
+            auto* r = static_cast<RefExpr*>(e);
+            if (!r->mut && is_place(r->operand)) view_at(r->operand, e, right);
+            view_check(r->operand, r->mut ? std::vector<Expr*>{} : right);
+            return;
+        }
+        case ExprKind::Slice: {
+            auto* s = static_cast<SliceExpr*>(e);
+            std::vector<Expr*> bounds, hi;
+            changes(s->lo, bounds);
+            changes(s->hi, bounds);
+            changes(s->hi, hi);
+            bool str = s->object->type && s->object->type->kind == TK::Str;
+            std::vector<Expr*> need = str ? bounds : right;
+            if (!str) need.insert(need.end(), bounds.begin(), bounds.end());
+            if (view_at(s->object, e, need)) return;  // срез среза — одна ошибка
+            std::vector<Expr*> inner = right;
+            inner.insert(inner.end(), bounds.begin(), bounds.end());
+            view_check(s->object, inner);
+            view_check(s->lo, hi);
+            view_check(s->hi, {});
+            return;
+        }
+        case ExprKind::Index: {
+            auto* i = static_cast<IndexExpr*>(e);
+            std::vector<Expr*> inner = right;
+            changes(i->index, inner);
+            view_check(i->object, inner);
+            view_check(i->index, {});
+            return;
+        }
+        case ExprKind::Field: view_check(static_cast<FieldExpr*>(e)->object, right); return;
+        case ExprKind::Unary: view_check(static_cast<UnaryExpr*>(e)->operand, {}); return;
+        case ExprKind::Binary: {
+            auto* b = static_cast<BinaryExpr*>(e);
+            view_operands({b->lhs, b->rhs}, {}, false);
+            return;
+        }
+        case ExprKind::Try: view_check(static_cast<TryExpr*>(e)->operand, right); return;
+        case ExprKind::StructLit: {
+            std::vector<Expr*> ops;
+            for (FieldInit& f : static_cast<StructLitExpr*>(e)->fields) ops.push_back(f.value ? f.value : f.shorthand);
+            view_operands(ops, right, holds_view(e->type));
+            return;
+        }
+        case ExprKind::VariantLit: {
+            auto* v = static_cast<VariantLitExpr*>(e);
+            std::vector<Expr*> ops(v->args.begin(), v->args.end());
+            for (FieldInit& f : v->fields) ops.push_back(f.value ? f.value : f.shorthand);
+            view_operands(ops, right, false);
+            return;
+        }
+        case ExprKind::ListLit: {
+            auto* l = static_cast<ListLitExpr*>(e);
+            view_operands(std::vector<Expr*>(l->items.begin(), l->items.end()), right, holds_view(e->type));
+            return;
+        }
+        default: return;
+    }
+}
+
+void Checker::views(Stmt* s) {
+    switch (s->kind) {
+        case StmtKind::Let: view_check(static_cast<LetStmt*>(s)->value, {}); break;
+        case StmtKind::Assign: {
+            auto* a = static_cast<AssignStmt*>(s);
+            view_check(a->target, {});
+            view_check(a->value, {});
+            break;
+        }
+        case StmtKind::Expr: view_check(static_cast<ExprStmt*>(s)->expr, {}); break;
+        case StmtKind::If: {
+            auto* i = static_cast<IfStmt*>(s);
+            view_check(i->cond, {});
+            view_check(i->let_value, {});
+            break;
+        }
+        case StmtKind::While: view_check(static_cast<WhileStmt*>(s)->cond, {}); break;
+        case StmtKind::For: {
+            auto* f = static_cast<ForStmt*>(s);
+            view_check(f->iter, {});
+            view_check(f->hi, {});
+            break;
+        }
+        case StmtKind::Match: view_check(static_cast<MatchStmt*>(s)->subject, {}); break;
+        case StmtKind::Return: view_check(static_cast<ReturnStmt*>(s)->value, {}); break;
+        case StmtKind::Fail: view_check(static_cast<FailStmt*>(s)->value, {}); break;
+        default: break;
+    }
 }
 
 }  // namespace dp::sema

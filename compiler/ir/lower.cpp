@@ -16,7 +16,6 @@
 #include <map>
 #include <unordered_map>
 
-#include "sema/access.h"
 #include "sema/builtins.h"
 
 namespace dp::ir {
@@ -154,14 +153,6 @@ bool may_trap(const Expr* e) {
 const Expr* strip_parens(const Expr* e) {
     while (auto* p = as<const ParenExpr>(e)) e = p->inner;
     return e;
-}
-
-// Значение хранит вид до вызова, который его поглотит: срез, `&T`,
-// заимствующая структура `@c` (Р62) или список таких (массив для C).
-bool holds_view(const sema::Type* t) {
-    if (!t) return false;
-    if (t->kind == TK::List || t->kind == TK::Array) return holds_view(t->elem);
-    return t->kind == TK::Slice || t->kind == TK::Ref || sema::c_borrowing(t);
 }
 
 class FnLower {
@@ -704,7 +695,6 @@ private:
     // меняет действие правее (need).
     Operand snapshot(Operand o, Span span, const Roots& need) {
         if (o.kind == OpKind::Copy && mutable_root(o.place) && hits(need, o.place)) {
-            note_snapshot("slice", span);
             return to_temp(use(o, type_of(o)), span);
         }
         return o;
@@ -712,26 +702,15 @@ private:
 
     // Место, над которым строится вид — срез или адрес `&T`; копия, если его
     // меняет действие правее (need).
-    Place view_base(const Expr* obj, bool& fresh, const Roots& need, const char* kind) {
+    Place view_base(const Expr* obj, bool& fresh, const Roots& need) {
         Place p = object(obj, fresh);
         if (!fresh && mutable_root(p) && hits(need, p)) {
-            note_snapshot(kind, obj->span);
             Operand o = copy(std::move(p));
             Operand c = to_temp(use(o, type_of(o)), obj->span);
             fresh = true;
             return c.place;
         }
         return p;
-    }
-
-    // Замер О4 (sema/access.h): снимок вида — событие view.
-    void note_snapshot(const char* kind, Span span) {
-        if (!prog_.access || !f_.def || f_.def->module->stdlib) return;
-        sema::AccessEvent ev;
-        ev.rule = "view";
-        ev.kind = kind;
-        ev.span = span;
-        prog_.access->events.push_back(std::move(ev));
     }
 
     // Понижает f() с snap_, дополненным к внешнему (on).
@@ -939,14 +918,14 @@ private:
                 if (e->type->kind == TK::Map) return to_temp(make(RvKind::MakeMap, e->type), e->span);
                 Rvalue rv = make(RvKind::MakeList, e->type);
                 std::vector<const Expr*> items(l->items.begin(), l->items.end());
-                rv.ops = exprs(items, holds_view(e->type));
+                rv.ops = exprs(items, sema::holds_view(e->type));
                 return to_temp(std::move(rv), e->span);
             }
             case ExprKind::Ref: {  // Р62: значение `&T` — адрес места или временного литерала
                 auto* r = static_cast<const RefExpr*>(e);
                 bool fresh = false;
                 Rvalue rv = make(RvKind::AddrOf, e->type);
-                rv.place = view_base(r->operand, fresh, snap_, "addr");
+                rv.place = view_base(r->operand, fresh, snap_);
                 rv.has_place = true;
                 return to_temp(std::move(rv), e->span);
             }
@@ -1076,7 +1055,7 @@ private:
         bool str = s->object->type && s->object->type->kind == TK::Str;
         Roots need = bounds;
         if (!str) need.insert(need.end(), snap_.begin(), snap_.end());
-        rv.place = snapping(bounds, [&] { return view_base(s->object, fresh, need, "slice"); });
+        rv.place = snapping(bounds, [&] { return view_base(s->object, fresh, need); });
         rv.has_place = true;
         if ((may_trap(s->lo) || may_trap(s->hi) || has_effect(s->lo) || has_effect(s->hi)) && !hits(bounds, rv.place)) {
             probe(rv.place, s->object->span);
@@ -1260,7 +1239,7 @@ private:
                         // снимок x (expr.order); `&mut x` — место на время вызова.
                         // Р62: `&S { ... }` — временное; виды в его полях — с snap_.
                         a.place = snapping_from(roots, [&] {
-                            return r->mut ? object(r->operand, fresh) : view_base(r->operand, fresh, roots, "ref");
+                            return r->mut ? object(r->operand, fresh) : view_base(r->operand, fresh, roots);
                         });
                         // `f(&xs[9], 1 / z)`: сперва xs[9]
                         if ((trap || later) && !hits(roots, a.place)) probe(a.place, args[i]->span);

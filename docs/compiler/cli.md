@@ -220,10 +220,7 @@ E0003.
 
 ## 8. Отладочные команды
 
-`dpl debug lex|parse|print|summary|types|ir|run|c|access <file.dpm>` —
-для тестов компилятора; формат вывода не стабилен (S2). `debug run` —
+`dpl debug lex|parse|print|summary|types|ir|run|c <file.dpm>` — для
+тестов компилятора; формат вывода не стабилен (S2). `debug run` —
 эталонный интерпретатор (Р43: только для тестов), `debug c` —
-сгенерированный C. `debug access` — замер О4 (`bench/o4/`): доступы,
-которые отвергли бы правила-кандидаты исключительного доступа, строками
-JSON (`compiler/sema/access.h`); E0502 и заморозка корня обхода (E0412)
-при нём не отвергают программу. Описание — `docs/compiler/README.md`.
+сгенерированный C. Описание — `docs/compiler/README.md`.

@@ -713,10 +713,7 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
             }
             continue;
         }
-        if (r->mut) {
-            mutable_place(r->operand, "mutate");
-            note_write(r->operand, Write::Ref);
-        }
+        if (r->mut && mutable_place(r->operand, "mutate")) note_write(r->operand, Write::Ref, "mutate");
         bool prefix = !r->mut && c_prefix(p.type, t);  // Р62: `&S` в `&B` по общему началу
         if (t != p.type && !prefix && t->kind != TK::Error && p.type->kind != TK::Error) {
             error(Code::E0401, r->operand->span, "expected '" + tn(p.type) + "', found '" + tn(t) + "'");
@@ -762,9 +759,8 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
             r->type = check(r->operand, prim(TK::Str));
             if (!is_place(r->operand)) {
                 error(Code::E0501, r->operand->span, "a reference needs a variable, a field or an element");
-            } else {
-                mutable_place(r->operand, "mutate");
-                note_write(r->operand, Write::Ref);
+            } else if (mutable_place(r->operand, "mutate")) {
+                note_write(r->operand, Write::Ref, "mutate");
             }
             continue;
         }
@@ -897,8 +893,10 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         if (slice) {
             error(Code::E0412, f->name_span, "slices are read-only; '" + f->name + "' needs a List");
         } else {
-            mutable_place(f->object, ("call '" + f->name + "' on").c_str());
-            note_write(f->object, mi->m == Method::Sort ? Write::Method : Write::Shape);  // замер О4
+            std::string why = "call '" + f->name + "' on";
+            if (mutable_place(f->object, why.c_str())) {
+                note_write(f->object, mi->m == Method::Sort ? Write::Method : Write::Shape, why.c_str());
+            }
         }
     }
     const Type* elem = t->elem;
@@ -1300,18 +1298,12 @@ bool Checker::mutable_place(Expr* e, const char* why) {
             return false;
         }
         Local* l = n->res.local;
-        // Заморозка — причина, только если без неё место изменяемо.
-        const char* hint = frozen(l);
-        if (l->mutable_ && hint && !probe()) {  // замер О4: событие loop вместо отказа
-            error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "'" + hint);
-            return false;
-        }
         if (l->mutable_) return true;
         // У элемента обхода Map и среза `&mut` нет (E0419, E0412).
         std::string reason = l->is_param ? (l->is_ref ? "it is a '&' parameter; make it '&mut'"
                                                       : "it is a value parameter; take it as '&mut' to change it")
-                             : l->is_ref ? (hint ? "it is an element read through 'for ... in &'"
-                                                 : "it is an element read through 'for ... in &'; use '&mut'")
+                             : l->is_ref ? (read_only_loop(l) ? "it is an element read through 'for ... in &'"
+                                                              : "it is an element read through 'for ... in &'; use '&mut'")
                                          : "it is not declared with 'var'";
         error(Code::E0412, e->span, std::string("cannot ") + why + " '" + l->name + "': " + reason);
         return false;
@@ -1331,18 +1323,6 @@ bool Checker::mutable_place(Expr* e, const char* why) {
     }
     error(Code::E0412, e->span, std::string("cannot ") + why + " this expression; it is not a variable, field or element");
     return false;
-}
-
-const char* Checker::frozen(const Local* l) const {
-    const Local* r = l->alias_of ? l->alias_of : l;
-    for (const Frozen& f : frozen_) {
-        if (f.root != r) continue;
-        return f.map ? " while 'for ... in &' iterates over its Map; iterate over a copy of the keys: "
-                       "'for k in &m.keys()'"
-                     : " while 'for ... in &' iterates over its slice; iterate over a slice of a copy "
-                       "made before the loop";
-    }
-    return nullptr;
 }
 
 Local* Checker::root_local(Expr* e) {
@@ -1370,8 +1350,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         Local* root = nullptr;
         bool mut = false;
         Span span;
-        Expr* place = nullptr;  // замер О4: путь аргумента
-        bool view = false;      // срез
+        Expr* place = nullptr;  // путь аргумента (Р66)
     };
     std::vector<Ref> refs;
     // Р62: заимствования внутри аргумента — структуры с полями-ссылками и
@@ -1392,7 +1371,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             else if (auto* x = as<IndexExpr>(e)) borrowed(x->object);
             else borrowed(static_cast<SliceExpr*>(e)->object);
         } else if ((e->conv && e->conv->kind == TK::Slice) || as<SliceExpr>(e)) {
-            refs.push_back({root, false, e->span, e, true});
+            refs.push_back({root, false, e->span, e});
         }
     };
     for (size_t i = 0; i < c->args.size() && i < params.size(); i++) {
@@ -1402,7 +1381,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             if (!is_place(r->operand)) borrowed(r->operand);
         } else if (params[i].type && params[i].type->kind == TK::Slice) {
             Local* root = root_local(a);  // `(xs[1..])` — тоже корень xs
-            if (root) refs.push_back({root, false, a->span, a, true});
+            if (root) refs.push_back({root, false, a->span, a});
             else borrowed(a);  // `[S { ... }]`, `[S { ... }][0..1]` — заимствования внутри
         } else if (params[i].type && (c_borrowing(params[i].type) || params[i].type->kind == TK::Optional)) {
             borrowed(a);
@@ -1412,7 +1391,7 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
         for (size_t j = 0; j < refs.size(); j++) {
             if (i == j || !refs[i].root || refs[i].root != refs[j].root || !refs[i].mut) continue;
             if (j < i && refs[j].mut) continue;  // пара двух &mut — одно сообщение
-            if (probe_call(refs[i].place, refs[i].mut, refs[i].view, refs[j].place, refs[j].mut, refs[j].view)) continue;
+            if (!overlap(refs[i].place, refs[j].place)) continue;  // Р66: разные поля и постоянные индексы
             error(Code::E0502, refs[j].span, "'" + refs[i].root->name + "' is passed as '&mut' together with "
                                                  "another reference into it; pass a copy of the value instead");
         }

@@ -7,7 +7,6 @@
 #include <map>
 #include <vector>
 
-#include "sema/access.h"
 #include "sema/resolve.h"
 #include "sema/sema.h"
 
@@ -36,15 +35,6 @@ private:
 
     // --- области и переменные
     std::vector<std::vector<Local*>> scopes_;
-    // Корни, которые обходит `for ... in &`: менять их в теле нельзя —
-    // Map в `for k in &m` (Р54) и список в `for x in &xs[a..b]` (Р65).
-    struct Frozen {
-        const Local* root;
-        bool map;
-    };
-    std::vector<Frozen> frozen_;
-    // Хвост сообщения E0412, если корень l заморожен, иначе nullptr.
-    const char* frozen(const Local* l) const;
     // Константы раньше зависящих от них — обходом с явным стеком (check.cpp).
     void const_chain(ConstDef& root);
     std::vector<ConstDef*> const_deps(const ConstDef& c);
@@ -149,40 +139,51 @@ private:
     Local* root_local(ast::Expr* e);
     void ref_args(ast::CallExpr* c, const std::vector<ParamDef>& params);
 
-    // --- замер О4 (access.cpp, sema/access.h): журнал доступа, если его ведут
-    AccessLog* probe() const { return m_.stdlib ? nullptr : prog_.access; }
-    // Обход в теле которого идёт проверка: корень, переменная, режим.
-    struct ProbeLoop {
+    // --- исключительный доступ (Р66; access.cpp)
+    // Обход `for x in &c` в теле которого идёт проверка.
+    struct AccessLoop {
         const Local* root = nullptr;  // корень коллекции; nullptr — диапазон
         const Local* var = nullptr;   // переменная цикла
+        ast::Expr* iter = nullptr;
         bool mut = false;             // `for … in &mut`
         bool parallel = false;
         uint32_t first_inner = 0;  // переменные с номером не меньше — объявлены в теле
-        Span head;
-        ast::Expr* iter = nullptr;
-        const char* coll = "";  // list, map, slice, str, range
+        TK coll = TK::Error;       // List, Map, Slice; Error — диапазон или срез str
     };
-    std::vector<ProbeLoop> probe_loops_;
-    // Чтение корня `&mut`-обхода: событие — в конце обхода, когда место
-    // продлено полями и индексами (`w.seed` — не обходимое `w.bodies`).
-    struct ProbeRead {
-        ast::Expr* place = nullptr;
-        size_t loop = 0;  // номер в probe_loops_
-    };
-    std::vector<ProbeRead> probe_reads_;
+    std::vector<AccessLoop> access_loops_;
     // Переменная обхода — выражение его коллекции: `for y in &x.items`.
-    std::map<const Local*, ast::Expr*> probe_iter_;
+    std::map<const Local*, ast::Expr*> loop_iters_;
+    // Чтение коллекции `&mut`-обхода: проверка — в конце обхода, когда место
+    // продлено полями и индексами (`w.seed` — не обходимое `w.bodies`).
+    struct LoopRead {
+        ast::Expr* place = nullptr;
+        size_t loop = 0;  // номер в access_loops_
+    };
+    std::vector<LoopRead> loop_reads_;
     // Запись в место: присваивание; метод, меняющий длину или ключи (и
     // новый ключ `m[k] = v` — место m); другой изменяющий метод; `&mut`.
     enum class Write : uint8_t { Assign, Shape, Method, Ref };
-    void note_write(ast::Expr* place, Write how);
+    // why — действие для сообщения («assign to»); loops = false — только
+    // правило `parallel for` (обход сверяет loop_begin).
+    void note_write(ast::Expr* place, Write how, const char* why, bool loops = true);
     void note_use(ast::NameExpr* n);
     void note_extend(ast::Expr* object, ast::Expr* place);
-    void probe_loop_begin(ast::ForStmt* s);
-    void probe_loop_end();
-    // Пара аргументов-ссылок с общим корнем: событие call; true — E0502 не
-    // нужно (журнал ведётся).
-    bool probe_call(ast::Expr* a, bool a_mut, bool a_view, ast::Expr* b, bool b_mut, bool b_view);
+    void loop_begin(ast::ForStmt* s);
+    void loop_end();
+    // У переменной обхода Map и среза `&mut` не бывает (сообщение E0412).
+    bool read_only_loop(const Local* l) const;
+    // Два места в одном вызове пересекаются: одно — начало другого или
+    // индексы вычислены (E0502).
+    bool overlap(ast::Expr* a, ast::Expr* b) const;
+    // Вид левее действия, которое меняет его место (E0502): инструкция s.
+    void views(ast::Stmt* s);
+    void view_check(ast::Expr* e, const std::vector<ast::Expr*>& right);
+    void view_operands(const std::vector<ast::Expr*>& ops, const std::vector<ast::Expr*>& right, bool keep);
+    // true — ошибка выдана.
+    bool view_at(ast::Expr* place, ast::Expr* at, const std::vector<ast::Expr*>& right);
+    // Места, которые меняет вычисление e: `&mut` и получатели изменяющих
+    // методов; top — без `&mut` самого e (его сверяет E0502 вызова).
+    void changes(ast::Expr* e, std::vector<ast::Expr*>& out, bool top = false) const;
 
     // --- образцы и match (check_pat.cpp)
     void pat(ast::Pat* p, const Type* subject);

@@ -29,4 +29,3 @@ debugging commands (output format is not stable):
   debug run <file.dpm> [args...]
                            run a program in the reference interpreter
   debug c <file.dpm>       print the C code of a program (C backend)
-  debug access <file.dpm>  print the accesses that stricter exclusive-access rules would reject
