@@ -130,7 +130,10 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
   `reserve`, `contains`, `repeat`, `split` (у `List[str]`);
 - методы `Map[K, V]` (Р54) — `dp_mfind`, `dp_mset`, `dp_mvalue`,
   `dp_mget`, `dp_mcontains`, `dp_mremove`, `dp_mclear`, `dp_mkeys`,
-  `dp_morder`, `dp_mreserve`.
+  `dp_morder`, `dp_mreserve`;
+- методы `Pool[T]` (Р67) — `dp_padd`, `dp_pvalue`, `dp_pget`,
+  `dp_pcontains`, `dp_premove`, `dp_pclear`, `dp_preserve`,
+  `dp_phandles`.
 
 `Map` хранит ключи и значения в массивах в порядке вставки (на место
 удалённой пары встаёт последняя). Наружу этот порядок не виден:
@@ -151,6 +154,17 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 Вставка, замена, поиск и `remove` — O(1) в среднем: `remove` убирает
 слот индекса сдвигом назад (линейное пробирование) и ставит на место
 пары последнюю.
+
+`Pool[T]` — `struct { T* vals; dp_pool m; }`. Служебная часть `dp_pool`
+(runtime) хранит поколения, признак жизни и свободные номера (минимальная
+куча), значения — в `vals` той же ёмкости.
+
+- `dp_pool_take` выдаёт наименьший свободный номер или новый.
+- Устаревший хэндл `dp_pvalue` встречает ловушкой.
+- Обход — по слотам с `live`.
+- Хэндл — `dp_hnd` из runtime, один тип C на все `Handle[T]`. Поэтому
+  `List[Handle[A]]` и `List[Handle[B]]` — одно определение `dp_L_hnd`:
+  составные типы с одной записью C определяются один раз.
 
 `clear` оставляет буфер (длина 0, ёмкость та же); `reserve(n)` (Р68)
 доводит ёмкость до `n` одним `dp_realloc`, у `Map` — и индекс `slots`
