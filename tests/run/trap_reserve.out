@@ -1,0 +1,4 @@
+before
+--- stderr ---
+trap_reserve.dpm:7:5: trap: reserve count -3 is negative
+[exit 101]

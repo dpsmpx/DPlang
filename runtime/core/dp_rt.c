@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,11 +57,36 @@ _Noreturn void dp_bad_shift_u(uint64_t n, const char* tname, const char* loc) {
 
 /* --- память */
 
+/* Счётчик выделений (Р68): вызовы malloc и realloc и их байты — для
+ * тестов и замеров кадровой памяти. Атомарный: библиотеку (`--lib`)
+ * могут звать из нескольких потоков C. */
+static _Atomic int64_t dp_alloc_count;
+static _Atomic int64_t dp_alloc_bytes;
+
+static void dp_count_alloc(int64_t bytes) {
+    atomic_fetch_add_explicit(&dp_alloc_count, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&dp_alloc_bytes, bytes, memory_order_relaxed);
+}
+
+void dp_alloc_stats(int64_t* count, int64_t* bytes) {
+    *count = atomic_load_explicit(&dp_alloc_count, memory_order_relaxed);
+    *bytes = atomic_load_explicit(&dp_alloc_bytes, memory_order_relaxed);
+}
+
+void dp_alloc_report(void) {
+    const char* on = getenv("DPL_ALLOC_STATS");
+    if (!on || !*on) return;
+    int64_t count, bytes;
+    dp_alloc_stats(&count, &bytes);
+    fprintf(stderr, "dpl: %" PRId64 " allocations, %" PRId64 " bytes\n", count, bytes);
+}
+
 void* dp_alloc(int64_t count, size_t elem, const char* loc) {
     if (count <= 0) return NULL;
     if (elem != 0 && count > DP_MAX_BYTES / (int64_t)elem) dp_trap(loc, "out of memory");
     void* p = malloc((size_t)count * elem);
     if (!p) dp_trap(loc, "out of memory");
+    dp_count_alloc(count * (int64_t)elem);
     return p;
 }
 
@@ -72,6 +98,7 @@ void* dp_realloc(void* p, int64_t count, size_t elem, const char* loc) {
     if (elem != 0 && count > DP_MAX_BYTES / (int64_t)elem) dp_trap(loc, "out of memory");
     void* q = realloc(p, (size_t)count * elem);
     if (!q) dp_trap(loc, "out of memory");
+    dp_count_alloc(count * (int64_t)elem);
     return q;
 }
 
@@ -550,4 +577,8 @@ void dp_check_insert(int64_t i, int64_t len, const char* loc) {
 
 void dp_check_repeat(int64_t n, const char* loc) {
     if (n < 0) dp_trapf(loc, "repeat count %" PRId64 " is negative", n);
+}
+
+void dp_check_reserve(int64_t n, const char* loc) {
+    if (n < 0) dp_trapf(loc, "reserve count %" PRId64 " is negative", n);
 }

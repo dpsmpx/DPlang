@@ -1,0 +1,42 @@
+// spec: builtin.methods memory.values
+// `reserve(n)` (Р68): ёмкость заранее, значения и порядок не меняются;
+// `clear()` очищает, после него таблица и список заполняются заново.
+fn fill(xs: &mut List[i64], m: &mut Map[str, i64], n: i64) {
+    for i in 0..n {
+        xs.push(i * i)
+        m["k" + str(i)] = i
+    }
+}
+
+fn main() {
+    var xs: List[i64] = [7]
+    xs.reserve(0)
+    xs.reserve(100)
+    xs.reserve(3)
+    var m: Map[str, i64] = []
+    m.reserve(50)
+    m["a"] = 1
+    m.reserve(1)
+    fill(&mut xs, &mut m, 10)
+    println(str(len(xs)) + " " + str(xs[0]) + " " + str(xs[10]) + " " + str(len(m)) + " " + str(m["k9"]))
+    for frame in 0..3 {
+        xs.clear()
+        m.clear()
+        fill(&mut xs, &mut m, 5 + frame)
+        var s: i64 = 0
+        for x in &xs {
+            s += x
+        }
+        for k in &m {
+            s += m[k]
+        }
+        println("frame " + str(frame) + ": " + str(len(xs)) + " " + str(len(m)) + " " + str(s))
+    }
+    var big: Map[i64, i64] = []
+    big.reserve(1000)
+    for i in 0..1000 {
+        big[i * 7 % 1009] = i
+    }
+    let _ = big.remove(14)
+    println(str(len(big)) + " " + str(big[7]) + " " + str(big.contains(14)))
+}

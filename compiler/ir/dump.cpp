@@ -171,10 +171,10 @@ private:
         static constexpr const char* names[] = {
             "len",  "repeat", "min",   "max",    "abs",    "parse_int", "is_digit", "is_alpha",
             "is_space", "is_alnum", "print", "println", "eprintln", "push", "pop", "insert",
-            "remove", "clear", "sort", "contains", "trim", "find", "starts_with", "split",
+            "remove", "clear", "sort", "reserve", "contains", "trim", "find", "starts_with", "split",
             "__args_len", "__arg", "__read_file", "checked_add", "checked_sub", "checked_mul", "checked_div",
             "checked_neg", "map_set", "map_get", "map_contains", "map_remove", "map_clear", "map_keys",
-            "map_order",
+            "map_order", "map_reserve",
             "c_arena_mark", "c_arena_release", "probe",
         };
         return names[static_cast<size_t>(k)];

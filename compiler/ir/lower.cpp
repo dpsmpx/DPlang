@@ -82,7 +82,7 @@ bool has_effect(const Expr* e) {
 
 // Выражение может дать ловушку (раздел 10): арифметика и сдвиги целых,
 // преобразование к целому и f64 → f32, индекс и срез, вызов функции,
-// встроенные abs, repeat, assert, методы remove, insert, split, `try`
+// встроенные abs, repeat, assert, методы remove, insert, split, reserve, `try`
 // (выход с ошибкой). Тогда место с проверкой левее проверяется раньше
 // (expr.order, force).
 bool may_trap(const Expr* e);
@@ -111,7 +111,8 @@ bool may_trap(const Expr* e) {
                 if (b == sema::BuiltinFn::Abs || b == sema::BuiltinFn::Repeat || b == sema::BuiltinFn::Assert) return true;
             }
             if (c->call == CallKind::Method &&
-                (c->method == Method::Remove || c->method == Method::Insert || c->method == Method::Split)) {
+                (c->method == Method::Remove || c->method == Method::Insert || c->method == Method::Split ||
+                 c->method == Method::Reserve)) {
                 return true;
             }
             if (auto* f = as<const FieldExpr>(c->callee); f && may_trap(f->object)) return true;
@@ -1246,11 +1247,12 @@ private:
                 auto* f = static_cast<const FieldExpr*>(c->callee);
                 Method m = c->method;
                 if (f->object->type->kind == TK::Map) {  // методы Map (Р54)
-                    bool changes = m == Method::Remove || m == Method::Clear;
+                    bool changes = m == Method::Remove || m == Method::Clear || m == Method::Reserve;
                     rv = intrinsic(m == Method::Get        ? Intrinsic::MapGet
                                    : m == Method::Contains ? Intrinsic::MapContains
                                    : m == Method::Remove   ? Intrinsic::MapRemove
                                    : m == Method::Clear    ? Intrinsic::MapClear
+                                   : m == Method::Reserve  ? Intrinsic::MapReserve
                                                            : Intrinsic::MapKeys,
                                    c->type);
                     if (changes) {
@@ -1272,7 +1274,8 @@ private:
                 bool mutating = m < Method::Contains;
                 static constexpr Intrinsic kMap[] = {
                     Intrinsic::ListPush,  Intrinsic::ListPop,  Intrinsic::ListInsert,    Intrinsic::ListRemove,
-                    Intrinsic::ListClear, Intrinsic::ListSort, Intrinsic::ListContains,  Intrinsic::StrTrim,
+                    Intrinsic::ListClear, Intrinsic::ListSort, Intrinsic::ListReserve, Intrinsic::ListContains,
+                    Intrinsic::StrTrim,
                     Intrinsic::StrFind,   Intrinsic::StrStartsWith, Intrinsic::StrSplit,
                 };
                 rv = intrinsic(kMap[static_cast<size_t>(m)], c->type);

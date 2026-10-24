@@ -127,10 +127,10 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 - `dp_drop__<запись>` и `dp_copy__<запись>` — у типов с памятью
   (`ir::needs_drop`): освобождение и глубокая копия;
 - методы `List[T]` — `push`, `pop`, `insert`, `remove`, `clear`, `sort`,
-  `contains`, `repeat`, `split` (у `List[str]`);
+  `reserve`, `contains`, `repeat`, `split` (у `List[str]`);
 - методы `Map[K, V]` (Р54) — `dp_mfind`, `dp_mset`, `dp_mvalue`,
   `dp_mget`, `dp_mcontains`, `dp_mremove`, `dp_mclear`, `dp_mkeys`,
-  `dp_morder`.
+  `dp_morder`, `dp_mreserve`.
 
 `Map` хранит ключи и значения в массивах в порядке вставки (на место
 удалённой пары встаёт последняя). Наружу этот порядок не виден:
@@ -152,7 +152,9 @@ cc -std=c11 -O1 -ffp-contract=off -fno-strict-aliasing \
 слот индекса сдвигом назад (линейное пробирование) и ставит на место
 пары последнюю.
 
-`push` удваивает ёмкость (с 4). Удвоение сверх предела буфера
+`clear` оставляет буфер (длина 0, ёмкость та же); `reserve(n)` (Р68)
+доводит ёмкость до `n` одним `dp_realloc`, у `Map` — и индекс `slots`
+под `n` пар. `push` удваивает ёмкость (с 4). Удвоение сверх предела буфера
 (`docs/runtime/README.md`) заменяется ростом на один элемент: ловушка
 «out of memory» срабатывает, только когда в предел упирается сам список.
 Пределы памяти у интерпретатора и runtime разные (`trap.memory`

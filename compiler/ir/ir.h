@@ -114,7 +114,7 @@ enum class CastKind : uint8_t {
 enum class Intrinsic : uint8_t {
     Len, Repeat, Min, Max, Abs, ParseInt, IsDigit, IsAlpha, IsSpace, IsAlnum, Print, Println, Eprintln,
     // методы List: получатель — изменяемое место (кроме Contains: он — операнд)
-    ListPush, ListPop, ListInsert, ListRemove, ListClear, ListSort, ListContains,
+    ListPush, ListPop, ListInsert, ListRemove, ListClear, ListSort, ListReserve, ListContains,
     // методы str: получатель — первый операнд
     StrTrim, StrFind, StrStartsWith, StrSplit,
     // внутренние стандартной библиотеки (Р51): аргументы программы и файл;
@@ -126,7 +126,8 @@ enum class Intrinsic : uint8_t {
     // вставка или замена), MapRemove (ключ → ?V), MapClear. Читающие —
     // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K], ключи по возрастанию),
     // MapOrder (→ List[i64], номера пар по возрастанию ключа — для обхода).
-    MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys, MapOrder,
+    // ListReserve и MapReserve (ops: n) — ёмкость не меньше n (Р68).
+    MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys, MapOrder, MapReserve,
     // Арена C на время вызова (Р62): строки и массивы заимствующих
     // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
     CArenaMark, CArenaRelease,

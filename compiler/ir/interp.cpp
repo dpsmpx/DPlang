@@ -1137,7 +1137,8 @@ private:
                 for (size_t i : pos) out.items.push_back(int_value(i));
                 return out;
             }
-            case Intrinsic::MapSet: case Intrinsic::MapRemove: case Intrinsic::MapClear: return map_method(fr, rv, ops);
+            case Intrinsic::MapSet: case Intrinsic::MapRemove: case Intrinsic::MapClear: case Intrinsic::MapReserve:
+                return map_method(fr, rv, ops);
             case Intrinsic::Repeat: {
                 const Value& n = arg(1, s1);
                 const Type* nt = op_type(fr, rv.ops[1]);
@@ -1309,6 +1310,13 @@ private:
         return int_value(static_cast<uint64_t>(code));
     }
 
+    // `reserve(n)` (Р68): ёмкость не видна, проверяется только n.
+    void reserve(const Value& n) {
+        int64_t k = static_cast<int64_t>(n.i);
+        if (k < 0) trap("reserve count " + std::to_string(k) + " is negative");
+        else if (n.i > kMaxLen) trap("out of memory");
+    }
+
     Value map_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
         Ref r = resolve(fr, rv.place, true);
         if (stop_) return Value{};
@@ -1343,6 +1351,7 @@ private:
                 return out;
             }
             case Intrinsic::MapClear: items.clear(); return Value{};
+            case Intrinsic::MapReserve: reserve(ops[0]); return Value{};
             default: break;
         }
         internal("unknown intrinsic");
@@ -1404,6 +1413,7 @@ private:
                 return v;
             }
             case Intrinsic::ListClear: items.clear(); return Value{};
+            case Intrinsic::ListReserve: reserve(ops[0]); return Value{};
             case Intrinsic::ListSort: {
                 const Type* t = place_type(p_, fn(fr), rv.place);
                 merge_sort(items, t->elem);

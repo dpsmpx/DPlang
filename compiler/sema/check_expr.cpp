@@ -67,6 +67,7 @@ struct MethodInfo {
 constexpr MethodInfo kMethods[] = {
     {"push", Method::Push},   {"pop", Method::Pop},           {"insert", Method::Insert},
     {"remove", Method::Remove}, {"clear", Method::Clear},     {"sort", Method::Sort},
+    {"reserve", Method::Reserve},
     {"contains", Method::Contains}, {"trim", Method::Trim},   {"find", Method::Find},
     {"starts_with", Method::StartsWith}, {"split", Method::Split}, {"get", Method::Get},
     {"keys", Method::Keys},
@@ -863,7 +864,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     bool list_method = mi && mi->m <= Method::Contains;
     bool str_method = mi && mi->m >= Method::Trim && mi->m <= Method::Split;
     bool map_method = mi && (mi->m == Method::Get || mi->m == Method::Keys || mi->m == Method::Contains ||
-                             mi->m == Method::Remove || mi->m == Method::Clear);
+                             mi->m == Method::Remove || mi->m == Method::Clear || mi->m == Method::Reserve);
     bool ok = mi && (map ? map_method : (list_method && (list || slice)) || (str_method && str));
     if (!ok) {
         error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
@@ -875,7 +876,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     size_t arity = 0;
     switch (mi->m) {
         case Method::Push: case Method::Contains: case Method::Remove: case Method::Find: case Method::StartsWith:
-        case Method::Split: case Method::Get:
+        case Method::Split: case Method::Get: case Method::Reserve:
             arity = 1;
             break;
         case Method::Insert: arity = 2; break;
@@ -887,7 +888,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         infer_loose(c->args);
         return err();
     }
-    bool mutating = map ? (mi->m == Method::Remove || mi->m == Method::Clear)
+    bool mutating = map ? (mi->m == Method::Remove || mi->m == Method::Clear || mi->m == Method::Reserve)
                         : list_method && mi->m != Method::Contains;
     if (mutating) {
         if (slice) {
@@ -906,6 +907,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
             case Method::Contains: check(c->args[0], t->key); return prim(TK::Bool);
             case Method::Remove: check(c->args[0], t->key); return tt_.optional(elem);
             case Method::Clear: return prim(TK::Void);
+            case Method::Reserve: check(c->args[0], prim(TK::I64)); return prim(TK::Void);
             case Method::Keys: return tt_.list(t->key);
             default: return err();
         }
@@ -919,6 +921,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
             return prim(TK::Void);
         case Method::Remove: check(c->args[0], prim(TK::I64)); return elem;
         case Method::Clear: return prim(TK::Void);
+        case Method::Reserve: check(c->args[0], prim(TK::I64)); return prim(TK::Void);
         case Method::Sort:
             if (!ordered(elem)) error(Code::E0422, f->name_span, "elements of type '" + tn(elem) + "' cannot be sorted");
             return prim(TK::Void);

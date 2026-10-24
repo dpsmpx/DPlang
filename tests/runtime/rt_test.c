@@ -6,7 +6,8 @@
  *
  *     rt_test unit        — проверки без ловушек; «ok N» и код 0
  *     rt_test trap ИМЯ    — одна ловушка: текст и код сверяет tests/runtime.py
- *     rt_test run ИМЯ     — вход dp_run: код выхода, ошибка main, глубина
+ *     rt_test run ИМЯ     — вход dp_run: код выхода, ошибка main, глубина,
+ *                           счётчик выделений (DPL_ALLOC_STATS)
  */
 #include <float.h>
 #include <math.h>
@@ -227,6 +228,16 @@ static void unit_index_memory(void) {
     uint8_t* big = (uint8_t*)dp_alloc(1 << 20, 1, LOC);
     CHECK(big != NULL);
     dp_free(big);
+    dp_check_reserve(0, LOC);
+    /* Счётчик выделений (Р68): malloc и realloc с байтами; пустое — не в счёт. */
+    int64_t n0, b0, n1, b1;
+    dp_alloc_stats(&n0, &b0);
+    void* q = dp_alloc(2, 4, LOC);
+    q = dp_realloc(q, 6, 4, LOC);
+    CHECK(dp_alloc(0, 8, LOC) == NULL);
+    dp_free(q);
+    dp_alloc_stats(&n1, &b1);
+    CHECK(n1 - n0 == 2 && b1 - b0 == 32);
 }
 
 /* --- ловушки: по одной на запуск */
@@ -267,6 +278,7 @@ static void trap_case(const char* name) {
     if (!strcmp(name, "slice_end")) dp_check_slice(0, 6, 5, LOC);
     if (!strcmp(name, "insert")) dp_check_insert(4, 3, LOC);
     if (!strcmp(name, "repeat")) dp_check_repeat(-2, LOC);
+    if (!strcmp(name, "reserve")) dp_check_reserve(-3, LOC);
     if (!strcmp(name, "str_at")) dp_str_at(S("abc"), 3, LOC);
     if (!strcmp(name, "str_utf8")) dp_str_slice(S("h\xc3\xa9llo"), 0, 2, LOC);
     if (!strcmp(name, "str_bounds")) dp_str_slice(S("abc"), 1, 4, LOC);
@@ -332,6 +344,17 @@ static int64_t deep(int64_t n) {
     return r;
 }
 
+/* Три выделения: 8, 24 и рост до 40 байт (Р68). */
+static const char* entry_allocs(void) {
+    void* a = dp_alloc(1, 8, LOC);
+    void* b = dp_alloc(3, 8, LOC);
+    b = dp_realloc(b, 5, 8, LOC);
+    dp_free(a);
+    dp_free(b);
+    dp_println(S("allocs"));
+    return NULL;
+}
+
 static const char* entry_deep(void) {
     int64_t r = deep(DP_MAX_DEPTH - 2);  /* ровно в пределе */
     dp_println(r == DP_MAX_DEPTH - 2 ? S("deep ok") : S("deep wrong"));
@@ -359,7 +382,8 @@ int main(int argc, char** argv) {
         if (!strcmp(argv[2], "error")) return dp_run(entry_error);
         if (!strcmp(argv[2], "trap")) return dp_run(entry_trap);
         if (!strcmp(argv[2], "deep")) return dp_run(entry_deep);
+        if (!strcmp(argv[2], "allocs")) return dp_run(entry_allocs);
     }
-    fprintf(stderr, "usage: rt_test unit | trap NAME | run ok|error|trap|deep\n");
+    fprintf(stderr, "usage: rt_test unit | trap NAME | run ok|error|trap|deep|allocs\n");
     return 2;
 }

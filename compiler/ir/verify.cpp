@@ -309,6 +309,18 @@ private:
                 list_receiver(rv);
                 same(rv.type, prim(TK::Void), "result");
                 break;
+            case Intrinsic::ListReserve:
+                args(1);
+                same(op(0), prim(TK::I64), "operand");
+                list_receiver(rv);
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            case Intrinsic::MapReserve:
+                args(1);
+                same(op(0), prim(TK::I64), "operand");
+                map_receiver(rv);
+                same(rv.type, prim(TK::Void), "result");
+                break;
             case Intrinsic::ListContains:
                 args(2);
                 t0 = op(0);
@@ -419,6 +431,7 @@ private:
             rv.intrinsic != Intrinsic::ReadFile &&
             rv.intrinsic != Intrinsic::ListInsert && rv.intrinsic != Intrinsic::ListRemove &&
             rv.intrinsic != Intrinsic::ListClear && rv.intrinsic != Intrinsic::ListSort &&
+            rv.intrinsic != Intrinsic::ListReserve && rv.intrinsic != Intrinsic::MapReserve &&
             rv.intrinsic != Intrinsic::MapSet && rv.intrinsic != Intrinsic::MapRemove &&
             rv.intrinsic != Intrinsic::MapClear && rv.intrinsic != Intrinsic::Probe) {
             fail("receiver place on a method that only reads");

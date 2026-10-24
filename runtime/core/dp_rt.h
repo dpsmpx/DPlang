@@ -53,6 +53,13 @@ void* dp_alloc(int64_t count, size_t elem, const char* loc);
 void* dp_realloc(void* p, int64_t count, size_t elem, const char* loc);
 void dp_free(void* p);
 
+/* Счётчик выделений (Р68): число вызовов dp_alloc и dp_realloc, которые
+ * выделили память, и их байты. dp_alloc_report пишет его в stderr, если
+ * задана переменная окружения DPL_ALLOC_STATS; порты зовут её после
+ * входа программы или теста. */
+void dp_alloc_stats(int64_t* count, int64_t* bytes);
+void dp_alloc_report(void);
+
 /* Глубина вложенности вызовов (trap.memory): число активных кадров;
  * функция увеличивает её на входе и уменьшает на выходе, вызов
  * проверяет предел до входа в вызываемую. */
@@ -356,6 +363,7 @@ int64_t dp_check_index(int64_t i, int64_t len, const char* loc);
 void dp_check_slice(int64_t lo, int64_t hi, int64_t len, const char* loc);
 void dp_check_insert(int64_t i, int64_t len, const char* loc);
 void dp_check_repeat(int64_t n, const char* loc);
+void dp_check_reserve(int64_t n, const char* loc);
 
 /* --- вход в программу (trap.exit)
  *

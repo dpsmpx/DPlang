@@ -763,9 +763,9 @@ private:
         b += "    for (uint64_t i = " + hash_of(t->key, "*key") + " & mask;; i = (i + 1) & mask) {\n";
         b += "        int64_t s = m->slots[i];\n        if (s == 0) return -1;\n";
         b += "        if (" + eq_of(t->key, "&m->keys[s - 1]", "key") + ") return s - 1;\n    }\n}\n\n";
-        // Индекс заново под len: размер — степень двойки не меньше 2 * len + 2.
-        b += "DP_INLINE void dp_mindex__" + m + "(" + n + "* m, const char* loc) {\n";
-        b += "    int64_t ns = 8;\n    while (ns < 2 * m->len + 2) ns *= 2;\n    dp_free(m->slots);\n";
+        // Индекс заново под want пар: размер — степень двойки не меньше 2 * want + 2.
+        b += "DP_INLINE void dp_mindex__" + m + "(" + n + "* m, int64_t want, const char* loc) {\n";
+        b += "    int64_t ns = 8;\n    while (ns < 2 * want + 2) ns *= 2;\n    dp_free(m->slots);\n";
         b += "    m->slots = (int64_t*)dp_alloc(ns, sizeof(int64_t), loc);\n";
         b += "    memset(m->slots, 0, (size_t)ns * sizeof(int64_t));\n    m->nslots = ns;\n";
         b += "    uint64_t mask = (uint64_t)ns - 1;\n    for (int64_t p = 0; p < m->len; p++) {\n";
@@ -782,13 +782,19 @@ private:
         b += "        m->keys = (" + kc + "*)dp_realloc(m->keys, nc, sizeof(" + kc + "), loc);\n";
         b += "        m->vals = (" + vc + "*)dp_realloc(m->vals, nc, sizeof(" + vc + "), loc);\n        m->cap = nc;\n    }\n";
         b += "    m->keys[m->len] = key;\n    m->vals[m->len] = val;\n    m->len++;\n";
-        b += "    if (2 * m->len + 2 > m->nslots) {\n        dp_mindex__" + m + "(m, loc);\n        return;\n    }\n";
+        b += "    if (2 * m->len + 2 > m->nslots) {\n        dp_mindex__" + m + "(m, m->len, loc);\n        return;\n    }\n";
         b += "    uint64_t mask = (uint64_t)m->nslots - 1;\n";
         b += "    uint64_t i = " + hash_of(t->key, "m->keys[m->len - 1]") + " & mask;\n";
         b += "    while (m->slots[i] != 0) i = (i + 1) & mask;\n    m->slots[i] = m->len;\n}\n\n";
         b += "DP_INLINE " + vc + "* dp_mvalue__" + m + "(" + n + "* m, const " + kc + "* key, const char* loc) {\n";
         b += "    int64_t p = dp_mfind__" + m + "(m, key);\n";
         b += "    if (p < 0) dp_trap(loc, \"key is not in the map\");\n    return &m->vals[p];\n}\n\n";
+        // Ёмкость не меньше n пар (Р68): массивы пар и индекс — сразу.
+        b += "DP_INLINE void dp_mreserve__" + m + "(" + n + "* m, int64_t n, const char* loc) {\n";
+        b += "    dp_check_reserve(n, loc);\n    if (n > m->cap) {\n";
+        b += "        m->keys = (" + kc + "*)dp_realloc(m->keys, n, sizeof(" + kc + "), loc);\n";
+        b += "        m->vals = (" + vc + "*)dp_realloc(m->vals, n, sizeof(" + vc + "), loc);\n        m->cap = n;\n    }\n";
+        b += "    if (2 * n + 2 > m->nslots) dp_mindex__" + m + "(m, n, loc);\n}\n\n";
         b += "DP_INLINE bool dp_mcontains__" + m + "(const " + n + "* m, const " + kc + "* key) {\n";
         b += "    return dp_mfind__" + m + "(m, key) >= 0;\n}\n\n";
         b += "DP_INLINE void dp_mclear__" + m + "(" + n + "* m) {\n";
@@ -893,6 +899,10 @@ private:
         b += "    dp_check_index(i, l->len, loc);\n    " + ec + " v = l->ptr[i];\n";
         b += "    memmove(&l->ptr[i], &l->ptr[i + 1], (size_t)(l->len - 1 - i) * sizeof(" + ec + "));\n";
         b += "    l->len--;\n    return v;\n}\n\n";
+        // Ёмкость не меньше n (Р68); clear() её сохраняет.
+        b += "DP_INLINE void dp_reserve__" + m + "(" + n + "* l, int64_t n, const char* loc) {\n";
+        b += "    dp_check_reserve(n, loc);\n    if (n > l->cap) {\n";
+        b += "        l->ptr = (" + ec + "*)dp_realloc(l->ptr, n, sizeof(" + ec + "), loc);\n        l->cap = n;\n    }\n}\n\n";
         b += "DP_INLINE void dp_clear__" + m + "(" + n + "* l) {\n";
         if (ir::needs_drop(t->elem)) b += "    for (int64_t i = 0; i < l->len; i++) " + drop_of(t->elem, "l->ptr[i]") + "\n";
         b += "    l->len = 0;\n}\n\n";
@@ -1280,6 +1290,10 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             case Intrinsic::ListRemove: return "dp_remove__" + m + "(" + l + ", (int64_t)" + ops[0] + ", " + loc_ + ")";
             case Intrinsic::ListClear: return "dp_clear__" + m + "(" + l + ")";
             case Intrinsic::ListSort: return "dp_sort__" + m + "(" + l + ")";
+            case Intrinsic::ListReserve:
+                return "dp_reserve__" + m + "(" + l + ", (int64_t)" + ops[0] + ", " + loc_ + ")";
+            case Intrinsic::MapReserve:
+                return "dp_mreserve__" + m + "(" + l + ", (int64_t)" + ops[0] + ", " + loc_ + ")";
             case Intrinsic::MapSet: return "dp_mset__" + m + "(" + l + ", " + ops[0] + ", " + ops[1] + ", " + loc_ + ")";
             case Intrinsic::MapRemove: return "dp_mremove__" + m + "(" + l + ", " + ops[0] + ", " + loc_ + ")";
             case Intrinsic::MapClear: return "dp_mclear__" + m + "(" + l + ")";

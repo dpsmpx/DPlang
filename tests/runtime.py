@@ -68,6 +68,7 @@ TRAPS = {
     'slice_end': _trap('slice 0..6 is out of bounds for length 5'),
     'insert': _trap('insert position 4 is out of bounds for length 3'),
     'repeat': _trap('repeat count -2 is negative'),
+    'reserve': _trap('reserve count -3 is negative'),
     'str_at': _trap('index 3 is out of bounds for length 3'),
     'str_utf8': _trap('slice 0..2 of a str does not fall on character boundaries'),
     'str_bounds': _trap('slice 1..4 is out of bounds for length 3'),
@@ -88,7 +89,11 @@ RUNS = {
     'error': ('before\n', 'error: main failed with ParseError.BadKey\n', 1),
     'trap': ('partial', f'{LOC}: trap: division by zero\n', 101),
     'deep': ('deep ok\n', f'{LOC}: trap: stack overflow: calls are nested too deeply\n', 101),
+    # Р68: счётчик выделений по DPL_ALLOC_STATS — 8, 24 и рост до 40 байт.
+    'allocs': ('allocs\n', 'dpl: 3 allocations, 72 bytes\n', 0),
 }
+# Переменные окружения запуска: остальные случаи — без них.
+RUN_ENV = {'allocs': {'DPL_ALLOC_STATS': '1'}}
 
 CASES = ['unit', 'floats'] + ['trap/' + n for n in sorted(TRAPS)] + ['run/' + n for n in sorted(RUNS)]
 
@@ -234,11 +239,12 @@ def prepare(cc, flags, native_dir, runtime_objs, runtime_include):
     return None
 
 
-def _run(argv, merge=False, cwd=None):
+def _run(argv, merge=False, cwd=None, env=None):
+    env = {k: v for k, v in os.environ.items() if k != 'DPL_ALLOC_STATS'} | (env or {})
     try:
         p = subprocess.run(argv, capture_output=not merge, stdout=subprocess.PIPE if merge else None,
                            stderr=subprocess.STDOUT if merge else None, text=True, errors='backslashreplace',
-                           timeout=TIMEOUT, cwd=cwd)
+                           timeout=TIMEOUT, cwd=cwd, env=env)
     except subprocess.TimeoutExpired:
         return None
     return p
@@ -310,4 +316,4 @@ def check_case(name, dpl, native, native_dir):
     if kind == 'trap':
         want = TRAPS[case]
         return _compare(_run([exe, 'trap', case], merge=want[1] is None), want, case)
-    return _compare(_run([exe, 'run', case]), RUNS[case], case)
+    return _compare(_run([exe, 'run', case], env=RUN_ENV.get(case)), RUNS[case], case)
