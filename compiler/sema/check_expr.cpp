@@ -67,7 +67,7 @@ struct MethodInfo {
 constexpr MethodInfo kMethods[] = {
     {"push", Method::Push},   {"pop", Method::Pop},           {"insert", Method::Insert},
     {"remove", Method::Remove}, {"clear", Method::Clear},     {"sort", Method::Sort},
-    {"reserve", Method::Reserve},
+    {"reserve", Method::Reserve}, {"add", Method::Add}, {"handles", Method::Handles},
     {"contains", Method::Contains}, {"trim", Method::Trim},   {"find", Method::Find},
     {"starts_with", Method::StartsWith}, {"split", Method::Split}, {"get", Method::Get},
     {"keys", Method::Keys},
@@ -156,7 +156,9 @@ bool Checker::type_prop(const Type* root, bool ord) {
             switch (p->kind) {
                 case TK::Error: return 1;
                 // Р54: отображения не сравниваются; указатель C (Р61), массив и ссылка-поле C (Р62) — тоже.
-                case TK::Void: case TK::Result: case TK::Map: case TK::CFn: case TK::Array: case TK::Ref: return 0;
+                case TK::Void: case TK::Result: case TK::Map: case TK::Pool: case TK::CFn: case TK::Array: case TK::Ref:
+                    return 0;
+                case TK::PoolHandle: return ord ? 0 : 1;  // Р67: хэндлы сравниваются ==, но не упорядочены
                 case TK::Bool: case TK::Str: return 1;
                 case TK::List: case TK::Slice: p = p->elem; continue;
                 case TK::Optional:  // ?T не упорядочен
@@ -385,6 +387,11 @@ const Type* Checker::field_expr(FieldExpr* f, const Type* /*hint*/) {
         }
         error(Code::E0406, f->name_span, "struct '" + tn(t) + "' has no field '" + f->name + "'");
         return err();
+    }
+    if (t->kind == TK::PoolHandle && (f->name == "index" || f->name == "generation")) {  // Р67
+        f->field = f->name == "index" ? 0 : 1;
+        note_extend(f->object, f);
+        return prim(TK::U32);
     }
     error(Code::E0406, f->name_span, "'" + tn(t) + "' has no field '" + f->name + "'");
     return err();
@@ -775,8 +782,9 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
         case BuiltinFn::Len: {
             const Type* t = infer(c->args[0], nullptr);
             if (t->kind != TK::List && t->kind != TK::Slice && t->kind != TK::Str && t->kind != TK::Map &&
-                t->kind != TK::Array && t->kind != TK::Error) {
-                error(Code::E0401, c->args[0]->span, "'len' needs a List, a slice, a Map or a str, found '" + tn(t) + "'");
+                t->kind != TK::Pool && t->kind != TK::Array && t->kind != TK::Error) {
+                error(Code::E0401, c->args[0]->span,
+                      "'len' needs a List, a slice, a Map, a Pool or a str, found '" + tn(t) + "'");
             }
             return prim(TK::I64);
         }
@@ -861,11 +869,15 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         if (f->name == m.name) mi = &m;
     }
     bool list = t->kind == TK::List, slice = t->kind == TK::Slice, str = t->kind == TK::Str, map = t->kind == TK::Map;
-    bool list_method = mi && mi->m <= Method::Contains;
+    bool pool = t->kind == TK::Pool;
+    bool list_method = mi && mi->m <= Method::Contains && mi->m != Method::Add;
     bool str_method = mi && mi->m >= Method::Trim && mi->m <= Method::Split;
     bool map_method = mi && (mi->m == Method::Get || mi->m == Method::Keys || mi->m == Method::Contains ||
                              mi->m == Method::Remove || mi->m == Method::Clear || mi->m == Method::Reserve);
-    bool ok = mi && (map ? map_method : (list_method && (list || slice)) || (str_method && str));
+    bool pool_method = mi && (mi->m == Method::Add || mi->m == Method::Get || mi->m == Method::Contains ||
+                              mi->m == Method::Remove || mi->m == Method::Clear || mi->m == Method::Reserve ||
+                              mi->m == Method::Handles);
+    bool ok = mi && (map ? map_method : pool ? pool_method : (list_method && (list || slice)) || (str_method && str));
     if (!ok) {
         error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
         infer_loose(c->args);
@@ -876,7 +888,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     size_t arity = 0;
     switch (mi->m) {
         case Method::Push: case Method::Contains: case Method::Remove: case Method::Find: case Method::StartsWith:
-        case Method::Split: case Method::Get: case Method::Reserve:
+        case Method::Split: case Method::Get: case Method::Reserve: case Method::Add:
             arity = 1;
             break;
         case Method::Insert: arity = 2; break;
@@ -888,8 +900,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         infer_loose(c->args);
         return err();
     }
-    bool mutating = map ? (mi->m == Method::Remove || mi->m == Method::Clear || mi->m == Method::Reserve)
-                        : list_method && mi->m != Method::Contains;
+    bool mutating = map || pool ? mi->m < Method::Contains : list_method && mi->m != Method::Contains;
     if (mutating) {
         if (slice) {
             error(Code::E0412, f->name_span, "slices are read-only; '" + f->name + "' needs a List");
@@ -901,6 +912,19 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         }
     }
     const Type* elem = t->elem;
+    if (pool) {  // Р67
+        const Type* h = tt_.pool_handle(elem);
+        switch (mi->m) {
+            case Method::Add: check(c->args[0], elem); return h;
+            case Method::Get: check(c->args[0], h); return tt_.optional(elem);
+            case Method::Contains: check(c->args[0], h); return prim(TK::Bool);
+            case Method::Remove: check(c->args[0], h); return tt_.optional(elem);
+            case Method::Clear: return prim(TK::Void);
+            case Method::Reserve: check(c->args[0], prim(TK::I64)); return prim(TK::Void);
+            case Method::Handles: return tt_.list(h);
+            default: return err();
+        }
+    }
     if (map) {
         switch (mi->m) {
             case Method::Get: check(c->args[0], t->key); return tt_.optional(elem);
@@ -933,7 +957,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         case Method::Find: check(c->args[0], prim(TK::Str)); return tt_.optional(prim(TK::I64));
         case Method::StartsWith: check(c->args[0], prim(TK::Str)); return prim(TK::Bool);
         case Method::Split: check(c->args[0], prim(TK::Str)); return tt_.list(prim(TK::Str));
-        case Method::Get: case Method::Keys: break;
+        case Method::Get: case Method::Keys: case Method::Add: case Method::Handles: break;
     }
     return err();
 }
@@ -1131,6 +1155,12 @@ const Type* Checker::list_lit(ListLitExpr* l, const Type* hint) {
         for (Expr* x : l->items) infer(x, nullptr);
         return err();
     }
+    if (h && h->kind == TK::Pool) {  // Р67: у Pool — тоже
+        if (l->items.empty()) return h;
+        error(Code::E0401, l->span, "a Pool literal must be empty: '[]'; add values with p.add(v)");
+        for (Expr* x : l->items) infer(x, nullptr);
+        return err();
+    }
     if (h && h->kind == TK::Array) {  // Р62: значение поля `[N]T` — ровно N элементов
         for (Expr* x : l->items) check(x, h->elem);
         if (l->items.size() != h->len) {
@@ -1167,6 +1197,10 @@ const Type* Checker::index_expr(IndexExpr* i) {
         check(i->index, t->key);
         return t->elem;
     }
+    if (t->kind == TK::Pool) {  // Р67: p[h] — значение по хэндлу
+        check(i->index, tt_.pool_handle(t->elem));
+        return t->elem;
+    }
     const Type* k = infer(i->index, prim(TK::I64));
     if (k->kind != TK::Error) {
         if (!is_integer(k)) error(Code::E0401, i->index->span, "index must be an integer, found '" + tn(k) + "'");
@@ -1197,6 +1231,9 @@ const Type* Checker::slice_expr(SliceExpr* s) {
         case TK::Str: return prim(TK::Str);
         case TK::Map:
             error(Code::E0403, s->object->span, "a Map cannot be sliced; read values with m[k]");
+            return err();
+        case TK::Pool:
+            error(Code::E0403, s->object->span, "a Pool cannot be sliced; read values with p[h]");
             return err();
         case TK::Error: return err();
         default:
@@ -1312,6 +1349,11 @@ bool Checker::mutable_place(Expr* e, const char* why) {
         return false;
     }
     if (auto* f = as<FieldExpr>(e)) {
+        if (f->field >= 0 && f->object->type && f->object->type->kind == TK::PoolHandle) {
+            error(Code::E0412, e->span, std::string("cannot ") + why + " '" + f->name +
+                                            "' of a Handle: it is read-only; handles come from 'p.add(v)'");
+            return false;
+        }
         if (f->field >= 0) return mutable_place(f->object, why);
         error(Code::E0412, e->span, std::string("cannot ") + why + " this expression");
         return false;

@@ -340,6 +340,7 @@ bool equal(const Value& a, const Value& b, const Type* t) {
         }
         case TK::Optional:
             return a.tag == b.tag && (a.tag == 0 || equal(a.items[0], b.items[0], t->elem));
+        case TK::PoolHandle: return a.items[0].i == b.items[0].i && a.items[1].i == b.items[1].i;
         case TK::Struct:
             for (size_t k = 0; k < t->sdef->fields.size(); k++) {
                 if (!equal(a.items[k], b.items[k], t->sdef->fields[k].type)) return false;
@@ -392,6 +393,38 @@ bool less(const Value& a, const Value& b, const Type* t) {
             if (sema::is_signed(t)) return static_cast<int64_t>(a.i) < static_cast<int64_t>(b.i);
             return a.i < b.i;
     }
+}
+
+// Pool (Р67): последовательность слотов; у слота tag — жив (1) или нет,
+// i — поколение, items — значение живого. Хэндл — [номер, поколение].
+constexpr uint64_t kGenLimit = UINT32_MAX;  // слот с таким поколением выведен из оборота
+
+Value handle_value(size_t index, uint64_t gen) {
+    Value h = seq_value(0);
+    h.items.push_back(int_value(index));
+    h.items.push_back(int_value(gen));
+    return h;
+}
+
+// Номер живого слота хэндла h или -1, если хэндл устарел.
+int64_t pool_find(const Value& p, const Value& h) {
+    uint64_t i = h.items[0].i;
+    if (i >= p.items.size()) return -1;
+    const Value& s = p.items[i];
+    return s.tag == 1 && s.i == h.items[1].i ? static_cast<int64_t>(i) : -1;
+}
+
+size_t pool_live(const Value& p) {
+    size_t n = 0;
+    for (const Value& s : p.items) n += s.tag;
+    return n;
+}
+
+// Освобождение живого слота: поколение растёт, на пределе слот выведен.
+void pool_release(Value& s) {
+    s.tag = 0;
+    s.items.clear();
+    s.i++;
 }
 
 // Устойчивая сортировка слиянием: при любом сравнении (и с NaN) даёт
@@ -564,6 +597,25 @@ private:
                         return Ref{};
                     }
                     r.v = &v.items[2 * static_cast<size_t>(i) + 1];
+                    break;
+                }
+                case ProjKind::PoolValue: {  // Р67
+                    int64_t i = v.k == Value::K::Seq ? pool_find(v, fr.locals[pr.index]) : -1;
+                    if (i < 0) {
+                        trap("stale handle: its slot was removed or reused");
+                        return Ref{};
+                    }
+                    r.v = &v.items[static_cast<size_t>(i)].items[0];
+                    break;
+                }
+                case ProjKind::PoolSlot: {  // живой слот из обхода
+                    const Value& iv = fr.locals[pr.index];
+                    if (v.k != Value::K::Seq || iv.k != Value::K::Int || iv.i >= v.items.size() ||
+                        v.items[iv.i].tag != 1) {
+                        internal("pool slot is not live");
+                        return Ref{};
+                    }
+                    r.v = &v.items[iv.i].items[0];
                     break;
                 }
                 case ProjKind::MapKeyAt: case ProjKind::MapValueAt: {  // номер пары из MapOrder
@@ -793,7 +845,7 @@ private:
                 }
                 return v;
             }
-            case RvKind::MakeMap: return seq_value(0);
+            case RvKind::MakeMap: case RvKind::MakePool: return seq_value(0);
             case RvKind::Zero: return zero_value(rv.type);
             case RvKind::AddrOf: {  // Р62: ссылку читает только C, а его интерпретатор не вызывает — копия
                 Ref r = resolve(fr, rv.place);
@@ -1108,6 +1160,7 @@ private:
             case Intrinsic::Len: {
                 const Value& a = arg(0, s0);
                 if (op_type(fr, rv.ops[0])->kind == TK::Map) return int_value(a.items.size() / 2);
+                if (op_type(fr, rv.ops[0])->kind == TK::Pool) return int_value(pool_live(a));
                 return int_value(a.k == Value::K::Str ? a.s.size() : seq_len(a));
             }
             case Intrinsic::MapGet: case Intrinsic::MapContains: {
@@ -1118,6 +1171,30 @@ private:
                 if (i >= 0) out.items.push_back(m.items[2 * static_cast<size_t>(i) + 1]);
                 return out;
             }
+            case Intrinsic::PoolGet: case Intrinsic::PoolContains: {
+                const Value& p = arg(0, s0);
+                int64_t i = pool_find(p, arg(1, s1));
+                if (rv.intrinsic == Intrinsic::PoolContains) return bool_value(i >= 0);
+                Value out = seq_value(i >= 0 ? 1 : 0);
+                if (i >= 0) out.items.push_back(p.items[static_cast<size_t>(i)].items[0]);
+                return out;
+            }
+            case Intrinsic::PoolHandles: {
+                const Value& p = arg(0, s0);
+                Value out = seq_value(0);
+                for (size_t i = 0; i < p.items.size(); i++) {
+                    if (p.items[i].tag == 1) out.items.push_back(handle_value(i, p.items[i].i));
+                }
+                return out;
+            }
+            case Intrinsic::PoolSlots: return int_value(arg(0, s0).items.size());
+            case Intrinsic::PoolLive: {
+                const Value& p = arg(0, s0);
+                uint64_t i = arg(1, s1).i;
+                return bool_value(i < p.items.size() && p.items[i].tag == 1);
+            }
+            case Intrinsic::PoolAdd: case Intrinsic::PoolRemove: case Intrinsic::PoolClear: case Intrinsic::PoolReserve:
+                return pool_method(fr, rv, ops);
             case Intrinsic::CArenaMark: return int_value(0);  // Р62: арена — только у сборки
             case Intrinsic::CArenaRelease: return Value{};
             case Intrinsic::MapKeys: {
@@ -1315,6 +1392,53 @@ private:
         int64_t k = static_cast<int64_t>(n.i);
         if (k < 0) trap("reserve count " + std::to_string(k) + " is negative");
         else if (n.i > kMaxLen) trap("out of memory");
+    }
+
+    Value pool_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place, true);
+        if (stop_) return Value{};
+        if (r.byte >= 0 || r.v->k != Value::K::Seq) {
+            internal("pool method on a non-Pool");
+            return Value{};
+        }
+        std::vector<Value>& slots = r.v->items;
+        switch (rv.intrinsic) {
+            case Intrinsic::PoolAdd: {  // свободный слот с наименьшим номером, иначе новый
+                size_t i = 0;
+                while (i < slots.size() && (slots[i].tag == 1 || slots[i].i >= kGenLimit)) i++;
+                if (i == slots.size()) {
+                    if (slots.size() >= kMaxLen) {
+                        trap("out of memory");
+                        return Value{};
+                    }
+                    Value s = seq_value(0);
+                    s.i = 1;
+                    slots.push_back(std::move(s));
+                }
+                slots[i].tag = 1;
+                slots[i].items.clear();
+                slots[i].items.push_back(std::move(ops[0]));
+                return handle_value(i, slots[i].i);
+            }
+            case Intrinsic::PoolRemove: {
+                int64_t i = pool_find(*r.v, ops[0]);
+                Value out = seq_value(i >= 0 ? 1 : 0);
+                if (i >= 0) {
+                    out.items.push_back(std::move(slots[static_cast<size_t>(i)].items[0]));
+                    pool_release(slots[static_cast<size_t>(i)]);
+                }
+                return out;
+            }
+            case Intrinsic::PoolClear:
+                for (Value& s : slots) {
+                    if (s.tag == 1) pool_release(s);
+                }
+                return Value{};
+            case Intrinsic::PoolReserve: reserve(ops[0]); return Value{};
+            default: break;
+        }
+        internal("unknown intrinsic");
+        return Value{};
     }
 
     Value map_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {

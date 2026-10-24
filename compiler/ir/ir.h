@@ -49,6 +49,8 @@ enum class ProjKind : uint8_t {
     // Ключ и значение пары Map с номером из переменной index (i64): номера
     // даёт MapOrder при обходе, тело обхода Map не меняет (E0412).
     MapKeyAt, MapValueAt,
+    PoolValue,  // элемент Pool по хэндлу из переменной index; устаревший — ловушка (Р67)
+    PoolSlot,   // элемент живого слота Pool с номером из переменной index (i64) — обход
 };
 
 struct Proj {
@@ -128,6 +130,12 @@ enum class Intrinsic : uint8_t {
     // MapOrder (→ List[i64], номера пар по возрастанию ключа — для обхода).
     // ListReserve и MapReserve (ops: n) — ёмкость не меньше n (Р68).
     MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys, MapOrder, MapReserve,
+    // Pool (Р67). Изменяющие — получатель-место: PoolAdd (ops: значение →
+    // Handle[T]), PoolRemove (хэндл → ?T), PoolClear, PoolReserve (n).
+    // Читающие — Pool первым операндом: PoolGet (хэндл → ?T), PoolContains
+    // (→ bool), PoolHandles (→ List[Handle[T]] по номеру слота), PoolSlots
+    // (→ i64, число слотов), PoolLive (номер i64 → bool, слот жив) — обход.
+    PoolAdd, PoolRemove, PoolClear, PoolReserve, PoolGet, PoolContains, PoolHandles, PoolSlots, PoolLive,
     // Арена C на время вызова (Р62): строки и массивы заимствующих
     // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
     CArenaMark, CArenaRelease,
@@ -145,6 +153,7 @@ enum class RvKind : uint8_t {
     MakeVariant,  // variant; ops — данные по порядку объявления
     MakeList,     // ops — элементы; type — List[T]
     MakeMap,      // пустое Map[K, V] (Р54); операндов нет
+    MakePool,     // пустой Pool[T] (Р67); операндов нет
     MakeSome,     // ops[0]
     MakeNone,
     MakeOk,       // ops[0]; у E!void операндов нет

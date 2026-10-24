@@ -60,6 +60,7 @@ private:
         for (size_t i = 0; i < pl.proj.size() && t; i++) {
             if (pl.proj[i].kind == ProjKind::Index && (t->kind == TK::Slice || t->kind == TK::Str)) return false;
             if (pl.proj[i].kind == ProjKind::MapKeyAt) return false;  // ключ пары не меняют
+            if (pl.proj[i].kind == ProjKind::Field && t->kind == TK::PoolHandle) return false;  // Р67
             Place prefix{pl.local, std::vector<Proj>(pl.proj.begin(), pl.proj.begin() + static_cast<long>(i) + 1)};
             t = place_type(p_, f_, prefix);
         }
@@ -209,6 +210,36 @@ private:
         return t;
     }
 
+    const Type* pool_receiver(const Rvalue& rv) {
+        if (!rv.has_place) {
+            fail("pool method without a receiver");
+            return nullptr;
+        }
+        const Type* t = place(rv.place);
+        if (!t || t->kind != TK::Pool) {
+            fail("pool method on a non-Pool");
+            return nullptr;
+        }
+        if (!writable(rv.place)) fail("pool method on a read-only place");
+        return t;
+    }
+
+    // Читающий метод Pool: первый операнд — Pool.
+    const Type* pool_operand(const Type* t) {
+        if (t && t->kind != TK::Pool) {
+            fail("pool method on a non-Pool");
+            return nullptr;
+        }
+        return t;
+    }
+
+    // Хэндл пула p (Р67): Handle[T] того же T.
+    void handle_of(const Type* h, const Type* p, const char* what) {
+        if (h && p && (h->kind != TK::PoolHandle || h->elem != p->elem)) {
+            fail(std::string(what) + " is not a handle of the pool");
+        }
+    }
+
     // Читающий метод Map: первый операнд — Map.
     const Type* map_operand(const Type* t) {
         if (t && t->kind != TK::Map) {
@@ -229,7 +260,7 @@ private:
                 args(1);
                 t0 = op(0);
                 if (t0 && t0->kind != TK::List && t0->kind != TK::Slice && t0->kind != TK::Str && t0->kind != TK::Map &&
-                    t0->kind != TK::Array) {
+                    t0->kind != TK::Pool && t0->kind != TK::Array) {
                     fail("len of a non-sequence");
                 }
                 same(rv.type, prim(TK::I64), "result");
@@ -377,6 +408,57 @@ private:
                     if (rv.type->kind != TK::List || rv.type->elem != m->key) fail("keys result is not List[K]");
                 }
                 break;
+            case Intrinsic::PoolAdd:
+                args(1);
+                if (const Type* p = pool_receiver(rv)) {
+                    same(op(0, true), p->elem, "operand");
+                    handle_of(rv.type, p, "add result");
+                }
+                break;
+            case Intrinsic::PoolRemove:
+                args(1);
+                if (const Type* p = pool_receiver(rv)) {
+                    handle_of(op(0), p, "operand");
+                    if (rv.type->kind != TK::Optional || rv.type->elem != p->elem) fail("remove result is not ?T");
+                }
+                break;
+            case Intrinsic::PoolClear:
+                args(0);
+                pool_receiver(rv);
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            case Intrinsic::PoolReserve:
+                args(1);
+                same(op(0), prim(TK::I64), "operand");
+                pool_receiver(rv);
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            case Intrinsic::PoolGet: case Intrinsic::PoolContains:
+                args(2);
+                if (const Type* p = pool_operand(op(0))) {
+                    handle_of(op(1), p, "operand");
+                    if (rv.intrinsic == Intrinsic::PoolContains) same(rv.type, prim(TK::Bool), "result");
+                    else if (rv.type->kind != TK::Optional || rv.type->elem != p->elem) fail("get result is not ?T");
+                }
+                break;
+            case Intrinsic::PoolHandles:
+                args(1);
+                if (const Type* p = pool_operand(op(0))) {
+                    if (rv.type->kind != TK::List) fail("handles result is not a List");
+                    else handle_of(rv.type->elem, p, "handles element");
+                }
+                break;
+            case Intrinsic::PoolSlots:
+                args(1);
+                pool_operand(op(0));
+                same(rv.type, prim(TK::I64), "result");
+                break;
+            case Intrinsic::PoolLive:
+                args(2);
+                pool_operand(op(0));
+                same(op(1), prim(TK::I64), "operand");
+                same(rv.type, prim(TK::Bool), "result");
+                break;
             case Intrinsic::MapOrder:
                 args(1);
                 if (map_operand(op(0)) && (rv.type->kind != TK::List || rv.type->elem->kind != TK::I64)) {
@@ -432,6 +514,8 @@ private:
             rv.intrinsic != Intrinsic::ListInsert && rv.intrinsic != Intrinsic::ListRemove &&
             rv.intrinsic != Intrinsic::ListClear && rv.intrinsic != Intrinsic::ListSort &&
             rv.intrinsic != Intrinsic::ListReserve && rv.intrinsic != Intrinsic::MapReserve &&
+            rv.intrinsic != Intrinsic::PoolAdd && rv.intrinsic != Intrinsic::PoolRemove &&
+            rv.intrinsic != Intrinsic::PoolClear && rv.intrinsic != Intrinsic::PoolReserve &&
             rv.intrinsic != Intrinsic::MapSet && rv.intrinsic != Intrinsic::MapRemove &&
             rv.intrinsic != Intrinsic::MapClear && rv.intrinsic != Intrinsic::Probe) {
             fail("receiver place on a method that only reads");
@@ -482,6 +566,10 @@ private:
                 break;
             case RvKind::MakeMap:
                 if (t->kind != TK::Map) return fail("map value of a non-Map type");
+                count(rv, 0);
+                break;
+            case RvKind::MakePool:
+                if (t->kind != TK::Pool) return fail("pool value of a non-Pool type");
                 count(rv, 0);
                 break;
             case RvKind::MakeSome:

@@ -130,6 +130,7 @@ void drop_reads(Reads& reads, Expr* place) {
 // Что обходит цикл — для сообщения.
 std::string over(TK coll) {
     if (coll == TK::Map) return "its Map; iterate over a copy of the keys: 'for k in &m.keys()'";
+    if (coll == TK::Pool) return "its Pool; iterate over a copy of the handles: 'for h in &p.handles()'";
     if (coll == TK::Slice) return "its slice; iterate over a slice of a copy made before the loop";
     return "it";
 }
@@ -212,7 +213,7 @@ void Checker::loop_begin(ForStmt* s) {
     L.iter = s->iter;
     if ((s->mode == ForMode::Ref || L.mut) && s->iter && s->iter->type) {
         TK k = s->iter->type->kind;
-        if (k == TK::List || k == TK::Map || k == TK::Slice) L.coll = k;
+        if (k == TK::List || k == TK::Map || k == TK::Pool || k == TK::Slice) L.coll = k;
         // Строка — как список байтов; её срез — копия (ref.slices): обход
         // среза строки корень не держит.
         if (k == TK::Str && !as<SliceExpr>(bare(s->iter))) L.coll = TK::List;

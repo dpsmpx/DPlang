@@ -208,10 +208,10 @@ enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Varian
 // Методы встроенных типов: List и str.
 // Методы: List — Push…Contains, str — Trim…Split, Map (Р54) — Get, Keys и
 // Contains, Remove, Clear.
-// Порядок важен: до Contains — изменяющие методы List (Reserve — и Map),
-// Contains..Split — читающие List и методы str, дальше — читающие Map.
+// Порядок важен: до Contains — изменяющие методы (Add — только у Pool),
+// Contains..Split — читающие List и методы str, дальше — читающие Map и Pool.
 enum class Method : uint8_t {
-    Push, Pop, Insert, Remove, Clear, Sort, Reserve, Contains, Trim, Find, StartsWith, Split, Get, Keys
+    Push, Pop, Insert, Remove, Clear, Sort, Reserve, Add, Contains, Trim, Find, StartsWith, Split, Get, Keys, Handles
 };
 
 struct CallExpr : Expr {

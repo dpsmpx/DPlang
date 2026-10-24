@@ -13,6 +13,10 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
         if (!t) return nullptr;
         switch (pr.kind) {
             case ProjKind::Field:
+                if (t->kind == TK::PoolHandle && pr.index < 2) {  // Р67: index, generation
+                    t = prog.types->prim(TK::U32);
+                    break;
+                }
                 if (t->kind != TK::Struct || pr.index >= t->sdef->fields.size()) return nullptr;
                 t = t->sdef->fields[pr.index].type;
                 break;
@@ -52,6 +56,18 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
                 }
                 t = t->elem;
                 break;
+            case ProjKind::PoolValue: {
+                const Type* h = pr.index < f.locals.size() ? f.locals[pr.index].type : nullptr;
+                if (t->kind != TK::Pool || !h || h->kind != TK::PoolHandle || h->elem != t->elem) return nullptr;
+                t = t->elem;
+                break;
+            }
+            case ProjKind::PoolSlot:
+                if (t->kind != TK::Pool || pr.index >= f.locals.size() || f.locals[pr.index].type->kind != TK::I64) {
+                    return nullptr;
+                }
+                t = t->elem;
+                break;
             case ProjKind::MapKeyAt: case ProjKind::MapValueAt:
                 if (t->kind != TK::Map || pr.index >= f.locals.size() || f.locals[pr.index].type->kind != TK::I64) {
                     return nullptr;
@@ -66,7 +82,7 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
 bool needs_drop(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
-        case TK::Str: case TK::List: case TK::Map: return true;
+        case TK::Str: case TK::List: case TK::Map: case TK::Pool: return true;
         case TK::Optional: return needs_drop(t->elem);
         case TK::Result: return needs_drop(t->elem) || needs_drop(t->err);
         case TK::Struct:

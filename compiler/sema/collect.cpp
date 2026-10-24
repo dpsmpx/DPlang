@@ -277,7 +277,7 @@ private:
     void public_type(const ast::Type* node, const sema::Type* t, const std::string& what) {
         if (!t || !node) return;
         switch (t->kind) {
-            case TK::List: case TK::Slice: case TK::Optional:
+            case TK::List: case TK::Slice: case TK::Optional: case TK::Pool: case TK::PoolHandle:
                 public_type(node, t->elem, what);
                 break;
             case TK::Result:
@@ -405,7 +405,7 @@ private:
         auto container = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m) {
             if (node && linear_in_container(t)) {
                 diags_.error(Code::E0514, node->span,
-                             "'" + type_name(t, m) + "' holds a '@linear' value in a List, a Map or a slice; "
+                             "'" + type_name(t, m) + "' holds a '@linear' value in a List, a Map, a Pool or a slice; "
                              "keep resources in variables or fields of a '@linear' struct");
             }
         };

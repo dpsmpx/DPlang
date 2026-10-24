@@ -71,6 +71,17 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
                 out = tt.list(type(n->args[0]));
                 break;
             }
+            if (k == TK::Pool || k == TK::PoolHandle) {  // Р67
+                if (n->args.size() != 1) {
+                    diags_.error(Code::E0314, node->span, "'" + n->name + "' takes exactly one type argument: " + n->name +
+                                                              "[T]");
+                    break;
+                }
+                const sema::Type* elem = type(n->args[0]);
+                if (elem->kind == TK::Error) break;
+                out = k == TK::Pool ? tt.pool(elem) : tt.pool_handle(elem);
+                break;
+            }
             if (k == TK::Map) {
                 if (n->args.size() != 2) {
                     diags_.error(Code::E0314, node->span, "'Map' takes exactly two type arguments: Map[K, V]");
