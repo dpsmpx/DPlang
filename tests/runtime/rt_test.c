@@ -240,6 +240,34 @@ static void unit_index_memory(void) {
     CHECK(n1 - n0 == 2 && b1 - b0 == 32);
 }
 
+/* Служебная часть Pool (Р67): наименьший свободный слот, поколения,
+ * вывод слота из оборота на пределе поколения. */
+static void unit_pool(void) {
+    dp_pool p = {0};
+    for (int i = 0; i < 6; i++) CHECK(dp_pool_take(&p, LOC) == i);
+    CHECK(p.len == 6 && p.nslots == 6 && p.cap >= 6);
+    dp_pool_release(&p, 4);
+    dp_pool_release(&p, 1);
+    dp_pool_release(&p, 3);
+    CHECK(p.len == 3 && p.gens[1] == 2 && !p.live[1]);
+    CHECK(dp_pool_take(&p, LOC) == 1 && dp_pool_take(&p, LOC) == 3 && dp_pool_take(&p, LOC) == 4);
+    dp_hnd h = {1, 2}, old = {1, 1}, far = {9, 1};
+    CHECK(dp_pool_valid(&p, h) && !dp_pool_valid(&p, old) && !dp_pool_valid(&p, far));
+    /* поколение на пределе: слот 0 выведен — и после clear */
+    p.gens[0] = DP_POOL_GEN_LIMIT - 1;
+    dp_pool_release(&p, 0);
+    CHECK(p.gens[0] == DP_POOL_GEN_LIMIT && dp_pool_take(&p, LOC) == 6);
+    dp_pool_clear(&p);
+    CHECK(p.len == 0 && p.nheap == 6);
+    CHECK(dp_pool_take(&p, LOC) == 1 && p.gens[1] == 3);
+    dp_pool q = dp_pool_copy(&p);
+    CHECK(q.nslots == 7 && q.len == 1 && q.live[1] && q.gens[0] == DP_POOL_GEN_LIMIT);
+    CHECK(dp_pool_take(&q, LOC) == 2 && dp_pool_take(&p, LOC) == 2);
+    dp_pool_drop(&q);
+    dp_pool_drop(&p);
+    CHECK(p.gens == NULL && p.cap == 0);
+}
+
 /* --- ловушки: по одной на запуск */
 
 static void trap_case(const char* name) {
@@ -369,6 +397,7 @@ int main(int argc, char** argv) {
         unit_convert();
         unit_str();
         unit_index_memory();
+        unit_pool();
         if (failures) {
             fprintf(stderr, "%d of %d checks failed\n", failures, checks);
             return 1;

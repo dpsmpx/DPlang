@@ -62,7 +62,7 @@ bool is_composite(const Type* t) {
     if (niche(t)) return false;
     switch (t->kind) {
         case TK::List: case TK::Map: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum:
-        case TK::Array:
+        case TK::Array: case TK::Pool:
             return true;
         default: return false;
     }
@@ -92,6 +92,8 @@ std::string mangle(const Type* t) {
         case TK::Str: return "str";
         case TK::List: return "L_" + mangle(t->elem);
         case TK::Map: return "M_" + mangle(t->key) + "_" + mangle(t->elem);
+        case TK::Pool: return "Q_" + mangle(t->elem);  // Р67
+        case TK::PoolHandle: return "hnd";             // dp_hnd из runtime: один на все T
         case TK::Handle: return "H_" + lp(t->hdef->module->name) + lp(t->hdef->name);
         case TK::Slice: return "S_" + mangle(t->elem);
         case TK::Optional: return "O_" + mangle(t->elem);
@@ -170,6 +172,7 @@ bool has_payload(const Type* t) {
 
 std::string eq_of(const Type* t, const std::string& a, const std::string& b) {
     if (is_scalar(t)) return "(*(" + a + ") == *(" + b + "))";
+    if (t->kind == TK::PoolHandle) return "dp_hnd_eq(*(" + a + "), *(" + b + "))";
     if (t->kind == TK::Str) return "dp_str_eq(*(" + a + "), *(" + b + "))";
     return "dp_eq__" + mangle(t) + "(" + a + ", " + b + ")";
 }
@@ -178,7 +181,9 @@ std::string lt_of(const Type* t, const std::string& a, const std::string& b) {
     // ?T, E!T и указатель на функцию C интерпретатор не упорядочивает:
     // «меньше» всегда ложно. Сравнение `<` указателей на функции C11
     // запрещает (6.5.8), а сравнение списка его порождает.
-    if (t->kind == TK::Optional || t->kind == TK::Result || t->kind == TK::CFn) return "false";
+    if (t->kind == TK::Optional || t->kind == TK::Result || t->kind == TK::CFn || t->kind == TK::PoolHandle) {
+        return "false";
+    }
     if (is_scalar(t)) return "(*(" + a + ") < *(" + b + "))";
     if (t->kind == TK::Str) return "dp_str_lt(*(" + a + "), *(" + b + "))";
     return "dp_lt__" + mangle(t) + "(" + a + ", " + b + ")";
@@ -353,7 +358,7 @@ private:
         if (!t || seen_.count(t)) return;
         seen_.insert(t);
         switch (t->kind) {
-            case TK::List: case TK::Slice: case TK::Array: case TK::Ref: add_type(t->elem); break;
+            case TK::List: case TK::Slice: case TK::Array: case TK::Ref: case TK::Pool: add_type(t->elem); break;
             case TK::Map:
                 add_type(t->key);
                 add_type(t->elem);
@@ -379,7 +384,8 @@ private:
                 break;
             default: break;
         }
-        if (is_composite(t)) types_.push_back(t);
+        // Разные типы с одной записью C (List[Handle[A]] и List[Handle[B]] — dp_L_hnd, Р67) — одно определение.
+        if (is_composite(t) && !mangled_.count(mangle(t))) types_.push_back(t);
         if (is_composite(t) || niche(t)) mangled_.insert(mangle(t));  // ?H — для pop и get
     }
 
@@ -456,6 +462,8 @@ private:
                        "* vals;\n    int64_t len;\n    int64_t cap;\n    int64_t* slots;\n    int64_t nslots;\n";
                 break;
             case TK::Slice: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n"; break;
+            // Р67: значения слотов и служебная часть той же ёмкости (dp_pool, runtime).
+            case TK::Pool: out += "    " + ctype(t->elem) + "* vals;\n    dp_pool m;\n"; break;
             // Массив C (Р62) — в обёртке: так его можно присвоить; раскладка — как у массива.
             case TK::Array: out += "    " + ctype(t->elem) + " v[" + std::to_string(t->len) + "];\n"; break;
             case TK::Optional: out += "    bool has;\n    " + ctype(t->elem) + " value;\n"; break;
@@ -522,6 +530,7 @@ private:
         }
         for (const Type* t : types_) {
             if (t->kind == TK::Map) def += map_methods(t);
+            if (t->kind == TK::Pool) def += pool_methods(t);
         }
         return decl + "\n" + def;
     }
@@ -541,6 +550,7 @@ private:
                 break;
             case TK::Result: b += "    (void)a;\n    (void)b;\n    return true;\n"; break;
             case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;  // не сравниваются (Р54)
+            case TK::Pool: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;  // и пулы (Р67)
             // Р62: массив и объединение dpl не сравнивает — функция нужна для сборки C.
             case TK::Array: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;
             case TK::Struct:
@@ -598,7 +608,7 @@ private:
                 b += "        if (" + lt_of(t->elem, "&b->ptr[i]", "&a->ptr[i]") + ") return false;\n";
                 b += "    }\n    return a->len < b->len;\n";
                 break;
-            case TK::Optional: case TK::Result: case TK::Map: case TK::Array:
+            case TK::Optional: case TK::Result: case TK::Map: case TK::Array: case TK::Pool:
                 b += "    (void)a;\n    (void)b;\n    return false;\n";
                 break;
             case TK::Struct: {
@@ -656,6 +666,13 @@ private:
                 }
                 b += "    dp_free(v->keys);\n    dp_free(v->vals);\n    dp_free(v->slots);\n";
                 break;
+            case TK::Pool:
+                if (ir::needs_drop(t->elem)) {
+                    b += "    for (int64_t i = 0; i < v->m.nslots; i++) {\n        if (v->m.live[i]) " +
+                         drop_of(t->elem, "v->vals[i]") + "\n    }\n";
+                }
+                b += "    dp_free(v->vals);\n    dp_pool_drop(&v->m);\n";
+                break;
             case TK::Optional: b += "    if (v->has) {\n" + drop_line(t->elem, "v->value", "        ") + "    }\n"; break;
             case TK::Result:
                 b += "    if (v->is_err) {\n" + drop_line(t->err, "v->err", "        ") + "    } else {\n";
@@ -705,6 +722,14 @@ private:
                 b += "        r.vals[i] = " + copy_of(t->elem, "v->vals[i]") + ";\n    }\n";
                 b += "    if (v->nslots > 0) {\n        r.slots = (int64_t*)dp_alloc(v->nslots, sizeof(int64_t), NULL);\n";
                 b += "        memcpy(r.slots, v->slots, (size_t)v->nslots * sizeof(int64_t));\n        r.nslots = v->nslots;\n    }\n";
+                break;
+            }
+            case TK::Pool: {  // Р67: копируются живые значения; номера и поколения те же
+                std::string ec = ctype(t->elem);
+                b += "    " + n + " r = {0};\n    r.m = dp_pool_copy(&v->m);\n";
+                b += "    r.vals = (" + ec + "*)dp_alloc(r.m.cap, sizeof(" + ec + "), NULL);\n";
+                b += "    for (int64_t i = 0; i < v->m.nslots; i++) {\n        if (v->m.live[i]) r.vals[i] = " +
+                     copy_of(t->elem, "v->vals[i]") + ";\n    }\n";
                 break;
             }
             case TK::Optional:
@@ -877,6 +902,49 @@ private:
         return b;
     }
 
+    // Методы Pool (Р67). Служебная часть — dp_pool из runtime; значения —
+    // в vals той же ёмкости: она растёт в dp_pool_take и dp_pool_grow.
+    std::string pool_methods(const Type* t) {
+        std::string n = ctype(t), m = mangle(t), ec = ctype(t->elem), em = mangle(t->elem);
+        std::string b;
+        auto grow_vals = [&](const std::string& ind) {
+            return ind + "if (p->m.cap != cap) p->vals = (" + ec + "*)dp_realloc(p->vals, p->m.cap, sizeof(" + ec +
+                   "), loc);\n";
+        };
+        b += "DP_INLINE dp_hnd dp_padd__" + m + "(" + n + "* p, " + ec + " v, const char* loc) {\n";
+        b += "    int64_t cap = p->m.cap;\n    int64_t i = dp_pool_take(&p->m, loc);\n" + grow_vals("    ");
+        b += "    p->vals[i] = v;\n    dp_hnd h = {(uint32_t)i, p->m.gens[i]};\n    return h;\n}\n\n";
+        b += "DP_INLINE " + ec + "* dp_pvalue__" + m + "(" + n + "* p, dp_hnd h, const char* loc) {\n";
+        b += "    if (!dp_pool_valid(&p->m, h)) dp_trap(loc, \"stale handle: its slot was removed or reused\");\n";
+        b += "    return &p->vals[h.index];\n}\n\n";
+        b += "DP_INLINE bool dp_pcontains__" + m + "(const " + n + "* p, dp_hnd h) { return dp_pool_valid(&p->m, h); }\n\n";
+        if (mangled_.count("O_" + em)) {
+            std::string o = niche_elem(t->elem) ? ec : "dp_O_" + em;
+            b += "DP_INLINE " + o + " dp_pget__" + m + "(const " + n + "* p, dp_hnd h) {\n    " + o + " r = {0};\n";
+            b += "    if (dp_pool_valid(&p->m, h)) {\n        " +
+                 set_some(t->elem, "r", copy_of(t->elem, "p->vals[h.index]"), "        ") + "\n    }\n    return r;\n}\n\n";
+            b += "DP_INLINE " + o + " dp_premove__" + m + "(" + n + "* p, dp_hnd h) {\n    " + o + " r = {0};\n";
+            b += "    if (dp_pool_valid(&p->m, h)) {\n        " + set_some(t->elem, "r", "p->vals[h.index]", "        ") +
+                 "\n        dp_pool_release(&p->m, h.index);\n    }\n    return r;\n}\n\n";
+        }
+        b += "DP_INLINE void dp_pclear__" + m + "(" + n + "* p) {\n";
+        if (ir::needs_drop(t->elem)) {
+            b += "    for (int64_t i = 0; i < p->m.nslots; i++) {\n        if (p->m.live[i]) " +
+                 drop_of(t->elem, "p->vals[i]") + "\n    }\n";
+        }
+        b += "    dp_pool_clear(&p->m);\n}\n\n";
+        b += "DP_INLINE void dp_preserve__" + m + "(" + n + "* p, int64_t n, const char* loc) {\n";
+        b += "    dp_check_reserve(n, loc);\n    int64_t cap = p->m.cap;\n    dp_pool_grow(&p->m, n, loc);\n" +
+             grow_vals("    ") + "}\n\n";
+        if (mangled_.count("L_hnd")) {
+            b += "DP_INLINE dp_L_hnd dp_phandles__" + m + "(const " + n + "* p) {\n    dp_L_hnd r = {0};\n";
+            b += "    r.ptr = (dp_hnd*)dp_alloc(p->m.len, sizeof(dp_hnd), NULL);\n    r.cap = p->m.len;\n";
+            b += "    for (int64_t i = 0; i < p->m.nslots; i++) {\n        if (!p->m.live[i]) continue;\n";
+            b += "        dp_hnd h = {(uint32_t)i, p->m.gens[i]};\n        r.ptr[r.len++] = h;\n    }\n    return r;\n}\n\n";
+        }
+        return b;
+    }
+
     std::string list_methods(const Type* t) {
         std::string n = ctype(t), m = mangle(t), ec = ctype(t->elem), e = mangle(t->elem);
         std::string b;
@@ -990,6 +1058,11 @@ private:
             }
             switch (pr.kind) {
                 case ProjKind::Field: {
+                    if (t->kind == TK::PoolHandle) {  // Р67: index, generation
+                        r.expr = "(" + r.expr + ")." + (pr.index == 0 ? "index" : "generation");
+                        r.type = p_.types->prim(TK::U32);
+                        break;
+                    }
                     const sema::FieldDef& fd = t->sdef->fields[pr.index];
                     r.expr = "(" + r.expr + ").f_" + fd.name;
                     r.type = fd.type;
@@ -1039,6 +1112,18 @@ private:
                     r.type = t->elem;
                     break;
                 }
+                case ProjKind::PoolValue: {  // Р67: устаревший хэндл — ловушка
+                    std::string ptr = fresh("dp_p");
+                    line(ctype(t->elem) + "* " + ptr + " = dp_pvalue__" + mangle(t) + "(&(" + r.expr + "), " +
+                         local_expr(pr.index) + ", " + loc_ + ");");
+                    r.expr = "(*" + ptr + ")";
+                    r.type = t->elem;
+                    break;
+                }
+                case ProjKind::PoolSlot:  // живой слот из обхода
+                    r.expr = "(" + r.expr + ").vals[" + local_expr(pr.index) + "]";
+                    r.type = t->elem;
+                    break;
                 case ProjKind::MapKeyAt: case ProjKind::MapValueAt: {  // номер пары из dp_morder
                     bool key = pr.kind == ProjKind::MapKeyAt;
                     r.expr = "(" + r.expr + ")." + (key ? "keys" : "vals") + "[" + local_expr(pr.index) + "]";
@@ -1297,6 +1382,11 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             case Intrinsic::MapSet: return "dp_mset__" + m + "(" + l + ", " + ops[0] + ", " + ops[1] + ", " + loc_ + ")";
             case Intrinsic::MapRemove: return "dp_mremove__" + m + "(" + l + ", " + ops[0] + ", " + loc_ + ")";
             case Intrinsic::MapClear: return "dp_mclear__" + m + "(" + l + ")";
+            case Intrinsic::PoolAdd: return "dp_padd__" + m + "(" + l + ", " + ops[0] + ", " + loc_ + ")";
+            case Intrinsic::PoolRemove: return "dp_premove__" + m + "(" + l + ", " + ops[0] + ")";
+            case Intrinsic::PoolClear: return "dp_pclear__" + m + "(" + l + ")";
+            case Intrinsic::PoolReserve:
+                return "dp_preserve__" + m + "(" + l + ", (int64_t)" + ops[0] + ", " + loc_ + ")";
             default: error("unknown list method");
                 return "0";
         }
@@ -1309,6 +1399,7 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         case Intrinsic::Len: {
             const Type* t = op_type(rv.ops[0]);
             if (t->kind == TK::Array) return "((void)" + ops[0] + ", (int64_t)" + std::to_string(t->len) + ")";
+            if (t->kind == TK::Pool) return "((int64_t)(" + ops[0] + ").m.len)";
             return "((int64_t)(" + ops[0] + ").len)";
         }
         case Intrinsic::Repeat: {
@@ -1377,6 +1468,12 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         }
         case Intrinsic::MapKeys: return "dp_mkeys__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ")";
         case Intrinsic::MapOrder: return "dp_morder__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ")";
+        case Intrinsic::PoolGet: return "dp_pget__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ", " + ops[1] + ")";
+        case Intrinsic::PoolContains:
+            return "dp_pcontains__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ", " + ops[1] + ")";
+        case Intrinsic::PoolHandles: return "dp_phandles__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ")";
+        case Intrinsic::PoolSlots: return "((int64_t)(" + ops[0] + ").m.nslots)";
+        case Intrinsic::PoolLive: return "((" + ops[0] + ").m.live[" + ops[1] + "] != 0)";
         case Intrinsic::StrTrim: return "dp_str_trim(" + ops[0] + ")";
         case Intrinsic::StrFind: {
             std::string r = fresh("dp_r");
@@ -1433,7 +1530,7 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             }
             return r;
         }
-        case RvKind::MakeMap: return "((" + ctype(rv.type) + "){0})";
+        case RvKind::MakeMap: case RvKind::MakePool: return "((" + ctype(rv.type) + "){0})";
         case RvKind::MakeList: {
             std::vector<std::string> ops;
             for (const Operand& o : rv.ops) ops.push_back(operand(o, true));
@@ -1529,8 +1626,10 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
             return niche(o.type) ? "((" + o.expr + ") != NULL)" : "((" + o.expr + ").has)";
         }
         case RvKind::IsOk: return "(!(" + place(rv.place).expr + ").is_err)";
-        case RvKind::Zero: return is_composite(rv.type) || rv.type->kind == TK::Str ? "((" + ctype(rv.type) + "){0})"
-                                                                                   : "((" + ctype(rv.type) + ")0)";
+        case RvKind::Zero:
+            return is_composite(rv.type) || rv.type->kind == TK::Str || rv.type->kind == TK::PoolHandle
+                       ? "((" + ctype(rv.type) + "){0})"
+                       : "((" + ctype(rv.type) + ")0)";
         case RvKind::AddrOf: return "(&" + place(rv.place).expr + ")";  // Р62
     }
     error("unknown rvalue");

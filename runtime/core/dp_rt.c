@@ -104,6 +104,97 @@ void* dp_realloc(void* p, int64_t count, size_t elem, const char* loc) {
 
 void dp_free(void* p) { free(p); }
 
+/* --- служебная часть Pool (Р67) */
+
+static void dp_heap_push(dp_pool* p, uint32_t x) {
+    int64_t i = p->nheap++;
+    while (i > 0 && p->heap[(i - 1) / 2] > x) {
+        p->heap[i] = p->heap[(i - 1) / 2];
+        i = (i - 1) / 2;
+    }
+    p->heap[i] = x;
+}
+
+static uint32_t dp_heap_pop(dp_pool* p) {
+    uint32_t top = p->heap[0], x = p->heap[--p->nheap];
+    int64_t i = 0;
+    for (;;) {
+        int64_t c = 2 * i + 1;
+        if (c >= p->nheap) break;
+        if (c + 1 < p->nheap && p->heap[c + 1] < p->heap[c]) c++;
+        if (p->heap[c] >= x) break;
+        p->heap[i] = p->heap[c];
+        i = c;
+    }
+    if (p->nheap > 0) p->heap[i] = x;
+    return top;
+}
+
+void dp_pool_grow(dp_pool* p, int64_t n, const char* loc) {
+    if (n <= p->cap) return;
+    if (n > (int64_t)UINT32_MAX) dp_trap(loc, "out of memory"); /* номер слота — u32 */
+    p->gens = (uint32_t*)dp_realloc(p->gens, n, sizeof(uint32_t), loc);
+    p->live = (uint8_t*)dp_realloc(p->live, n, 1, loc);
+    p->heap = (uint32_t*)dp_realloc(p->heap, n, sizeof(uint32_t), loc);
+    p->cap = n;
+}
+
+int64_t dp_pool_take(dp_pool* p, const char* loc) {
+    int64_t i;
+    if (p->nheap > 0) {
+        i = dp_heap_pop(p);
+    } else {
+        if (p->nslots == p->cap) {
+            int64_t n = p->cap ? 2 * p->cap : 4;
+            dp_pool_grow(p, n > (int64_t)UINT32_MAX ? p->cap + 1 : n, loc);
+        }
+        i = p->nslots++;
+        p->gens[i] = 1;
+    }
+    p->live[i] = 1;
+    p->len++;
+    return i;
+}
+
+void dp_pool_release(dp_pool* p, int64_t i) {
+    p->live[i] = 0;
+    p->len--;
+    if (++p->gens[i] < DP_POOL_GEN_LIMIT) dp_heap_push(p, (uint32_t)i);
+}
+
+void dp_pool_clear(dp_pool* p) {
+    p->nheap = 0;
+    for (int64_t i = 0; i < p->nslots; i++) {
+        if (p->live[i]) {
+            p->live[i] = 0;
+            p->gens[i]++;
+        }
+        if (p->gens[i] < DP_POOL_GEN_LIMIT) p->heap[p->nheap++] = (uint32_t)i; /* по возрастанию — уже куча */
+    }
+    p->len = 0;
+}
+
+dp_pool dp_pool_copy(const dp_pool* p) {
+    dp_pool r = *p;
+    r.cap = p->nslots;
+    r.gens = (uint32_t*)dp_alloc(r.cap, sizeof(uint32_t), NULL);
+    r.live = (uint8_t*)dp_alloc(r.cap, 1, NULL);
+    r.heap = (uint32_t*)dp_alloc(r.cap, sizeof(uint32_t), NULL);
+    if (r.cap > 0) {
+        memcpy(r.gens, p->gens, (size_t)r.cap * sizeof(uint32_t));
+        memcpy(r.live, p->live, (size_t)r.cap);
+    }
+    if (p->nheap > 0) memcpy(r.heap, p->heap, (size_t)p->nheap * sizeof(uint32_t));
+    return r;
+}
+
+void dp_pool_drop(dp_pool* p) {
+    dp_free(p->gens);
+    dp_free(p->live);
+    dp_free(p->heap);
+    *p = (dp_pool){0};
+}
+
 /* --- запись плавающего (Р48)
  *
  * Тот же алгоритм, что compiler/support/format.h: кратчайшая запись,

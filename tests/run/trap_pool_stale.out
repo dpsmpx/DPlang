@@ -1,0 +1,4 @@
+2
+--- stderr ---
+trap_pool_stale.dpm:9:13: trap: stale handle: its slot was removed or reused
+[exit 101]

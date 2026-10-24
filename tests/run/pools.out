@@ -1,0 +1,16 @@
+(0,1)(1,1)(2,1)
+ann:10 bob:5 cid:7 | 3
+true false false
+d (1,2) reuses b: true same: false
+stale get none
+ann+:10 dan:3 cid:7 | 3 tags 2
+ann+:20 dan:6 cid:14 | 3
+removed ann+ 2
+removed cid 2
+dan:6 | 1
+eve:1 dan:100 | 2 / dan:6 | 1 e in w: false
+after clear (0,2) d stale: true fay:2 | 1
+first in copy (0,2) eve
+order 4 live from order 0
+live 334 sum 166833 top slot 333
+0.2 2.2 5.2 7.2 8.1 
