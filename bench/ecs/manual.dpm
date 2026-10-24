@@ -1,0 +1,137 @@
+// Нагрузка М2 на ручном пуле: List слотов с поколением и признаком жизни
+// и список свободных номеров (последний освобождённый — первым), как до
+// Р67 и как в эталоне на C++. Тот же кадр и тот же итог, что у pool.dpm.
+import os
+
+struct H {
+    index: i64
+    gen: u32
+}
+
+struct Body {
+    x: i64
+    y: i64
+    vx: i64
+    vy: i64
+    hp: i64
+    target: ?H
+}
+
+struct Slot {
+    gen: u32
+    live: bool
+    value: Body
+}
+
+struct Bodies {
+    slots: List[Slot]
+    free: List[i64]
+    count: i64
+}
+
+fn valid(p: &Bodies, h: H) bool {
+    return h.index < len(p.slots) && p.slots[h.index].live && p.slots[h.index].gen == h.gen
+}
+
+fn add(p: &mut Bodies, b: Body) H {
+    p.count += 1
+    if let i = p.free.pop() {
+        p.slots[i].live = true
+        p.slots[i].value = b
+        return H{index: i, gen: p.slots[i].gen}
+    }
+    p.slots.push(Slot{gen: 1, live: true, value: b})
+    return H{index: len(p.slots) - 1, gen: 1}
+}
+
+fn remove(p: &mut Bodies, h: H) {
+    if valid(&p, h) {
+        p.slots[h.index].live = false
+        p.slots[h.index].gen += 1
+        p.free.push(h.index)
+        p.count -= 1
+    }
+}
+
+fn mix(x: u64) u64 {
+    var h = x *% 11400714819323198485
+    h = (h ^ (h >> 31)) *% 13787848793156543929
+    return h ^ (h >> 29)
+}
+
+fn body(seed: u64, all: &List[H]) Body {
+    var target: ?H = none
+    if len(all) > 0 {
+        target = all[i64(seed % u64(len(all)))]
+    }
+    return Body{x: i64(seed % 1000000), y: i64((seed >> 20) % 1000000), vx: i64(seed % 201) - 100,
+                vy: i64((seed >> 8) % 201) - 100, hp: 50 + i64((seed >> 16) % 50), target: target}
+}
+
+fn main() {
+    let a = os.args()
+    let n = parse_int(a[0]) ?? 100000
+    let frames = parse_int(a[1]) ?? 100
+    var bodies = Bodies{slots: [], free: [], count: 0}
+    var all: List[H] = []
+    var seed: u64 = 1
+    for i in 0..n {
+        seed = mix(seed + u64(i))
+        let b = body(seed, &all)
+        all.push(add(&mut bodies, b))
+    }
+    var born: i64 = 0
+    for f in 0..frames {
+        for s in &mut bodies.slots {
+            if !s.live {
+                continue
+            }
+            s.value.x += s.value.vx
+            if s.value.x < 0 || s.value.x > 1000000 {
+                s.value.vx = -s.value.vx
+                s.value.x += 2 * s.value.vx
+            }
+            s.value.y += s.value.vy
+            if s.value.y < 0 || s.value.y > 1000000 {
+                s.value.vy = -s.value.vy
+                s.value.y += 2 * s.value.vy
+            }
+        }
+        for i in 0..len(all) {
+            let h = all[i]
+            if let t = bodies.slots[h.index].value.target {
+                if valid(&bodies, t) {
+                    bodies.slots[t.index].value.hp -= 1
+                } else {
+                    bodies.slots[h.index].value.target = none
+                }
+            }
+        }
+        var dead: i64 = 0
+        var i: i64 = 0
+        while i < len(all) {
+            let h = all[i]
+            if bodies.slots[h.index].value.hp <= 0 {
+                remove(&mut bodies, h)
+                all[i] = all[len(all) - 1]
+                let _ = all.pop()
+                dead += 1
+            } else {
+                i += 1
+            }
+        }
+        for k in 0..dead {
+            seed = mix(seed + u64(f * 7 + k))
+            let b = body(seed, &all)
+            all.push(add(&mut bodies, b))
+            born += 1
+        }
+    }
+    var sum: i64 = 0
+    for s in &bodies.slots {
+        if s.live {
+            sum += s.value.x + s.value.y + s.value.hp
+        }
+    }
+    println(str(bodies.count) + " " + str(born) + " " + str(sum))
+}

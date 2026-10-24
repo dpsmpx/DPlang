@@ -1,0 +1,93 @@
+// Нагрузка М2 (заметка 9, раздел 5; docs/policy/BENCHMARKS.md, раздел 2:
+// «обход 100 тыс. сущностей по компонентам») на встроенном Pool (Р67).
+// Кадр: движение всех живых, удар по цели через хэндл, смерть и рождение
+// новых с целью из списка живых. Арифметика целая: итог не зависит от
+// порядка слотов. Аргументы: число сущностей, число кадров.
+import os
+
+struct Body {
+    x: i64
+    y: i64
+    vx: i64
+    vy: i64
+    hp: i64
+    target: ?Handle[Body]
+}
+
+fn mix(x: u64) u64 {
+    var h = x *% 11400714819323198485
+    h = (h ^ (h >> 31)) *% 13787848793156543929
+    return h ^ (h >> 29)
+}
+
+fn body(seed: u64, all: &List[Handle[Body]]) Body {
+    var target: ?Handle[Body] = none
+    if len(all) > 0 {
+        target = all[i64(seed % u64(len(all)))]
+    }
+    return Body{x: i64(seed % 1000000), y: i64((seed >> 20) % 1000000), vx: i64(seed % 201) - 100,
+                vy: i64((seed >> 8) % 201) - 100, hp: 50 + i64((seed >> 16) % 50), target: target}
+}
+
+fn main() {
+    let a = os.args()
+    let n = parse_int(a[0]) ?? 100000
+    let frames = parse_int(a[1]) ?? 100
+    var bodies: Pool[Body] = []
+    var all: List[Handle[Body]] = []
+    var seed: u64 = 1
+    for i in 0..n {
+        seed = mix(seed + u64(i))
+        let b = body(seed, &all)
+        all.push(bodies.add(b))
+    }
+    var born: i64 = 0
+    for f in 0..frames {
+        for b in &mut bodies {
+            b.x += b.vx
+            if b.x < 0 || b.x > 1000000 {
+                b.vx = -b.vx
+                b.x += 2 * b.vx
+            }
+            b.y += b.vy
+            if b.y < 0 || b.y > 1000000 {
+                b.vy = -b.vy
+                b.y += 2 * b.vy
+            }
+        }
+        for i in 0..len(all) {
+            let h = all[i]
+            if let t = bodies[h].target {
+                if bodies.contains(t) {
+                    bodies[t].hp -= 1
+                } else {
+                    bodies[h].target = none
+                }
+            }
+        }
+        var dead: i64 = 0
+        var i: i64 = 0
+        while i < len(all) {
+            let h = all[i]
+            if bodies[h].hp <= 0 {
+                let _ = bodies.remove(h)
+                all[i] = all[len(all) - 1]
+                let _ = all.pop()
+                dead += 1
+            } else {
+                i += 1
+            }
+        }
+        for k in 0..dead {
+            seed = mix(seed + u64(f * 7 + k))
+            let b = body(seed, &all)
+            all.push(bodies.add(b))
+            born += 1
+        }
+    }
+    var sum: i64 = 0
+    for b in &bodies {
+        sum += b.x + b.y + b.hp
+    }
+    println(str(len(bodies)) + " " + str(born) + " " + str(sum))
+}

@@ -1,0 +1,74 @@
+// Нагрузка М3 (заметка 9, раздел 5; docs/policy/BENCHMARKS.md, раздел 2:
+// «сценарий кадровых аллокаций»). Кадр: видимые объекты, сетка клеток
+// (Map — число объектов в клетке), пары «клетка, объект». Вариант fresh —
+// временные данные заново в каждом кадре; reuse — живут между кадрами и
+// очищаются clear() (Р68). Аргументы: вариант, объектов, кадров.
+import os
+
+struct Pair {
+    cell: i64
+    obj: i32
+}
+
+fn mix(x: u64) u64 {
+    var h = x *% 11400714819323198485
+    h = (h ^ (h >> 31)) *% 13787848793156543929
+    return h ^ (h >> 29)
+}
+
+fn frame(f: i64, xs: &List[i64], ys: &List[i64], visible: &mut List[i32], cells: &mut Map[i64, i32],
+         pairs: &mut List[Pair]) i64 {
+    let left = (f * 37) % 600000
+    for i in 0..len(xs) {
+        let x = (xs[i] + f * 101) % 1000000
+        let y = (ys[i] + f * 53) % 1000000
+        if x >= left && x < left + 400000 && y < 500000 {
+            visible.push(i32(i))
+            let cell = (x / 10000) * 1000 + y / 10000
+            if cells.contains(cell) {
+                cells[cell] += 1
+            } else {
+                cells[cell] = 1
+            }
+            pairs.push(Pair{cell: cell, obj: i32(i)})
+        }
+    }
+    var check = i64(len(visible)) * 1000003 + i64(len(cells))
+    for p in &pairs {
+        check = check +% p.cell * i64(cells[p.cell]) +% i64(p.obj)
+    }
+    return check
+}
+
+fn main() {
+    let a = os.args()
+    let reuse = a[0] == "reuse"
+    let n = parse_int(a[1]) ?? 10000
+    let frames = parse_int(a[2]) ?? 1000
+    var xs: List[i64] = []
+    var ys: List[i64] = []
+    var seed: u64 = 7
+    for i in 0..n {
+        seed = mix(seed + u64(i))
+        xs.push(i64(seed % 1000000))
+        ys.push(i64((seed >> 24) % 1000000))
+    }
+    var total: i64 = 0
+    var visible: List[i32] = []
+    var cells: Map[i64, i32] = []
+    var pairs: List[Pair] = []
+    for f in 0..frames {
+        if reuse {
+            visible.clear()
+            cells.clear()
+            pairs.clear()
+            total = total +% frame(f, &xs, &ys, &mut visible, &mut cells, &mut pairs)
+        } else {
+            var v: List[i32] = []
+            var c: Map[i64, i32] = []
+            var p: List[Pair] = []
+            total = total +% frame(f, &xs, &ys, &mut v, &mut c, &mut p)
+        }
+    }
+    println(str(total))
+}

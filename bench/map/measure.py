@@ -19,96 +19,24 @@ i64 и str. Фазы накопительные: build — заполнение 
 import argparse
 import json
 import os
-import platform
-import shlex
-import statistics
-import subprocess
 import sys
 import tempfile
-import time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import native  # noqa: E402  bench/native.py
+
+ROOT = native.ROOT
 HERE = os.path.join(ROOT, 'bench', 'map')
-DPL = os.path.join(ROOT, 'build', 'release', 'dpl')
 PHASES = ['build', 'lookup', 'iter', 'churn']
 KEYS = ['int', 'str']
 VARIANTS = {'dpl': 'Map (dpl)', 'map': 'std::map', 'umap': 'std::unordered_map'}
 
 
-def cc_wrapper(tmp, align):
-    path = os.path.join(tmp, f'cc-align{align}')
-    if not os.path.exists(path):
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(f'#!/bin/sh\nexec {shlex.quote(os.environ.get("CC") or "cc")} -falign-loops={align} "$@"\n')
-        os.chmod(path, 0o755)
-    return path
-
-
 def build(variant, align, tmp):
     exe = os.path.join(tmp, f'{variant}-{align}')
     if variant == 'dpl':
-        env = dict(os.environ, CC=cc_wrapper(tmp, align))
-        cmd = [DPL, 'build', '--release', '-o', exe, os.path.join(HERE, 'map.dpm')]
-    else:
-        env = None
-        cxx = os.environ.get('CXX') or 'c++'
-        cmd = [cxx, '-std=c++17', '-O2', f'-falign-loops={align}', '-o', exe, os.path.join(HERE, 'map.cpp')]
-        if variant == 'umap':
-            cmd.insert(3, '-DUNORDERED')
-    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    if r.returncode != 0:
-        sys.exit(f'{variant}: сборка: {r.stderr.strip()}')
-    return exe
-
-
-# Запускатель: пиковый RSS из wait4 включает память процесса до exec, и у
-# потомка Python это память самого Python. Маленький процесс на C её не
-# добавляет.
-LAUNCHER = r"""
-#include <stdio.h>
-#include <sys/resource.h>
-#include <sys/wait.h>
-#include <unistd.h>
-int main(int argc, char** argv) {
-    pid_t p = fork();
-    if (p == 0) { execv(argv[1], argv + 1); _exit(127); }
-    int st; struct rusage u;
-    if (wait4(p, &st, 0, &u) < 0) return 126;
-    fprintf(stderr, "%ld\n", u.ru_maxrss);
-    return WIFEXITED(st) ? WEXITSTATUS(st) : 125;
-}
-"""
-
-
-def launcher(tmp):
-    src, exe = os.path.join(tmp, 'launch.c'), os.path.join(tmp, 'launch')
-    with open(src, 'w', encoding='utf-8') as f:
-        f.write(LAUNCHER)
-    subprocess.run([os.environ.get('CC') or 'cc', '-O2', '-o', exe, src], check=True)
-    return exe
-
-
-def once(launch, argv):
-    """Время (мс), пиковый RSS (КБ) и вывод одного прогона."""
-    a = time.perf_counter()
-    r = subprocess.run([launch] + argv, capture_output=True, text=True)
-    ms = (time.perf_counter() - a) * 1000
-    if r.returncode != 0:
-        sys.exit(f'{" ".join(argv)}: код {r.returncode}')
-    return ms, int(r.stderr.split()[-1]), r.stdout
-
-
-def environment():
-    cpu = '?'
-    try:
-        with open('/proc/cpuinfo', encoding='utf-8') as f:
-            cpu = next((ln.split(':', 1)[1].strip() for ln in f if ln.startswith('model name')), '?')
-    except OSError:
-        pass
-    cc = subprocess.run(['cc', '--version'], capture_output=True, text=True).stdout.splitlines()
-    commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
-    return {'cpu': f'{os.cpu_count()} CPU, {cpu}', 'os': platform.platform(), 'cc': cc[0] if cc else '?',
-            'commit': commit.stdout.strip() or '?'}
+        return native.build_dpl(os.path.join(HERE, 'map.dpm'), exe, tmp, align)
+    return native.build_cpp(os.path.join(HERE, 'map.cpp'), exe, align, ['UNORDERED'] if variant == 'umap' else [])
 
 
 def main():
@@ -118,31 +46,22 @@ def main():
     ap.add_argument('--layouts', default='1,16,32,64', help='значения -falign-loops через запятую')
     ap.add_argument('--save', default='')
     args = ap.parse_args()
-    if not os.path.exists(DPL):
-        sys.exit(f'нет {DPL}: соберите компилятор (python3 tests/run.py)')
+    native.need_dpl()
     layouts = [int(a) for a in args.layouts.split(',')]
-    data = {'env': environment(), 'runs': args.runs, 'n': args.n, 'layouts': layouts, 'keys': {}}
+    data = {'env': native.environment(), 'runs': args.runs, 'n': args.n, 'layouts': layouts, 'keys': {}}
     same = True
     with tempfile.TemporaryDirectory() as tmp:
-        launch = launcher(tmp)
+        launch = native.launcher(tmp)
         exes = {(v, a): build(v, a, tmp) for v in VARIANTS for a in layouts}
         for key in KEYS:
             res = {v: {} for v in VARIANTS}
             for phase in PHASES:
-                cells = list(exes)
-                times = {c: [] for c in cells}
-                rss = {}
-                outs = {c: once(launch, [exes[c], key, phase, str(args.n)])[2] for c in cells}  # прогрев
+                medians, rss, outs = native.sweep(launch, {c: [exes[c], key, phase, str(args.n)] for c in exes},
+                                                  args.runs)
                 same = same and len(set(outs.values())) == 1
-                for _ in range(args.runs):
-                    for c in cells:  # в круге — все сборки по очереди: дрейф ложится на все
-                        ms, kb, _ = once(launch, [exes[c], key, phase, str(args.n)])
-                        times[c].append(ms)
-                        rss[c] = max(rss.get(c, 0), kb)
                 for v in VARIANTS:
-                    medians = {a: statistics.median(times[(v, a)]) for a in layouts}
-                    res[v][phase] = {'best': min(medians.values()), 'medians': medians,
-                                     'rss_kb': max(rss[(v, a)] for a in layouts)}
+                    m = {a: medians[(v, a)] for a in layouts}
+                    res[v][phase] = {'best': min(m.values()), 'medians': m, 'rss_kb': max(rss[(v, a)] for a in layouts)}
             data['keys'][key] = res
     data['same_output'] = same
     report = summary(data)
