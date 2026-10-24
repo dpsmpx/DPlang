@@ -59,6 +59,7 @@ private:
         const Type* t = f_.locals[pl.local].type;
         for (size_t i = 0; i < pl.proj.size() && t; i++) {
             if (pl.proj[i].kind == ProjKind::Index && (t->kind == TK::Slice || t->kind == TK::Str)) return false;
+            if (pl.proj[i].kind == ProjKind::MapKeyAt) return false;  // ключ пары не меняют
             Place prefix{pl.local, std::vector<Proj>(pl.proj.begin(), pl.proj.begin() + static_cast<long>(i) + 1)};
             t = place_type(p_, f_, prefix);
         }
@@ -362,6 +363,12 @@ private:
                 args(1);
                 if (const Type* m = map_operand(op(0))) {
                     if (rv.type->kind != TK::List || rv.type->elem != m->key) fail("keys result is not List[K]");
+                }
+                break;
+            case Intrinsic::MapOrder:
+                args(1);
+                if (map_operand(op(0)) && (rv.type->kind != TK::List || rv.type->elem->kind != TK::I64)) {
+                    fail("order result is not List[i64]");
                 }
                 break;
             case Intrinsic::StrTrim:

@@ -97,6 +97,8 @@ private:
                 case ProjKind::ResultValue: s += ".ok"; if (t) t = t->elem; break;
                 case ProjKind::ResultError: s += ".err"; if (t) t = t->err; break;
                 case ProjKind::MapValue: s += "{%" + std::to_string(pr.index) + "}"; if (t) t = t->elem; break;
+                case ProjKind::MapKeyAt: s += ".key[%" + std::to_string(pr.index) + "]"; if (t) t = t->key; break;
+                case ProjKind::MapValueAt: s += ".value[%" + std::to_string(pr.index) + "]"; if (t) t = t->elem; break;
             }
         }
         return s;
@@ -172,6 +174,7 @@ private:
             "remove", "clear", "sort", "contains", "trim", "find", "starts_with", "split",
             "__args_len", "__arg", "__read_file", "checked_add", "checked_sub", "checked_mul", "checked_div",
             "checked_neg", "map_set", "map_get", "map_contains", "map_remove", "map_clear", "map_keys",
+            "map_order",
             "c_arena_mark", "c_arena_release", "probe",
         };
         return names[static_cast<size_t>(k)];

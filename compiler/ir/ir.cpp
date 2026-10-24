@@ -52,6 +52,12 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
                 }
                 t = t->elem;
                 break;
+            case ProjKind::MapKeyAt: case ProjKind::MapValueAt:
+                if (t->kind != TK::Map || pr.index >= f.locals.size() || f.locals[pr.index].type->kind != TK::I64) {
+                    return nullptr;
+                }
+                t = pr.kind == ProjKind::MapKeyAt ? t->key : t->elem;
+                break;
         }
     }
     return t;

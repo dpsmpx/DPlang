@@ -396,19 +396,24 @@ bool less(const Value& a, const Value& b, const Type* t) {
 
 // Устойчивая сортировка слиянием: при любом сравнении (и с NaN) даёт
 // перестановку и заканчивается.
-void merge_sort(std::vector<Value>& v, const Type* t) {
+template <class T, class Less>
+void merge_sort(std::vector<T>& v, Less lt) {
     size_t n = v.size();
-    std::vector<Value> tmp(n);
+    std::vector<T> tmp(n);
     for (size_t w = 1; w < n; w *= 2) {
         for (size_t lo = 0; lo < n; lo += 2 * w) {
             size_t mid = lo + w < n ? lo + w : n, hi = lo + 2 * w < n ? lo + 2 * w : n;
             size_t i = lo, j = mid, k = lo;
-            while (i < mid && j < hi) tmp[k++] = less(v[j], v[i], t) ? std::move(v[j++]) : std::move(v[i++]);
+            while (i < mid && j < hi) tmp[k++] = lt(v[j], v[i]) ? std::move(v[j++]) : std::move(v[i++]);
             while (i < mid) tmp[k++] = std::move(v[i++]);
             while (j < hi) tmp[k++] = std::move(v[j++]);
         }
         v.swap(tmp);
     }
+}
+
+void merge_sort(std::vector<Value>& v, const Type* t) {
+    merge_sort(v, [t](const Value& a, const Value& b) { return less(a, b, t); });
 }
 
 // --- встроенное (builtin.functions)
@@ -559,6 +564,15 @@ private:
                         return Ref{};
                     }
                     r.v = &v.items[2 * static_cast<size_t>(i) + 1];
+                    break;
+                }
+                case ProjKind::MapKeyAt: case ProjKind::MapValueAt: {  // номер пары из MapOrder
+                    const Value& iv = fr.locals[pr.index];
+                    if (v.k != Value::K::Seq || iv.k != Value::K::Int || iv.i >= v.items.size() / 2) {
+                        internal("pair number outside the map");
+                        return Ref{};
+                    }
+                    r.v = &v.items[2 * static_cast<size_t>(iv.i) + (pr.kind == ProjKind::MapValueAt ? 1 : 0)];
                     break;
                 }
                 case ProjKind::Unwrap: case ProjKind::ResultValue: case ProjKind::ResultError: {
@@ -1111,6 +1125,16 @@ private:
                 Value out = seq_value(0);
                 for (size_t i = 0; i < m.items.size(); i += 2) out.items.push_back(m.items[i]);
                 merge_sort(out.items, op_type(fr, rv.ops[0])->key);  // ключи по возрастанию
+                return out;
+            }
+            case Intrinsic::MapOrder: {  // номера пар по возрастанию ключа: та же сортировка
+                const Value& m = arg(0, s0);
+                const Type* kt = op_type(fr, rv.ops[0])->key;
+                std::vector<size_t> pos(m.items.size() / 2);
+                for (size_t i = 0; i < pos.size(); i++) pos[i] = i;
+                merge_sort(pos, [&](size_t a, size_t b) { return less(m.items[2 * a], m.items[2 * b], kt); });
+                Value out = seq_value(0);
+                for (size_t i : pos) out.items.push_back(int_value(i));
                 return out;
             }
             case Intrinsic::MapSet: case Intrinsic::MapRemove: case Intrinsic::MapClear: return map_method(fr, rv, ops);

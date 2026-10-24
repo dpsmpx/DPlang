@@ -46,6 +46,9 @@ enum class ProjKind : uint8_t {
     ResultValue,  // значение E!T при успехе
     ResultError,  // ошибка E!T
     MapValue,     // значение Map по ключу из переменной index; нет ключа — ловушка (Р54)
+    // Ключ и значение пары Map с номером из переменной index (i64): номера
+    // даёт MapOrder при обходе, тело обхода Map не меняет (E0412).
+    MapKeyAt, MapValueAt,
 };
 
 struct Proj {
@@ -121,8 +124,9 @@ enum class Intrinsic : uint8_t {
     CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
     // Map (Р54). Изменяющие — получатель-место: MapSet (ops: ключ, значение;
     // вставка или замена), MapRemove (ключ → ?V), MapClear. Читающие —
-    // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K], ключи по возрастанию).
-    MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys,
+    // Map первым операндом: MapGet (→ ?V), MapContains (→ bool), MapKeys (→ List[K], ключи по возрастанию),
+    // MapOrder (→ List[i64], номера пар по возрастанию ключа — для обхода).
+    MapSet, MapGet, MapContains, MapRemove, MapClear, MapKeys, MapOrder,
     // Арена C на время вызова (Р62): строки и массивы заимствующих
     // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
     CArenaMark, CArenaRelease,

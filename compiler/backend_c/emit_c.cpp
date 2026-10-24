@@ -829,6 +829,45 @@ private:
             b += "    for (int64_t i = 0; i < m->len; i++) r.ptr[i] = " + copy_of(t->key, "m->keys[i]") + ";\n";
             b += "    dp_sort__" + std::string("L_") + km + "(&r);\n    return r;\n}\n\n";
         }
+        if (mangled_.count("L_i64")) {
+            // Номера пар по возрастанию ключа — для обхода (Р54). Сортируются
+            // пары «ключ, номер»; ключ — побитовая копия без владения, строки
+            // не копируются. Слияние устойчиво — порядок тот же, что у keys().
+            // Ключи различны, поэтому любая верная сортировка даёт тот же
+            // порядок: целые и bool — поразрядно (LSD по байтам, знак — сдвигом
+            // к беззнаковому), строки — слиянием.
+            std::string kp = "dp_kp__" + m;
+            bool radix = sema::is_integer(t->key) || t->key->kind == TK::Bool;
+            b += "DP_INLINE dp_L_i64 dp_morder__" + m + "(const " + n + "* m) {\n";
+            b += "    dp_L_i64 r = {0};\n    int64_t n = m->len;\n    if (n == 0) return r;\n";
+            b += "    struct " + kp + " { " + (radix ? std::string("uint64_t") : kc) + " k; int64_t p; };\n";
+            b += "    struct " + kp + "* a = (struct " + kp + "*)dp_alloc(n, sizeof(struct " + kp + "), NULL);\n";
+            b += "    struct " + kp + "* b = (struct " + kp + "*)dp_alloc(n, sizeof(struct " + kp + "), NULL);\n";
+            if (radix) {
+                std::string key = sema::is_signed(t->key)
+                                      ? "(uint64_t)(int64_t)m->keys[i] ^ UINT64_C(0x8000000000000000)"
+                                      : "(uint64_t)m->keys[i]";
+                b += "    for (int64_t i = 0; i < n; i++) {\n        a[i].k = " + key + ";\n        a[i].p = i;\n    }\n";
+                b += "    for (int s = 0; s < 64; s += 8) {\n        int64_t c[257] = {0};\n";
+                b += "        for (int64_t i = 0; i < n; i++) c[((a[i].k >> s) & 255) + 1]++;\n";
+                b += "        int same = 0;\n        for (int d = 1; d <= 256; d++) same |= c[d] == n;\n";
+                b += "        if (same) continue;\n        for (int d = 1; d <= 256; d++) c[d] += c[d - 1];\n";
+                b += "        for (int64_t i = 0; i < n; i++) b[c[(a[i].k >> s) & 255]++] = a[i];\n";
+                b += "        struct " + kp + "* t = a;\n        a = b;\n        b = t;\n    }\n";
+            } else {
+                b += "    for (int64_t i = 0; i < n; i++) {\n        a[i].k = m->keys[i];\n        a[i].p = i;\n    }\n";
+                b += "    for (int64_t w = 1; w < n; w *= 2) {\n        for (int64_t lo = 0; lo < n; lo += 2 * w) {\n";
+                b += "            int64_t mid = lo + w < n ? lo + w : n, hi = lo + 2 * w < n ? lo + 2 * w : n;\n";
+                b += "            int64_t i = lo, j = mid, k = lo;\n";
+                b += "            while (i < mid && j < hi) {\n                if (" + lt_of(t->key, "&a[j].k", "&a[i].k") +
+                     ") b[k++] = a[j++];\n                else b[k++] = a[i++];\n            }\n";
+                b += "            while (i < mid) b[k++] = a[i++];\n            while (j < hi) b[k++] = a[j++];\n        }\n";
+                b += "        struct " + kp + "* t = a;\n        a = b;\n        b = t;\n    }\n";
+            }
+            b += "    r.ptr = (int64_t*)dp_alloc(n, sizeof(int64_t), NULL);\n    r.len = n;\n    r.cap = n;\n";
+            b += "    for (int64_t i = 0; i < n; i++) r.ptr[i] = a[i].p;\n";
+            b += "    dp_free(a);\n    dp_free(b);\n    return r;\n}\n\n";
+        }
         return b;
     }
 
@@ -988,6 +1027,12 @@ private:
                          local_expr(pr.index) + "), " + loc_ + ");");
                     r.expr = "(*" + ptr + ")";
                     r.type = t->elem;
+                    break;
+                }
+                case ProjKind::MapKeyAt: case ProjKind::MapValueAt: {  // номер пары из dp_morder
+                    bool key = pr.kind == ProjKind::MapKeyAt;
+                    r.expr = "(" + r.expr + ")." + (key ? "keys" : "vals") + "[" + local_expr(pr.index) + "]";
+                    r.type = key ? t->key : t->elem;
                     break;
                 }
             }
@@ -1317,6 +1362,7 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             return fn + mangle(mt) + "(&" + ops[0] + ", &" + x + ")";
         }
         case Intrinsic::MapKeys: return "dp_mkeys__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ")";
+        case Intrinsic::MapOrder: return "dp_morder__" + mangle(op_type(rv.ops[0])) + "(&" + ops[0] + ")";
         case Intrinsic::StrTrim: return "dp_str_trim(" + ops[0] + ")";
         case Intrinsic::StrFind: {
             std::string r = fresh("dp_r");

@@ -1,0 +1,106 @@
+// spec: type.map stmt.for builtin.methods
+// Обход Map — по номерам пар, отсортированным по ключу: целые и bool —
+// поразрядно, строки — слиянием; `m[k]` переменной обхода той же таблицы
+// — значение пары по номеру. Порядок — по возрастанию ключа при любом
+// знаке и ширине; `m[k]` переменной чужого обхода — поиск по ключу.
+fn mix(x: u64) u64 {
+    var h = x *% 11400714819323198485
+    h = (h ^ (h >> 31)) *% 13787848793156543929
+    return h ^ (h >> 29)
+}
+
+fn show_i8(m: &Map[i8, i64]) str {
+    var s = ""
+    var prev: i64 = -1000
+    for k in &m {
+        if i64(k) <= prev {
+            s += "!"
+        }
+        prev = i64(k)
+        s += str(k) + "=" + str(m[k]) + " "
+    }
+    return s
+}
+
+fn main() {
+    var a: Map[i8, i64] = []
+    for i in 0..40 {
+        a[i8.wrap(mix(u64(i)))] = i
+    }
+    println(show_i8(&a))
+
+    var b: Map[u64, i64] = []
+    b[18446744073709551615] = 1
+    b[0] = 2
+    b[9223372036854775808] = 3
+    b[9223372036854775807] = 4
+    b[1] = 5
+    for k in &b {
+        print(str(k) + ":" + str(b[k]) + " ")
+    }
+    println("")
+
+    var c: Map[i64, i64] = []
+    c[-9223372036854775807 - 1] = 1
+    c[9223372036854775807] = 2
+    c[-1] = 3
+    c[0] = 4
+    c[256] = 5
+    c[-256] = 6
+    for k in &c {
+        print(str(k) + ":" + str(c[k]) + " ")
+    }
+    println("")
+
+    var d: Map[bool, str] = []
+    d[true] = "t"
+    d[false] = "f"
+    for k in &d {
+        print(str(k) + d[k] + " ")
+    }
+    println("")
+
+    var e: Map[i32, i64] = []
+    var f: Map[i32, i64] = []
+    for i in 0..300 {
+        let k = i32.wrap(mix(u64(i)) % 1000) - 500
+        e[k] = i
+        f[k] = 1000 + i
+    }
+    let _ = e.remove(e.keys()[3])
+    let _ = f.remove(e.keys()[7])
+    var total: i64 = 0
+    var prev: i64 = -1000000
+    var bad = 0
+    for k in &e {
+        if i64(k) <= prev {
+            bad += 1
+        }
+        prev = i64(k)
+        total += e[k]
+        if let v = f.get(k) {
+            total += v
+        }
+        for j in &e {
+            if j == k {
+                total += e[j] * 3
+            }
+        }
+    }
+    for k in &f {
+        if e.contains(k) {
+            total += e[k] - f[k]
+        }
+    }
+    println(str(len(e)) + " " + str(total) + " bad " + str(bad))
+
+    var s: Map[str, i64] = []
+    for i in 0..50 {
+        s["w" + str(mix(u64(i)) % 97)] = i
+    }
+    var words = ""
+    for k in &s {
+        words += k + str(s[k]) + ","
+    }
+    println(words)
+}
