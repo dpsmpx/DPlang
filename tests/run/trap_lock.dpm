@@ -1,0 +1,13 @@
+// spec: trap.concurrent stmt.lock stmt.for (Р69, Р70)
+// Ловушка в итерации `parallel for` внутри `lock`: мьютекс прерванной
+// итерации отпускается, ждущие его итерации доделываются — ловушка та же,
+// что при исполнении по очереди.
+fn main() {
+    let m: Mutex[i64] = mutex(0)
+    parallel for i in 0..64 {
+        lock m as t {
+            t = t + 1
+            assert(i != 40)
+        }
+    }
+}

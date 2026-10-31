@@ -105,6 +105,8 @@ void dp_sys_wait(void* c, void* m) { pthread_cond_wait((pthread_cond_t*)c, (pthr
 
 void dp_sys_broadcast(void* c) { pthread_cond_broadcast((pthread_cond_t*)c); }
 
+void dp_sys_signal(void* c) { pthread_cond_signal((pthread_cond_t*)c); }
+
 void dp_sys_cond_free(void* c) {
     pthread_cond_destroy((pthread_cond_t*)c);
     free(c);

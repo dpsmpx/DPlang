@@ -56,11 +56,15 @@ typedef struct dp_task {
 } dp_task;
 
 static _Thread_local dp_task* dp_task_cur; /* задача, которую исполняет поток */
+static _Thread_local dp_mtx* dp_mtx_held;  /* захваченные потоком мьютексы: вершина стека */
 static void dp_out_write(const dp_par_out* o);
 static void* dp_die_m;
 static void* dp_lazy_mutex(void** slot);
 static void dp_dl_enter(void);
 static void dp_dl_exit(void);
+static void dp_dl_block(int* waiting, const char* loc);
+static void dp_dl_wake(int* waiting);
+static void dp_dl_unblock(int n);
 
 /* --- ловушки */
 
@@ -790,6 +794,7 @@ static int dp_par_workers = -1; /* -1 — пул ещё не запущен */
 static dp_par_job* dp_par_pending;
 static uint64_t dp_par_gen;
 static int dp_par_active;
+static int dp_par_waiting; /* поток ждёт рабочих: 1 (снимает со счёта последний рабочий) */
 
 /* Части задания, пока они есть и не дальше ловушки. */
 static void dp_par_run(dp_par_job* j) {
@@ -799,6 +804,7 @@ static void dp_par_run(dp_par_job* j) {
         if (start >= j->n || start > atomic_load(&j->trap_at)) break;
         uint64_t end = j->n - start < j->chunk ? j->n : start + j->chunk;
         jmp_buf jb;
+        dp_mtx* held = dp_mtx_held;
         dp_par_cur = j;
         dp_par_buf = &j->outs[start / j->chunk];
         dp_par_jb = &jb;
@@ -810,6 +816,8 @@ static void dp_par_run(dp_par_job* j) {
             }
         } else {
             dp_depth = depth; /* кадры прерванной итерации брошены */
+            /* Её мьютексы — тоже: иначе итерации, ждущие их, не кончатся. */
+            while (dp_mtx_held != held) dp_mtx_unlock(dp_mtx_held);
         }
         dp_par_cur = NULL;
     }
@@ -824,12 +832,15 @@ static void dp_par_worker(void* arg) {
         seen = dp_par_gen;
         dp_par_job* j = dp_par_pending;
         dp_par_active++;
+        dp_dl_enter(); /* под dp_par_m: ждущий рабочих учтёт этот поток живым */
         dp_sys_unlock(dp_par_m);
-        dp_dl_enter();
         dp_par_run(j);
-        dp_dl_exit();
         dp_sys_lock(dp_par_m);
-        if (--dp_par_active == 0) dp_sys_broadcast(dp_par_done_cv);
+        if (--dp_par_active == 0) {
+            dp_dl_wake(&dp_par_waiting);
+            dp_sys_broadcast(dp_par_done_cv);
+        }
+        dp_dl_exit(); /* после побудки: ждущий рабочих — не в счёте ждущих */
     }
 }
 
@@ -922,7 +933,11 @@ void dp_parallel_for(uint64_t n, dp_par_body body, void* env) {
     dp_par_run(&j);
     dp_sys_lock(dp_par_m);
     dp_par_pending = NULL;
-    while (dp_par_active > 0) dp_sys_wait(dp_par_done_cv, dp_par_m);
+    while (dp_par_active > 0) {
+        /* Место ожидания — у ждущих рабочих: своего у цикла нет. */
+        if (!dp_par_waiting) dp_dl_block(&dp_par_waiting, NULL);
+        dp_sys_wait(dp_par_done_cv, dp_par_m);
+    }
     dp_sys_unlock(dp_par_m);
     uint64_t trap_at = atomic_load(&j.trap_at);
     dp_par_flush(&j, parts, trap_at);
@@ -936,28 +951,75 @@ static _Thread_local char dp_thread_id; /* адрес — имя потока */
 
 dp_mtx dp_mtx_new(void) {
     dp_mtx m;
+    memset(&m, 0, sizeof m);
     m.sys = dp_sys_mutex();
-    m.owner = NULL;
-    if (!m.sys) dp_trap(NULL, "out of memory");
+    m.cv = dp_sys_cond();
+    if (!m.sys || !m.cv) dp_trap(NULL, "out of memory");
     return m;
 }
 
+static bool dp_mtx_try(dp_mtx* m) {
+    void* none = NULL;
+    return __atomic_compare_exchange_n(&m->owner, &none, (void*)&dp_thread_id, false, __ATOMIC_SEQ_CST,
+                                       __ATOMIC_RELAXED);
+}
+
+/* Захват. Медленный путь: waiters растёт до проверки владельца, отпускающий
+ * читает waiters после записи NULL (обе — последовательно согласованные),
+ * поэтому побудка не теряется. Спит поток только под m->sys, отпускающий
+ * будит под ним же — счёт ждущих точен. Короткое ожидание — без сна. */
 void dp_mtx_lock(dp_mtx* m, const char* loc) {
     if (__atomic_load_n(&m->owner, __ATOMIC_RELAXED) == &dp_thread_id) {
         dp_trap(loc, "mutex is already locked by this thread");
     }
-    dp_sys_lock(m->sys);
-    __atomic_store_n(&m->owner, (void*)&dp_thread_id, __ATOMIC_RELAXED);
+    if (!dp_mtx_try(m)) {
+        bool got = false;
+        for (int spin = 0; spin < 64 && !got; spin++) {
+            if (!__atomic_load_n(&m->owner, __ATOMIC_RELAXED)) got = dp_mtx_try(m);
+        }
+        if (!got) {
+            dp_sys_lock(m->sys);
+            __atomic_fetch_add(&m->waiters, 1, __ATOMIC_SEQ_CST);
+            while (!dp_mtx_try(m)) {
+                dp_dl_block(&m->waiting, loc);
+                do dp_sys_wait(m->cv, m->sys);
+                while (m->wakes == 0);
+                m->wakes--; /* со счёта снял отпускающий */
+            }
+            __atomic_fetch_sub(&m->waiters, 1, __ATOMIC_SEQ_CST);
+            dp_sys_unlock(m->sys);
+        }
+    }
+    m->held_up = dp_mtx_held;
+    dp_mtx_held = m;
 }
 
+/* Отпускание. Есть спящие — будит одного и снимает его со счёта; не
+ * получивший захват засыпает снова — снова в счёте. */
 void dp_mtx_unlock(dp_mtx* m) {
-    __atomic_store_n(&m->owner, NULL, __ATOMIC_RELAXED);
+    dp_mtx** p = &dp_mtx_held; /* блоки `lock` вложены: m — обычно вершина */
+    while (*p && *p != m) p = &(*p)->held_up;
+    if (*p) *p = m->held_up;
+    __atomic_store_n(&m->owner, NULL, __ATOMIC_SEQ_CST);
+    if (__atomic_load_n(&m->waiters, __ATOMIC_SEQ_CST) == 0) return;
+    bool wake = false;
+    dp_sys_lock(m->sys);
+    if (m->waiting > 0) {
+        m->waiting--;
+        m->wakes++;
+        dp_dl_unblock(1);
+        wake = true;
+    }
     dp_sys_unlock(m->sys);
+    /* Сигнал — после отпускания: разбуженный не упирается в m->sys. */
+    if (wake) dp_sys_signal(m->cv);
 }
 
 void dp_mtx_drop(dp_mtx* m) {
     if (m->sys) dp_sys_mutex_free(m->sys);
+    if (m->cv) dp_sys_cond_free(m->cv);
     m->sys = NULL;
+    m->cv = NULL;
 }
 
 /* --- Channel[T] (Р70) */
@@ -972,7 +1034,8 @@ struct dp_chan {
     uint64_t recv_gen, send_gen;    /* номер побудки: ложная побудка его не меняет */
 };
 
-/* Взаимная блокировка: живые потоки dpl и ждущие канал — под dp_dl_m.
+/* Взаимная блокировка: живые потоки dpl и ждущие (канал, мьютекс, конец
+ * блока задач, рабочих пула) — под dp_dl_m.
  * Будящий снимает ждущих со счёта сам, поэтому «все ждут» не бывает
  * ложным, пока разбуженный ещё не проснулся. */
 static void* dp_dl_m;
@@ -1009,14 +1072,15 @@ static _Noreturn void dp_die_now(const char* loc, const char* msg) {
     _Exit(101);
 }
 
-/* Поток засыпает в ожидании канала или задач блока (их мьютекс захвачен). */
+/* Поток засыпает в ожидании (мьютекс ожидаемого захвачен). Место NULL
+ * оставляет прежнее — место другого ждущего. */
 static void dp_dl_block(int* waiting, const char* loc) {
     void* m = dp_dl_mutex();
     dp_sys_lock(m);
     dp_dl_blocked++;
     (*waiting)++;
-    dp_dl_loc = loc;
-    if (dp_dl_blocked >= dp_dl_live) dp_die_now(loc, "deadlock: every thread is waiting");
+    if (loc) dp_dl_loc = loc;
+    if (dp_dl_blocked >= dp_dl_live) dp_die_now(dp_dl_loc, "deadlock: every thread is waiting");
     dp_sys_unlock(m);
 }
 
@@ -1037,13 +1101,18 @@ static void dp_dl_exit(void) {
     dp_sys_unlock(m);
 }
 
-/* Будит ждущих (канал захвачен): они больше не в счёте. */
-static void dp_dl_wake(int* waiting) {
-    if (*waiting == 0) return;
+/* n ждущих разбужены — они больше не в счёте. */
+static void dp_dl_unblock(int n) {
     void* m = dp_dl_mutex();
     dp_sys_lock(m);
-    dp_dl_blocked -= *waiting;
+    dp_dl_blocked -= n;
     dp_sys_unlock(m);
+}
+
+/* Будит ждущих (мьютекс ожидаемого захвачен): они больше не в счёте. */
+static void dp_dl_wake(int* waiting) {
+    if (*waiting == 0) return;
+    dp_dl_unblock(*waiting);
     *waiting = 0;
 }
 

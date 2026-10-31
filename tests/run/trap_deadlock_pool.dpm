@@ -1,0 +1,14 @@
+// spec: trap.concurrent stmt.for (Р69, Р70)
+// Итерация `parallel for` ждёт канал, в который никто не пишет; поток,
+// раздавший итерации, ждёт рабочих — это ожидание тоже в счёте, ловушка
+// с местом ждущей итерации.
+fn main() {
+    let ch: Channel[i64] = channel(1)
+    println("start")
+    parallel for i in 0..64 {
+        if i == 63 {
+            let v = ch.recv()
+        }
+    }
+    println("unreachable")
+}

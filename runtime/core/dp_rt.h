@@ -424,11 +424,20 @@ int dp_run_test(dp_entry_fn entry);
  * очереди в своём потоке. */
 typedef void (*dp_par_body)(void* env, uint64_t k);
 
-/* Mutex[T] (Р70): мьютекс платформы и поток-владелец; повторный
- * захват тем же потоком — ловушка. */
+/* Mutex[T] (Р70): захват — атомарная замена владельца NULL на поток;
+ * занят — ожидание на условии под мьютексом платформы, в счёте взаимной
+ * блокировки. Повторный захват тем же потоком — ловушка. Захваченные
+ * потоком — стек через held_up: итерация `parallel for`, прерванная
+ * ловушкой, отпускает свои. */
 typedef struct dp_mtx {
-    void* sys;
-    void* owner;
+    void* owner;            /* поток-владелец или NULL (атомарно) */
+    int waiters;            /* потоков в медленном пути (атомарно) */
+    void* sys;              /* защищает waiting, gen и условие */
+    void* cv;               /* ждущие захвата */
+    int waiting;            /* спят сейчас, в счёте взаимной блокировки */
+    int wakes;              /* побудки: отпускающий снял одного спящего со
+                               счёта; ложная побудка их не берёт */
+    struct dp_mtx* held_up; /* предыдущий захваченный тем же потоком */
 } dp_mtx;
 dp_mtx dp_mtx_new(void);
 void dp_mtx_lock(dp_mtx* m, const char* loc);
@@ -473,5 +482,6 @@ void dp_sys_cond_free(void* c);
 void* dp_sys_cond(void);
 void dp_sys_wait(void* c, void* m);
 void dp_sys_broadcast(void* c);
+void dp_sys_signal(void* c);
 
 #endif
