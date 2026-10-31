@@ -72,10 +72,14 @@ import dp_check  # noqa: E402
 import mkspec  # noqa: E402
 import run_refs  # noqa: E402
 
-LANGS = ('cpp', 'A', 'B', 'C', 'dp')
+LANGS = ('cpp', 'A', 'B', 'C', 'dp', 'dpa', 'dpb', 'dpc')
 PROTO = ('A', 'B', 'C')
+# dpa, dpb, dpc — dpl с вариантом модели задач О13 (DPL_TASKS=a, b, c;
+# docs/research/notes/10_concurrency.md, раздел 6): решение — dp/<v>/sol.dpm,
+# в задании — спецификация и руководство варианта bench/o13/guide_<v>.md.
+VARIANTS = ('dpa', 'dpb', 'dpc')
 TITLE = {'cpp': 'C++', 'A': 'dpl, вариант A', 'B': 'dpl, вариант B', 'C': 'dpl, вариант C',
-         'dp': 'dpl'}
+         'dp': 'dpl', 'dpa': 'dpl, модель задач А', 'dpb': 'dpl, модель задач Б', 'dpc': 'dpl, модель задач В'}
 # Спецификация для языка dp: docs/spec/core.md с первого раздела.
 SPEC_DP = os.path.join(ROOT, 'docs', 'spec', 'core.md')
 SPEC_DP_TITLE = "# Спецификация dpl (ядро v0.1)"
@@ -131,8 +135,22 @@ def is_proto(lang):
     return lang in PROTO
 
 
+def variant(lang):
+    """Вариант модели задач О13 языка dpa, dpb, dpc: 'a', 'b', 'c'; иначе None."""
+    return lang[2] if lang in VARIANTS else None
+
+
+def is_dpl(lang):
+    """Настоящий dpl (компилятор): dp и его варианты модели задач."""
+    return lang == 'dp' or lang in VARIANTS
+
+
 def ext_key(lang):
-    return 'proto' if is_proto(lang) else lang
+    return 'proto' if is_proto(lang) else 'dp' if is_dpl(lang) else lang
+
+
+def guide_o13(lang):
+    return os.path.join(BENCH, 'o13', f'guide_{variant(lang)}.md')
 
 
 def demote(text, by=1):
@@ -166,14 +184,25 @@ class Task:
         self.expected = read(os.path.join(path, 'expected.txt'))
 
     def langs(self):
-        """Языки задачи: C++ всегда; варианты — если есть cm/, dp — если есть dp/."""
-        return [lang for lang in LANGS if lang == 'cpp' or (is_proto(lang) and os.path.isdir(self.cm))
-                or (lang == 'dp' and os.path.isdir(self.dp))]
+        """Языки задачи: C++ всегда; варианты — если есть cm/; dp — если есть
+        dp/ с общим решением; dpa, dpb, dpc — если есть dp/<v>/sol.dpm."""
+        def has(lang):
+            if lang == 'cpp':
+                return True
+            if is_proto(lang):
+                return os.path.isdir(self.cm)
+            if lang == 'dp':
+                return os.path.isdir(self.dp) and (self.kind == 'refactor' or
+                                                   os.path.exists(os.path.join(self.dp, 'sol.dpm')))
+            return os.path.exists(os.path.join(self.dp, variant(lang), 'sol.dpm'))
+        return [lang for lang in LANGS if has(lang)]
 
-    def dp_files(self, which):
+    def dp_files(self, which, v=None):
         if self.kind == 'refactor':
             d = os.path.join(self.dp, 'before' if which == 'start' else 'ref')
             return {os.path.basename(p): read(p) for p in sorted(glob.glob(os.path.join(d, '*.dpm')))}
+        if v and which == 'ref':
+            return {'sol.dpm': read(os.path.join(self.dp, v, 'sol.dpm'))}
         name = 'sol.dpm' if which == 'ref' else ('buggy.dpm' if self.kind == 'fix' else 'stub.dpm')
         return {'sol.dpm': read(os.path.join(self.dp, name))}
 
@@ -186,8 +215,8 @@ class Task:
 
     def files(self, lang, which):
         """Начальный код (which='start') или эталон ('ref'): имя в src/ → текст."""
-        if lang == 'dp':
-            return self.dp_files(which)
+        if is_dpl(lang):
+            return self.dp_files(which, variant(lang))
         if is_proto(lang):
             mods = cm.load(self.cm_paths(which), 'A')
             info = cm.Info(mods)
@@ -217,7 +246,7 @@ class Task:
             return {}
         if lang == 'cpp':
             return {os.path.basename(p): read(p) for p in sorted(glob.glob(os.path.join(self.path, 'ref', '*.hpp')))}
-        if lang == 'dp':
+        if is_dpl(lang):
             return {name: dp_interface(text) for name, text in self.dp_files('ref').items()}
         mods = cm.load(self.cm_paths('ref'), 'A')
         info = cm.Info(mods)
@@ -297,7 +326,7 @@ def prompt(task, lang, sandbox, attempts, flags, start, doc='spec'):
     lines = [
         f'# Задача {task.id} на {TITLE[lang]}', '',
         'Задание опыта: написать код по постановке'
-        + (f', зная язык только по {DOC_WORD[doc] if lang == "dp" else "спецификации"} в конце этого файла.'
+        + (f', зная язык только по {DOC_WORD[doc] if is_dpl(lang) else "спецификации"} в конце этого файла.'
            if dp else '.'), '',
         '## Правила', '',
         f'- Работай только в папке `{sandbox}`: читай этот файл и `src/`, правь файлы в `src/`. '
@@ -329,7 +358,7 @@ def prompt(task, lang, sandbox, attempts, flags, start, doc='spec'):
     if is_proto(lang):
         lines.append('Ошибки типов прототип находит при сборке переведённого C++: сообщение называет '
                      'функцию, в которой ошибка, а текст — от компилятора C++.')
-    elif lang == 'dp':
+    elif is_dpl(lang):
         mods = 'модули `src/<имя>.dpm`' if task.kind == 'refactor' else 'модуль `sol` (файл `src/sol.dpm`)'
         lines.append(f'Решение — {mods}. Скрытый драйвер — главный модуль `main`: он импортирует '
                      + ('эти модули' if task.kind == 'refactor' else '`sol`')
@@ -352,8 +381,10 @@ def prompt(task, lang, sandbox, attempts, flags, start, doc='spec'):
         spec = read(mkspec.out_path(lang))
         spec = re.sub(r'\A<!--.*?-->\n+', '', spec, flags=re.S)
         text += '\n' + demote(spec)
-    elif lang == 'dp':
+    elif is_dpl(lang):
         text += '\n' + demote(dp_spec(doc))
+        if variant(lang):
+            text += '\n' + demote(read(guide_o13(lang)))
     return text
 
 
@@ -491,7 +522,7 @@ def series_prompt(items, lang, attempts, doc='spec'):
     lines = [
         f'# Серия из {n} задач на {TITLE[lang]}', '',
         f'Задание опыта: решить по очереди {n} задач в одной работе'
-        + (f', зная язык только по {DOC_WORD[doc] if lang == "dp" else "спецификации"} в конце этого файла.'
+        + (f', зная язык только по {DOC_WORD[doc] if is_dpl(lang) else "спецификации"} в конце этого файла.'
            if dp else '.'), '',
         '## Правила', '',
         '- Задачи решаются по порядку, следующая — после того, как кончилась предыдущая. У каждой '
@@ -509,8 +540,10 @@ def series_prompt(items, lang, attempts, doc='spec'):
     for k, (task, sandbox, cell_text) in enumerate(items, 1):
         text += (f'\n## Задача {k} из {n}: {task.id}\n\nПапка — `{sandbox}`. Проверка:\n\n'
                  f'      python3 {exe} check {sandbox}\n\n' + demote(task_part(cell_text)))
-    if lang == 'dp':
+    if is_dpl(lang):
         text += '\n' + demote(dp_spec(doc))
+        if variant(lang):
+            text += '\n' + demote(read(guide_o13(lang)))
     elif is_proto(lang):
         spec = read(mkspec.out_path(lang))
         text += '\n' + demote(re.sub(r'\A<!--.*?-->\n+', '', spec, flags=re.S))
@@ -627,11 +660,11 @@ def evaluate(task, lang, files, build_dir, flags, build=True):
     exe = os.path.join(build_dir, 'driver')
     code_lines = None
     sol_lines = 0
-    if lang == 'dp':
+    if is_dpl(lang):
         if not build:
             return None, ''
         driver = read(os.path.join(task.dp, dp_check.DRIVER))
-        return dp_check.evaluate(files, driver, dp_check.expected(task.path), build_dir)
+        return dp_check.evaluate(files, driver, dp_check.expected(task.path), build_dir, variant=variant(lang))
     if is_proto(lang):
         mods = []
         for name, text in files.items():
@@ -1109,7 +1142,7 @@ def restore(run, force=False):
 # ---------------------------------------------------------------- самопроверка
 
 START_CLASS = {'write': {'сборка'}, 'fix': {'вывод', 'ловушка'}, 'refactor': {'интерфейс'}}
-FULL = ('cpp', 'A', 'dp')
+FULL = ('cpp', 'A', 'dp', 'dpa', 'dpb', 'dpc')
 
 
 def selftest_cell(task, lang, sandbox, tmp, flags):
@@ -1122,8 +1155,10 @@ def selftest_cell(task, lang, sandbox, tmp, flags):
         fails.append(f'{tag}: в PROMPT.md попал драйвер или ожидаемый вывод')
     if is_proto(lang) and f'вариант {lang} — краткая спецификация' not in p:
         fails.append(f'{tag}: в PROMPT.md нет спецификации варианта')
-    if lang == 'dp' and (SPEC_DP_TITLE not in p or '[lex.source]' not in p):
+    if is_dpl(lang) and (SPEC_DP_TITLE not in p or '[lex.source]' not in p):
         fails.append(f'{tag}: в PROMPT.md нет спецификации dpl')
+    if variant(lang) and read(guide_o13(lang)).splitlines()[0][2:] not in p:
+        fails.append(f'{tag}: в PROMPT.md нет руководства варианта модели задач')
     if lang == 'dp' and task.kind == 'refactor' and '// ...' not in p:
         fails.append(f'{tag}: в PROMPT.md нет целевого интерфейса')
     start = read_files(os.path.join(sandbox, 'src'))
