@@ -1,0 +1,41 @@
+// t3 — заголовок, части, итог в одном файле; как сейчас.
+import os
+
+fn header(n: int) List[u8] {
+    return [u8(n & 255), 0, 0, 0]
+}
+
+fn save(path: str, parts: &List[List[u8]]) os.IoError!void {
+    var f = try os.create(path)
+    match os.write(&mut f, header(len(parts))) {
+        ok(_) => {}
+        err(e) => {
+            _ = os.close(f)
+            fail e
+        }
+    }
+    var failed: ?os.IoError = none
+    for p in &parts {
+        match os.write(&mut f, p) {
+            ok(_) => {}
+            err(e) => {
+                failed = e
+                break
+            }
+        }
+    }
+    if let e = failed {
+        _ = os.close(f)
+        fail e
+    }
+    match os.write(&mut f, [255]) {
+        ok(_) => {}
+        err(e) => {
+            _ = os.close(f)
+            fail e
+        }
+    }
+    try os.close(f)
+}
+
+fn main() {}

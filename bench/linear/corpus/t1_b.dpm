@@ -1,0 +1,13 @@
+// t1 — запись частями; Б: errdefer снимается, когда файл закрыт.
+import os
+
+fn save(path: str, parts: &List[List[u8]]) os.IoError!void {
+    var f = try os.create(path)
+    errdefer _ = os.close(f)
+    for p in &parts {
+        try os.write(&mut f, p)
+    }
+    try os.close(f)
+}
+
+fn main() {}

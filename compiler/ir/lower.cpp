@@ -366,7 +366,11 @@ private:
         bool on_error = false;  // errdefer: только на выходе с ошибкой
         bool unlock = false;    // конец блока `lock` (О13): снять мьютекс place
         Place place;
+        // errdefer одного ресурса (Р60): переменная-флаг; ресурс поглощён —
+        // флаг снят, errdefer не выполняется.
+        uint32_t flag = UINT32_MAX;
     };
+    std::map<const sema::Local*, uint32_t> armed_;  // ресурс → флаг его errdefer
     // Вид выхода из областей: errdefer выполняется только на ошибке.
     // Dynamic — `return` значения E!T: ошибка или нет, видно во время
     // выполнения по результату.
@@ -958,6 +962,10 @@ private:
                 auto* n = static_cast<const NameExpr*>(e);
                 if (n->res.kind == ResKind::Const) return const_operand(n->res.cn->value, n->res.cn->type, e->span);
                 if (n->res.kind == ResKind::Fn) return fn_operand(n->res.fn, e->type);
+                if (n->disarm) {  // ресурс уходит: его errdefer снят (Р60)
+                    auto a = armed_.find(n->res.local);
+                    if (a != armed_.end()) assign(local(a->second), use(cbool(false), prim(TK::Bool)), e->span);
+                }
                 bool fresh = false;
                 return copy(lvalue(e, fresh));
             }
@@ -1548,19 +1556,29 @@ private:
                 eval(std::move(u), span);
             } else if (!it->is_defer) {
                 inst(InstKind::Drop, local(it->local), Rvalue{}, span);
-            } else if (!it->on_error || way == Way::Error) {
+            } else if (!it->on_error || way == Way::Error || way == Way::Dynamic) {
+                uint32_t done = UINT32_MAX;
+                if (it->on_error && way == Way::Dynamic) {  // errdefer — если результат функции ошибка
+                    Rvalue test = make(RvKind::IsOk, prim(TK::Bool));
+                    test.place = local(ret_);
+                    test.has_place = true;
+                    Operand ok = to_temp(std::move(test), span);
+                    uint32_t run_b = new_block();
+                    done = new_block();
+                    branch(ok, done, run_b, span);
+                    cur_ = run_b;
+                }
+                if (it->flag != UINT32_MAX) {  // ресурс ещё у переменной (Р60)
+                    uint32_t run_b = new_block();
+                    if (done == UINT32_MAX) done = new_block();
+                    branch(copy(local(it->flag)), run_b, done, span);
+                    cur_ = run_b;
+                }
                 stmt(it->defer);
-            } else if (way == Way::Dynamic) {  // errdefer — если результат функции ошибка
-                Rvalue test = make(RvKind::IsOk, prim(TK::Bool));
-                test.place = local(ret_);
-                test.has_place = true;
-                Operand ok = to_temp(std::move(test), span);
-                uint32_t run_b = new_block(), done = new_block();
-                branch(ok, done, run_b, span);
-                cur_ = run_b;
-                stmt(it->defer);
-                jump(done, span);
-                cur_ = done;
+                if (done != UINT32_MAX) {
+                    jump(done, span);
+                    cur_ = done;
+                }
             }
         }
     }
@@ -1621,7 +1639,13 @@ private:
             }
             case StmtKind::Defer: {
                 auto* d = static_cast<const DeferStmt*>(s);
-                scopes_.back().push_back(Cleanup{true, 0, d->body, d->on_error, false, {}});
+                Cleanup c{true, 0, d->body, d->on_error, false, {}};
+                if (d->on_error && d->closes.size() == 1) {  // Р60: снимается, когда ресурс поглощён
+                    c.flag = temp(prim(TK::Bool));
+                    assign(local(c.flag), use(cbool(true), prim(TK::Bool)), s->span);
+                    armed_[d->closes[0]] = c.flag;
+                }
+                scopes_.back().push_back(c);
                 break;
             }
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;

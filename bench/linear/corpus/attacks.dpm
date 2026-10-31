@@ -1,0 +1,142 @@
+// Атаки на правила линейных типов: каждая функция — отдельный случай.
+// Строка «// expect: reject» или «// expect: reject-base-a» (безопасно —
+// принимает режим с Б) перед функцией. Разрезает bench/linear/measure.py.
+import os
+
+// expect: reject
+// x1 — закрыт в цикле без выхода: вторая итерация закроет снова.
+fn x1(path: str) os.IoError!void {
+    var f = try os.create(path)
+    for i in 0..3 {
+        _ = os.close(f)
+    }
+}
+
+// expect: reject
+// x2 — закрыт в цикле в одной ветви, цикл идёт дальше, после — снова.
+fn x2(path: str) os.IoError!void {
+    var f = try os.create(path)
+    for i in 0..3 {
+        if i == 1 {
+            _ = os.close(f)
+        }
+    }
+    try os.close(f)
+}
+
+// expect: reject
+// x3 — закрыт в цикле и break, после цикла — снова.
+fn x3(path: str) os.IoError!void {
+    var f = try os.create(path)
+    for i in 0..3 {
+        if i == 1 {
+            _ = os.close(f)
+            break
+        }
+    }
+    try os.close(f)
+}
+
+// expect: reject
+// x4 — закрыт в цикле и break, но цикл может кончиться и без break: утечка.
+fn x4(path: str) os.IoError!void {
+    var f = try os.create(path)
+    for i in 0..3 {
+        if i == 5 {
+            try os.close(f)
+            break
+        }
+    }
+}
+
+// expect: reject
+// x5 — закрыт в цикле и continue.
+fn x5(path: str) os.IoError!void {
+    var f = try os.create(path)
+    var n = 0
+    while n < 3 {
+        n += 1
+        _ = os.close(f)
+        continue
+    }
+}
+
+// expect: reject
+// x6 — закрыт во внутреннем цикле, break только из него, внешний идёт дальше.
+fn x6(path: str) os.IoError!void {
+    var f = try os.create(path)
+    for i in 0..2 {
+        for j in 0..2 {
+            _ = os.close(f)
+            break
+        }
+    }
+}
+
+// expect: reject
+// x7 — errdefer и закрытие в одной ветви, затем ошибка: закрыт ли — зависит от пути.
+fn x7(path: str, c: bool) os.IoError!void {
+    var f = try os.create(path)
+    errdefer _ = os.close(f)
+    if c {
+        _ = os.close(f)
+    }
+    fail .Other
+}
+
+// expect: reject
+// x8 — закрыт дважды подряд.
+fn x8(path: str) os.IoError!void {
+    let f = try os.create(path)
+    try os.close(f)
+    try os.close(f)
+}
+
+// expect: reject
+// x9 — забыт на пути ошибки без errdefer.
+fn x9(path: str) os.IoError!void {
+    var f = try os.create(path)
+    try os.write(&mut f, [1])
+    try os.close(f)
+}
+
+// expect: reject-base-a
+// x10 — errdefer, закрыт, потом ошибка: errdefer уже снят — безопасно.
+fn x10(path: str, bad: bool) os.IoError!void {
+    var f = try os.create(path)
+    errdefer _ = os.close(f)
+    try os.write(&mut f, [1])
+    try os.close(f)
+    if bad {
+        fail .Other
+    }
+}
+
+// expect: reject-base-a
+// x11 — errdefer, ресурс отдан функции, которая вернула ошибку: он уже у неё.
+fn finish(f: os.File) os.IoError!void {
+    try os.close(f)
+}
+
+fn x11(path: str) os.IoError!void {
+    var f = try os.create(path)
+    errdefer _ = os.close(f)
+    try os.write(&mut f, [1])
+    try finish(f)
+}
+
+// expect: reject
+// x12 — errdefer, закрыт в цикле и break, после цикла ошибка: закрыт ли — зависит от пути.
+fn x12(path: str) os.IoError!void {
+    var f = try os.create(path)
+    errdefer _ = os.close(f)
+    for i in 0..3 {
+        if i == 7 {
+            _ = os.close(f)
+            break
+        }
+    }
+    fail .Other
+}
+
+fn main() {}

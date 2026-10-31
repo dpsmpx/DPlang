@@ -1,0 +1,39 @@
+// t2 — копия файла частями (два ресурса); как сейчас.
+import os
+
+fn copy(from: str, to: str) os.IoError!void {
+    var src = try os.open(from)
+    errdefer _ = os.close(src)
+    var dst = try os.create(to)
+    var buf: List[u8] = []
+    var failed: ?os.IoError = none
+    while true {
+        buf.clear()
+        match os.read(&mut src, &mut buf, 65536) {
+            ok(n) => {
+                if n == 0 {
+                    break
+                }
+            }
+            err(e) => {
+                failed = e
+                break
+            }
+        }
+        match os.write(&mut dst, buf) {
+            ok(_) => {}
+            err(e) => {
+                failed = e
+                break
+            }
+        }
+    }
+    if let e = failed {
+        _ = os.close(dst)
+        fail e
+    }
+    try os.close(dst)
+    _ = os.close(src)
+}
+
+fn main() {}

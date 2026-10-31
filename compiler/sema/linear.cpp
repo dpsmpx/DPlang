@@ -7,6 +7,7 @@
 // break, continue) проверяется, что ресурс закрыт. Во время выполнения
 // линейное значение — обычное значение: этот проход ничего не меняет в
 // дереве.
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,8 @@ public:
         reported_.assign(f.local_count, 0);
         scopes_.clear();
         loops_.clear();
+        errdefer_of_.assign(f.local_count, nullptr);
+        pending_.clear();
         scopes_.emplace_back();
         FnItem* node = const_cast<FnItem*>(f.node);
         for (Param& p : node->params) {
@@ -86,6 +89,12 @@ private:
     std::vector<Scope> scopes_;
     std::vector<size_t> loops_;      // число областей снаружи тела каждого цикла
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
+    DeferStmt* cur_defer_ = nullptr;  // errdefer, тело которого проверяется
+    std::vector<DeferStmt*> errdefer_of_;  // по номеру переменной: её errdefer
+    // Перенос ресурса с errdefer, который ещё не кончился: вызов или
+    // выражение, куда он перенесён, не завершены (Р60). Выход с ошибкой до
+    // конца — E0512: errdefer уже снят, ресурс был бы потерян.
+    std::vector<const Local*> pending_;
     // Нельзя поглотить до конца вызова или присваивания: под ссылкой
     // аргумента (args), получатель изменяющего метода, место присваивания.
     enum class Why : uint8_t { Call, Assign, Index };
@@ -167,8 +176,15 @@ private:
                 if (st == St::ErrMoved && kind != Exit::Normal) {
                     if (reported_[l->id]) continue;
                     reported_[l->id] = 1;
-                    error(Code::E0512, span, "'" + l->name + "' is already closed or moved, but 'errdefer' would "
-                                             "close it again if the function returns an error here");
+                    if (std::find(pending_.begin(), pending_.end(), l) != pending_.end()) {
+                        error(Code::E0512, span, "'" + l->name + "' is moved, but the call or value it goes into "
+                                                 "is not finished when the function returns an error here: the "
+                                                 "resource would be lost; compute the fallible part first");
+                    } else {
+                        error(Code::E0512, span, "'" + l->name + "' is already closed or moved, but 'errdefer' "
+                                                 "closes it together with other resources and would close it again "
+                                                 "if the function returns an error here");
+                    }
                     continue;
                 }
                 bool bad = st == St::Owned || st == St::Maybe || (kind != Exit::Error && st == St::ErrDeferred);
@@ -193,7 +209,16 @@ private:
 
     // --- переменные
 
-    void consume(const Local* l, Span span) {
+    // Переносы с отметки mark кончились: ресурс у нового владельца.
+    void finish_moves(size_t mark) {
+        for (size_t i = mark; i < pending_.size(); i++) {
+            St& st = flow_.st[pending_[i]->id];
+            if (st == St::ErrMoved) st = St::Consumed;
+        }
+        pending_.resize(mark);
+    }
+
+    void consume(const Local* l, Span span, NameExpr* at = nullptr) {
         for (const Held& h : held_) {
             if (h.l != l) continue;
             // дальше — как поглощение: без лавины E0511
@@ -215,6 +240,10 @@ private:
             if (decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
             st = defer_ == 2 ? St::ErrDeferred : St::Deferred;
             scopes_.back().defers.push_back({l, defer_ == 2});
+            if (defer_ == 2 && cur_defer_) {
+                cur_defer_->closes.push_back(l);
+                errdefer_of_[l->id] = cur_defer_;
+            }
             return;
         }
         switch (st) {
@@ -222,10 +251,18 @@ private:
                 if (decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
                 st = St::Consumed;
                 return;
-            case St::ErrDeferred:
+            case St::ErrDeferred: {
                 if (decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
                 st = St::ErrMoved;  // выход с ошибкой дальше — E0512 (exit_check)
+                // errdefer одного ресурса снимается (Р60): перенос кончится с
+                // вызовом или инструкцией, дальше ресурс — у нового владельца.
+                const DeferStmt* d = errdefer_of_[l->id];
+                if (d && d->closes.size() == 1) {
+                    pending_.push_back(l);
+                    if (at) at->disarm = true;
+                }
                 return;
+            }
             case St::None: st = St::Consumed; return;  // чтение без значения — уже E0503
             default: used_after(l, span, st); return;
         }
@@ -330,7 +367,13 @@ private:
 
     // --- инструкции
 
+    // Инструкция; переносы ресурсов в ней кончаются с ней.
     void stmt(Stmt* s) {
+        stmt_parts(s);
+        finish_moves(0);
+    }
+
+    void stmt_parts(Stmt* s) {
         if (!s || !flow_.live) return;
         switch (s->kind) {
             case StmtKind::Let: let_stmt(static_cast<LetStmt*>(s)); break;
@@ -373,9 +416,15 @@ private:
             case StmtKind::Defer: {
                 auto* d = static_cast<DeferStmt*>(s);
                 int saved = defer_;
+                DeferStmt* saved_d = cur_defer_;
                 defer_ = d->on_error ? 2 : 1;
+                if (d->on_error) {
+                    d->closes.clear();
+                    cur_defer_ = d;
+                }
                 stmt(d->body);
                 defer_ = saved;
+                cur_defer_ = saved_d;
                 break;
             }
             case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
@@ -560,7 +609,7 @@ private:
                     return;
                 }
                 if (!tracked(l)) return;
-                if (use == Use::Consume) consume(n->res.local, n->span);
+                if (use == Use::Consume) consume(n->res.local, n->span, n);
                 else borrow(n->res.local, n->span);
                 return;
             }
@@ -629,7 +678,14 @@ private:
         }
     }
 
+    // Вызов: переносы в его аргументы кончаются, когда он сделан.
     void call(CallExpr* c) {
+        size_t mark = pending_.size();
+        call_args(c);
+        finish_moves(mark);
+    }
+
+    void call_args(CallExpr* c) {
         auto* f = as<FieldExpr>(c->callee);
         switch (c->call) {
             case CallKind::Fn: {

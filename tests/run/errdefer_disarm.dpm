@@ -1,0 +1,92 @@
+// spec: ffi.linear (Р60)
+// errdefer снимается, когда ресурс поглощён: закрытие — ровно один раз на
+// каждом пути (закрытие печатает строку).
+enum Fail {
+    Bad
+}
+
+@linear
+struct Res {
+    name: str
+}
+
+fn open(name: str) Res {
+    println("open " + name)
+    return Res { name }
+}
+
+fn close(r: Res) Fail!void {
+    let Res { name } = r
+    println("close " + name)
+    if name == "bad" {
+        fail .Bad
+    }
+}
+
+fn step(r: &Res, bad: bool) Fail!void {
+    if bad {
+        fail .Bad
+    }
+}
+
+fn finish(r: Res) Fail!void {
+    println("finish " + r.name)
+    try close(r)
+    fail .Bad
+}
+
+// Ошибка до закрытия: errdefer закрывает.
+fn fail_before(name: str) Fail!void {
+    let r = open(name)
+    errdefer _ = close(r)
+    try step(&r, true)
+    try close(r)
+}
+
+// Закрыт, потом ошибка: errdefer снят.
+fn fail_after(name: str) Fail!void {
+    let r = open(name)
+    errdefer _ = close(r)
+    try step(&r, false)
+    try close(r)
+    fail .Bad
+}
+
+// Ошибка самого закрытия: errdefer не закрывает второй раз.
+fn close_fails() Fail!void {
+    let r = open("bad")
+    errdefer _ = close(r)
+    try close(r)
+}
+
+// Ресурс отдан функции, она вернула ошибку: он уже у неё.
+fn handed(name: str) Fail!void {
+    let r = open(name)
+    errdefer _ = close(r)
+    try finish(r)
+}
+
+// Цикл: ошибка на третьем шаге закрывает ресурс один раз.
+fn looped(name: str) Fail!void {
+    let r = open(name)
+    errdefer _ = close(r)
+    for i in 0..5 {
+        try step(&r, i == 2)
+    }
+    try close(r)
+}
+
+fn show(what: str, r: Fail!void) {
+    match r {
+        ok(_) => println(what + ": ok")
+        err(_) => println(what + ": error")
+    }
+}
+
+fn main() {
+    show("fail_before", fail_before("a"))
+    show("fail_after", fail_after("b"))
+    show("close_fails", close_fails())
+    show("handed", handed("c"))
+    show("looped", looped("d"))
+}
