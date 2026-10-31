@@ -1,0 +1,40 @@
+// spec: type.pool type.handle builtin.methods ref.alias stmt.for
+struct Ship {
+    hp: i32
+}
+
+struct Rock {
+    size: i32
+}
+
+@linear
+struct Buffer {
+    id: i32
+}
+
+fn swap_hp(a: &mut Ship, b: &mut Ship) {
+    let t = a.hp
+    a.hp = b.hp
+    b.hp = t
+}
+
+fn main() {
+    var ships: Pool[Ship] = [Ship{hp: 1}]
+    var rocks: Pool[Rock] = []
+    let r = rocks.add(Rock{size: 3})
+    let s = ships.add(Ship{hp: 2})
+    let _ = ships[r]
+    var h = s
+    h.index = 3
+    let less = s < s
+    let m: Map[Handle[Ship], i32] = []
+    let part = ships[0..1]
+    ships.push(Ship{hp: 1})
+    let same = ships == ships
+    for x in &ships {
+        let _ = ships.add(Ship{hp: x.hp})
+    }
+    swap_hp(&mut ships[s], &mut ships[h])
+    var bufs: Pool[Buffer] = []
+    let w: Handle[i32, i32] = s
+}

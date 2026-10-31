@@ -53,6 +53,48 @@ void* dp_alloc(int64_t count, size_t elem, const char* loc);
 void* dp_realloc(void* p, int64_t count, size_t elem, const char* loc);
 void dp_free(void* p);
 
+/* Счётчик выделений (Р68): число вызовов dp_alloc и dp_realloc, которые
+ * выделили память, и их байты. dp_alloc_report пишет его в stderr, если
+ * задана переменная окружения DPL_ALLOC_STATS; порты зовут её после
+ * входа программы или теста. */
+void dp_alloc_stats(int64_t* count, int64_t* bytes);
+void dp_alloc_report(void);
+
+/* Хэндл пула (Р67): номер слота и поколение. */
+typedef struct dp_hnd {
+    uint32_t index;
+    uint32_t generation;
+} dp_hnd;
+
+static inline bool dp_hnd_eq(dp_hnd a, dp_hnd b) { return a.index == b.index && a.generation == b.generation; }
+
+/* Служебная часть Pool[T] (Р67): поколение и признак жизни слотов и
+ * свободные слоты — минимальная куча номеров (add берёт наименьший).
+ * Значения лежат в массиве сгенерированного типа той же ёмкости cap.
+ * Поколение слота начинается с 1 и растёт при освобождении; слот, чьё
+ * поколение дошло до DP_POOL_GEN_LIMIT, выведен из оборота. */
+#define DP_POOL_GEN_LIMIT UINT32_MAX
+typedef struct dp_pool {
+    uint32_t* gens;
+    uint8_t* live;
+    uint32_t* heap;
+    int64_t nslots; /* занятые когда-либо слоты, включая выведенные */
+    int64_t cap;    /* ёмкость gens, live, heap и массива значений */
+    int64_t len;    /* живые */
+    int64_t nheap;
+} dp_pool;
+
+/* Слот для add: наименьший свободный или новый (ёмкость растёт). */
+int64_t dp_pool_take(dp_pool* p, const char* loc);
+static inline bool dp_pool_valid(const dp_pool* p, dp_hnd h) {
+    return (int64_t)h.index < p->nslots && p->live[h.index] && p->gens[h.index] == h.generation;
+}
+void dp_pool_release(dp_pool* p, int64_t i);
+void dp_pool_clear(dp_pool* p);
+void dp_pool_grow(dp_pool* p, int64_t n, const char* loc); /* ёмкость не меньше n слотов */
+dp_pool dp_pool_copy(const dp_pool* p);
+void dp_pool_drop(dp_pool* p);
+
 /* Глубина вложенности вызовов (trap.memory): число активных кадров;
  * функция увеличивает её на входе и уменьшает на выходе, вызов
  * проверяет предел до входа в вызываемую. */
@@ -356,6 +398,7 @@ int64_t dp_check_index(int64_t i, int64_t len, const char* loc);
 void dp_check_slice(int64_t lo, int64_t hi, int64_t len, const char* loc);
 void dp_check_insert(int64_t i, int64_t len, const char* loc);
 void dp_check_repeat(int64_t n, const char* loc);
+void dp_check_reserve(int64_t n, const char* loc);
 
 /* --- вход в программу (trap.exit)
  *

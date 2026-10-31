@@ -1,0 +1,9 @@
+// spec: builtin.methods trap.builtin
+// `reserve` с отрицательным числом — ловушка в месте вызова.
+fn main() {
+    var xs: List[i32] = []
+    let n: i64 = 2 - 5
+    println("before")
+    xs.reserve(n)
+    println("after")
+}

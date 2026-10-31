@@ -82,7 +82,7 @@ bool has_effect(const Expr* e) {
 
 // Выражение может дать ловушку (раздел 10): арифметика и сдвиги целых,
 // преобразование к целому и f64 → f32, индекс и срез, вызов функции,
-// встроенные abs, repeat, assert, методы remove, insert, split, `try`
+// встроенные abs, repeat, assert, методы remove, insert, split, reserve, `try`
 // (выход с ошибкой). Тогда место с проверкой левее проверяется раньше
 // (expr.order, force).
 bool may_trap(const Expr* e);
@@ -111,7 +111,8 @@ bool may_trap(const Expr* e) {
                 if (b == sema::BuiltinFn::Abs || b == sema::BuiltinFn::Repeat || b == sema::BuiltinFn::Assert) return true;
             }
             if (c->call == CallKind::Method &&
-                (c->method == Method::Remove || c->method == Method::Insert || c->method == Method::Split)) {
+                (c->method == Method::Remove || c->method == Method::Insert || c->method == Method::Split ||
+                 c->method == Method::Reserve)) {
                 return true;
             }
             if (auto* f = as<const FieldExpr>(c->callee); f && may_trap(f->object)) return true;
@@ -227,6 +228,14 @@ private:
     uint32_t ret_ = UINT32_MAX;
     std::map<const sema::Local*, uint32_t> locals_;
     std::map<const sema::Local*, Place> aliases_;  // переменная `for x in &xs` — место xs[i]
+    // Обход `for k in &m` (Р54): переменная, место m и временное с номером
+    // пары. `m[k]` в теле — значение пары по номеру: тело m не меняет (E0412).
+    struct MapLoop {
+        const sema::Local* var;
+        Place map;
+        uint32_t pos;
+    };
+    std::vector<MapLoop> map_loops_;
     // Переменные (номера мест), которые меняет действие правее операнда
     // (changed): от них зависит порядок проверок места (probe). Вида левее
     // действия над его местом нет — его отвергает проверка типов (Р66).
@@ -635,6 +644,15 @@ private:
         return out;
     }
 
+    static bool same_place(const Place& a, const Place& b) {
+        if (a.local != b.local || a.proj.size() != b.proj.size()) return false;
+        for (size_t i = 0; i < a.proj.size(); i++) {
+            const Proj &x = a.proj[i], &y = b.proj[i];
+            if (x.kind != y.kind || x.index != y.index || x.sub != y.sub) return false;
+        }
+        return true;
+    }
+
     static bool hits(const Roots& r, const Place& p) {
         for (uint32_t x : r) {
             if (x == p.local) return true;
@@ -645,7 +663,7 @@ private:
     // Место с проверкой при чтении: индекс или ключ Map.
     static bool checked(const Place& p) {
         for (const Proj& pr : p.proj) {
-            if (pr.kind == ProjKind::Index || pr.kind == ProjKind::MapValue) return true;
+            if (pr.kind == ProjKind::Index || pr.kind == ProjKind::MapValue || pr.kind == ProjKind::PoolValue) return true;
         }
         return false;
     }
@@ -691,17 +709,20 @@ private:
         return o;
     }
 
-    // Операнды по порядку: место левее выражения с действием читается сразу.
+    // Операнды по порядку: место левее выражения, которое меняет его корень,
+    // читается сразу. Иначе — без копии: другого пути изменить переменную
+    // нет (changed), а копия `List`, `Map` или `str` стоит O(n).
     std::vector<Operand> exprs(const std::vector<const Expr*>& es, bool tail_trap = false) {
         std::vector<Operand> out;
         for (size_t i = 0; i < es.size(); i++) {
-            bool later = false, trap = tail_trap;
+            bool trap = tail_trap;
+            Roots roots;
             for (size_t j = i + 1; j < es.size(); j++) {
-                later = later || has_effect(es[j]);
                 trap = trap || may_trap(es[j]);
+                changed(es[j], roots);
             }
             Operand o = expr(es[i]);
-            if (later) o = stabilize(std::move(o), es[i]->span);
+            if (o.kind == OpKind::Copy && hits(roots, o.place)) o = stabilize(std::move(o), es[i]->span);
             if (trap) o = force(std::move(o), es[i]->span);
             out.push_back(std::move(o));
         }
@@ -772,10 +793,23 @@ private:
             probe(base, i->object->span);  // `xs[9][1 / z]`: сперва xs[9]
         }
         if (i->object->type->kind == TK::Map) {  // m[k]: ключ во временном (Р54)
+            if (auto* n = as<const NameExpr>(strip_parens(i->index)); n && n->res.kind == ResKind::Local) {
+                for (auto l = map_loops_.rbegin(); l != map_loops_.rend(); ++l) {
+                    if (l->var == n->res.local && same_place(l->map, base)) {
+                        return proj(std::move(base), ProjKind::MapValueAt, l->pos);
+                    }
+                }
+            }
             const Type* kt = i->object->type->key;
             uint32_t key = temp(kt);
             assign(local(key), use(rd(expr(i->index)), kt), i->index->span);
             return proj(std::move(base), ProjKind::MapValue, key);
+        }
+        if (i->object->type->kind == TK::Pool) {  // p[h]: хэндл во временном (Р67)
+            const Type* ht = i->index->type;
+            uint32_t h = temp(ht);
+            assign(local(h), use(rd(expr(i->index)), ht), i->index->span);
+            return proj(std::move(base), ProjKind::PoolValue, h);
         }
         uint32_t idx = temp(prim(TK::I64));
         assign(local(idx), use(rd(expr(i->index)), prim(TK::I64)), i->index->span);
@@ -848,6 +882,7 @@ private:
             case ExprKind::ListLit: {
                 auto* l = static_cast<const ListLitExpr*>(e);
                 if (e->type->kind == TK::Map) return to_temp(make(RvKind::MakeMap, e->type), e->span);
+                if (e->type->kind == TK::Pool) return to_temp(make(RvKind::MakePool, e->type), e->span);
                 Rvalue rv = make(RvKind::MakeList, e->type);
                 std::vector<const Expr*> items(l->items.begin(), l->items.end());
                 rv.ops = exprs(items);
@@ -1172,7 +1207,9 @@ private:
                         if ((trap || later) && !hits(roots, a.place)) probe(a.place, args[i]->span);
                     } else {
                         a.op = expr(args[i]);
-                        if (later) a.op = stabilize(std::move(a.op), args[i]->span);
+                        if (a.op.kind == OpKind::Copy && hits(roots, a.op.place)) {
+                            a.op = stabilize(std::move(a.op), args[i]->span);
+                        }
                         if (trap) a.op = force(std::move(a.op), args[i]->span);
                     }
                     rv.args.push_back(std::move(a));
@@ -1217,11 +1254,12 @@ private:
                 auto* f = static_cast<const FieldExpr*>(c->callee);
                 Method m = c->method;
                 if (f->object->type->kind == TK::Map) {  // методы Map (Р54)
-                    bool changes = m == Method::Remove || m == Method::Clear;
+                    bool changes = m == Method::Remove || m == Method::Clear || m == Method::Reserve;
                     rv = intrinsic(m == Method::Get        ? Intrinsic::MapGet
                                    : m == Method::Contains ? Intrinsic::MapContains
                                    : m == Method::Remove   ? Intrinsic::MapRemove
                                    : m == Method::Clear    ? Intrinsic::MapClear
+                                   : m == Method::Reserve  ? Intrinsic::MapReserve
                                                            : Intrinsic::MapKeys,
                                    c->type);
                     if (changes) {
@@ -1240,12 +1278,44 @@ private:
                     for (Operand& o : rv.ops) o = rd(std::move(o));
                     return true;
                 }
+                if (f->object->type->kind == TK::Pool) {  // методы Pool (Р67)
+                    bool changes = m < Method::Contains;
+                    rv = intrinsic(m == Method::Add        ? Intrinsic::PoolAdd
+                                   : m == Method::Remove   ? Intrinsic::PoolRemove
+                                   : m == Method::Clear    ? Intrinsic::PoolClear
+                                   : m == Method::Reserve  ? Intrinsic::PoolReserve
+                                   : m == Method::Get      ? Intrinsic::PoolGet
+                                   : m == Method::Contains ? Intrinsic::PoolContains
+                                                           : Intrinsic::PoolHandles,
+                                   c->type);
+                    if (changes) {
+                        bool fresh = false;
+                        rv.place = lvalue(f->object, fresh);
+                        rv.has_place = true;
+                        if ((any_trap(args) || any_effect(args)) && !hits(changed_all(args), rv.place)) {
+                            probe(rv.place, f->object->span);
+                        }
+                        rv.ops = exprs(args);
+                    } else {
+                        std::vector<const Expr*> all{f->object};
+                        all.insert(all.end(), args.begin(), args.end());
+                        rv.ops = exprs(all);
+                    }
+                    // Значение, которое пул сохраняет (add), отдаётся целиком.
+                    for (size_t i = 0; i < rv.ops.size(); i++) {
+                        if (!(m == Method::Add && i == 0)) rv.ops[i] = rd(std::move(rv.ops[i]));
+                    }
+                    return true;
+                }
                 bool mutating = m < Method::Contains;
+                // По номеру метода; Add — только у Pool (выше).
                 static constexpr Intrinsic kMap[] = {
                     Intrinsic::ListPush,  Intrinsic::ListPop,  Intrinsic::ListInsert,    Intrinsic::ListRemove,
-                    Intrinsic::ListClear, Intrinsic::ListSort, Intrinsic::ListContains,  Intrinsic::StrTrim,
+                    Intrinsic::ListClear, Intrinsic::ListSort, Intrinsic::ListReserve, Intrinsic::PoolAdd,
+                    Intrinsic::ListContains, Intrinsic::StrTrim,
                     Intrinsic::StrFind,   Intrinsic::StrStartsWith, Intrinsic::StrSplit,
                 };
+                static_assert(sizeof kMap / sizeof kMap[0] == static_cast<size_t>(Method::Split) + 1);
                 rv = intrinsic(kMap[static_cast<size_t>(m)], c->type);
                 if (mutating) {
                     bool fresh = false;
@@ -1475,7 +1545,7 @@ private:
         }
         // `x op= e` — `x = x op e`; x читается до e.
         Operand cur = copy(p);
-        if (has_effect(a->value)) cur = stabilize(std::move(cur), a->target->span);
+        if (hits(changed(a->value), p)) cur = stabilize(std::move(cur), a->target->span);
         if (may_trap(a->value)) cur = force(std::move(cur), a->target->span);
         Operand rhs = expr(a->value);
         BinKind k = BinKind::Add;
@@ -1577,17 +1647,49 @@ private:
             cur_ = step;
             assign(local(i), bin(BinKind::AddWrap, copy(local(i)), cint(1, t), t), s->var_span);
             jump(head, s->span);
+        } else if (s->iter->type->kind == TK::Pool) {
+            // `for e in &p` (Р67): e — элемент живого слота k по возрастанию
+            // номера. Число слотов — раз: тело p не меняет (E0412).
+            bool fresh = false;
+            Place base = object(s->iter, fresh);
+            Rvalue slots = intrinsic(Intrinsic::PoolSlots, i64);
+            slots.ops.push_back(copy(base));
+            Operand n = to_temp(std::move(slots), s->iter->span);
+            uint32_t k = temp(i64);
+            assign(local(k), use(cint(0, i64), i64), s->var_span);
+            jump(head, s->span);
+            cur_ = head;
+            Operand c = to_temp(bin(BinKind::Lt, copy(local(k)), n, prim(TK::Bool)), s->var_span);
+            branch(c, body, done, s->var_span);
+            cur_ = body;
+            Rvalue live = intrinsic(Intrinsic::PoolLive, prim(TK::Bool));
+            live.ops.push_back(copy(base));
+            live.ops.push_back(copy(local(k)));
+            uint32_t inner = new_block();
+            branch(to_temp(std::move(live), s->iter->span), inner, step, s->var_span);
+            cur_ = inner;
+            if (s->local) aliases_[s->local] = proj(base, ProjKind::PoolSlot, k);
+            loops_.push_back(Loop{done, step, scopes_.size()});
+            block(s->body);
+            loops_.pop_back();
+            jump(step, s->span);
+            cur_ = step;
+            assign(local(k), bin(BinKind::AddWrap, copy(local(k)), cint(1, i64), i64), s->var_span);
+            jump(head, s->span);
         } else {
             // `for x in &xs`: x — место xs[k]; длина проверяется на каждом шаге.
-            // `for k in &m`: k — элемент снимка m.keys(), ключи по возрастанию (Р54).
+            // `for k in &m`: k — ключ пары m с номером ord[k]; ord — номера
+            // пар по возрастанию ключа (Р54), ключи не копируются.
             bool fresh = false;
             // `for x in &xs[a..b]`: срез вычисляется раз; тело не меняет xs
             // (E0412, Р65), поэтому он строится над самим xs без снимка.
             Place base = object(s->iter, fresh);
-            if (s->iter->type->kind == TK::Map) {
-                Rvalue keys = intrinsic(Intrinsic::MapKeys, tt_.list(s->iter->type->key));
-                keys.ops.push_back(copy(base));
-                base = place_of(to_temp(std::move(keys), s->iter->span), s->iter->span, fresh);
+            Place map = base;
+            bool over_map = s->iter->type->kind == TK::Map;
+            if (over_map) {
+                Rvalue ord = intrinsic(Intrinsic::MapOrder, tt_.list(i64));
+                ord.ops.push_back(copy(base));
+                base = place_of(to_temp(std::move(ord), s->iter->span), s->iter->span, fresh);
             }
             uint32_t k = temp(i64);
             assign(local(k), use(cint(0, i64), i64), s->var_span);
@@ -1599,10 +1701,18 @@ private:
             Operand c = to_temp(bin(BinKind::Lt, copy(local(k)), n, prim(TK::Bool)), s->var_span);
             branch(c, body, done, s->var_span);
             cur_ = body;
-            if (s->local) aliases_[s->local] = proj(base, ProjKind::Index, k);
+            if (over_map) {
+                uint32_t pos = temp(i64);
+                assign(local(pos), use(copy(proj(base, ProjKind::Index, k)), i64), s->var_span);
+                if (s->local) aliases_[s->local] = proj(map, ProjKind::MapKeyAt, pos);
+                map_loops_.push_back(MapLoop{s->local, map, pos});
+            } else if (s->local) {
+                aliases_[s->local] = proj(base, ProjKind::Index, k);
+            }
             loops_.push_back(Loop{done, step, scopes_.size()});
             block(s->body);
             loops_.pop_back();
+            if (over_map) map_loops_.pop_back();
             jump(step, s->span);
             cur_ = step;
             assign(local(k), bin(BinKind::AddWrap, copy(local(k)), cint(1, i64), i64), s->var_span);

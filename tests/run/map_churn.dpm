@@ -1,0 +1,92 @@
+// spec: type.map builtin.methods stmt.for memory.values
+// Вставки и удаления вперемешку: удаление ставит на место последнюю пару
+// и убирает слот индекса сдвигом назад. Проверка — против списка пар и
+// по обходу (порядок — по возрастанию ключа, от истории не зависит).
+fn mix(x: u64) u64 {
+    var h = x *% 11400714819323198485
+    h = (h ^ (h >> 31)) *% 13787848793156543929
+    return h ^ (h >> 29)
+}
+
+// Ключи из малого диапазона: длинные цепочки пробирования и частые
+// повторы — удаление чаще попадает в середину цепочки.
+fn key(i: i64) i64 {
+    return i64(mix(u64(i)) % 300)
+}
+
+fn name(k: i64) str {
+    return "k" + str(k)
+}
+
+fn find(ks: &List[i64], k: i64) i64 {
+    for i in 0..len(ks) {
+        if ks[i] == k {
+            return i
+        }
+    }
+    return -1
+}
+
+fn main() {
+    var m: Map[i64, i64] = []
+    var s: Map[str, List[i64]] = []
+    var ks: List[i64] = []
+    var vs: List[i64] = []
+    var bad = 0
+    for i in 0..6000 {
+        let k = key(i)
+        let p = find(&ks, k)
+        if mix(u64(i) + 7) % 3 == 0 {
+            let got = m.remove(k)
+            let sgot = s.remove(name(k))
+            if p >= 0 {
+                if (got ?? -1) != vs[p] || sgot == none {
+                    bad += 1
+                }
+                let _ = ks.remove(p)
+                let _ = vs.remove(p)
+            } else if got != none || sgot != none {
+                bad += 1
+            }
+        } else {
+            m[k] = i
+            s[name(k)] = [i, k]
+            if p >= 0 {
+                vs[p] = i
+            } else {
+                ks.push(k)
+                vs.push(i)
+            }
+        }
+        if len(m) != len(ks) || len(s) != len(ks) {
+            bad += 1
+        }
+    }
+    for i in 0..len(ks) {
+        if (m.get(ks[i]) ?? -1) != vs[i] || !s.contains(name(ks[i])) || s[name(ks[i])][0] != vs[i] {
+            bad += 1
+        }
+    }
+    for k in 0..300 {
+        if m.contains(k) != (find(&ks, k) >= 0) {
+            bad += 1
+        }
+    }
+    var prev: i64 = -1
+    var sum: i64 = 0
+    for k in &m {
+        if k <= prev {
+            bad += 1
+        }
+        prev = k
+        sum += m[k]
+    }
+    println("live " + str(len(m)) + " sum " + str(sum) + " bad " + str(bad))
+    var first = ""
+    for k in &s {
+        if first == "" {
+            first = k
+        }
+    }
+    println("first " + first)
+}

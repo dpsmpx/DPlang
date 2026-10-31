@@ -31,6 +31,8 @@ enum class TK : uint8_t {
     Str,
     List,      // List[T]
     Map,       // Map[K, V] (Р54): key — ключ, elem — значение
+    Pool,        // Pool[T] (Р67): elem — элемент
+    PoolHandle,  // Handle[T] (Р67): номер слота и поколение; elem — элемент пула
     Slice,     // []T
     Optional,  // ?T
     Result,    // E!T; err — перечисление ошибок
@@ -53,7 +55,7 @@ struct CFnSig {
 
 struct Type {
     TK kind = TK::Error;
-    const Type* elem = nullptr;  // List, Slice, Optional — элемент; Result, Map — значение
+    const Type* elem = nullptr;  // List, Slice, Optional, Pool, Handle — элемент; Result, Map — значение
     const Type* key = nullptr;   // Map — ключ
     const Type* err = nullptr;   // Result — тип ошибки (перечисление); nullptr — ещё не выведен (Р41)
     const StructDef* sdef = nullptr;
@@ -70,6 +72,8 @@ public:
     const Type* error() const { return prim(TK::Error); }
     const Type* list(const Type* elem) { return make(TK::List, elem, nullptr, nullptr, nullptr); }
     const Type* map(const Type* key, const Type* value) { return make(TK::Map, value, nullptr, nullptr, nullptr, key); }
+    const Type* pool(const Type* elem) { return make(TK::Pool, elem, nullptr, nullptr, nullptr); }
+    const Type* pool_handle(const Type* elem) { return make(TK::PoolHandle, elem, nullptr, nullptr, nullptr); }
     const Type* slice(const Type* elem) { return make(TK::Slice, elem, nullptr, nullptr, nullptr); }
     const Type* optional(const Type* elem) { return make(TK::Optional, elem, nullptr, nullptr, nullptr); }
     const Type* result(const Type* err, const Type* value) { return make(TK::Result, value, err, nullptr, nullptr); }

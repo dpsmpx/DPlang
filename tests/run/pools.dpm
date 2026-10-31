@@ -1,0 +1,150 @@
+// spec: type.pool type.handle builtin.methods stmt.for memory.values trap.index
+// Pool[T] и Handle[T] (Р67): слот с наименьшим номером, поколение растёт
+// при удалении и clear, устаревший хэндл обнаруживается; обход — живые
+// по номеру слота; копия пула — значение, хэндлы годятся в обеих.
+struct Unit {
+    name: str
+    hp: i32
+    tags: List[str]
+}
+
+struct World {
+    units: Pool[Unit]
+    order: List[Handle[Unit]]
+}
+
+fn show(h: Handle[Unit]) str {
+    return "(" + str(h.index) + "," + str(h.generation) + ")"
+}
+
+fn spawn(w: &mut World, name: str, hp: i32) Handle[Unit] {
+    let h = w.units.add(Unit{name: name, hp: hp, tags: [name + "!"]})
+    w.order.push(h)
+    return h
+}
+
+fn hit(w: &mut World, h: Handle[Unit], dmg: i32) bool {
+    if !w.units.contains(h) {
+        return false
+    }
+    w.units[h].hp -= dmg
+    if w.units[h].hp <= 0 {
+        let _ = w.units.remove(h)
+    }
+    return true
+}
+
+fn alive(p: &Pool[Unit]) str {
+    var s = ""
+    for u in &p {
+        s += u.name + ":" + str(u.hp) + " "
+    }
+    return s + "| " + str(len(p))
+}
+
+fn main() {
+    var w = World{units: [], order: []}
+    w.units.reserve(4)
+    let a = spawn(&mut w, "ann", 10)
+    let b = spawn(&mut w, "bob", 5)
+    let c = spawn(&mut w, "cid", 7)
+    println(show(a) + show(b) + show(c))
+    println(alive(&w.units))
+    println(str(hit(&mut w, b, 6)) + " " + str(w.units.contains(b)) + " " + str(hit(&mut w, b, 1)))
+    let d = spawn(&mut w, "dan", 3)
+    println("d " + show(d) + " reuses b: " + str(d.index == b.index) + " same: " + str(d == b))
+    if let u = w.units.get(b) {
+        println("stale get " + u.name)
+    } else {
+        println("stale get none")
+    }
+    w.units[d].tags.push("new")
+    w.units[a].name += "+"
+    println(alive(&w.units) + " tags " + str(len(w.units[d].tags)))
+
+    // &mut-обход меняет элементы через переменную цикла
+    for u in &mut w.units {
+        u.hp *= 2
+        u.tags.push("x")
+    }
+    println(alive(&w.units))
+
+    // структурные изменения — по снимку хэндлов
+    for h in &w.units.handles() {
+        if w.units[h].hp > 10 {
+            let gone = w.units.remove(h) ?? Unit{name: "?", hp: 0, tags: []}
+            println("removed " + gone.name + " " + str(len(gone.tags)))
+        }
+    }
+    println(alive(&w.units))
+
+    // копия — значение
+    var copy = w.units
+    let e = copy.add(Unit{name: "eve", hp: 1, tags: []})
+    copy[d].hp = 100
+    println(alive(&copy) + " / " + alive(&w.units) + " e in w: " + str(w.units.contains(e)))
+
+    // clear: все хэндлы устарели, слоты снова с наименьшего номера
+    w.units.clear()
+    let f = w.units.add(Unit{name: "fay", hp: 2, tags: []})
+    println("after clear " + show(f) + " d stale: " + str(!w.units.contains(d)) + " " + alive(&w.units))
+
+    // хэндлы в списке и как ?Handle
+    var hs: List[Handle[Unit]] = []
+    for h in &w.order {
+        if w.units.contains(h) {
+            hs.push(h)
+        }
+    }
+    var maybe: ?Handle[Unit] = none
+    if len(copy) > 0 {
+        maybe = copy.handles()[0]
+    }
+    if let m = maybe {
+        println("first in copy " + show(m) + " " + copy[m].name)
+    }
+    println("order " + str(len(w.order)) + " live from order " + str(len(hs)))
+
+    // много добавлений и удалений: номера не растут сверх живых
+    var p: Pool[i64] = []
+    var keep: List[Handle[i64]] = []
+    for i in 0..1000 {
+        let h = p.add(i)
+        if i % 3 == 0 {
+            keep.push(h)
+        } else {
+            let _ = p.remove(h)
+        }
+    }
+    var sum: i64 = 0
+    for v in &p {
+        sum += v
+    }
+    var top: u32 = 0
+    for h in &keep {
+        if h.index > top {
+            top = h.index
+        }
+    }
+    println("live " + str(len(p)) + " sum " + str(sum) + " top slot " + str(top))
+
+    // освобождения не по порядку: add берёт наименьший свободный номер
+    var q: Pool[str] = []
+    var qs: List[Handle[str]] = []
+    for i in 0..8 {
+        qs.push(q.add("v" + str(i)))
+    }
+    for i in &[5, 2, 7, 0] {
+        let _ = q.remove(qs[i])
+    }
+    var got = ""
+    for i in 0..5 {
+        let h = q.add("w" + str(i))
+        got += show_any(h)
+    }
+    println(got)
+}
+
+fn show_any(h: Handle[str]) str {
+    return str(h.index) + "." + str(h.generation) + " "
+}

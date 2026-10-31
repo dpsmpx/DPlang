@@ -1,0 +1,10 @@
+// spec: type.pool trap.index
+// Чтение по устаревшему хэндлу — ловушка в месте обращения (Р67).
+fn main() {
+    var p: Pool[i32] = []
+    let h = p.add(1)
+    let _ = p.remove(h)
+    let g = p.add(2)
+    println(str(p[g]))
+    println(str(p[h]))
+}

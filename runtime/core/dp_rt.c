@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,11 +57,36 @@ _Noreturn void dp_bad_shift_u(uint64_t n, const char* tname, const char* loc) {
 
 /* --- память */
 
+/* Счётчик выделений (Р68): вызовы malloc и realloc и их байты — для
+ * тестов и замеров кадровой памяти. Атомарный: библиотеку (`--lib`)
+ * могут звать из нескольких потоков C. */
+static _Atomic int64_t dp_alloc_count;
+static _Atomic int64_t dp_alloc_bytes;
+
+static void dp_count_alloc(int64_t bytes) {
+    atomic_fetch_add_explicit(&dp_alloc_count, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&dp_alloc_bytes, bytes, memory_order_relaxed);
+}
+
+void dp_alloc_stats(int64_t* count, int64_t* bytes) {
+    *count = atomic_load_explicit(&dp_alloc_count, memory_order_relaxed);
+    *bytes = atomic_load_explicit(&dp_alloc_bytes, memory_order_relaxed);
+}
+
+void dp_alloc_report(void) {
+    const char* on = getenv("DPL_ALLOC_STATS");
+    if (!on || !*on) return;
+    int64_t count, bytes;
+    dp_alloc_stats(&count, &bytes);
+    fprintf(stderr, "dpl: %" PRId64 " allocations, %" PRId64 " bytes\n", count, bytes);
+}
+
 void* dp_alloc(int64_t count, size_t elem, const char* loc) {
     if (count <= 0) return NULL;
     if (elem != 0 && count > DP_MAX_BYTES / (int64_t)elem) dp_trap(loc, "out of memory");
     void* p = malloc((size_t)count * elem);
     if (!p) dp_trap(loc, "out of memory");
+    dp_count_alloc(count * (int64_t)elem);
     return p;
 }
 
@@ -72,10 +98,102 @@ void* dp_realloc(void* p, int64_t count, size_t elem, const char* loc) {
     if (elem != 0 && count > DP_MAX_BYTES / (int64_t)elem) dp_trap(loc, "out of memory");
     void* q = realloc(p, (size_t)count * elem);
     if (!q) dp_trap(loc, "out of memory");
+    dp_count_alloc(count * (int64_t)elem);
     return q;
 }
 
 void dp_free(void* p) { free(p); }
+
+/* --- служебная часть Pool (Р67) */
+
+static void dp_heap_push(dp_pool* p, uint32_t x) {
+    int64_t i = p->nheap++;
+    while (i > 0 && p->heap[(i - 1) / 2] > x) {
+        p->heap[i] = p->heap[(i - 1) / 2];
+        i = (i - 1) / 2;
+    }
+    p->heap[i] = x;
+}
+
+static uint32_t dp_heap_pop(dp_pool* p) {
+    uint32_t top = p->heap[0], x = p->heap[--p->nheap];
+    int64_t i = 0;
+    for (;;) {
+        int64_t c = 2 * i + 1;
+        if (c >= p->nheap) break;
+        if (c + 1 < p->nheap && p->heap[c + 1] < p->heap[c]) c++;
+        if (p->heap[c] >= x) break;
+        p->heap[i] = p->heap[c];
+        i = c;
+    }
+    if (p->nheap > 0) p->heap[i] = x;
+    return top;
+}
+
+void dp_pool_grow(dp_pool* p, int64_t n, const char* loc) {
+    if (n <= p->cap) return;
+    if (n > (int64_t)UINT32_MAX) dp_trap(loc, "out of memory"); /* номер слота — u32 */
+    p->gens = (uint32_t*)dp_realloc(p->gens, n, sizeof(uint32_t), loc);
+    p->live = (uint8_t*)dp_realloc(p->live, n, 1, loc);
+    p->heap = (uint32_t*)dp_realloc(p->heap, n, sizeof(uint32_t), loc);
+    p->cap = n;
+}
+
+int64_t dp_pool_take(dp_pool* p, const char* loc) {
+    int64_t i;
+    if (p->nheap > 0) {
+        i = dp_heap_pop(p);
+    } else {
+        if (p->nslots == p->cap) {
+            int64_t n = p->cap ? 2 * p->cap : 4;
+            dp_pool_grow(p, n > (int64_t)UINT32_MAX ? p->cap + 1 : n, loc);
+        }
+        i = p->nslots++;
+        p->gens[i] = 1;
+    }
+    p->live[i] = 1;
+    p->len++;
+    return i;
+}
+
+void dp_pool_release(dp_pool* p, int64_t i) {
+    p->live[i] = 0;
+    p->len--;
+    if (++p->gens[i] < DP_POOL_GEN_LIMIT) dp_heap_push(p, (uint32_t)i);
+}
+
+void dp_pool_clear(dp_pool* p) {
+    p->nheap = 0;
+    for (int64_t i = 0; i < p->nslots; i++) {
+        if (p->live[i]) {
+            p->live[i] = 0;
+            p->gens[i]++;
+        }
+        if (p->gens[i] < DP_POOL_GEN_LIMIT) p->heap[p->nheap++] = (uint32_t)i; /* по возрастанию — уже куча */
+    }
+    p->len = 0;
+}
+
+dp_pool dp_pool_copy(const dp_pool* p) {
+    dp_pool r = *p;
+    r.cap = p->nslots;
+    r.gens = (uint32_t*)dp_alloc(r.cap, sizeof(uint32_t), NULL);
+    r.live = (uint8_t*)dp_alloc(r.cap, 1, NULL);
+    r.heap = (uint32_t*)dp_alloc(r.cap, sizeof(uint32_t), NULL);
+    if (r.cap > 0) {
+        memcpy(r.gens, p->gens, (size_t)r.cap * sizeof(uint32_t));
+        memcpy(r.live, p->live, (size_t)r.cap);
+    }
+    if (p->nheap > 0) memcpy(r.heap, p->heap, (size_t)p->nheap * sizeof(uint32_t));
+    return r;
+}
+
+void dp_pool_drop(dp_pool* p) {
+    dp_free(p->gens);
+    dp_free(p->live);
+    dp_free(p->heap);
+    *p = (dp_pool){0};
+}
 
 /* --- запись плавающего (Р48)
  *
@@ -550,4 +668,8 @@ void dp_check_insert(int64_t i, int64_t len, const char* loc) {
 
 void dp_check_repeat(int64_t n, const char* loc) {
     if (n < 0) dp_trapf(loc, "repeat count %" PRId64 " is negative", n);
+}
+
+void dp_check_reserve(int64_t n, const char* loc) {
+    if (n < 0) dp_trapf(loc, "reserve count %" PRId64 " is negative", n);
 }

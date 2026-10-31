@@ -83,6 +83,8 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
         case TK::Str: return "str";
         case TK::List: return "List[" + type_name(t->elem, from) + "]";
         case TK::Map: return "Map[" + type_name(t->key, from) + ", " + type_name(t->elem, from) + "]";
+        case TK::Pool: return "Pool[" + type_name(t->elem, from) + "]";
+        case TK::PoolHandle: return "Handle[" + type_name(t->elem, from) + "]";
         case TK::Slice: return "[]" + type_name(t->elem, from);
         case TK::Optional: return (t->elem->kind == TK::Optional ? "? " : "?") + type_name(t->elem, from);
         case TK::Result: return (t->err ? type_name(t->err, from) : "") + "!" + type_name(t->elem, from);
@@ -125,7 +127,7 @@ bool linear_in_container(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
         case TK::List: case TK::Slice: return linear_type(t->elem) || linear_in_container(t->elem);
-        case TK::Map: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Map: case TK::Pool: return linear_type(t->elem) || linear_in_container(t->elem);
         case TK::Optional: return linear_in_container(t->elem);
         case TK::Result: return linear_in_container(t->elem) || linear_in_container(t->err);
         default: return false;

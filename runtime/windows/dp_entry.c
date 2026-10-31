@@ -66,6 +66,7 @@ static int dp_run_as(dp_entry_fn entry, const char* what) {
         dp_main_error = entry();
     }
     fflush(stdout);
+    dp_alloc_report();
     if (dp_main_error) {
         fprintf(stderr, "error: %s failed with %s\n", what, dp_main_error);
         return 1;

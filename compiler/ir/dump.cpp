@@ -97,6 +97,10 @@ private:
                 case ProjKind::ResultValue: s += ".ok"; if (t) t = t->elem; break;
                 case ProjKind::ResultError: s += ".err"; if (t) t = t->err; break;
                 case ProjKind::MapValue: s += "{%" + std::to_string(pr.index) + "}"; if (t) t = t->elem; break;
+                case ProjKind::MapKeyAt: s += ".key[%" + std::to_string(pr.index) + "]"; if (t) t = t->key; break;
+                case ProjKind::MapValueAt: s += ".value[%" + std::to_string(pr.index) + "]"; if (t) t = t->elem; break;
+                case ProjKind::PoolValue: s += "{%" + std::to_string(pr.index) + "}"; if (t) t = t->elem; break;
+                case ProjKind::PoolSlot: s += ".slot[%" + std::to_string(pr.index) + "]"; if (t) t = t->elem; break;
             }
         }
         return s;
@@ -169,9 +173,11 @@ private:
         static constexpr const char* names[] = {
             "len",  "repeat", "min",   "max",    "abs",    "parse_int", "is_digit", "is_alpha",
             "is_space", "is_alnum", "print", "println", "eprintln", "push", "pop", "insert",
-            "remove", "clear", "sort", "contains", "trim", "find", "starts_with", "split",
+            "remove", "clear", "sort", "reserve", "contains", "trim", "find", "starts_with", "split",
             "__args_len", "__arg", "__read_file", "checked_add", "checked_sub", "checked_mul", "checked_div",
             "checked_neg", "map_set", "map_get", "map_contains", "map_remove", "map_clear", "map_keys",
+            "map_order", "map_reserve", "pool_add", "pool_remove", "pool_clear", "pool_reserve", "pool_get",
+            "pool_contains", "pool_handles", "pool_slots", "pool_live",
             "c_arena_mark", "c_arena_release", "probe",
         };
         return names[static_cast<size_t>(k)];
@@ -199,7 +205,7 @@ private:
                 return s;
             }
             case RvKind::MakeList: return type(rv.type) + " [" + ops(rv.ops) + "]";
-            case RvKind::MakeMap: return type(rv.type) + " []";
+            case RvKind::MakeMap: case RvKind::MakePool: return type(rv.type) + " []";
             case RvKind::MakeSome: return "some " + ops(rv.ops);
             case RvKind::MakeNone: return "none " + type(rv.type);
             case RvKind::MakeOk: return rv.ops.empty() ? "ok " + type(rv.type) : "ok " + ops(rv.ops);

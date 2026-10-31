@@ -314,7 +314,7 @@ void Checker::let_stmt(LetStmt* l) {
     }
     if (t && linear_in_container(t)) {
         error(Code::E0514, l->type ? l->type->span : l->name_span,
-              "'" + tn(t) + "' holds a '@linear' value in a List, a Map or a slice; keep resources in variables");
+              "'" + tn(t) + "' holds a '@linear' value in a List, a Map, a Pool or a slice; keep resources in variables");
     }
     l->local = declare(l->name, l->name_span, t, l->is_var, false, l->value != nullptr);
 }
@@ -482,6 +482,9 @@ void Checker::for_stmt(ForStmt* s) {
                 error(Code::E0419, s->iter->span, "iterate a collection through a mark: 'for x in &xs'");
             }
         } else if (t->kind == TK::List) {
+            elem = t->elem;
+            if (s->mode == ForMode::Mut) mutable_place(s->iter, "mutate");
+        } else if (t->kind == TK::Pool) {  // Р67: живые элементы по возрастанию номера слота
             elem = t->elem;
             if (s->mode == ForMode::Mut) mutable_place(s->iter, "mutate");
         } else if (t->kind == TK::Map) {  // Р54: ключи по возрастанию
