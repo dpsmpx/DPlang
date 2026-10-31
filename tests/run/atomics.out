@@ -1,0 +1,6 @@
+hits 200, done true, tickets 9900
+swap 200, cas true false, now 9
+sub 250, now 240
+--- stderr ---
+atomics.dpm:26:9: trap: integer overflow in '+' on 'u8'
+[exit 101]

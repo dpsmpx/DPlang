@@ -1,0 +1,85 @@
+// t22: заготовка — напишите тело функции по task.md.
+pub struct Stats {
+    distinct: List[i64]
+    longest: str
+    anagrams: i64
+}
+
+fn count_part(words: &List[str], lo: int, hi: int, out: &mut List[i64]) {
+    var marks: List[bool] = repeat(false, 26)
+    for i in lo..hi {
+        for m in &mut marks {
+            m = false
+        }
+        var k: int = 0
+        for c in &words[i] {
+            if c >= 'a' && c <= 'z' {
+                let idx = int(c - 'a')
+                if !marks[idx] {
+                    marks[idx] = true
+                    k += 1
+                }
+            }
+        }
+        out[k] += 1
+    }
+}
+
+fn longest_of(words: &List[str], out: &mut str) {
+    var best = ""
+    for w in &words {
+        if len(w) > len(best) {
+            best = w
+        }
+    }
+    out = best
+}
+
+fn count_anagrams(words: &List[str], out: &mut i64) {
+    var a: List[i64] = repeat(i64(0), 256)
+    var b: List[i64] = repeat(i64(0), 256)
+    var total: i64 = 0
+    let n = len(words)
+    for i in 0..n {
+        if i + 1 < n && len(words[i]) == len(words[i + 1]) {
+            for x in &mut a {
+                x = 0
+            }
+            for y in &mut b {
+                y = 0
+            }
+            for c in &words[i] {
+                a[int(c)] += 1
+            }
+            for d in &words[i + 1] {
+                b[int(d)] += 1
+            }
+            if a == b {
+                total += 1
+            }
+        }
+    }
+    out = total
+}
+
+pub fn analyze(words: &List[str], workers: i32) Stats {
+    let nw = int(workers)
+    let n = len(words)
+    var parts: List[List[i64]] = repeat(repeat(i64(0), 27), nw)
+    var longest = ""
+    var anag: i64 = 0
+    tasks {
+        spawn longest_of(&words, &mut longest)
+        spawn count_anagrams(&words, &mut anag)
+        for w in 0..nw {
+            spawn count_part(&words, n * w / nw, n * (w + 1) / nw, &mut parts[w])
+        }
+    }
+    var distinct: List[i64] = repeat(i64(0), 27)
+    for p in &parts {
+        for k in 0..27 {
+            distinct[k] += p[k]
+        }
+    }
+    return Stats { distinct, longest, anagrams: anag }
+}

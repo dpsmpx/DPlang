@@ -1,0 +1,8 @@
+--- stderr ---
+par_index.dpm:13:9: error[E0412]: cannot assign to 'out[i]' inside 'parallel for': 'i' is an element of 'idx', and elements may repeat, so two iterations could write the same place; iterate over a range: 'parallel for k in 0..len(idx)'
+  13 |         out[i] += 1
+     |         ^~~~~~
+par_index.dpm:17:28: error[E0521]: every iteration of this loop starts a task with '&mut out[i]': the tasks would change it at the same time; start one task per element in a 'for' over a range
+  17 |             spawn add(&mut out[i])
+     |                            ^~~~~~
+[exit 1]

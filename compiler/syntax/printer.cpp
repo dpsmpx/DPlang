@@ -208,7 +208,10 @@ private:
                 block(f->body, 0);
                 break;
             }
-            case ItemKind::ExternType: out += pub + "extern type " + it->name; break;
+            case ItemKind::ExternType:
+                for (const Attr& a : static_cast<const ExternTypeItem*>(it)->attrs) out += a.text() + "\n";
+                out += pub + "extern type " + it->name;
+                break;
             case ItemKind::Struct: {
                 auto* s = static_cast<const StructItem*>(it);
                 for (const Attr& a : s->attrs) out += a.text() + "\n";
@@ -375,6 +378,20 @@ private:
             }
             case StmtKind::Break: out += "break"; break;
             case StmtKind::Continue: out += "continue"; break;
+            case StmtKind::Lock: {
+                auto* l = static_cast<const LockStmt*>(s);
+                out += "lock ";
+                expr(l->mutex);
+                out += " as " + l->var + " ";
+                block(l->body, d);
+                break;
+            }
+            case StmtKind::Tasks: {
+                auto* t = static_cast<const TasksStmt*>(s);
+                out += "tasks ";
+                block(t->body, d);
+                break;
+            }
             case StmtKind::Defer: {
                 auto* df = static_cast<const DeferStmt*>(s);
                 out += df->on_error ? "errdefer " : "defer ";
@@ -535,6 +552,7 @@ private:
                 break;
             }
             case ExprKind::Try: out += "try "; expr(static_cast<const TryExpr*>(e)->operand); break;
+            case ExprKind::Spawn: out += "spawn "; expr(static_cast<const SpawnExpr*>(e)->operand); break;
             case ExprKind::Paren:
                 out += "(";
                 expr(static_cast<const ParenExpr*>(e)->inner);

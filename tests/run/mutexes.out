@@ -1,0 +1,6 @@
+hits 40, n0 10, over -24
+len 4
+first 4
+--- stderr ---
+mutexes.dpm:24:9: trap: mutex is already locked by this thread
+[exit 101]

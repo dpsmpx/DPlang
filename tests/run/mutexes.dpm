@@ -1,0 +1,49 @@
+// spec: type.concurrent stmt.lock trap.concurrent (Р70)
+// Mutex[T] и блок lock: общая таблица у итераций parallel for, return из
+// блока снимает мьютекс, повторный захват тем же потоком — ловушка.
+struct Cache {
+    names: Map[str, i64]
+    hits: i64
+}
+
+fn record(c: &Mutex[Cache], name: str) i64 {
+    lock c as data {
+        data.hits += 1
+        let n = data.names.get(name) ?? 0
+        data.names[name] = n + 1
+        if n > 3 {
+            return -1
+        }
+    }
+    return 0
+}
+
+fn both(a: &Mutex[List[int]], b: &Mutex[List[int]]) {
+    lock a as x {
+        println("first " + str(len(x)))
+        lock b as y {
+            println("never")
+        }
+    }
+}
+
+fn main() {
+    let cache: Mutex[Cache] = mutex(Cache { names: [], hits: 0 })
+    var res: List[i64] = repeat(i64(0), 40)
+    parallel for i in 0..40 {
+        res[i] = record(&cache, "n" + str(i % 4))
+    }
+    var over: i64 = 0
+    for r in &res {
+        over += r
+    }
+    lock cache as data {
+        println("hits " + str(data.hits) + ", n0 " + str(data.names["n0"]) + ", over " + str(over))
+    }
+    let counts = mutex([1, 2, 3])
+    lock counts as xs {
+        xs.push(4)
+        println("len " + str(len(xs)))
+    }
+    both(&counts, &counts)
+}

@@ -1,0 +1,29 @@
+// spec: type.concurrent stmt.lock (Р70)
+// Mutex[T]: не копируется (E0518), в блоке lock сам мьютекс не называют
+// (E0412), lock — только у Mutex, не класс D.
+struct Holder {
+    m: Mutex[int]
+}
+
+fn take(m: Mutex[int]) {
+}
+
+@det
+fn pure(m: &Mutex[int]) int {
+    lock m as v {
+        return v
+    }
+    return 0
+}
+
+fn main() {
+    let m = mutex(5)
+    let copy = m
+    lock m as v {
+        v += 1
+        println(str(len([m])))
+    }
+    let n = 3
+    lock n as w {
+    }
+}

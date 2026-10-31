@@ -1,0 +1,4 @@
+before
+--- stderr ---
+trap_task.dpm:5:13: trap: index 5 is out of bounds for length 2
+[exit 101]

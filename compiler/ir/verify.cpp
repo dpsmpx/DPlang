@@ -55,7 +55,11 @@ private:
     bool writable(const Place& pl) {
         if (pl.local >= f_.locals.size()) return false;
         LocalKind k = f_.locals[pl.local].kind;
-        if (k != LocalKind::Var && k != LocalKind::Temp && k != LocalKind::ParamMut) return false;
+        // Данные Mutex (Р70) пишут в блоке `lock` и через `&`: доступ
+        // исключителен по захвату, а не по ссылке.
+        bool locked = false;
+        for (const Proj& pr : pl.proj) locked = locked || pr.kind == ProjKind::MutexValue;
+        if (k != LocalKind::Var && k != LocalKind::Temp && k != LocalKind::ParamMut && !locked) return false;
         const Type* t = f_.locals[pl.local].type;
         for (size_t i = 0; i < pl.proj.size() && t; i++) {
             if (pl.proj[i].kind == ProjKind::Index && (t->kind == TK::Slice || t->kind == TK::Str)) return false;
@@ -207,6 +211,16 @@ private:
             return nullptr;
         }
         if (!writable(rv.place)) fail("map method on a read-only place");
+        return t;
+    }
+
+    // Получатель Atomic[T] (Р70): место, можно и `&` — общий доступ.
+    const Type* atomic_receiver(const Rvalue& rv) {
+        const Type* t = rv.has_place ? place(rv.place) : nullptr;
+        if (!t || t->kind != TK::Atomic) {
+            fail("atomic operation on a non-Atomic");
+            return nullptr;
+        }
         return t;
     }
 
@@ -448,6 +462,77 @@ private:
                     else handle_of(rv.type->elem, p, "handles element");
                 }
                 break;
+            case Intrinsic::AtomicNew:
+                args(1);
+                t0 = op(0);
+                if (rv.type->kind != TK::Atomic || rv.type->elem != t0) fail("atomic of a wrong type");
+                break;
+            case Intrinsic::AtomicLoad:
+                args(0);
+                if (const Type* a = atomic_receiver(rv)) same(rv.type, a->elem, "result");
+                break;
+            case Intrinsic::AtomicStore:
+                args(1);
+                if (const Type* a = atomic_receiver(rv)) same(op(0), a->elem, "operand");
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            case Intrinsic::AtomicAdd: case Intrinsic::AtomicSub: case Intrinsic::AtomicSwap:
+                args(1);
+                if (const Type* a = atomic_receiver(rv)) {
+                    same(op(0), a->elem, "operand");
+                    same(rv.type, a->elem, "result");
+                    if (rv.intrinsic != Intrinsic::AtomicSwap && !integer(a->elem)) fail("atomic arithmetic on a bool");
+                }
+                break;
+            case Intrinsic::AtomicCas:
+                args(2);
+                if (const Type* a = atomic_receiver(rv)) {
+                    same(op(0), a->elem, "operand");
+                    same(op(1), a->elem, "operand");
+                }
+                same(rv.type, prim(TK::Bool), "result");
+                break;
+            case Intrinsic::MutexNew:
+                args(1);
+                t0 = op(0, true);
+                if (rv.type->kind != TK::Mutex || rv.type->elem != t0) fail("mutex of a wrong type");
+                break;
+            case Intrinsic::ChannelNew:
+                args(1);
+                same(op(0), prim(TK::I64), "capacity");
+                if (rv.type->kind != TK::Channel) fail("channel of a wrong type");
+                break;
+            case Intrinsic::ChannelSend: case Intrinsic::ChannelRecv: case Intrinsic::ChannelTryRecv:
+            case Intrinsic::ChannelClose: {
+                const Type* ch = rv.has_place ? place(rv.place) : nullptr;
+                if (!ch || ch->kind != TK::Channel) {
+                    fail("channel operation on a non-Channel");
+                    break;
+                }
+                if (rv.intrinsic == Intrinsic::ChannelSend) {
+                    args(1);
+                    same(op(0, true), ch->elem, "operand");
+                    same(rv.type, prim(TK::Void), "result");
+                } else if (rv.intrinsic == Intrinsic::ChannelClose) {
+                    args(0);
+                    same(rv.type, prim(TK::Void), "result");
+                } else {
+                    args(0);
+                    if (rv.type->kind != TK::Optional || rv.type->elem != ch->elem) fail("recv result is not ?T");
+                }
+                break;
+            }
+            case Intrinsic::TasksBegin: case Intrinsic::TasksEnd:
+                args(0);
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            case Intrinsic::MutexLock: case Intrinsic::MutexUnlock: {
+                args(0);
+                const Type* m = rv.has_place ? place(rv.place) : nullptr;
+                if (!m || m->kind != TK::Mutex) fail("lock of a non-Mutex");
+                same(rv.type, prim(TK::Void), "result");
+                break;
+            }
             case Intrinsic::PoolSlots:
                 args(1);
                 pool_operand(op(0));
@@ -517,7 +602,10 @@ private:
             rv.intrinsic != Intrinsic::PoolAdd && rv.intrinsic != Intrinsic::PoolRemove &&
             rv.intrinsic != Intrinsic::PoolClear && rv.intrinsic != Intrinsic::PoolReserve &&
             rv.intrinsic != Intrinsic::MapSet && rv.intrinsic != Intrinsic::MapRemove &&
-            rv.intrinsic != Intrinsic::MapClear && rv.intrinsic != Intrinsic::Probe) {
+            rv.intrinsic != Intrinsic::MapClear && rv.intrinsic != Intrinsic::Probe &&
+            (rv.intrinsic < Intrinsic::AtomicLoad || rv.intrinsic > Intrinsic::AtomicCas) &&
+            rv.intrinsic != Intrinsic::MutexLock && rv.intrinsic != Intrinsic::MutexUnlock &&
+            (rv.intrinsic < Intrinsic::ChannelSend || rv.intrinsic > Intrinsic::ChannelClose)) {
             fail("receiver place on a method that only reads");
         }
     }
@@ -635,10 +723,13 @@ private:
                 }
                 break;
             }
-            case RvKind::Call: {
+            case RvKind::Call: case RvKind::Spawn: {
                 if (rv.fn >= p_.fns.size()) return fail("call of an unknown function");
                 const Function& g = p_.fns[rv.fn];
                 same(t, g.ret, "result");
+                if (rv.kind == RvKind::Spawn && (g.is_extern || g.ret->kind != TK::Void)) {
+                    fail("a task must be a dpl function without a result");
+                }
                 if (rv.args.size() != g.param_count) return fail("wrong number of arguments to " + g.name);
                 for (size_t i = 0; i < rv.args.size(); i++) {
                     const Arg& a = rv.args[i];
@@ -658,6 +749,35 @@ private:
                         same(pt, prm.type, "argument");
                         if (a.kind == Arg::Kind::Mut && !writable(a.place)) fail("'&mut' argument of a read-only place");
                     }
+                }
+                break;
+            }
+            case RvKind::ParFor: {  // Р69: тело — функция (v, ссылки…) без результата
+                same(t, prim(TK::Void), "result");
+                if (rv.fn >= p_.fns.size()) return fail("parallel loop of an unknown function");
+                const Function& g = p_.fns[rv.fn];
+                if (g.is_extern || g.ret->kind != TK::Void) fail("parallel loop body must be a dpl function without a result");
+                if (rv.ops.size() != 2) return fail("parallel loop needs two bounds");
+                if (rv.args.size() + 1 != g.param_count || g.param_count == 0) {
+                    return fail("wrong number of arguments to " + g.name);
+                }
+                const Type* bt = operand(rv.ops[0], false);
+                same(operand(rv.ops[1], false), bt, "bound");
+                if (bt && !sema::is_integer(bt)) fail("parallel loop over a non-integer range");
+                if (g.locals[0].kind != LocalKind::Param) fail("parallel loop body takes the index by value");
+                same(g.locals[0].type, bt, "index");
+                for (size_t i = 0; i < rv.args.size(); i++) {
+                    const Arg& a = rv.args[i];
+                    const Local& prm = g.locals[i + 1];
+                    Arg::Kind want = prm.kind == LocalKind::ParamRef ? Arg::Kind::Ref
+                                     : prm.kind == LocalKind::ParamMut ? Arg::Kind::Mut
+                                                                       : Arg::Kind::Value;
+                    if (a.kind != want || a.kind == Arg::Kind::Value) {
+                        fail("argument " + std::to_string(i + 1) + " of " + g.name + " has a wrong mode");
+                        continue;
+                    }
+                    same(place(a.place), prm.type, "argument");
+                    if (a.kind == Arg::Kind::Mut && !writable(a.place)) fail("'&mut' argument of a read-only place");
                 }
                 break;
             }

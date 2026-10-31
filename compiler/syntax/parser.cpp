@@ -370,7 +370,9 @@ private:
             if (auto* f = as<FnItem>(it)) f->attrs = std::move(attrs);
             else if (auto* im = as<ImportItem>(it)) im->attrs = std::move(attrs);
             else if (auto* st = as<StructItem>(it)) st->attrs = std::move(attrs);
-            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function, a struct or an import");
+            else if (auto* et = as<ExternTypeItem>(it)) et->attrs = std::move(attrs);
+            else error_at(Code::E0205, attrs[0].span,
+                          "attributes are only allowed before a function, a struct, an 'extern type' or an import");
         }
         it->pub = pub;
         it->span = span_from(begin);
@@ -766,10 +768,45 @@ private:
                 break;
             }
             case TokKind::LBrace: s = block_stmt(); break;
+            case TokKind::Ident:
+                // `lock m as t { … }` (Р70): слово контекстное — за
+                // ним имя, а выражение не начинается двумя именами подряд.
+                if (text_of(toks_[idx()]) == "lock" && peek(1) == TokKind::Ident) {
+                    s = lock_stmt();
+                    break;
+                }
+                // `tasks { … }` (Р70): выражение не начинается именем и
+                // скобкой блока — литерал структуры пишется с именем типа.
+                if (text_of(toks_[idx()]) == "tasks" && peek(1) == TokKind::LBrace) {
+                    bump();
+                    auto* t = m_.make<TasksStmt>();
+                    t->body = block();
+                    s = t;
+                    break;
+                }
+                s = expr_or_assign();
+                break;
             default: s = expr_or_assign(); break;
         }
         s->span = span_from(begin);
         return s;
+    }
+
+    Stmt* lock_stmt() {
+        bump();  // lock
+        auto* l = m_.make<LockStmt>();
+        l->mutex = expr(true);
+        if (failed_) return l;
+        Span as_span;
+        std::string as = expect_ident(as_span);
+        if (failed_) return l;
+        if (as != "as") {
+            expected("'as' after the mutex: 'lock m as t { ... }'");
+            return l;
+        }
+        l->var = expect_ident(l->var_span);
+        if (!failed_) l->body = block();
+        return l;
     }
 
     Stmt* let_stmt() {
@@ -944,6 +981,21 @@ private:
         TokKind k = peek();
         bool prefix = k == TokKind::Minus || k == TokKind::Bang || k == TokKind::Tilde || k == TokKind::KwTry ||
                       k == TokKind::Amp;
+        // `spawn f(…)` (Р70): слово контекстное — за ним имя.
+        bool spawn = k == TokKind::Ident && text_of(toks_[idx()]) == "spawn" && peek(1) == TokKind::Ident;
+        if (spawn) {
+            Nest nest(*this);
+            if (!nest.ok) {
+                auto* e = m_.make<ErrorExpr>();
+                e->span = span_from(begin);
+                return e;
+            }
+            bump();
+            auto* sp = m_.make<SpawnExpr>();
+            sp->operand = unary(ns);
+            sp->span = span_from(begin);
+            return sp;
+        }
         if (!prefix) return postfix(primary(ns), ns, begin);
         Nest nest(*this);
         if (!nest.ok) {

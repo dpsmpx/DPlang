@@ -17,13 +17,16 @@ inline constexpr BuiltinType kBuiltinTypes[] = {
     {"bool", TK::Bool}, {"i8", TK::I8},   {"i16", TK::I16}, {"i32", TK::I32}, {"i64", TK::I64},
     {"int", TK::I64},   {"u8", TK::U8},   {"u16", TK::U16}, {"u32", TK::U32}, {"u64", TK::U64},
     {"f32", TK::F32},   {"f64", TK::F64}, {"str", TK::Str}, {"void", TK::Void}, {"List", TK::List},
-    {"Map", TK::Map},   {"Pool", TK::Pool}, {"Handle", TK::PoolHandle},
+    {"Map", TK::Map},   {"Pool", TK::Pool}, {"Handle", TK::PoolHandle}, {"Atomic", TK::Atomic},
+    {"Mutex", TK::Mutex}, {"Channel", TK::Channel},
 };
 
 enum class BuiltinFn : uint8_t {
     Len, Repeat, Min, Max, Abs, ParseInt, IsDigit, IsAlpha, IsSpace, IsAlnum, Assert, Print, Println, Eprintln,
     // Проверяемая арифметика целых (Р53): ?T, none — вне типа (и делитель 0).
     CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
+    // Конкурентные значения (Р70): atomic(v) → Atomic[T].
+    AtomicNew, MutexNew, ChannelNew,
     // Внутренние — только для модулей стандартной библиотеки (Р51): простые
     // типы, обёртки с нормальным API — в stdlib/os.dpm.
     ArgsLen,   // __args_len() i64 — число аргументов программы без её имени
@@ -35,7 +38,7 @@ enum class BuiltinFn : uint8_t {
 inline constexpr std::string_view kBuiltinFnNames[] = {
     "len", "repeat", "min", "max", "abs", "parse_int", "is_digit", "is_alpha", "is_space", "is_alnum", "assert",
     "print", "println", "eprintln", "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_neg",
-    "__args_len", "__arg", "__read_file",
+    "atomic", "mutex", "channel", "__args_len", "__arg", "__read_file",
 };
 
 // Встроенная только для стандартной библиотеки.

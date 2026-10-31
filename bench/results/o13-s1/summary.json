@@ -1,0 +1,571 @@
+{
+ "rows": [
+  {
+   "task": "t20",
+   "lang": "cpp",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 893,
+    "diagnostics": 23,
+    "written": 3787,
+    "final": 4561
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t20",
+   "lang": "dpa",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 655,
+    "diagnostics": 23,
+    "written": 3087,
+    "final": 3607
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t20",
+   "lang": "dpb",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 655,
+    "diagnostics": 23,
+    "written": 2903,
+    "final": 3423
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t20",
+   "lang": "dpc",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 655,
+    "diagnostics": 23,
+    "written": 1785,
+    "final": 2305
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t22",
+   "lang": "cpp",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 474,
+    "diagnostics": 23,
+    "written": 2608,
+    "final": 2963
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t22",
+   "lang": "dpa",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 341,
+    "diagnostics": 23,
+    "written": 1922,
+    "final": 2128
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t22",
+   "lang": "dpb",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 341,
+    "diagnostics": 23,
+    "written": 2532,
+    "final": 2738
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t22",
+   "lang": "dpc",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 341,
+    "diagnostics": 23,
+    "written": 2117,
+    "final": 2323
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t23",
+   "lang": "cpp",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 776,
+    "diagnostics": 23,
+    "written": 1636,
+    "final": 2293
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t23",
+   "lang": "dpa",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 654,
+    "diagnostics": 23,
+    "written": 1678,
+    "final": 2197
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t23",
+   "lang": "dpb",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 654,
+    "diagnostics": 23,
+    "written": 1447,
+    "final": 1966
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t23",
+   "lang": "dpc",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 654,
+    "diagnostics": 23,
+    "written": 1420,
+    "final": 1939
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t24",
+   "lang": "cpp",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 547,
+    "diagnostics": 23,
+    "written": 1594,
+    "final": 2022
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t24",
+   "lang": "dpa",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 425,
+    "diagnostics": 23,
+    "written": 1169,
+    "final": 1459
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t24",
+   "lang": "dpb",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 425,
+    "diagnostics": 23,
+    "written": 1752,
+    "final": 2042
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  },
+  {
+   "task": "t24",
+   "lang": "dpc",
+   "kind": "write",
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
+   "chars": {
+    "prompt": 425,
+    "diagnostics": 23,
+    "written": 1272,
+    "final": 1562
+   },
+   "tokens": null,
+   "token_model": null,
+   "session": null,
+   "meta": {
+    "commit": "066db24dc6ffe552d75cdc6c4caed376be6bdb1d",
+    "cxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "agent_model": "claude-opus-5-5",
+    "attempts_max": 5,
+    "created": "2026-10-31T12:11:14"
+   }
+  }
+ ],
+ "summary": {
+  "langs": [
+   "cpp",
+   "dpa",
+   "dpb",
+   "dpc"
+  ],
+  "tasks": [
+   "t20",
+   "t22",
+   "t23",
+   "t24"
+  ],
+  "common": [
+   "t20",
+   "t22",
+   "t23",
+   "t24"
+  ],
+  "unit": "chars",
+  "by_lang": {
+   "cpp": {
+    "cells": 4,
+    "accepted": 4,
+    "first_try": 4,
+    "mean_attempts": 1.0,
+    "classes": {
+     "разбор": 0,
+     "перевод": 0,
+     "сборка": 0,
+     "интерфейс": 0,
+     "ловушка": 0,
+     "время": 0,
+     "вывод": 0,
+     "прототип": 0,
+     "компилятор": 0
+    },
+    "common": {
+     "prompt": 2690,
+     "diagnostics": 92,
+     "written": 9625,
+     "final": 11839
+    },
+    "session": null
+   },
+   "dpa": {
+    "cells": 4,
+    "accepted": 4,
+    "first_try": 4,
+    "mean_attempts": 1.0,
+    "classes": {
+     "разбор": 0,
+     "перевод": 0,
+     "сборка": 0,
+     "интерфейс": 0,
+     "ловушка": 0,
+     "время": 0,
+     "вывод": 0,
+     "прототип": 0,
+     "компилятор": 0
+    },
+    "common": {
+     "prompt": 2075,
+     "diagnostics": 92,
+     "written": 7856,
+     "final": 9391
+    },
+    "session": null
+   },
+   "dpb": {
+    "cells": 4,
+    "accepted": 4,
+    "first_try": 4,
+    "mean_attempts": 1.0,
+    "classes": {
+     "разбор": 0,
+     "перевод": 0,
+     "сборка": 0,
+     "интерфейс": 0,
+     "ловушка": 0,
+     "время": 0,
+     "вывод": 0,
+     "прототип": 0,
+     "компилятор": 0
+    },
+    "common": {
+     "prompt": 2075,
+     "diagnostics": 92,
+     "written": 8634,
+     "final": 10169
+    },
+    "session": null
+   },
+   "dpc": {
+    "cells": 4,
+    "accepted": 4,
+    "first_try": 4,
+    "mean_attempts": 1.0,
+    "classes": {
+     "разбор": 0,
+     "перевод": 0,
+     "сборка": 0,
+     "интерфейс": 0,
+     "ловушка": 0,
+     "время": 0,
+     "вывод": 0,
+     "прототип": 0,
+     "компилятор": 0
+    },
+    "common": {
+     "prompt": 2075,
+     "diagnostics": 92,
+     "written": 6594,
+     "final": 8129
+    },
+    "session": null
+   }
+  }
+ }
+}

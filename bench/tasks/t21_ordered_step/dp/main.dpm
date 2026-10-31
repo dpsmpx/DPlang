@@ -1,0 +1,38 @@
+// Драйвер t21 (скрыт от модели): те же входы, что у ref.cpp. Числа f64
+// печатаются кратчайшей записью (Р48), поэтому ожидаемое — dp/expected.txt;
+// численно оно равно expected.txt задачи.
+import sol
+
+fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+fn main() {
+    let n: i32 = 200003
+    var x: List[f64] = []
+    for i in 0..n {
+        x.push(f64(mix(u64(i)) >> 11) / 9007199254740992.0 * 2.0 - 1.0)
+    }
+    let e1 = sol.simulate(x, 12, 1)
+    for s in 0..len(e1) {
+        println("step " + str(s) + " " + str(e1[s]))
+    }
+    let threads: List[i32] = [3, 8]
+    for t in &threads {
+        let e = sol.simulate(x, 12, t)
+        var verdict = "differs"
+        if e == e1 {
+            verdict = "same"
+        }
+        println("t=" + str(t) + " " + verdict)
+    }
+    let one = sol.simulate([1.0], 3, 4)
+    println("one " + str(one[0]) + " " + str(one[1]) + " " + str(one[2]))
+    let three = sol.simulate([0.5, -0.25, 1.0], 2, 2)
+    println("three " + str(three[0]) + " " + str(three[1]))
+    let empty: List[f64] = []
+    println("empty " + str(len(sol.simulate(empty, 2, 3))) + " none " + str(len(sol.simulate(x, 0, 2))))
+}

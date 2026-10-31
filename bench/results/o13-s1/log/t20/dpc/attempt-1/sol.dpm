@@ -1,0 +1,90 @@
+// t20: заготовка — напишите тело run по task.md.
+pub fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn build(chunk: i64, seed: u64) i64 {
+    var h = u64.wrap(chunk) ^ seed
+    for i in 0..20000 {
+        h = mix(h)
+    }
+    return i64(h % 100000)
+}
+
+pub struct Cmd {
+    kind: i32
+    chunk: i64
+    seed: u64
+}
+
+struct Done {
+    id: i64
+    chunk: i64
+    value: i64
+}
+
+fn job(id: i64, chunk: i64, seed: u64, ch: Channel[Done]) {
+    let v = build(chunk, seed)
+    ch.send(Done { id, chunk, value: v })
+}
+
+fn apply_done(d: &Done, latest: &Map[i64, i64], values: &mut Map[i64, i64]) {
+    if latest.get(d.chunk) == d.id {
+        values[d.chunk] = d.value
+    }
+}
+
+pub fn run(script: &List[Cmd], limit: i32) List[str] {
+    var out: List[str] = []
+    var orders: int = 0
+    for c0 in &script {
+        if c0.kind == 0 {
+            orders += 1
+        }
+    }
+    let ch: Channel[Done] = channel(max(orders, 1))
+    var latest: Map[i64, i64] = []
+    var values: Map[i64, i64] = []
+    var tasks: List[Task[void]] = []
+    var next_id: i64 = 0
+    var pending: i64 = 0
+    var syncs: i64 = 0
+    for c in &script {
+        if c.kind == 0 {
+            next_id += 1
+            latest[c.chunk] = next_id
+            pending += 1
+            tasks.push(spawn job(next_id, c.chunk, c.seed, ch))
+        } else if c.kind == 1 {
+            var taken: i32 = 0
+            while taken < limit {
+                if let d1 = ch.try_recv() {
+                    pending -= 1
+                    apply_done(&d1, &latest, &mut values)
+                    taken += 1
+                } else {
+                    break
+                }
+            }
+        } else if c.kind == 2 {
+            while pending > 0 {
+                if let d2 = ch.recv() {
+                    pending -= 1
+                    apply_done(&d2, &latest, &mut values)
+                }
+            }
+            syncs += 1
+            var line = "sync " + str(syncs) + ":"
+            for k in &values {
+                line += " " + str(k) + "=" + str(values[k])
+            }
+            out.push(line)
+        } else if c.kind == 3 {
+            break
+        }
+    }
+    return out
+}

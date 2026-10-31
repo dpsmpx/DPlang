@@ -1,7 +1,9 @@
 // Проверка тел: инструкции и поток (docs/spec/core.md, разделы 6–8).
 // Выражения — check_expr.cpp, образцы — check_pat.cpp.
 #include <algorithm>
+#include <cstdlib>
 #include <set>
+#include <string>
 
 #include "sema/builtins.h"
 #include "sema/checker.h"
@@ -54,6 +56,7 @@ std::vector<ConstDef*> Checker::const_deps(const ConstDef& c) {
                 push(static_cast<const BinaryExpr*>(e)->rhs);
                 break;
             case ExprKind::Try: push(static_cast<const TryExpr*>(e)->operand); break;
+            case ExprKind::Spawn: push(static_cast<const SpawnExpr*>(e)->operand); break;
             case ExprKind::Paren: push(static_cast<const ParenExpr*>(e)->inner); break;
             case ExprKind::Ref: push(static_cast<const RefExpr*>(e)->operand); break;
             case ExprKind::StructLit:
@@ -279,6 +282,8 @@ void Checker::stmt(Stmt* s) {
             break;
         }
         case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
+        case StmtKind::Lock: lock_stmt(static_cast<LockStmt*>(s)); break;
+        case StmtKind::Tasks: tasks_stmt(static_cast<TasksStmt*>(s)); break;
         case StmtKind::Error: break;
     }
     views(s);  // Р66: вид левее действия над его местом
@@ -310,6 +315,20 @@ void Checker::let_stmt(LetStmt* l) {
                       "a slice cannot be stored in a variable; pass it to a function directly");
                 t = err();
             }
+        }
+    }
+    // Р70: конкурентное значение — только из atomic(…), не копия.
+    if (t && holds_concurrent(t)) {
+        auto* c = as<CallExpr>(l->value);
+        bool fresh = c && c->call == CallKind::Builtin && concurrent(t) && !holds_concurrent(t->elem) &&
+                     (c->builtin == static_cast<uint32_t>(BuiltinFn::AtomicNew) ||
+                      c->builtin == static_cast<uint32_t>(BuiltinFn::MutexNew) ||
+                      c->builtin == static_cast<uint32_t>(BuiltinFn::ChannelNew));
+        if (!fresh) {
+            error(Code::E0518, l->value ? l->value->span : l->name_span,
+                  "'" + l->name + "' would hold a copy of '" + tn(t) + "'; it is shared, not copied: create it with "
+                  "'atomic(v)', 'mutex(v)' or 'channel(n)' and pass '&" + l->name + "'");
+            t = err();
         }
     }
     if (t && linear_in_container(t)) {
@@ -363,6 +382,46 @@ void Checker::destructure(LetStmt* l) {
     }
 }
 
+// `lock m as t { … }` (Р70): t — данные m (`&mut`) до конца блока.
+void Checker::lock_stmt(LockStmt* s) {
+    const Type* t = infer(s->mutex, nullptr);
+    const Type* elem = err();
+    if (t->kind == TK::Mutex) {
+        elem = t->elem;
+    } else if (t->kind != TK::Error) {
+        error(Code::E0401, s->mutex->span, "'lock' needs a Mutex, found '" + tn(t) + "'");
+    }
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, s->span, "a 'Mutex' is shared between threads; '" + fn_->name +
+                                        "' is class D and cannot use it");
+    }
+    Local* root = root_local(s->mutex);
+    push_scope();
+    s->local = declare(s->var, s->var_span, elem, true, true, true);
+    if (s->local) s->local->alias_of = root;
+    locked_.push_back(root);
+    block(s->body);
+    locked_.pop_back();
+    pop_scope();
+}
+
+// `tasks { … }` (Р70): задачи ставит `spawn`; блок кончается, когда
+// кончились они. Выйти из блока раньше нельзя (E0516).
+void Checker::tasks_stmt(TasksStmt* s) {
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, s->span, "tasks run at the same time; '" + fn_->name + "' is class D and cannot start them");
+    }
+    TasksScope sc;
+    sc.first_inner = next_local_;
+    tasks_.push_back(std::move(sc));
+    loops_.emplace_back();
+    loops_.back().tasks = true;
+    block(s->body);
+    loops_.pop_back();
+    tasks_end();
+    tasks_.pop_back();
+}
+
 void Checker::assign_stmt(AssignStmt* a) {
     auto* n = as<NameExpr>(a->target);
     if (n && n->name == "_" && a->op == AssignOp::Set) {  // `_ = e` — явный отброс (Р10)
@@ -373,6 +432,12 @@ void Checker::assign_stmt(AssignStmt* a) {
     // Простое присваивание переменной инициализирует её; остальное читает цель.
     if (n && a->op == AssignOp::Set) {
         resolve_name(n);
+        if (n->res.kind == ResKind::Local && holds_concurrent(n->res.local->type)) {  // Р70
+            error(Code::E0518, n->span, "cannot assign to '" + n->name + "': '" + tn(n->res.local->type) +
+                                            "' is shared, not replaced; use its methods");
+            infer(a->value, nullptr);
+            return;
+        }
         if (n->res.kind == ResKind::Local) {
             Local* l = n->res.local;
             n->type = l->type;
@@ -414,7 +479,11 @@ void Checker::assign_stmt(AssignStmt* a) {
 
 void Checker::expr_stmt(ExprStmt* s) {
     Expr* e = s->expr;
+    // `spawn f(…)` — оператор блока `tasks` (Р70).
+    auto* sp = as<SpawnExpr>(e);
+    if (sp && !tasks_.empty()) sp->group = true;
     const Type* t = infer(e, nullptr);
+    if (sp) return;
     Expr* inner = e;
     if (auto* tr = as<TryExpr>(inner)) inner = tr->operand;
     if (!as<CallExpr>(inner)) {
@@ -456,7 +525,9 @@ void Checker::while_stmt(WhileStmt* s) {
     bool forever = lit && lit->value;
     Flow before = flow_;
     loops_.emplace_back();
+    if (!tasks_.empty()) task_loop_begin(nullptr);
     block(s->body);
+    if (!tasks_.empty()) task_loop_end();
     Loop loop = std::move(loops_.back());
     loops_.pop_back();
     // После цикла — состояние до него (тело могло не выполниться) и состояния у break.
@@ -510,7 +581,12 @@ void Checker::for_stmt(ForStmt* s) {
     // переменную цикла; `parallel for` пишет снаружи только `out[i]`.
     loop_begin(s);
     loops_.emplace_back();
+    loops_.back().parallel = s->parallel;
+    if (s->parallel) parallel_depth_++;
+    if (!tasks_.empty()) task_loop_begin(s);
     block(s->body);
+    if (!tasks_.empty()) task_loop_end();
+    if (s->parallel) parallel_depth_--;
     loops_.pop_back();
     loop_end();
     pop_scope();
@@ -542,14 +618,35 @@ void Checker::loop_jump(Stmt* s, bool is_break) {
         } else {
             error(Code::E0420, s->span, std::string("'") + (is_break ? "break" : "continue") + "' outside of a loop");
         }
+    } else if (loops_.back().tasks) {
+        error(Code::E0516, s->span, std::string("'") + (is_break ? "break" : "continue") +
+                                        "' cannot leave 'tasks': the block waits for its tasks; leave the loop "
+                                        "after the block");
     } else if (is_break) {
+        if (loops_.back().parallel) parallel_exit(s->span, "break");
         loops_.back().breaks.push_back(flow_);
     }
     flow_.live = false;
 }
 
+bool Checker::parallel_exit(Span span, const char* what) {
+    std::string w(what);
+    if (parallel_depth_ == 0 && !tasks_.empty()) {
+        error(Code::E0516, span, "'" + w + "' cannot leave 'tasks': the block waits for its tasks; write the outcome "
+                                     "to a variable and act on it after the block");
+        return true;
+    }
+    if (parallel_depth_ == 0) return false;
+    std::string hint = w == "break" ? "skip the rest of this iteration with 'continue'"
+                       : w == "return" ? "write the result to an element 'out[i]' and return after the loop"
+                                       : "handle the error with 'match' and write it to an element 'out[i]'";
+    error(Code::E0516, span, "'" + w + "' cannot leave 'parallel for': iterations run at the same time; " + hint);
+    return true;
+}
+
 void Checker::return_stmt(ReturnStmt* s) {
     if (defer_depth_ > 0) error(Code::E0508, s->span, "'return' cannot leave a 'defer'");
+    else parallel_exit(s->span, "return");
     const Type* ret = fn_ ? fn_->ret : prim(TK::Void);
     bool void_ret = ret->kind == TK::Void || (ret->kind == TK::Result && ret->elem->kind == TK::Void);
     if (!s->value) {
@@ -567,6 +664,7 @@ void Checker::return_stmt(ReturnStmt* s) {
 
 void Checker::fail_stmt(FailStmt* s) {
     if (defer_depth_ > 0) error(Code::E0508, s->span, "'fail' cannot leave a 'defer'");
+    else parallel_exit(s->span, "fail");
     const Type* ret = fn_ ? fn_->ret : prim(TK::Void);
     if (ret->kind != TK::Result) {
         infer(s->value, nullptr);
@@ -604,6 +702,7 @@ void check(Program& prog, Diagnostics& diags) {
         // Линейность — по дереву без ошибок, чтобы не множить сообщения.
         if (diags.error_count() == before) check_linear(prog, *m, diags);
     }
+    if (diags.error_count() == 0) check_parallel(prog, diags);
 }
 
 }  // namespace dp::sema

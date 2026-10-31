@@ -81,6 +81,64 @@ int dp_run(dp_entry_fn entry) {
 
 int dp_run_test(dp_entry_fn entry) { return dp_run_as(entry, "test"); }
 
+/* --- потоки пула `parallel for` (Р69) */
+
+int dp_sys_cpus(void) {
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return si.dwNumberOfProcessors > 0 ? (int)si.dwNumberOfProcessors : 1;
+}
+
+typedef struct {
+    void (*fn)(void*);
+    void* arg;
+} dp_sys_start;
+
+static DWORD WINAPI dp_sys_trampoline(LPVOID p) {
+    dp_sys_start s = *(dp_sys_start*)p;
+    free(p);
+    s.fn(s.arg);
+    return 0;
+}
+
+int dp_sys_thread(void (*fn)(void*), void* arg) {
+    dp_sys_start* s = (dp_sys_start*)malloc(sizeof *s);
+    if (!s) return -1;
+    s->fn = fn;
+    s->arg = arg;
+    HANDLE th = CreateThread(NULL, DP_STACK_BYTES, dp_sys_trampoline, s, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+    if (!th) {
+        free(s);
+        return -1;
+    }
+    CloseHandle(th);
+    return 0;
+}
+
+void* dp_sys_mutex(void) {
+    SRWLOCK* m = (SRWLOCK*)malloc(sizeof *m);
+    if (m) InitializeSRWLock(m);
+    return m;
+}
+
+void dp_sys_lock(void* m) { AcquireSRWLockExclusive((SRWLOCK*)m); }
+
+void dp_sys_unlock(void* m) { ReleaseSRWLockExclusive((SRWLOCK*)m); }
+
+void dp_sys_mutex_free(void* m) { free(m); }
+
+void* dp_sys_cond(void) {
+    CONDITION_VARIABLE* c = (CONDITION_VARIABLE*)malloc(sizeof *c);
+    if (c) InitializeConditionVariable(c);
+    return c;
+}
+
+void dp_sys_wait(void* c, void* m) { SleepConditionVariableSRW((CONDITION_VARIABLE*)c, (SRWLOCK*)m, INFINITE, 0); }
+
+void dp_sys_broadcast(void* c) { WakeAllConditionVariable((CONDITION_VARIABLE*)c); }
+
+void dp_sys_cond_free(void* c) { free(c); }
+
 FILE* dp_os_open_read(const char* path) {
     int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
     if (n <= 0) {

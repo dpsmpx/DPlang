@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <map>
 #include <unordered_map>
@@ -47,6 +48,7 @@ bool has_effect(const Expr* e) {
             auto* c = static_cast<const CallExpr*>(e);
             if (c->call == CallKind::Fn || c->call == CallKind::Ptr) return true;
             if (c->call == CallKind::Method && c->method != Method::Contains && c->method < Method::Trim) return true;
+            if (c->call == CallKind::Method && c->method >= Method::Load) return true;  // Atomic: общий объект
             if (auto* f = as<const FieldExpr>(c->callee); f && has_effect(f->object)) return true;
             return any_effect(c->args);
         }
@@ -61,6 +63,7 @@ bool has_effect(const Expr* e) {
         case ExprKind::Binary:
             return has_effect(static_cast<const BinaryExpr*>(e)->lhs) || has_effect(static_cast<const BinaryExpr*>(e)->rhs);
         case ExprKind::Try: return has_effect(static_cast<const TryExpr*>(e)->operand);
+        case ExprKind::Spawn: return true;
         case ExprKind::Paren: return has_effect(static_cast<const ParenExpr*>(e)->inner);
         case ExprKind::Ref: return has_effect(static_cast<const RefExpr*>(e)->operand);
         case ExprKind::StructLit:
@@ -132,6 +135,7 @@ bool may_trap(const Expr* e) {
         }
         case ExprKind::Field: return may_trap(static_cast<const FieldExpr*>(e)->object);
         case ExprKind::Try: return true;  // ошибка выходит из функции: для места левее — как ловушка
+        case ExprKind::Spawn: return true;
         case ExprKind::Paren: return may_trap(static_cast<const ParenExpr*>(e)->inner);
         case ExprKind::Ref: return may_trap(static_cast<const RefExpr*>(e)->operand);
         case ExprKind::StructLit:
@@ -156,11 +160,124 @@ const Expr* strip_parens(const Expr* e) {
     return e;
 }
 
+// Переменные, которые читает или пишет фрагмент: захват тела `parallel for`.
+void names(const Expr* e, std::vector<const sema::Local*>& out);
+
+void names(const Stmt* s, std::vector<const sema::Local*>& out) {
+    if (!s) return;
+    auto block = [&](const ast::Block* b) {
+        if (b) for (const Stmt* x : b->stmts) names(x, out);
+    };
+    switch (s->kind) {
+        case StmtKind::Let: names(static_cast<const LetStmt*>(s)->value, out); break;
+        case StmtKind::Assign:
+            names(static_cast<const AssignStmt*>(s)->target, out);
+            names(static_cast<const AssignStmt*>(s)->value, out);
+            break;
+        case StmtKind::Expr: names(static_cast<const ExprStmt*>(s)->expr, out); break;
+        case StmtKind::If: {
+            auto* i = static_cast<const IfStmt*>(s);
+            names(i->cond, out);
+            names(i->let_value, out);
+            block(i->then);
+            names(i->els, out);
+            break;
+        }
+        case StmtKind::While:
+            names(static_cast<const WhileStmt*>(s)->cond, out);
+            block(static_cast<const WhileStmt*>(s)->body);
+            break;
+        case StmtKind::For: {
+            auto* f = static_cast<const ForStmt*>(s);
+            names(f->iter, out);
+            names(f->hi, out);
+            block(f->body);
+            break;
+        }
+        case StmtKind::Match: {
+            auto* m = static_cast<const MatchStmt*>(s);
+            names(m->subject, out);
+            for (const MatchArm& a : m->arms) names(a.body, out);
+            break;
+        }
+        case StmtKind::Return: names(static_cast<const ReturnStmt*>(s)->value, out); break;
+        case StmtKind::Fail: names(static_cast<const FailStmt*>(s)->value, out); break;
+        case StmtKind::Defer: names(static_cast<const DeferStmt*>(s)->body, out); break;
+        case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;
+        case StmtKind::Lock:
+            names(static_cast<const LockStmt*>(s)->mutex, out);
+            block(static_cast<const LockStmt*>(s)->body);
+            break;
+        case StmtKind::Tasks: block(static_cast<const TasksStmt*>(s)->body); break;
+        default: break;
+    }
+}
+
+void names(const Expr* e, std::vector<const sema::Local*>& out) {
+    if (!e) return;
+    switch (e->kind) {
+        case ExprKind::Name: {
+            auto* n = static_cast<const NameExpr*>(e);
+            if (n->res.kind == ResKind::Local && std::find(out.begin(), out.end(), n->res.local) == out.end()) {
+                out.push_back(n->res.local);
+            }
+            break;
+        }
+        case ExprKind::Field: names(static_cast<const FieldExpr*>(e)->object, out); break;
+        case ExprKind::Index:
+            names(static_cast<const IndexExpr*>(e)->object, out);
+            names(static_cast<const IndexExpr*>(e)->index, out);
+            break;
+        case ExprKind::Slice: {
+            auto* s = static_cast<const SliceExpr*>(e);
+            names(s->object, out);
+            names(s->lo, out);
+            names(s->hi, out);
+            break;
+        }
+        case ExprKind::Call: {
+            auto* c = static_cast<const CallExpr*>(e);
+            names(c->callee, out);
+            for (const Expr* a : c->args) names(a, out);
+            break;
+        }
+        case ExprKind::Unary: names(static_cast<const UnaryExpr*>(e)->operand, out); break;
+        case ExprKind::Binary:
+            names(static_cast<const BinaryExpr*>(e)->lhs, out);
+            names(static_cast<const BinaryExpr*>(e)->rhs, out);
+            break;
+        case ExprKind::Try: names(static_cast<const TryExpr*>(e)->operand, out); break;
+        case ExprKind::Spawn: names(static_cast<const SpawnExpr*>(e)->operand, out); break;
+        case ExprKind::Paren: names(static_cast<const ParenExpr*>(e)->inner, out); break;
+        case ExprKind::Ref: names(static_cast<const RefExpr*>(e)->operand, out); break;
+        case ExprKind::StructLit:
+            for (const FieldInit& f : static_cast<const StructLitExpr*>(e)->fields) names(f.value ? f.value : f.shorthand, out);
+            break;
+        case ExprKind::VariantLit: {
+            auto* v = static_cast<const VariantLitExpr*>(e);
+            for (const Expr* a : v->args) names(a, out);
+            for (const FieldInit& f : v->fields) names(f.value ? f.value : f.shorthand, out);
+            break;
+        }
+        case ExprKind::ListLit:
+            for (const Expr* a : static_cast<const ListLitExpr*>(e)->items) names(a, out);
+            break;
+        default: break;
+    }
+}
+
+// Вынесенные тела `parallel for`: функции после функций программы, номер
+// — base + место в fns (deque: ссылки на функции не меняются при росте).
+struct Outlined {
+    uint32_t base = 0;
+    std::deque<Function> fns;
+};
+
 class FnLower {
 public:
     FnLower(Program& out, sema::Program& prog, const std::map<const sema::FnDef*, uint32_t>& fns,
-            std::unordered_map<std::string, uint32_t>& strings, Function& f)
-        : out_(out), prog_(prog), tt_(prog.types), fns_(fns), strings_(strings), f_(f) {}
+            std::unordered_map<std::string, uint32_t>& strings, Function& f, Outlined& outl)
+        : out_(out), prog_(prog), tt_(prog.types), fns_(fns), strings_(strings), f_(f), outl_(outl) {}
 
     void run(const sema::FnDef& def) {
         const FnItem* node = def.node;
@@ -192,7 +309,7 @@ public:
         scopes_.emplace_back();
         for (uint32_t i = 0; i < f_.param_count; i++) {
             if (f_.locals[i].kind == LocalKind::Param && needs_drop(f_.locals[i].type)) {
-                scopes_.back().push_back(Cleanup{false, i, nullptr});
+                scopes_.back().push_back(Cleanup{false, i, nullptr, false, false, {}});
             }
         }
         block(node->body);
@@ -224,6 +341,7 @@ private:
     const std::map<const sema::FnDef*, uint32_t>& fns_;
     std::unordered_map<std::string, uint32_t>& strings_;
     Function& f_;
+    Outlined& outl_;
     uint32_t cur_ = 0;
     uint32_t ret_ = UINT32_MAX;
     std::map<const sema::Local*, uint32_t> locals_;
@@ -246,6 +364,8 @@ private:
         uint32_t local = 0;
         const Stmt* defer = nullptr;
         bool on_error = false;  // errdefer: только на выходе с ошибкой
+        bool unlock = false;    // конец блока `lock` (О13): снять мьютекс place
+        Place place;
     };
     // Вид выхода из областей: errdefer выполняется только на ошибке.
     // Dynamic — `return` значения E!T: ошибка или нет, видно во время
@@ -271,7 +391,7 @@ private:
     // Временное: освобождается в конце текущей области.
     uint32_t temp(const Type* t) {
         uint32_t l = add_local(t, LocalKind::Temp, "");
-        if (needs_drop(t)) scopes_.back().push_back(Cleanup{false, l, nullptr});
+        if (needs_drop(t)) scopes_.back().push_back(Cleanup{false, l, nullptr, false, false, {}});
         return l;
     }
 
@@ -282,7 +402,7 @@ private:
     }
 
     void own(uint32_t l) {
-        if (needs_drop(f_.locals[l].type)) scopes_.back().push_back(Cleanup{false, l, nullptr});
+        if (needs_drop(f_.locals[l].type)) scopes_.back().push_back(Cleanup{false, l, nullptr, false, false, {}});
     }
 
     uint32_t new_block() {
@@ -369,7 +489,7 @@ private:
                 see = !(rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min ||
                         rv.intrinsic == Intrinsic::Max);
                 break;
-            case RvKind::Call: callee_det = det_callee(rv); break;
+            case RvKind::Call: case RvKind::Spawn: callee_det = det_callee(rv); break;
             default: break;
         }
         if (see)
@@ -614,6 +734,7 @@ private:
                 changed(static_cast<const BinaryExpr*>(e)->rhs, out);
                 return;
             case ExprKind::Try: changed(static_cast<const TryExpr*>(e)->operand, out); return;
+            case ExprKind::Spawn: changed(static_cast<const SpawnExpr*>(e)->operand, out); return;
             case ExprKind::Paren: changed(static_cast<const ParenExpr*>(e)->inner, out); return;
             case ExprKind::StructLit:
                 for (const FieldInit& f : static_cast<const StructLitExpr*>(e)->fields) changed(f.value, out);
@@ -876,6 +997,10 @@ private:
             case ExprKind::Unary: return unary(static_cast<const UnaryExpr*>(e));
             case ExprKind::Binary: return binary(static_cast<const BinaryExpr*>(e));
             case ExprKind::Try: return try_expr(static_cast<const TryExpr*>(e));
+            case ExprKind::Spawn: {  // задача блока — инструкция (effect); значения нет
+                effect(e);
+                return cbool(false);
+            }
             case ExprKind::Paren: return expr(static_cast<const ParenExpr*>(e)->inner);
             case ExprKind::StructLit: return struct_lit(static_cast<const StructLitExpr*>(e));
             case ExprKind::VariantLit: return variant_lit(static_cast<const VariantLitExpr*>(e));
@@ -1232,7 +1357,7 @@ private:
                     Intrinsic::ParseInt, Intrinsic::IsDigit, Intrinsic::IsAlpha, Intrinsic::IsSpace, Intrinsic::IsAlnum,
                     Intrinsic::Len,     Intrinsic::Print,   Intrinsic::Println, Intrinsic::Eprintln,
                     Intrinsic::CheckedAdd, Intrinsic::CheckedSub, Intrinsic::CheckedMul, Intrinsic::CheckedDiv,
-                    Intrinsic::CheckedNeg,
+                    Intrinsic::CheckedNeg,  Intrinsic::AtomicNew, Intrinsic::MutexNew, Intrinsic::ChannelNew,
                     Intrinsic::ArgsLen, Intrinsic::ArgAt,   Intrinsic::ReadFile,
                 };
                 static_assert(sizeof kMap / sizeof kMap[0] == static_cast<size_t>(sema::BuiltinFn::Count));
@@ -1246,7 +1371,8 @@ private:
                 }
                 rv.ops = exprs(args);
                 for (size_t i = 0; i < rv.ops.size(); i++) {
-                    if (!(b == sema::BuiltinFn::Repeat && i == 0)) rv.ops[i] = rd(std::move(rv.ops[i]));
+                    bool stored = (b == sema::BuiltinFn::Repeat || b == sema::BuiltinFn::MutexNew) && i == 0;
+                    if (!stored) rv.ops[i] = rd(std::move(rv.ops[i]));
                 }
                 return true;
             }
@@ -1276,6 +1402,33 @@ private:
                         rv.ops = exprs(all);
                     }
                     for (Operand& o : rv.ops) o = rd(std::move(o));
+                    return true;
+                }
+                if (f->object->type->kind == TK::Atomic) {  // Р70: получатель — место, общий доступ
+                    rv = intrinsic(m == Method::Load    ? Intrinsic::AtomicLoad
+                                   : m == Method::Store ? Intrinsic::AtomicStore
+                                   : m == Method::Add   ? Intrinsic::AtomicAdd
+                                   : m == Method::Sub   ? Intrinsic::AtomicSub
+                                   : m == Method::Swap  ? Intrinsic::AtomicSwap
+                                                        : Intrinsic::AtomicCas,
+                                   c->type);
+                    bool fresh = false;
+                    rv.place = object(f->object, fresh);
+                    rv.has_place = true;
+                    rv.ops = exprs(args);
+                    for (Operand& o : rv.ops) o = rd(std::move(o));
+                    return true;
+                }
+                if (f->object->type->kind == TK::Channel) {  // Р70: получатель — место, общий доступ
+                    rv = intrinsic(m == Method::Send      ? Intrinsic::ChannelSend
+                                   : m == Method::Recv    ? Intrinsic::ChannelRecv
+                                   : m == Method::TryRecv ? Intrinsic::ChannelTryRecv
+                                                          : Intrinsic::ChannelClose,
+                                   c->type);
+                    bool fresh = false;
+                    rv.place = object(f->object, fresh);
+                    rv.has_place = true;
+                    rv.ops = exprs(args);  // send: значение уходит в канал целиком
                     return true;
                 }
                 if (f->object->type->kind == TK::Pool) {  // методы Pool (Р67)
@@ -1371,7 +1524,12 @@ private:
     void cleanup(size_t depth, Span span, Way way = Way::Normal) {
         std::vector<Cleanup> items = scopes_[depth];  // defer может открыть новые области
         for (auto it = items.rbegin(); it != items.rend(); ++it) {
-            if (!it->is_defer) {
+            if (it->unlock) {
+                Rvalue u = intrinsic(Intrinsic::MutexUnlock, prim(TK::Void));
+                u.place = it->place;
+                u.has_place = true;
+                eval(std::move(u), span);
+            } else if (!it->is_defer) {
                 inst(InstKind::Drop, local(it->local), Rvalue{}, span);
             } else if (!it->on_error || way == Way::Error) {
                 stmt(it->defer);
@@ -1446,16 +1604,58 @@ private:
             }
             case StmtKind::Defer: {
                 auto* d = static_cast<const DeferStmt*>(s);
-                scopes_.back().push_back(Cleanup{true, 0, d->body, d->on_error});
+                scopes_.back().push_back(Cleanup{true, 0, d->body, d->on_error, false, {}});
                 break;
             }
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;
+            case StmtKind::Lock: lock_stmt(static_cast<const LockStmt*>(s)); break;
+            case StmtKind::Tasks: tasks_stmt(static_cast<const TasksStmt*>(s)); break;
             case StmtKind::Error: break;
         }
     }
 
+    // `lock m as t { … }` (Р70): захват, t — данные m, снятие —
+    // очисткой области на любом выходе.
+    void lock_stmt(const LockStmt* s) {
+        push_scope();
+        bool fresh = false;
+        Place m = object(s->mutex, fresh);
+        Rvalue lk = intrinsic(Intrinsic::MutexLock, prim(TK::Void));
+        lk.place = m;
+        lk.has_place = true;
+        eval(std::move(lk), s->span);
+        Cleanup c;
+        c.unlock = true;
+        c.place = m;
+        scopes_.back().push_back(std::move(c));
+        if (s->local) aliases_[s->local] = proj(m, ProjKind::MutexValue);
+        block(s->body);
+        Span end{s->body->span.file, s->body->span.end > 0 ? s->body->span.end - 1 : 0, s->body->span.end};
+        pop_scope(end);
+    }
+
+    // `tasks { … }` (Р70): группа задач вокруг тела; выйти из тела
+    // раньше нельзя (E0516), поэтому TasksEnd — после его области: места,
+    // которые держат задачи, объявлены до блока.
+    void tasks_stmt(const TasksStmt* s) {
+        eval(intrinsic(Intrinsic::TasksBegin, prim(TK::Void)), s->span);
+        block(s->body);
+        Span end{s->body->span.file, s->body->span.end > 0 ? s->body->span.end - 1 : 0, s->body->span.end};
+        eval(intrinsic(Intrinsic::TasksEnd, prim(TK::Void)), end);
+    }
+
     // Инструкция-вызов: результат, если он есть, освобождается.
     void effect(const Expr* e) {
+        if (auto* sp = as<const SpawnExpr>(e)) {  // задача блока `tasks`
+            Rvalue rv;
+            uint32_t mark = UINT32_MAX;
+            if (call(static_cast<const CallExpr*>(sp->operand), rv, &mark) && rv.kind == RvKind::Call) {
+                rv.kind = RvKind::Spawn;
+                eval(std::move(rv), e->span);
+            }
+            release(mark, e->span);
+            return;
+        }
         if (auto* c = as<const CallExpr>(e)) {
             Rvalue rv;
             uint32_t mark = UINT32_MAX;
@@ -1624,7 +1824,135 @@ private:
         cur_ = done;
     }
 
+    // Захват тела `parallel for`: переменная, режим и тип места.
+    struct Capture {
+        const sema::Local* var;
+        Arg::Kind kind;
+        Place place;
+        const Type* type;
+    };
+
+    // Место — байт строки (`for b in &s`): ссылкой его не передать.
+    bool byte_place(const Place& p) const {
+        if (p.proj.empty() || p.proj.back().kind != ProjKind::Index) return false;
+        Place base = p;
+        base.proj.pop_back();
+        const Type* t = place_type(out_, f_, base);
+        return !t || t->kind == TK::Str;
+    }
+
+    // `parallel for` (Р69): тело — отдельная функция, внешние переменные —
+    // ссылками на их места. Диапазон и обход `&`/`&mut` списка; остальное
+    // (Map, Pool, срез, str, обход значений) — по очереди, это допустимый
+    // порядок. false — не вынесено.
+    bool par_for(const ForStmt* s) {
+        bool range = s->mode == ForMode::Range;
+        bool list = (s->mode == ForMode::Ref || s->mode == ForMode::Mut) && s->iter->type &&
+                    s->iter->type->kind == TK::List && !s->iter->conv;
+        if (!range && !list) return false;
+        std::vector<const sema::Local*> used;
+        for (const Stmt* x : s->body->stmts) names(x, used);
+        std::vector<Capture> caps;
+        for (const sema::Local* v : used) {
+            Place p;
+            auto a = aliases_.find(v);
+            if (a != aliases_.end()) {
+                p = a->second;
+                if (byte_place(p)) return false;
+            } else {
+                auto l = locals_.find(v);
+                if (l == locals_.end()) continue;  // объявлена в теле
+                p = local(l->second);
+            }
+            LocalKind lk = f_.locals[p.local].kind;
+            bool mut = v->mutable_ && lk != LocalKind::ParamRef && lk != LocalKind::Param;
+            caps.push_back(Capture{v, mut ? Arg::Kind::Mut : Arg::Kind::Ref, p, place_type(out_, f_, p)});
+        }
+        push_scope();
+        const Type* t = range ? s->elem : prim(TK::I64);
+        Operand lo, hi;
+        Place coll;
+        if (range) {
+            uint32_t l = temp(t), h = temp(t);
+            assign(local(l), use(rd(expr(s->iter)), t), s->iter->span);
+            assign(local(h), use(rd(expr(s->hi)), t), s->hi->span);
+            lo = copy(local(l));
+            hi = copy(local(h));
+        } else {
+            // Длина — раз: тело длину не меняет (Р66).
+            bool fresh = false;
+            coll = object(s->iter, fresh);
+            Rvalue len = intrinsic(Intrinsic::Len, t);
+            len.ops.push_back(copy(coll));
+            hi = to_temp(std::move(len), s->iter->span);
+            lo = cint(0, t);
+        }
+        uint32_t idx = outl_.base + static_cast<uint32_t>(outl_.fns.size());
+        outl_.fns.emplace_back();
+        Function& g = outl_.fns.back();
+        g.name = f_.name.substr(0, f_.name.find('#')) + "#" + std::to_string(idx);
+        g.def = f_.def;
+        g.det = f_.det;
+        g.ret = prim(TK::Void);
+        Arg::Kind ck = s->mode == ForMode::Mut ? Arg::Kind::Mut : Arg::Kind::Ref;
+        const Type* ct = list ? place_type(out_, f_, coll) : nullptr;
+        FnLower(out_, prog_, fns_, strings_, g, outl_).outline(s, t, ct, ck, caps);
+        Rvalue rv = make(RvKind::ParFor, prim(TK::Void));
+        rv.fn = idx;
+        rv.ops.push_back(rd(std::move(lo)));
+        rv.ops.push_back(rd(std::move(hi)));
+        if (list) {
+            Arg a;
+            a.kind = ck;
+            a.place = coll;
+            rv.args.push_back(std::move(a));
+        }
+        for (const Capture& c : caps) {
+            Arg a;
+            a.kind = c.kind;
+            a.place = c.place;
+            rv.args.push_back(std::move(a));
+        }
+        eval(std::move(rv), s->span);
+        pop_scope(s->span);
+        return true;
+    }
+
+public:
+    // Тело `parallel for` функцией: параметр 0 — значение переменной
+    // цикла (у обхода списка — номер элемента), дальше — список (если
+    // обход) и захваченные переменные; `continue` — возврат.
+    void outline(const ForStmt* s, const Type* t, const Type* coll_t, Arg::Kind coll_kind,
+                 const std::vector<Capture>& caps) {
+        uint32_t v = add_local(t, LocalKind::Param, s->mode == ForMode::Range ? s->var : "");
+        uint32_t coll = UINT32_MAX;
+        if (coll_t) coll = add_local(coll_t, coll_kind == Arg::Kind::Mut ? LocalKind::ParamMut : LocalKind::ParamRef, "");
+        for (const Capture& c : caps) {
+            locals_[c.var] = add_local(c.type, c.kind == Arg::Kind::Mut ? LocalKind::ParamMut : LocalKind::ParamRef,
+                                       c.var->name);
+        }
+        f_.param_count = static_cast<uint32_t>(f_.locals.size());
+        if (s->local) {
+            if (coll_t) aliases_[s->local] = proj(local(coll), ProjKind::Index, v);
+            else locals_[s->local] = v;
+        }
+        cur_ = new_block();
+        scopes_.emplace_back();
+        uint32_t done = new_block();
+        loops_.push_back(Loop{done, done, scopes_.size()});
+        block(s->body);
+        loops_.pop_back();
+        Span end{s->body->span.file, s->body->span.end > 0 ? s->body->span.end - 1 : 0, s->body->span.end};
+        jump(done, end);
+        cur_ = done;
+        ret_term(false, end);
+        scopes_.pop_back();
+        prune();
+    }
+
+private:
     void for_stmt(const ForStmt* s) {
+        if (s->parallel && par_for(s)) return;
         push_scope();
         uint32_t head = new_block(), body = new_block(), step = new_block(), done = new_block();
         const Type* i64 = prim(TK::I64);
@@ -1950,7 +2278,10 @@ std::unique_ptr<Program> lower(sema::Program& prog) {
     out->fns.resize(order.size());
     for (size_t i = 0; i < order.size(); i++) out->fns[i].def = order[i];  // класс вызываемой — до её понижения
     std::unordered_map<std::string, uint32_t> strings;  // строка → номер в out->strings
-    for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, strings, out->fns[i]).run(*order[i]);
+    Outlined outl;
+    outl.base = static_cast<uint32_t>(order.size());
+    for (size_t i = 0; i < order.size(); i++) FnLower(*out, prog, fns, strings, out->fns[i], outl).run(*order[i]);
+    for (Function& g : outl.fns) out->fns.push_back(std::move(g));  // тела `parallel for` — номерами после функций
     // Библиотеки `@link` — только у вызываемых функций C: импорт привязки
     // не требует библиотек, которые программа не зовёт.
     std::vector<bool> called(out->fns.size(), false);

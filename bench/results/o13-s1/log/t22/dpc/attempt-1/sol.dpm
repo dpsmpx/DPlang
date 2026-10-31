@@ -1,0 +1,99 @@
+// t22: заготовка — напишите тело функции по task.md.
+pub struct Stats {
+    distinct: List[i64]
+    longest: str
+    anagrams: i64
+}
+
+fn count_part(part: List[str]) List[i64] {
+    var counts: List[i64] = repeat(i64(0), 27)
+    var marks: List[bool] = repeat(false, 26)
+    for w in &part {
+        for j in 0..26 {
+            marks[j] = false
+        }
+        var k: int = 0
+        for b in &w {
+            if b >= 'a' && b <= 'z' {
+                let idx = int(b - 'a')
+                if !marks[idx] {
+                    marks[idx] = true
+                    k += 1
+                }
+            }
+        }
+        counts[k] += 1
+    }
+    return counts
+}
+
+fn distinct_all(words: List[str], workers: i32) List[i64] {
+    let n = len(words)
+    let wk = int(workers)
+    var ts: List[Task[List[i64]]] = []
+    for w in 0..wk {
+        let lo = n * w / wk
+        let hi = n * (w + 1) / wk
+        var part: List[str] = []
+        for i in lo..hi {
+            part.push(words[i])
+        }
+        ts.push(spawn count_part(part))
+    }
+    var total: List[i64] = repeat(i64(0), 27)
+    for t in &ts {
+        let c = t.join()
+        for k in 0..27 {
+            total[k] += c[k]
+        }
+    }
+    return total
+}
+
+fn longest_of(words: List[str]) str {
+    var best = ""
+    for w in &words {
+        if len(w) > len(best) {
+            best = w
+        }
+    }
+    return best
+}
+
+fn fill_counts(w: &str, cnt: &mut List[i64]) {
+    for i in 0..256 {
+        cnt[i] = 0
+    }
+    for c in &w {
+        cnt[int(c)] += 1
+    }
+}
+
+fn anagram_pairs(words: List[str]) i64 {
+    var a: List[i64] = repeat(i64(0), 256)
+    var b: List[i64] = repeat(i64(0), 256)
+    var pairs: i64 = 0
+    var i = 1
+    while i < len(words) {
+        if len(words[i - 1]) == len(words[i]) {
+            fill_counts(&words[i - 1], &mut a)
+            fill_counts(&words[i], &mut b)
+            if a == b {
+                pairs += 1
+            }
+        }
+        i += 1
+    }
+    return pairs
+}
+
+pub fn analyze(words: &List[str], workers: i32) Stats {
+    let ws: List[str] = words
+    let t1 = spawn distinct_all(ws, workers)
+    let t2 = spawn longest_of(ws)
+    let t3 = spawn anagram_pairs(ws)
+    let d = t1.join()
+    let l = t2.join()
+    let a = t3.join()
+    return Stats { distinct: d, longest: l, anagrams: a }
+}

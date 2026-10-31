@@ -1,0 +1,498 @@
+// Атаки на модель задач (Р70; замер — вариант А): каждая — отдельная
+// программа между строками «// === имя: что пробует | ожидание».
+// Ожидание: race — гонка данных (компилятор должен отвергнуть), safe — без
+// гонки (должен принять), logic — логическая гонка без гонки данных
+// (принимается, TSan молчит). Разбор — bench/o13/attacks.py.
+
+// === a01: две задачи пишут одну переменную | race
+fn add(x: &mut i64, v: i64) {
+    for i in 0..1000 {
+        x += v
+    }
+}
+
+fn main() {
+    var x: i64 = 0
+    tasks {
+        spawn add(&mut x, 1)
+        spawn add(&mut x, 2)
+    }
+    println(str(x))
+}
+
+// === a02: задача пишет, код блока читает | race
+fn add(x: &mut i64, v: i64) {
+    for i in 0..1000 {
+        x += v
+    }
+}
+
+fn main() {
+    var x: i64 = 0
+    tasks {
+        spawn add(&mut x, 1)
+        println(str(x))
+    }
+}
+
+// === a03: задача читает, код блока пишет | race
+fn show(x: &i64) {
+    println(str(x))
+}
+
+fn main() {
+    var x: i64 = 0
+    tasks {
+        spawn show(&x)
+        for i in 0..1000 {
+            x += 1
+        }
+    }
+}
+
+// === a04: spawn в цикле с одной и той же &mut | race
+fn add(x: &mut i64, v: i64) {
+    x += v
+}
+
+fn main() {
+    var acc: i64 = 0
+    tasks {
+        for w in 0..4 {
+            spawn add(&mut acc, i64(w))
+        }
+    }
+    println(str(acc))
+}
+
+// === a05: spawn в цикле с постоянным индексом | race
+fn add(x: &mut i64, v: i64) {
+    x += v
+}
+
+fn main() {
+    var out: List[i64] = repeat(i64(0), 4)
+    tasks {
+        for w in 0..4 {
+            spawn add(&mut out[0], i64(w))
+        }
+    }
+    println(str(out[0]))
+}
+
+// === a06: индекс из списка значений (может повторяться) | race
+fn add(x: &mut i64, v: i64) {
+    x += v
+}
+
+fn main() {
+    var out: List[i64] = repeat(i64(0), 4)
+    let idx = [0, 1, 1, 2]
+    tasks {
+        for i in &idx {
+            spawn add(&mut out[i], 1)
+        }
+    }
+    println(str(out[1]))
+}
+
+// === a07: две задачи, вычисленные индексы i и j | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn peek(x: &i64) {
+    println(str(x))
+}
+
+fn main() {
+    var out: List[i64] = repeat(i64(0), 4)
+    let i = 1
+    let j = 1
+    tasks {
+        spawn add(&mut out[i])
+        spawn peek(&out[j])
+    }
+}
+
+// === a08: задача держит элемент, код блока растит список | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2]
+    tasks {
+        spawn add(&mut xs[0])
+        for i in 0..100 {
+            xs.push(i64(i))
+        }
+    }
+}
+
+// === a09: задача читает список, код блока растит его | race
+fn total(xs: &List[i64]) {
+    var s: i64 = 0
+    for x in &xs {
+        s += x
+    }
+    println(str(s))
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2]
+    tasks {
+        spawn total(&xs)
+        xs.push(3)
+    }
+}
+
+// === a10: разные поля одной структуры двум задачам | safe
+struct Pair {
+    a: i64,
+    b: i64,
+}
+
+fn add(x: &mut i64, v: i64) {
+    for i in 0..1000 {
+        x += v
+    }
+}
+
+fn main() {
+    var p = Pair { a: 0, b: 0 }
+    tasks {
+        spawn add(&mut p.a, 1)
+        spawn add(&mut p.b, 2)
+    }
+    println(str(p.a + p.b))
+}
+
+// === a11: вложенный блок берёт то же место, что внешняя задача | race
+fn add(x: &mut i64) {
+    for i in 0..1000 {
+        x += 1
+    }
+}
+
+fn main() {
+    var x: i64 = 0
+    tasks {
+        spawn add(&mut x)
+        tasks {
+            spawn add(&mut x)
+        }
+    }
+    println(str(x))
+}
+
+// === a12: задача берёт переменную блока (живёт меньше задачи) | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    tasks {
+        for w in 0..4 {
+            var local: i64 = 0
+            spawn add(&mut local)
+        }
+    }
+}
+
+// === a13: срез в задачу, код блока растит список | race
+fn total(xs: []i64) {
+    var s: i64 = 0
+    for x in &xs {
+        s += x
+    }
+    println(str(s))
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2, 3]
+    tasks {
+        spawn total(xs[0..2])
+        xs.push(4)
+    }
+}
+
+// === a14: обход &mut в коде блока, задача читает список | race
+fn total(xs: &List[i64]) {
+    var s: i64 = 0
+    for x in &xs {
+        s += x
+    }
+    println(str(s))
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2, 3]
+    tasks {
+        spawn total(&xs)
+        for x in &mut xs {
+            x += 1
+        }
+    }
+}
+
+// === a15: Map — задача читает, код блока вставляет | race
+fn get(m: &Map[i64, i64]) {
+    println(str(len(m)))
+}
+
+fn main() {
+    var m: Map[i64, i64] = []
+    tasks {
+        spawn get(&m)
+        for i in 0..100 {
+            m[i64(i)] = 1
+        }
+    }
+}
+
+// === a16: атомик, но чтение и запись по отдельности | logic
+fn bump(c: &Atomic[i64]) {
+    for i in 0..10000 {
+        c.store(c.load() + 1)
+    }
+}
+
+fn main() {
+    let c = atomic(i64(0))
+    tasks {
+        spawn bump(&c)
+        spawn bump(&c)
+    }
+    println(str(c.load() <= 20000))
+}
+
+// === a17: атомик add — верно | safe
+fn bump(c: &Atomic[i64]) {
+    for i in 0..10000 {
+        _ = c.add(1)
+    }
+}
+
+fn main() {
+    let c = atomic(i64(0))
+    tasks {
+        spawn bump(&c)
+        spawn bump(&c)
+    }
+    println(str(c.load()))
+}
+
+// === a18: мьютекс — верно | safe
+fn bump(m: &Mutex[i64]) {
+    for i in 0..10000 {
+        lock m as v {
+            v += 1
+        }
+    }
+}
+
+fn main() {
+    let m = mutex(i64(0))
+    tasks {
+        spawn bump(&m)
+        spawn bump(&m)
+    }
+    lock m as v {
+        println(str(v))
+    }
+}
+
+// === a19: задачи в теле parallel for | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    var out: List[i64] = repeat(i64(0), 4)
+    var y: i64 = 0
+    parallel for i in 0..4 {
+        tasks {
+            spawn add(&mut y)
+        }
+        out[i] = 1
+    }
+}
+
+// === a20: parallel for пишет общую переменную | race
+fn main() {
+    var s: i64 = 0
+    parallel for i in 0..1000 {
+        s += 1
+    }
+    println(str(s))
+}
+
+// === a21: в одной итерации out[w] и out[w + 1] | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    var out: List[i64] = repeat(i64(0), 5)
+    tasks {
+        for w in 0..4 {
+            spawn add(&mut out[w])
+            spawn add(&mut out[w + 1])
+        }
+    }
+}
+
+// === a22: две задачи читают одно | safe
+fn show(x: &List[i64]) {
+    println(str(len(x)))
+}
+
+fn main() {
+    let xs = [1, 2, 3]
+    tasks {
+        spawn show(&xs)
+        spawn show(&xs)
+    }
+}
+
+// === a23: обход &mut — задача на элемент | safe
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2, 3]
+    tasks {
+        for x in &mut xs {
+            spawn add(&mut x)
+        }
+    }
+    println(str(xs[0] + xs[1] + xs[2]))
+}
+
+// === a24: элемент по переменной цикла, длина в заголовке | safe
+fn add(x: &mut i64, v: i64) {
+    x += v
+}
+
+fn main() {
+    var out: List[i64] = repeat(i64(0), 8)
+    tasks {
+        for w in 0..len(out) {
+            spawn add(&mut out[w], i64(w))
+        }
+    }
+    println(str(out[7]))
+}
+
+// === a25: два элемента одной итерации через обход &mut | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn peek(x: &i64) {
+    println(str(x))
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2, 3]
+    tasks {
+        for x in &mut xs {
+            spawn add(&mut x)
+            spawn peek(&x)
+        }
+    }
+}
+
+// === a26: задача берёт структуру, код блока читает поле | race
+struct Pair {
+    a: i64,
+    b: i64,
+}
+
+fn bump(p: &mut Pair) {
+    p.a += 1
+}
+
+fn main() {
+    var p = Pair { a: 0, b: 0 }
+    tasks {
+        spawn bump(&mut p)
+        println(str(p.b))
+    }
+}
+
+// === a27: параметр &mut функции двум задачам | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn run(x: &mut i64) {
+    tasks {
+        spawn add(&mut x)
+        spawn add(&mut x)
+    }
+}
+
+fn main() {
+    var x: i64 = 0
+    run(&mut x)
+    println(str(x))
+}
+
+// === a28: строка ряда задаче, код блока читает ячейку ряда | race
+fn fill(row: &mut List[i64]) {
+    row[0] = 1
+}
+
+fn main() {
+    var g = [[0, 0], [0, 0]]
+    tasks {
+        for r in 0..2 {
+            spawn fill(&mut g[r])
+        }
+        println(str(g[0][0]))
+    }
+}
+
+// === a29: данные мьютекса задаче под lock | safe
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    let m = mutex(i64(0))
+    lock m as v {
+        tasks {
+            spawn add(&mut v)
+        }
+    }
+    lock m as v {
+        println(str(v))
+    }
+}
+
+// === a30: канал — производитель и потребитель | safe
+fn produce(ch: &Channel[i64]) {
+    for i in 0..100 {
+        ch.send(i64(i))
+    }
+    ch.close()
+}
+
+fn main() {
+    let ch: Channel[i64] = channel(4)
+    var s: i64 = 0
+    tasks {
+        spawn produce(&ch)
+        while true {
+            if let v = ch.recv() {
+                s += v
+            } else {
+                break
+            }
+        }
+    }
+    println(str(s))
+}

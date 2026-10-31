@@ -1,0 +1,6 @@
+50 job#0 job#9
+true
+1
+--- stderr ---
+channels.dpm:35:5: trap: deadlock: every thread is waiting
+[exit 101]

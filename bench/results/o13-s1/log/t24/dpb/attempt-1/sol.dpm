@@ -1,0 +1,71 @@
+// t24: заготовка — напишите тело функции по task.md.
+pub struct Move {
+    from: i32
+    to: i32
+    amount: i64
+}
+
+pub struct Report {
+    table: List[i64]
+    reads: i64
+    bad: i64
+}
+
+// Писатель: переводы по порядку, каждый — целиком под замком.
+// Возвращает таблицу после всех переводов.
+fn write_all(bank: &Mutex[List[i64]], moves: &List[Move]) List[i64] {
+    for mv in &moves {
+        lock bank as t1 {
+            let f = int(mv.from)
+            let to_i = int(mv.to)
+            if f != to_i {
+                let amt = min(mv.amount, t1[f])
+                t1[f] -= amt
+                t1[to_i] += amt
+            }
+        }
+    }
+    var result: List[i64] = []
+    lock bank as t2 {
+        result = t2
+    }
+    return result
+}
+
+// Один читатель: reads чтений, каждое — сумма всех счетов под замком.
+fn reader(bank: &Mutex[List[i64]], reads: i32, expect: i64, total_reads: &Atomic[i64], bad_reads: &Atomic[i64]) {
+    for k in 0..int(reads) {
+        var s: i64 = 0
+        lock bank as t {
+            for v in &t {
+                s += v
+            }
+        }
+        _ = total_reads.add(1)
+        if s != expect {
+            _ = bad_reads.add(1)
+        }
+    }
+}
+
+// Читатели идут одновременно.
+fn read_all(bank: &Mutex[List[i64]], readers: i32, reads: i32, expect: i64, total_reads: &Atomic[i64], bad_reads: &Atomic[i64]) {
+    let nr = int(readers)
+    parallel for r in 0..nr {
+        reader(&bank, reads, expect, &total_reads, &bad_reads)
+    }
+}
+
+pub fn run_bank(accounts: i32, moves: &List[Move], readers: i32, reads: i32) Report {
+    let na = int(accounts)
+    let expect = i64(na) * 1000
+    let bank: Mutex[List[i64]] = mutex(repeat(i64(1000), na))
+    let total_reads = atomic(i64(0))
+    let bad_reads = atomic(i64(0))
+    var final_table: List[i64] = []
+    parallel {
+        final_table = write_all(&bank, &moves)
+        read_all(&bank, readers, reads, expect, &total_reads, &bad_reads)
+    }
+    return Report { table: final_table, reads: total_reads.load(), bad: bad_reads.load() }
+}

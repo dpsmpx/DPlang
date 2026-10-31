@@ -59,6 +59,15 @@ fn all(xs: &mut List[i32], n: int) !i32 {
         b = 0
     }
     errdefer xs.clear()
+    lock cache.rows as rows {
+        rows.push(b)
+    }
+    tasks {
+        spawn load(&q, 1)
+        for w in 0..n {
+            spawn work(&q, &mut out[w])
+        }
+    }
     let Pair { left, right: r, tag: _ } = make()
     var Pair {
         left,

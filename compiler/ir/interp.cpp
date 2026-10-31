@@ -278,7 +278,23 @@ struct Frame {
     std::vector<Ref> refs;  // параметры-ссылки
     uint32_t block = 0;
     uint32_t inst = 0;
+    // `parallel for` на инструкции inst (Р69): итерации по очереди —
+    // допустимый порядок; k — следующая из n, значение — lo + k.
+    bool par = false;
+    uint64_t par_lo = 0, par_k = 0, par_n = 0;
 };
+
+// Задача (Р70): свой стек кадров. Задачи исполняются по очереди
+// без потоков ОС: переключение — когда задача ждёт (канал, мьютекс, конец
+// блока задач) и каждые kSlice шагов; порядок детерминирован.
+struct TaskRec {
+    std::deque<Frame> frames;  // у текущей — в Interp::frames_
+    bool done = false;
+    std::vector<std::pair<int, std::string>> out;  // вывод до конца блока: поток (1, 2) и байты
+    std::vector<std::vector<uint32_t>> groups;      // открытые блоки задач: задачи по порядку запуска
+};
+
+constexpr uint32_t kSlice = 1024;
 
 // --- целые
 
@@ -490,7 +506,30 @@ public:
         fr.fn = static_cast<uint32_t>(p_.main_fn);
         fr.locals.resize(p_.fns[fr.fn].locals.size());
         frames_.push_back(std::move(fr));
-        while (!frames_.empty() && !stop_) step();
+        tasks_.emplace_back();
+        while (!stop_) {
+            if (frames_.empty()) {  // задача кончилась; main — программа
+                if (cur_ == 0) break;
+                tasks_[cur_].done = true;
+                stalled_ = 0;
+                switch_task();
+                continue;
+            }
+            step();
+            if (wait_) {
+                wait_ = false;
+                size_t live = 0;
+                for (const TaskRec& t : tasks_) live += t.done ? 0 : 1;
+                if (++stalled_ >= live) {
+                    trap("deadlock: every thread is waiting");
+                    break;
+                }
+                switch_task();
+                continue;
+            }
+            stalled_ = 0;
+            if (tasks_.size() > 1 && ++slice_ >= kSlice) switch_task();
+        }
         std::fflush(stdout);
         return res_;
     }
@@ -500,6 +539,11 @@ private:
     const SourceMap& sources_;
     const std::vector<std::string>& args_;  // аргументы программы без её имени (os.args)
     std::deque<Frame> frames_;
+    std::deque<TaskRec> tasks_;  // [0] — main; адреса кадров стабильны
+    uint32_t cur_ = 0;
+    bool wait_ = false;     // инструкция ждёт и повторится, когда до задачи дойдёт очередь
+    size_t stalled_ = 0;    // ожиданий подряд без шага
+    uint32_t slice_ = 0;    // шагов текущей задачи
     bool stop_ = false;
     RunResult res_;
     Span span_;
@@ -514,10 +558,43 @@ private:
         if (!frames_.empty()) res_.message += " (in " + fn(frames_.back()).name + ")";
     }
 
+    // Следующая живая задача по кругу.
+    void switch_task() {
+        slice_ = 0;
+        size_t n = tasks_.size();
+        for (size_t k = 1; k <= n; k++) {
+            uint32_t i = static_cast<uint32_t>((cur_ + k) % n);
+            if (tasks_[i].done) continue;
+            if (i == cur_) return;
+            std::swap(frames_, tasks_[cur_].frames);
+            cur_ = i;
+            std::swap(frames_, tasks_[cur_].frames);
+            return;
+        }
+    }
+
+    // Вывод: у задачи — в её буфер до конца блока, у main — сразу.
+    void emit(int stream, const std::string& bytes) {
+        if (cur_ != 0) {
+            tasks_[cur_].out.emplace_back(stream, bytes);
+            return;
+        }
+        if (stream == 2) std::fflush(stdout);
+        std::fwrite(bytes.data(), 1, bytes.size(), stream == 2 ? stderr : stdout);
+    }
+
     void trap(const std::string& msg) {
         if (stop_) return;
         stop_ = true;
         res_.exit_code = 101;
+        // Ловушка в задаче: сначала её вывод (как у runtime).
+        if (cur_ != 0 && cur_ < tasks_.size()) {
+            for (auto& [stream, bytes] : tasks_[cur_].out) {
+                if (stream == 2) std::fflush(stdout);
+                std::fwrite(bytes.data(), 1, bytes.size(), stream == 2 ? stderr : stdout);
+            }
+            tasks_[cur_].out.clear();
+        }
         std::fflush(stdout);
         std::string where;
         if (span_.file < sources_.size()) {
@@ -608,6 +685,13 @@ private:
                     r.v = &v.items[static_cast<size_t>(i)].items[0];
                     break;
                 }
+                case ProjKind::MutexValue:  // данные Mutex (О13): items[0], tag — захвачен
+                    if (v.k != Value::K::Seq || v.items.empty()) {
+                        internal("data of a non-mutex");
+                        return Ref{};
+                    }
+                    r.v = &v.items[0];
+                    break;
                 case ProjKind::PoolSlot: {  // живой слот из обхода
                     const Value& iv = fr.locals[pr.index];
                     if (v.k != Value::K::Seq || iv.k != Value::K::Int || iv.i >= v.items.size() ||
@@ -703,6 +787,12 @@ private:
             return;
         }
         if (in.rv.kind == RvKind::Call || in.rv.kind == RvKind::CallPtr) return call(fr, in.rv);  // продолжение — при возврате
+        if (in.rv.kind == RvKind::ParFor) return par_step(fr, in.rv);
+        if (in.rv.kind == RvKind::Spawn) return spawn(fr, in.rv);
+        if (in.rv.kind == RvKind::Intrinsic && waits(fr, in.rv)) {
+            wait_ = true;
+            return;
+        }
         Value v = rvalue(fr, in.rv);
         if (stop_) return;
         if (in.kind == InstKind::Assign) {
@@ -757,6 +847,92 @@ private:
         frames_.push_back(std::move(nf));
     }
 
+    // Задача блока `tasks`: кадр fn с аргументами — в новую задачу группы.
+    void spawn(Frame& fr, const Rvalue& rv) {
+        const Function& g = p_.fns[rv.fn];
+        Frame nf;
+        nf.fn = rv.fn;
+        nf.locals.resize(g.locals.size());
+        nf.refs.resize(g.param_count);
+        for (size_t i = 0; i < rv.args.size(); i++) {
+            const Arg& a = rv.args[i];
+            if (a.kind == Arg::Kind::Value) nf.locals[i] = take(fr, a.op);
+            else nf.refs[i] = resolve(fr, a.place, a.kind == Arg::Kind::Mut);
+            if (stop_) return;
+        }
+        if (tasks_[cur_].groups.empty()) return internal("spawn outside a block of tasks");
+        uint32_t id = static_cast<uint32_t>(tasks_.size());
+        tasks_.emplace_back();
+        tasks_.back().frames.push_back(std::move(nf));
+        tasks_[cur_].groups.back().push_back(id);
+        fr.inst++;
+    }
+
+    // Инструкция ждёт: канал полон или пуст, мьютекс у другой задачи, задачи
+    // блока не кончились. Проверка — до вычисления операндов: повтор их не
+    // теряет.
+    bool waits(Frame& fr, const Rvalue& rv) {
+        switch (rv.intrinsic) {
+            case Intrinsic::ChannelSend: case Intrinsic::ChannelRecv: {
+                Ref r = resolve(fr, rv.place);
+                if (stop_ || !r.v) return false;
+                bool closed = r.v->tag == 1;
+                if (rv.intrinsic == Intrinsic::ChannelSend) return !closed && r.v->items.size() >= r.v->i;
+                return !closed && r.v->items.empty();
+            }
+            case Intrinsic::MutexLock: {
+                Ref r = resolve(fr, rv.place);
+                if (stop_ || !r.v) return false;
+                return r.v->tag == 1 && r.v->i != cur_;
+            }
+            case Intrinsic::TasksEnd: {
+                const auto& gs = tasks_[cur_].groups;
+                if (gs.empty()) return false;
+                for (uint32_t t : gs.back()) {
+                    if (!tasks_[t].done) return true;
+                }
+                return false;
+            }
+            default: return false;
+        }
+    }
+
+    // Следующая итерация `parallel for`: вызов тела; после последней —
+    // следующая инструкция.
+    void par_step(Frame& fr, const Rvalue& rv) {
+        const Type* t = op_type(fr, rv.ops[0]);
+        if (!fr.par) {
+            Value s1, s2;
+            uint64_t lo = peek(fr, rv.ops[0], s1).i;
+            if (stop_) return;
+            uint64_t hi = peek(fr, rv.ops[1], s2).i;
+            if (stop_) return;
+            bool less = sema::is_signed(t) ? static_cast<int64_t>(lo) < static_cast<int64_t>(hi) : lo < hi;
+            fr.par = true;
+            fr.par_lo = lo;
+            fr.par_k = 0;
+            fr.par_n = less ? hi - lo : 0;
+        }
+        if (fr.par_k >= fr.par_n) {
+            fr.par = false;
+            fr.inst++;
+            return;
+        }
+        if (frames_.size() >= kMaxFrames) return trap("stack overflow: calls are nested too deeply");
+        const Function& g = p_.fns[rv.fn];
+        Frame nf;
+        nf.fn = rv.fn;
+        nf.locals.resize(g.locals.size());
+        nf.refs.resize(g.param_count);
+        nf.locals[0] = int_value(canon(fr.par_lo + fr.par_k, t));
+        fr.par_k++;
+        for (size_t i = 0; i < rv.args.size(); i++) {
+            nf.refs[i + 1] = resolve(fr, rv.args[i].place, rv.args[i].kind == Arg::Kind::Mut);
+            if (stop_) return;
+        }
+        frames_.push_back(std::move(nf));
+    }
+
     void finish_return(Value v) {
         Frame& fr = frames_.back();
         const Function& f = fn(fr);
@@ -771,9 +947,10 @@ private:
         const Type* ret = f.ret;
         bool det = f.det;
         frames_.pop_back();
-        if (frames_.empty()) return finish_main(v, ret);
+        if (frames_.empty()) return cur_ == 0 ? finish_main(v, ret) : void();  // задача: результата нет
         Frame& caller = frames_.back();
         const Inst& in = fn(caller).blocks[caller.block].insts[caller.inst];
+        if (in.rv.kind == RvKind::ParFor) return;  // следующая итерация — в par_step
         if (in.kind == InstKind::Assign) {
             // Через указатель — обёртка `@export`: результат функции класса D
             // уходит в C каноническим (Р56).
@@ -864,7 +1041,7 @@ private:
                 if (rv.kind == RvKind::Tag) return int_value(r.v->tag);
                 return bool_value(rv.kind == RvKind::IsSome ? r.v->tag == 1 : r.v->tag == 0);
             }
-            case RvKind::Call: case RvKind::CallPtr: break;  // исполняется в step()
+            case RvKind::Call: case RvKind::CallPtr: case RvKind::ParFor: case RvKind::Spawn: break;  // исполняются в step()
         }
         internal("unknown rvalue");
         return Value{};
@@ -1195,6 +1372,59 @@ private:
             }
             case Intrinsic::PoolAdd: case Intrinsic::PoolRemove: case Intrinsic::PoolClear: case Intrinsic::PoolReserve:
                 return pool_method(fr, rv, ops);
+            case Intrinsic::AtomicNew: return arg(0, s0);
+            case Intrinsic::MutexNew: {  // данные — items[0]; tag — захвачен
+                Value m = seq_value(0);
+                m.items.push_back(rv.ops[0].kind == OpKind::Move ? std::move(ops[0]) : arg(0, s0));
+                m.tag = 0;
+                return m;
+            }
+            case Intrinsic::ChannelNew: {  // очередь — items, ёмкость — i, tag — закрыт
+                int64_t cap = static_cast<int64_t>(arg(0, s0).i);
+                if (cap < 1) {
+                    trap("channel capacity " + std::to_string(cap) + " is less than 1");
+                    return Value{};
+                }
+                Value ch = seq_value(0);
+                ch.i = static_cast<uint64_t>(cap);
+                return ch;
+            }
+            case Intrinsic::ChannelSend: case Intrinsic::ChannelRecv: case Intrinsic::ChannelTryRecv:
+            case Intrinsic::ChannelClose:
+                return channel_method(fr, rv, ops);
+            case Intrinsic::MutexLock: case Intrinsic::MutexUnlock: {
+                Ref r = resolve(fr, rv.place);
+                if (stop_) return Value{};
+                if (rv.intrinsic == Intrinsic::MutexUnlock) {
+                    r.v->tag = 0;
+                    return Value{};
+                }
+                // Занятый другой задачей ждёт в waits(): здесь — этой же.
+                if (r.v->tag == 1) {
+                    trap("mutex is already locked by this thread");
+                    return Value{};
+                }
+                r.v->tag = 1;
+                r.v->i = cur_;
+                return Value{};
+            }
+            case Intrinsic::TasksBegin: tasks_[cur_].groups.emplace_back(); return Value{};
+            case Intrinsic::TasksEnd: {  // задачи кончились (waits): вывод по порядку запуска
+                if (tasks_[cur_].groups.empty()) {
+                    internal("end of a block of tasks without its beginning");
+                    return Value{};
+                }
+                std::vector<uint32_t> g = std::move(tasks_[cur_].groups.back());
+                tasks_[cur_].groups.pop_back();
+                for (uint32_t t : g) {
+                    for (auto& [stream, bytes] : tasks_[t].out) emit(stream, bytes);
+                    tasks_[t].out.clear();
+                }
+                return Value{};
+            }
+            case Intrinsic::AtomicLoad: case Intrinsic::AtomicStore: case Intrinsic::AtomicAdd: case Intrinsic::AtomicSub:
+            case Intrinsic::AtomicSwap: case Intrinsic::AtomicCas:
+                return atomic_method(fr, rv, ops);
             case Intrinsic::CArenaMark: return int_value(0);  // Р62: арена — только у сборки
             case Intrinsic::CArenaRelease: return Value{};
             case Intrinsic::MapKeys: {
@@ -1280,10 +1510,7 @@ private:
             }
             case Intrinsic::Print: case Intrinsic::Println: case Intrinsic::Eprintln: {
                 const Value& a = arg(0, s0);
-                FILE* out = rv.intrinsic == Intrinsic::Eprintln ? stderr : stdout;
-                if (out == stderr) std::fflush(stdout);
-                std::fwrite(a.s.data(), 1, a.s.size(), out);
-                if (rv.intrinsic != Intrinsic::Print) std::fputc('\n', out);
+                emit(rv.intrinsic == Intrinsic::Eprintln ? 2 : 1, rv.intrinsic == Intrinsic::Print ? a.s : a.s + "\n");
                 return Value{};
             }
             case Intrinsic::ListContains: {
@@ -1392,6 +1619,63 @@ private:
         int64_t k = static_cast<int64_t>(n.i);
         if (k < 0) trap("reserve count " + std::to_string(k) + " is negative");
         else if (n.i > kMaxLen) trap("out of memory");
+    }
+
+    // Atomic[T] (Р70): задачи интерпретатора идут по очереди,
+    // поэтому операция — обычное чтение и запись места.
+    Value atomic_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place);
+        if (stop_) return Value{};
+        Value& v = *r.v;
+        const Type* t = place_type(p_, fn(fr), rv.place)->elem;
+        Value old = v;
+        switch (rv.intrinsic) {
+            case Intrinsic::AtomicLoad: return old;
+            case Intrinsic::AtomicStore: v = ops[0]; return Value{};
+            case Intrinsic::AtomicSwap: v = ops[0]; return old;
+            case Intrinsic::AtomicCas: {
+                bool eq = v.i == ops[0].i;
+                if (eq) v = ops[1];
+                return bool_value(eq);
+            }
+            default: {  // Add, Sub: переполнение — ловушка, как у `+` и `-`
+                uint64_t res = 0;
+                Intrinsic k = rv.intrinsic == Intrinsic::AtomicAdd ? Intrinsic::CheckedAdd : Intrinsic::CheckedSub;
+                if (!checked(k, v.i, ops[0].i, t, res)) {
+                    trap(std::string("integer overflow in '") + (k == Intrinsic::CheckedAdd ? "+" : "-") + "' on '" +
+                         sema::type_name(t) + "'");
+                    return Value{};
+                }
+                v = int_value(res);
+                return old;
+            }
+        }
+    }
+
+    // Channel[T] (Р70): очередь items, ёмкость i, tag 1 — закрыт.
+    // Ожидание места или значения — в waits() до вызова.
+    Value channel_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place);
+        if (stop_) return Value{};
+        Value& ch = *r.v;
+        bool closed = ch.tag == 1;
+        switch (rv.intrinsic) {
+            case Intrinsic::ChannelSend:
+                if (closed) trap("send on a closed channel");
+                else ch.items.push_back(rv.ops[0].kind == OpKind::Move ? std::move(ops[0]) : ops[0]);
+                return Value{};
+            case Intrinsic::ChannelClose:
+                if (closed) trap("close of a closed channel");
+                ch.tag = 1;
+                return Value{};
+            default: {  // Recv, TryRecv
+                if (ch.items.empty()) return seq_value(0);
+                Value out = seq_value(1);
+                out.items.push_back(std::move(ch.items.front()));
+                ch.items.erase(ch.items.begin());
+                return out;
+            }
+        }
     }
 
     Value pool_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {

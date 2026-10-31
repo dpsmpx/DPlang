@@ -158,6 +158,38 @@ Module stmts
           Call
             Field .clear
               Name xs
+      Lock rows
+        Field .rows
+          Name cache
+        Block
+          ExprStmt
+            Call
+              Field .push
+                Name rows
+              Name b
+      Tasks
+        Block
+          ExprStmt
+            Spawn
+              Call
+                Name load
+                Ref
+                  Name q
+                Int 1
+          For w in range
+            Int 0
+            Name n
+            Block
+              ExprStmt
+                Spawn
+                  Call
+                    Name work
+                    Ref
+                      Name q
+                    Ref mut
+                      Index
+                        Name out
+                        Name w
       Let Pair { left right:r tag:_ }
         Call
           Name make

@@ -1,0 +1,26 @@
+import os
+
+extern fn labs(x: i64) i64
+
+fn clamp(x: i64) i64 {
+    return labs(x)
+}
+
+pub fn advance(x: i32) i32 {
+    return i32(clamp(i64(x)))
+}
+
+pub fn size(names: List[str]) i32 {
+    var total: i32 = 0
+    for n in &names {
+        total += i32(len(n))
+    }
+    return total
+}
+
+pub fn load(path: str) int {
+    match os.read_file(path) {
+        ok(t) => return len(t)
+        err(_) => return 0
+    }
+}

@@ -51,6 +51,7 @@ enum class ProjKind : uint8_t {
     MapKeyAt, MapValueAt,
     PoolValue,  // элемент Pool по хэндлу из переменной index; устаревший — ловушка (Р67)
     PoolSlot,   // элемент живого слота Pool с номером из переменной index (i64) — обход
+    MutexValue,  // данные Mutex[T] (Р70): только в блоке `lock`
 };
 
 struct Proj {
@@ -139,6 +140,25 @@ enum class Intrinsic : uint8_t {
     // Арена C на время вызова (Р62): строки и массивы заимствующих
     // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
     CArenaMark, CArenaRelease,
+    // Atomic[T] (Р70): AtomicNew (ops[0] → Atomic[T]); остальные —
+    // получатель-место, последовательная согласованность: AtomicLoad (→ T),
+    // AtomicStore (v), AtomicAdd и AtomicSub (v → прежнее; переполнение —
+    // ловушка), AtomicSwap (v → прежнее), AtomicCas (ожидаемое, новое → bool).
+    AtomicNew, AtomicLoad, AtomicStore, AtomicAdd, AtomicSub, AtomicSwap, AtomicCas,
+    // Mutex[T] (Р70): MutexNew (ops[0] — данные → Mutex[T]);
+    // MutexLock и MutexUnlock — получатель-место; повторный захват тем же
+    // потоком — ловушка.
+    MutexNew, MutexLock, MutexUnlock,
+    // Channel[T] (Р70): ChannelNew (ops[0] — ёмкость i64 →
+    // Channel[T]; меньше 1 — ловушка); остальные — получатель-место:
+    // ChannelSend (v; ждёт места; закрыт — ловушка), ChannelRecv (→ ?T, ждёт;
+    // none — закрыт и пуст), ChannelTryRecv (→ ?T, не ждёт), ChannelClose
+    // (повторно — ловушка). Все ждут — ловушка deadlock.
+    ChannelNew, ChannelSend, ChannelRecv, ChannelTryRecv, ChannelClose,
+    // Блок задач (Р70): TasksBegin открывает группу задач потока,
+    // TasksEnd ждёт её задачи и выводит их вывод по порядку запуска.
+    // Операндов нет.
+    TasksBegin, TasksEnd,
     // Probe: место (place) вычисляется со всеми проверками — индексы, ключ
     // Map — и не читается. Ловушка места раньше ловушек правее (expr.order).
     Probe,
@@ -167,6 +187,15 @@ enum class RvKind : uint8_t {
     IsOk,         // place (E!T) — успех
     Zero,         // ноль типа (Р62: пропущенное поле `@c`); операндов нет
     AddrOf,       // ссылка на place (Р62): значение `&T` поля `@c` и параметра `?&T`
+    // `parallel for` (Р69): fn(v, args…) для каждого v из [ops[0], ops[1]) —
+    // в любом порядке и одновременно; результат — когда закончились все.
+    // fn — вынесенное тело: параметр 0 — значение типа ops (Param), дальше
+    // — args (Ref и Mut), результата нет. Вывод итераций — по порядку v.
+    ParFor,
+    // Задача блока `tasks` (Р70): fn(args) в своём потоке, в группе
+    // TasksBegin вокруг; значения-аргументы переходят в задачу, места живут
+    // до TasksEnd. fn — функция dpl без результата.
+    Spawn,
 };
 
 struct Arg {

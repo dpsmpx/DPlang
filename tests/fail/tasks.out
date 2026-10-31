@@ -1,0 +1,47 @@
+--- stderr ---
+tasks.dpm:42:5: error[E0425]: tasks run at the same time; 'pure' is class D and cannot start them
+  42 |     tasks {
+     |     ^
+tasks.dpm:54:20: error[E0521]: cannot read 'a' inside 'tasks': a task changes 'a' until the end of the block; prepare it before 'tasks' and use it after
+  54 |         let copy = a
+     |                    ^
+tasks.dpm:58:21: error[E0521]: 'b' is borrowed by two tasks of this block, and one of them changes it ('&mut b'); give each task its own element or field
+  58 |         spawn peek(&b)
+     |                     ^
+tasks.dpm:62:29: error[E0521]: every iteration of this loop starts a task with '&mut c': the tasks would change it at the same time; borrow an element indexed by the loop variable, such as '&mut out[i]'
+  62 |             spawn work(&mut c)
+     |                             ^
+tasks.dpm:65:9: error[E0521]: cannot change 'xs[0]' inside 'tasks': a task reads 'xs[0]' until the end of the block; prepare it before 'tasks' and use it after
+  65 |         xs[0] = 5
+     |         ^~~~~
+tasks.dpm:69:25: error[E0520]: 'local' is declared inside 'tasks'; a task borrows only variables declared before the block, which outlive its tasks
+  69 |         spawn work(&mut local)
+     |                         ^~~~~
+tasks.dpm:70:15: error[E0520]: the result of a task in 'tasks' is lost: 'ret' returns 'i64'; write the result through a '&mut' parameter
+  70 |         spawn ret()
+     |               ^~~~~
+tasks.dpm:71:15: error[E0520]: a task runs a dpl function: 'spawn f(...)'; call methods, built-in functions and C from that function
+  71 |         spawn print("x")
+     |               ^~~~~~~~~~
+tasks.dpm:72:20: error[E0520]: '?Win' holds a C handle ('extern type'); a task cannot take it: the C library may tie it to the thread that made it; mark the type '@send' if the library allows it
+  72 |         spawn take(none)
+     |                    ^~~~
+tasks.dpm:73:20: error[E0520]: '[]i64' views memory of the code that starts the task; pass the List by reference and the bounds by value
+  73 |         spawn view(xs[0..1])
+     |                    ^~~~~~~~
+tasks.dpm:74:20: error[E0520]: a task holds its '&' arguments until the end of the block, and this value is temporary; store it in a variable declared before 'tasks'
+  74 |         spawn hold(&Box { v: 1 })
+     |                    ^~~~~~~~~~~~~
+tasks.dpm:79:33: error[E0521]: every iteration of this loop starts a task with '&mut g[i]': the tasks would change it at the same time; borrow an element indexed by the loop variable, such as '&mut out[j]'
+  79 |                 spawn grid(&mut g[i])
+     |                                 ^~~~
+tasks.dpm:85:13: error[E0516]: 'break' cannot leave 'tasks': the block waits for its tasks; leave the loop after the block
+  85 |             break
+     |             ^~~~~
+tasks.dpm:89:9: error[E0516]: 'return' cannot leave 'tasks': the block waits for its tasks; write the outcome to a variable and act on it after the block
+  89 |         return
+     |         ^~~~~~
+tasks.dpm:91:5: error[E0520]: 'spawn' starts a task of a 'tasks' block: write it as a statement inside 'tasks { ... }'
+  91 |     spawn work(&mut a)
+     |     ^~~~~~~~~~~~~~~~~~
+[exit 1]

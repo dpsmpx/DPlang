@@ -1,0 +1,109 @@
+pub fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn build(chunk: i64, seed: u64) i64 {
+    var h = u64.wrap(chunk) ^ seed
+    for i in 0..20000 {
+        h = mix(h)
+    }
+    return i64(h % 100000)
+}
+
+pub struct Cmd {
+    kind: i32
+    chunk: i64
+    seed: u64
+}
+
+struct Res {
+    id: i64
+    value: i64
+}
+
+// Состояние менеджера: значения чанков, последний заказ чанка, чанк заказа.
+struct Book {
+    state: Map[i64, i64]
+    latest: Map[i64, i64]
+    chunk_of: List[i64]
+    orders: i64
+    taken: i64
+    syncs: i64
+}
+
+fn new_book() Book {
+    var state: Map[i64, i64] = []
+    var latest: Map[i64, i64] = []
+    return Book { state, latest, chunk_of: [], orders: 0, taken: 0, syncs: 0 }
+}
+
+// Новый заказ: номер и чанк; прежние заказы чанка устаревают.
+fn order(b: &mut Book, chunk: i64) i64 {
+    b.orders += 1
+    b.latest[chunk] = b.orders
+    b.chunk_of.push(chunk)
+    return b.orders
+}
+
+// Результат заказа: устаревший выбрасывается.
+fn apply(b: &mut Book, r: Res) {
+    let c = b.chunk_of[r.id - 1]
+    if b.latest[c] == r.id {
+        b.state[c] = r.value
+    }
+    b.taken += 1
+}
+
+fn sync_line(b: &mut Book) str {
+    b.syncs += 1
+    var line = "sync " + str(b.syncs) + ":"
+    for k in &b.state.keys() {
+        line += " " + str(k) + "=" + str(b.state[k])
+    }
+    return line
+}
+
+fn build_task(chunk: i64, seed: u64, id: i64, ready: &Channel[Res]) {
+    ready.send(Res { id, value: build(chunk, seed) })
+}
+
+// Игровой цикл — внутри блока задач; сборки — задачи блока,
+// результаты — канал на все заказы (отправка не ждёт). Уход: цикл
+// кончается, но блок ждёт незаконченные сборки — менеджер не уходит
+// раньше своих задач.
+pub fn run(script: &List[Cmd], limit: i32) List[str] {
+    let ready: Channel[Res] = channel(len(script) + 1)
+    var b = new_book()
+    var out: List[str] = []
+    tasks {
+        for c in &script {
+            if c.kind == 0 {
+                let id = order(&mut b, c.chunk)
+                spawn build_task(c.chunk, c.seed, id, &ready)
+            } else if c.kind == 1 {
+                var k = 0
+                while k < limit {
+                    if let r = ready.try_recv() {
+                        apply(&mut b, r)
+                    } else {
+                        break
+                    }
+                    k += 1
+                }
+            } else if c.kind == 2 {
+                while b.taken < b.orders {
+                    if let r = ready.recv() {
+                        apply(&mut b, r)
+                    }
+                }
+                out.push(sync_line(&mut b))
+            } else {
+                break
+            }
+        }
+    }
+    return out
+}

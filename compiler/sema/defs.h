@@ -138,6 +138,7 @@ struct HandleDef {
     std::string name;
     const ModuleInfo* module = nullptr;
     bool pub = false;
+    bool send = false;  // `@send`: библиотека C разрешает передавать дескриптор между потоками (Р70)
     Span span;
 };
 

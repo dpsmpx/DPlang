@@ -1,0 +1,27 @@
+// spec: type.concurrent builtin.methods (Р70)
+// Atomic[T]: общий счётчик и флаг в parallel for, операции, ловушка
+// переполнения add.
+fn bump(c: &Atomic[i64], by: i64) i64 {
+    return c.add(by)
+}
+
+fn main() {
+    let hits: Atomic[i64] = atomic(0)
+    let done = atomic(false)
+    let small: Atomic[u8] = atomic(250)
+    var tickets: List[i64] = repeat(i64(0), 100)
+    parallel for i in 0..100 {
+        tickets[i] = bump(&hits, 2)
+        if i == 50 {
+            done.store(true)
+        }
+    }
+    var total: i64 = 0
+    for t in &tickets {
+        total += t
+    }
+    println("hits " + str(hits.load()) + ", done " + str(done.load()) + ", tickets " + str(total))
+    println("swap " + str(hits.swap(7)) + ", cas " + str(hits.cas(7, 9)) + " " + str(hits.cas(7, 1)) + ", now " + str(hits.load()))
+    println("sub " + str(small.sub(10)) + ", now " + str(small.load()))
+    _ = small.add(20)
+}

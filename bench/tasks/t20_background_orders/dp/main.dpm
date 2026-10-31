@@ -1,0 +1,49 @@
+// Драйвер t20 (скрыт от модели): те же входы, что у ref.cpp.
+import sol
+
+fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+fn cmd(kind: i32, chunk: i64, seed: u64) sol.Cmd {
+    return sol.Cmd { kind, chunk, seed }
+}
+
+fn main() {
+    var script: List[sol.Cmd] = []
+    for i in 0..300 {
+        let h = mix(u64(i) + 1000)
+        script.push(cmd(0, i64(h % 23), h >> 20))
+        if i % 3 == 0 {
+            script.push(cmd(1, 0, 0))
+        }
+        if i % 100 == 99 {
+            script.push(cmd(2, 0, 0))
+        }
+    }
+    script.push(cmd(1, 0, 0))
+    for i in 0..40 {
+        script.push(cmd(0, i64(i), mix(u64(i))))
+    }
+    script.push(cmd(3, 0, 0))
+    script.push(cmd(2, 0, 0))
+    let lines = sol.run(&script, 2)
+    for s in &lines {
+        println(s)
+    }
+    let small = [cmd(0, 5, 1), cmd(0, 5, 2), cmd(1, 0, 0), cmd(0, -3, 9), cmd(2, 0, 0), cmd(2, 0, 0)]
+    let ls = sol.run(&small, 1)
+    for s in &ls {
+        println("small " + s)
+    }
+    let empty: List[sol.Cmd] = []
+    println("empty " + str(len(sol.run(&empty, 3))))
+    let only = [cmd(2, 0, 0)]
+    let lo = sol.run(&only, 1)
+    for s in &lo {
+        println("only " + s)
+    }
+}

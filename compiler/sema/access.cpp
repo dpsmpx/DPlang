@@ -127,6 +127,34 @@ void drop_reads(Reads& reads, Expr* place) {
                 reads.end());
 }
 
+// Чтения кода блока задач (с номера from), которые сами — место записи
+// или заимствования и цепочка его объектов: это не чтения.
+void drop_task_reads(std::vector<Checker::TaskAccess>& acc, Expr* place, size_t from) {
+    std::vector<const Expr*> chain;
+    for (Expr* e = place; e;) {
+        e = bare(e);
+        chain.push_back(e);
+        if (auto* f = as<FieldExpr>(e)) e = f->object;
+        else if (auto* i = as<IndexExpr>(e)) e = i->object;
+        else if (auto* sl = as<SliceExpr>(e)) e = sl->object;
+        else e = nullptr;
+    }
+    auto in_chain = [&](const Checker::TaskAccess& a) {
+        return !a.write && std::find(chain.begin(), chain.end(), a.place) != chain.end();
+    };
+    if (from > acc.size()) from = acc.size();
+    acc.erase(std::remove_if(acc.begin() + static_cast<std::ptrdiff_t>(from), acc.end(), in_chain), acc.end());
+}
+
+// Путь проходит индексом по переменной цикла: `out[i]`, `out[i].x`.
+bool by_var(const std::vector<Step>& steps, const Local* var) {
+    for (const Step& s : steps) {
+        auto* n = s.kind == Step::Index ? as<NameExpr>(const_cast<Expr*>(s.index)) : nullptr;
+        if (n && n->res.kind == ResKind::Local && n->res.local == var) return true;
+    }
+    return false;
+}
+
 // Что обходит цикл — для сообщения.
 std::string over(TK coll) {
     if (coll == TK::Map) return "its Map; iterate over a copy of the keys: 'for k in &m.keys()'";
@@ -152,6 +180,15 @@ bool Checker::overlap(Expr* a, Expr* b) const {
 }
 
 void Checker::note_write(Expr* place, const char* why, bool loops) {
+    if (!tasks_.empty() && place && !concurrent(place->type)) {
+        // Код блока задач меняет место; его чтение целью записи — не чтение.
+        // Заголовок `for x in &mut xs` (loops = false) сам не пишет: пишут
+        // через x.
+        for (TasksScope& sc : tasks_) {
+            drop_task_reads(sc.accesses, place, 0);
+            if (loops) sc.accesses.push_back(TaskAccess{place, true, false});
+        }
+    }
     if (access_loops_.empty() || !place) return;
     std::vector<Step> steps;
     const Local* root = path(place, loop_iters_, steps);
@@ -159,7 +196,7 @@ void Checker::note_write(Expr* place, const char* why, bool loops) {
     if (!root || !base) return;
     drop_reads(loop_reads_, place);  // цель записи при выводе её типа прочитана
     std::string head = std::string("cannot ") + why + " '" + text(place) + "'";
-    for (const AccessLoop& L : access_loops_) {
+    for (AccessLoop& L : access_loops_) {
         if (derived(base, L.var, loop_iters_)) continue;
         if (loops && L.root && root == L.root && L.coll != TK::Error) {
             std::vector<Step> coll;
@@ -175,15 +212,22 @@ void Checker::note_write(Expr* place, const char* why, bool loops) {
         }
         if (!L.parallel || base->id >= L.first_inner) continue;
         // Снаружи тела `parallel for` пишется только элемент по переменной
-        // цикла (`out[i]`, `out[i].push(x)`): итерации идут одновременно, и
-        // у каждой свой элемент.
-        bool by_var = false;
-        for (const Step& s : steps) {
-            auto* n = s.kind == Step::Index ? as<NameExpr>(const_cast<Expr*>(s.index)) : nullptr;
-            if (n && n->res.kind == ResKind::Local && n->res.local == L.var) by_var = true;
+        // диапазона (`out[i]`, `out[i].push(x)`): итерации идут одновременно,
+        // и у каждой свой элемент. У обхода `&xs` переменная — значение
+        // элемента, оно может повторяться.
+        if (L.range && by_var(steps, L.var)) {
+            // Р69: читать эту переменную тело дальше может только как out[i].
+            if (std::find(L.written.begin(), L.written.end(), root) == L.written.end()) L.written.push_back(root);
+            continue;
         }
-        if (by_var) continue;
         std::string var = L.var ? L.var->name : "i";
+        if (by_var(steps, L.var)) {
+            error(Code::E0412, place->span,
+                  head + " inside 'parallel for': '" + var + "' is an element of '" + text(L.iter) +
+                      "', and elements may repeat, so two iterations could write the same place; iterate over a "
+                      "range: 'parallel for k in 0..len(" + text(L.iter) + ")'");
+            return;
+        }
         error(Code::E0412, place->span,
               head + " inside 'parallel for': iterations run at the same time; write each result to an element "
                      "indexed by the loop variable, such as 'out[" + var + "]', and combine them after the loop");
@@ -192,15 +236,39 @@ void Checker::note_write(Expr* place, const char* why, bool loops) {
 }
 
 void Checker::note_use(NameExpr* n) {
+    if (!tasks_.empty() && n->res.kind == ResKind::Local && !concurrent(n->res.local->type)) {
+        for (TasksScope& sc : tasks_) sc.accesses.push_back(TaskAccess{n, false, false});
+    }
     if (access_loops_.empty() || n->res.kind != ResKind::Local) return;
     for (size_t k = 0; k < access_loops_.size(); k++) {
-        if (access_loops_[k].mut && access_loops_[k].root == n->res.local) loop_reads_.push_back(LoopRead{n, k});
+        const AccessLoop& L = access_loops_[k];
+        if (L.mut && L.root == n->res.local) loop_reads_.push_back(LoopRead{n, k, false});
+        // Р69: внешняя переменная в теле `parallel for` — проверка в конце
+        // тела, когда известно, что тело пишет.
+        if (L.parallel && n->res.local->id < L.first_inner) loop_reads_.push_back(LoopRead{n, k, true});
     }
+}
+
+void Checker::note_len(Expr* e) {
+    e = bare(e);
+    for (TasksScope& sc : tasks_) {
+        for (TaskAccess& a : sc.accesses) {
+            if (a.place == e && !a.write) a.len = true;
+        }
+    }
+    loop_reads_.erase(std::remove_if(loop_reads_.begin(), loop_reads_.end(),
+                                     [&](const LoopRead& r) { return r.par && r.place == e; }),
+                      loop_reads_.end());
 }
 
 void Checker::note_extend(Expr* object, Expr* place) {
     for (LoopRead& r : loop_reads_) {
         if (r.place == object) r.place = place;
+    }
+    for (TasksScope& sc : tasks_) {
+        for (TaskAccess& a : sc.accesses) {
+            if (a.place == object && !a.write) a.place = place;
+        }
     }
 }
 
@@ -209,6 +277,7 @@ void Checker::loop_begin(ForStmt* s) {
     L.var = s->local;
     L.mut = s->mode == ForMode::Mut;
     L.parallel = s->parallel;
+    L.range = s->mode == ForMode::Range;
     L.first_inner = s->local ? s->local->id : next_local_;
     L.iter = s->iter;
     if ((s->mode == ForMode::Ref || L.mut) && s->iter && s->iter->type) {
@@ -251,10 +320,27 @@ void Checker::loop_end() {
     const AccessLoop& L = access_loops_[k];
     std::vector<Step> coll;
     path(L.iter, loop_iters_, coll);
+    std::vector<const Local*> reported;
     for (const LoopRead& r : loop_reads_) {
         if (r.loop != k) continue;
         std::vector<Step> steps;
-        path(r.place, loop_iters_, steps);
+        const Local* root = path(r.place, loop_iters_, steps);
+        if (r.par) {
+            // Р69: переменную, которую тело пишет как out[i], оно и читает
+            // только так — другой элемент пишет другая итерация.
+            if (!root || (L.range && by_var(steps, L.var)) ||
+                std::find(L.written.begin(), L.written.end(), root) == L.written.end() ||
+                std::find(reported.begin(), reported.end(), root) != reported.end()) {
+                continue;
+            }
+            reported.push_back(root);
+            std::string var = L.var ? L.var->name : "i";
+            error(Code::E0412, r.place->span,
+                  "cannot read '" + text(r.place) + "' inside 'parallel for': another iteration writes '" + root->name +
+                      "' at the same time; read only this iteration's element '" + root->name + "[" + var +
+                      "]', or copy what you need before the loop");
+            continue;
+        }
         if (!crosses(steps, coll)) continue;
         error(Code::E0412, r.place->span,
               "cannot read '" + text(r.place) + "' while 'for ... in &mut' changes it; read the value before the "
@@ -307,6 +393,7 @@ void Checker::changes(Expr* e, std::vector<Expr*>& out, bool top) const {
             changes(static_cast<BinaryExpr*>(e)->rhs, out);
             return;
         case ExprKind::Try: changes(static_cast<TryExpr*>(e)->operand, out); return;
+        case ExprKind::Spawn: changes(static_cast<SpawnExpr*>(e)->operand, out); return;
         case ExprKind::StructLit:
             for (FieldInit& f : static_cast<StructLitExpr*>(e)->fields) changes(f.value, out);
             return;
@@ -409,6 +496,7 @@ void Checker::view_check(Expr* e, const std::vector<Expr*>& right) {
             return;
         }
         case ExprKind::Try: view_check(static_cast<TryExpr*>(e)->operand, right); return;
+        case ExprKind::Spawn: view_check(static_cast<SpawnExpr*>(e)->operand, {}); return;
         case ExprKind::StructLit: {
             std::vector<Expr*> ops;
             for (FieldInit& f : static_cast<StructLitExpr*>(e)->fields) ops.push_back(f.value ? f.value : f.shorthand);
@@ -458,6 +546,193 @@ void Checker::views(Stmt* s) {
         case StmtKind::Return: view_check(static_cast<ReturnStmt*>(s)->value, {}); break;
         case StmtKind::Fail: view_check(static_cast<FailStmt*>(s)->value, {}); break;
         default: break;
+    }
+}
+
+// --- задачи (Р70): `tasks { spawn f(&x, &mut y) }`
+//
+// Заимствование задачей живёт до конца блока. Пока блок идёт, место
+// `&mut` не трогает никто, кроме задачи, место `&` никто не меняет; код
+// блока вне `spawn` — такой же участник. `spawn` в цикле блока — каждая
+// итерация ставит задачу, поэтому `&mut` — элемент по переменной цикла
+// (`&mut out[w]`), как в `parallel for`. Конкурентные значения (`Atomic`,
+// `Mutex`, `Channel`) делятся по `&` — их правило не касается.
+
+namespace {
+
+// Значение с дескриптором C (`extern type`) без `@send`: поток его не
+// создавал, а библиотека C может привязывать дескриптор к потоку.
+bool holds_handle(const Type* t, std::vector<const Type*>& seen) {
+    if (!t) return false;
+    if (t->kind == TK::Handle) return !t->hdef || !t->hdef->send;
+    if (std::find(seen.begin(), seen.end(), t) != seen.end()) return false;
+    seen.push_back(t);
+    if (t->kind == TK::Struct && t->sdef) {
+        for (const FieldDef& f : t->sdef->fields) {
+            if (holds_handle(f.type, seen)) return true;
+        }
+        return false;
+    }
+    if (t->kind == TK::Enum && t->edef) {
+        for (const VariantDef& v : t->edef->variants) {
+            for (const Type* x : v.types) {
+                if (holds_handle(x, seen)) return true;
+            }
+            for (const FieldDef& f : v.fields) {
+                if (holds_handle(f.type, seen)) return true;
+            }
+        }
+        return false;
+    }
+    return holds_handle(t->elem, seen) || holds_handle(t->key, seen) || holds_handle(t->err, seen);
+}
+
+}  // namespace
+
+void Checker::task_loop_begin(const ForStmt* f) {
+    // Разные итерации — разные места только у диапазона (`out[i]`) и обхода
+    // `&`/`&mut` (сам элемент); у обхода значений — ничего.
+    TaskLoop l;
+    if (f && f->local && (f->mode == ForMode::Range || f->mode == ForMode::Ref || f->mode == ForMode::Mut)) {
+        l.var = f->local;
+        l.range = f->mode == ForMode::Range;
+    }
+    for (TasksScope& sc : tasks_) sc.loops.push_back(l);
+}
+
+void Checker::task_loop_end() {
+    for (TasksScope& sc : tasks_) {
+        if (!sc.loops.empty()) sc.loops.pop_back();
+    }
+}
+
+// Задача блока: вызов c уже проверен; marks — размеры доступов областей до
+// его аргументов.
+void Checker::task_spawn(SpawnExpr* sp, CallExpr* c, const std::vector<size_t>& marks) {
+    TasksScope& sc = tasks_.back();
+    std::vector<Expr*> borrowed;
+    for (Expr* a : c->args) {
+        if (a->type) {
+            std::vector<const Type*> seen;
+            if (holds_handle(a->type, seen)) {
+                error(Code::E0520, a->span, "'" + tn(a->type) + "' holds a C handle ('extern type'); a task cannot "
+                                            "take it: the C library may tie it to the thread that made it; mark "
+                                            "the type '@send' if the library allows it");
+                continue;
+            }
+        }
+        if (a->type && holds_view(a->type)) {
+            error(Code::E0520, a->span, "'" + tn(a->type) + "' views memory of the code that starts the task; pass "
+                                        "the List by reference and the bounds by value");
+            continue;
+        }
+        auto* r = as<RefExpr>(bare(a));
+        if (!r) continue;
+        if (!is_place(r->operand)) {  // `&S { … }`; другое отвергает E0501
+            if (as<StructLitExpr>(bare(r->operand))) {
+                error(Code::E0520, a->span, "a task holds its '&' arguments until the end of the block, and this "
+                                            "value is temporary; store it in a variable declared before 'tasks'");
+            }
+            continue;
+        }
+        Expr* place = bare(r->operand);
+        if (concurrent(place->type)) continue;
+        std::vector<Step> steps;
+        const Local* root = path(place, loop_iters_, steps);
+        if (!root) continue;
+        if (root->id >= sc.first_inner) {
+            error(Code::E0520, place->span, "'" + root->name + "' is declared inside 'tasks'; a task borrows only "
+                                            "variables declared before the block, which outlive its tasks");
+            continue;
+        }
+        TaskBorrow b;
+        b.place = place;
+        b.mut = r->mut;
+        b.spawn = sp;
+        b.loops = sc.loops;
+        sc.borrows.push_back(b);
+        borrowed.push_back(place);
+    }
+    // Заимствование — не чтение и не запись кода блока; в блоках вокруг оно —
+    // доступ их кода.
+    std::vector<TaskAccess>& acc = sc.accesses;
+    size_t from = marks.empty() ? 0 : marks.back();
+    for (Expr* p : borrowed) {
+        drop_task_reads(acc, p, from);
+        acc.erase(std::remove_if(acc.begin() + static_cast<std::ptrdiff_t>(std::min(from, acc.size())), acc.end(),
+                                 [&](const TaskAccess& x) { return x.write && bare(x.place) == p; }),
+                  acc.end());
+    }
+    for (size_t k = 0; k + 1 < tasks_.size(); k++) {
+        for (const TaskBorrow& b : sc.borrows) {
+            if (b.spawn != sp) continue;
+            drop_task_reads(tasks_[k].accesses, b.place, k < marks.size() ? marks[k] : 0);
+            tasks_[k].accesses.push_back(TaskAccess{b.place, b.mut, false});
+        }
+    }
+}
+
+void Checker::tasks_end() {
+    TasksScope& sc = tasks_.back();
+    std::vector<const Local*> reported;
+    auto once = [&](const Local* root) {
+        if (std::find(reported.begin(), reported.end(), root) != reported.end()) return false;
+        reported.push_back(root);
+        return true;
+    };
+    struct Path {
+        const Local* root = nullptr;
+        std::vector<Step> steps;
+    };
+    std::vector<Path> bp(sc.borrows.size());
+    for (size_t i = 0; i < sc.borrows.size(); i++) bp[i].root = path(sc.borrows[i].place, loop_iters_, bp[i].steps);
+    // `&mut` в цикле блока: у каждой итерации — свой элемент.
+    for (size_t i = 0; i < sc.borrows.size(); i++) {
+        const TaskBorrow& b = sc.borrows[i];
+        if (!b.mut) continue;
+        const Local* base = raw_base(b.place);
+        for (const TaskLoop& l : b.loops) {
+            const Local* var = l.var;
+            if (var && ((l.range && by_var(bp[i].steps, var)) || derived(base, var, loop_iters_))) continue;
+            if (!once(bp[i].root)) break;
+            std::string hint = var && l.range ? "; borrow an element indexed by the loop variable, such as '&mut out[" +
+                                                    var->name + "]'"
+                                              : "; start one task per element in a 'for' over a range";
+            error(Code::E0521, b.place->span, "every iteration of this loop starts a task with '&mut " +
+                                                  text(b.place) + "': the tasks would change it at the same time" + hint);
+            break;
+        }
+    }
+    // Две задачи: одно место, хоть одна меняет его.
+    for (size_t i = 0; i < sc.borrows.size(); i++) {
+        for (size_t j = 0; j < i; j++) {
+            const TaskBorrow& a = sc.borrows[j];
+            const TaskBorrow& b = sc.borrows[i];
+            if (a.spawn == b.spawn || !(a.mut || b.mut) || bp[i].root != bp[j].root || !bp[i].root) continue;
+            if (!crosses(bp[i].steps, bp[j].steps) || !once(bp[i].root)) continue;
+            error(Code::E0521, b.place->span,
+                  "'" + text(b.place) + "' is borrowed by two tasks of this block, and one of them changes it ('&mut " +
+                      text(a.mut ? a.place : b.place) + "'); give each task its own element or field");
+        }
+    }
+    // Код блока и задача: одно место, хоть кто-то меняет его.
+    for (const TaskAccess& x : sc.accesses) {
+        std::vector<Step> steps;
+        const Local* root = path(x.place, loop_iters_, steps);
+        if (!root) continue;
+        for (size_t i = 0; i < sc.borrows.size(); i++) {
+            const TaskBorrow& b = sc.borrows[i];
+            if (bp[i].root != root || !(x.write || b.mut) || !crosses(steps, bp[i].steps)) continue;
+            // `len(xs)`, пока задачи меняют элементы: длину они не меняют.
+            if (x.len && bp[i].steps.size() > steps.size()) continue;
+            if (!once(root)) break;
+            std::string what = x.write ? "change" : "read";
+            error(Code::E0521, x.place->span,
+                  "cannot " + what + " '" + text(x.place) + "' inside 'tasks': a task " +
+                      (b.mut ? "changes" : "reads") + " '" + text(b.place) +
+                      "' until the end of the block; prepare it before 'tasks' and use it after");
+            break;
+        }
     }
 }
 

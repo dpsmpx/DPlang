@@ -36,6 +36,7 @@ public:
         }
         export_symbols();
         linear_placement();
+        concurrent_placement();
         c_placement();
         self_containment();
     }
@@ -112,6 +113,11 @@ private:
                     d.module = &m;
                     d.pub = it->pub;
                     d.span = it->name_span;
+                    for (const Attr& a : static_cast<ExternTypeItem*>(it)->attrs) {
+                        if (a.name == "send" && !a.has_arg) d.send = true;
+                        else diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name +
+                                                                   "' for an 'extern type'; use '@send'");
+                    }
                     s.kind = SymKind::Handle;
                     s.hd = &d;
                     break;
@@ -446,6 +452,46 @@ private:
                 container(f.node->params[i].type, f.params[i].type, f.module);
             }
             container(f.node->ret, f.ret, f.module);
+        }
+    }
+
+    // Конкурентные значения (Р70, E0518): не копируются — только
+    // переменная и параметр `&`/`&mut`.
+    void concurrent_placement() {
+        auto bad = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m, const std::string& where) {
+            if (!node || !holds_concurrent(t)) return;
+            diags_.error(Code::E0518, node->span, "'" + type_name(t, m) + "' cannot be " + where +
+                                                      ": it is shared, not copied; keep it in a variable and pass '&'");
+        };
+        for (StructDef& d : prog_.structs) {
+            if (!d.node) continue;
+            for (size_t i = 0; i < d.fields.size() && i < d.node->fields.size(); i++) {
+                bad(d.node->fields[i].type, d.fields[i].type, d.module, "a field");
+            }
+        }
+        for (EnumDef& d : prog_.enums) {
+            if (!d.node) continue;
+            for (size_t v = 0; v < d.variants.size() && v < d.node->variants.size(); v++) {
+                const VariantDecl& vd = d.node->variants[v];
+                for (size_t k = 0; k < d.variants[v].types.size() && k < vd.types.size(); k++) {
+                    bad(vd.types[k], d.variants[v].types[k], d.module, "variant data");
+                }
+                for (size_t k = 0; k < d.variants[v].fields.size() && k < vd.fields.size(); k++) {
+                    bad(vd.fields[k].type, d.variants[v].fields[k].type, d.module, "variant data");
+                }
+            }
+        }
+        for (FnDef& f : prog_.fns) {
+            if (!f.node) continue;
+            for (size_t i = 0; i < f.params.size() && i < f.node->params.size(); i++) {
+                const sema::Type* t = f.params[i].type;
+                bool by_ref = f.params[i].mode != ParamMode::Value && concurrent(t) && !holds_concurrent(t->elem);
+                if (!by_ref) {
+                    bad(f.node->params[i].type, t, f.module,
+                        f.params[i].mode == ParamMode::Value ? "passed by value" : "held in a container");
+                }
+            }
+            bad(f.node->ret, f.ret, f.module, "returned");
         }
     }
 

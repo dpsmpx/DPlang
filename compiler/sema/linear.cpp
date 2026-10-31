@@ -378,6 +378,11 @@ private:
                 break;
             }
             case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
+            case StmtKind::Lock:
+                expr(static_cast<LockStmt*>(s)->mutex, Use::Borrow);
+                block(static_cast<LockStmt*>(s)->body);
+                break;
+            case StmtKind::Tasks: block(static_cast<TasksStmt*>(s)->body); break;
             case StmtKind::Error: break;
         }
     }
@@ -592,6 +597,7 @@ private:
             case ExprKind::Call: call(static_cast<CallExpr*>(e)); break;
             case ExprKind::Unary: expr(static_cast<UnaryExpr*>(e)->operand, Use::Read); break;
             case ExprKind::Binary: binary(static_cast<BinaryExpr*>(e)); break;
+            case ExprKind::Spawn: expr(static_cast<SpawnExpr*>(e)->operand, Use::Read); break;
             case ExprKind::Try: {
                 auto* t = static_cast<TryExpr*>(e);
                 expr(t->operand, Use::Consume);

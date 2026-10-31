@@ -185,6 +185,8 @@ def discover(pattern):
                 tests.append((suite, path))
     verify = [('verify', path) for suite, path in tests if SUITES[suite][0] in VERIFY_FROM]
     native = [('native', path) for suite, path in tests if suite == 'run']
+    if tsan_cc():
+        native += [('tsan', path) for suite, path in tests if suite == 'run' and uses_parallel(path)]
     native += [('build', path + profile) for suite, path in tests if suite == 'run' for profile in ('', ' --release')]
     ffi = [path for suite, path in tests if suite == 'ffi']
     tests = [t for t in tests if t[0] != 'ffi']
@@ -251,6 +253,75 @@ def prepare_native():
 
 def runtime_objects():
     return [os.path.join(NATIVE, os.path.basename(s) + '.o') for s in RUNTIME_SOURCES]
+
+
+# Проход tsan (Р69; docs/policy/TESTING.md): программы набора run с
+# `parallel for` — сгенерированный C и runtime под ThreadSanitizer, четыре
+# потока. Сообщение TSan или расхождение с интерпретатором — сбой.
+TSAN_FLAGS = ['-std=c11', '-O1', '-g', '-ffp-contract=off', '-fno-strict-aliasing', '-w', '-fsanitize=thread']
+_tsan_cc = None
+
+
+def tsan_cc():
+    """Компилятор C, у которого ThreadSanitizer собирает и запускает; '' — нет."""
+    global _tsan_cc
+    if _tsan_cc is None:
+        _tsan_cc = ''
+        os.makedirs(NATIVE, exist_ok=True)
+        probe = os.path.join(NATIVE, 'tsan_probe.c')
+        with open(probe, 'w', encoding='utf-8') as f:
+            f.write('int main(void) { return 0; }\n')
+        for cc in dict.fromkeys([CC, 'gcc', 'clang']):
+            try:
+                r = subprocess.run([cc] + TSAN_FLAGS + [probe, '-o', probe + '.bin'], capture_output=True)
+                if r.returncode == 0 and subprocess.run([probe + '.bin'], capture_output=True).returncode == 0:
+                    _tsan_cc = cc
+                    break
+            except OSError:
+                continue
+    return _tsan_cc
+
+
+def uses_parallel(path):
+    """В программе (или в модулях её каталога) есть `parallel for` или задачи (О13)."""
+    d = os.path.dirname(path)
+    files = [os.path.join(d, n) for n in os.listdir(d) if n.endswith('.dpm')] if os.path.basename(path) == 'main.dpm' else [path]
+    for f in files:
+        with open(f, encoding='utf-8') as h:
+            text = h.read()
+            if 'parallel for' in text or 'tasks {' in text:
+                return True
+    return False
+
+
+def tsan_one(path):
+    cwd = os.path.join(TESTS, 'run')
+    name = os.path.relpath(path, cwd)
+    exe = os.path.join(NATIVE, 'tsan_' + name.replace(os.sep, '_')[:-len('.dpm')] + '.bin')
+    try:
+        r = subprocess.run([DPL, 'debug', 'c', name], capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return f'debug c: [timeout {TIMEOUT} s]'
+    if r.returncode == 1:
+        return None  # не проходит проверку: диагностику сверяет набор run
+    if r.returncode != 0:
+        return f'debug c: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+    c_path = exe[:-len('.bin')] + '.c'
+    with open(c_path, 'w', encoding='utf-8') as f:
+        f.write(r.stdout)
+    r = subprocess.run([tsan_cc()] + TSAN_FLAGS + ['-I', os.path.join(RUNTIME, 'core'), c_path] + RUNTIME_SOURCES +
+                       ['-lm', '-pthread', '-o', exe], capture_output=True, text=True)
+    if r.returncode != 0:
+        return 'сборка C с TSan:\n' + '\n'.join(r.stderr.splitlines()[:5])
+    env = dict(os.environ, DPL_THREADS='4', TSAN_OPTIONS='halt_on_error=1')
+    try:
+        p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
+                           timeout=TIMEOUT * 4, cwd=cwd, env=env)
+    except subprocess.TimeoutExpired:
+        return f'[timeout {TIMEOUT * 4} s]'
+    if 'ThreadSanitizer' in p.stderr:
+        return 'гонка (TSan):\n' + '\n'.join(p.stderr.splitlines()[:20])
+    return compare_native(p, path)
 
 
 def build_native(path, exe, cwd):
@@ -554,6 +625,11 @@ def native_one(path):
                            timeout=TIMEOUT, cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
+    return compare_native(p, path)
+
+
+def compare_native(p, path):
+    """Вывод и код выхода нативной программы против ожидаемого набора run."""
     got = p.stdout
     if p.stderr:
         got += '--- stderr ---\n' + p.stderr
@@ -645,6 +721,8 @@ def run_one(suite, path, bless):
         return verify_one(path)
     if suite == 'native':
         return native_one(path)
+    if suite == 'tsan':
+        return tsan_one(path)
     if suite == 'build':
         return build_pass_one(path)
     if suite in CROSS:
@@ -716,7 +794,7 @@ def main():
             print(err)
             return 1
     # Проходы native, build, windows и android сверяют с ожидаемым набора run — после того, как --bless его перепишет.
-    late = ('native', 'build', 'example', 'bench', 'lib') + tuple(CROSS)
+    late = ('native', 'tsan', 'build', 'example', 'bench', 'lib') + tuple(CROSS)
     if a.bless:  # ожидаемое ffi и lib пишет сборка хоста — до сверки других целей с ним
         first = [t for t in tests if (t[0] == 'ffi' and ' ' not in t[1]) or (t[0] == 'lib' and t[1].endswith(' host'))]
         for t in first:
@@ -743,6 +821,8 @@ def main():
     note = ''.join(f'; {c} пропущен — нет {cross_tools(c)}' for c in CROSS if cross_tools(c) and not a.k)
     note += ''.join(f'; bindings/{c} пропущен — нет {bindings.missing(c)}' for c in bindings.CASES
                     if bindings.missing(c) and not a.k)
+    if not tsan_cc() and not a.k:
+        note += '; tsan пропущен — нет компилятора C с ThreadSanitizer'
     print(f'компилятор: собран, тестов {len(tests)} {verb} ({summary}){note}')
     return 0
 

@@ -20,6 +20,10 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
                 if (t->kind != TK::Struct || pr.index >= t->sdef->fields.size()) return nullptr;
                 t = t->sdef->fields[pr.index].type;
                 break;
+            case ProjKind::MutexValue:  // Р70
+                if (t->kind != TK::Mutex) return nullptr;
+                t = t->elem;
+                break;
             case ProjKind::Index:
                 if (pr.index >= f.locals.size() || f.locals[pr.index].type->kind != TK::I64) return nullptr;
                 if (t->kind == TK::List || t->kind == TK::Slice || t->kind == TK::Array) {
@@ -82,7 +86,7 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
 bool needs_drop(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
-        case TK::Str: case TK::List: case TK::Map: case TK::Pool: return true;
+        case TK::Str: case TK::List: case TK::Map: case TK::Pool: case TK::Mutex: case TK::Channel: return true;
         case TK::Optional: return needs_drop(t->elem);
         case TK::Result: return needs_drop(t->elem) || needs_drop(t->err);
         case TK::Struct:

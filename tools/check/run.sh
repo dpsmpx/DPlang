@@ -9,8 +9,9 @@
 # bench/run_refs.py; решения на вариантах синтаксиса —
 # bench/syntax/run_variants.py; повторная генерация привязок —
 # bindings/gen/check.py (Р58); компилятор и его тесты — tests/run.py
-# (docs/compiler/README.md); обвязка опыта — bench/experiment.py
-# selftest, после компилятора: ей нужен dpl.
+# (docs/compiler/README.md); атаки на модель задач — bench/o13/attacks.py
+# (Р70: гонки отвергаются, принятое чисто под TSan); обвязка опыта —
+# bench/experiment.py selftest. Атакам и обвязке нужен собранный dpl.
 # ============================================================
 set -u
 
@@ -78,6 +79,7 @@ step "эталоны"         python3 "$ROOT/bench/run_refs.py"
 step "варианты"        python3 "$ROOT/bench/syntax/run_variants.py"
 step "привязки"        python3 "$ROOT/bindings/gen/check.py"
 step "компилятор"      python3 "$ROOT/tests/run.py"
+step "атаки"           python3 "$ROOT/bench/o13/attacks.py"
 # Обвязке нужен собранный компилятор: язык dp опыта (bench/dp_check.py).
 step "обвязка"         python3 "$ROOT/bench/experiment.py" selftest
 

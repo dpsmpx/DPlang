@@ -1,0 +1,14 @@
+// spec: stmt.tasks trap.concurrent (Р70)
+// Ловушка в задаче: сначала её вывод, затем ловушка; программа кончается.
+fn boom(xs: &List[int]) {
+    println("before")
+    println(str(xs[5]))
+}
+
+fn main() {
+    let xs = [1, 2]
+    tasks {
+        spawn boom(&xs)
+    }
+    println("after")
+}

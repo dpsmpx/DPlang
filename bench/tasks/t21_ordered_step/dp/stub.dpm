@@ -1,0 +1,4 @@
+// t21: заготовка — напишите тело функции по task.md.
+pub fn simulate(x: []f64, steps: i32, threads: i32) List[f64] {
+    // ...
+}

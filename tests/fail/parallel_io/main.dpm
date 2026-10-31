@@ -1,0 +1,24 @@
+// spec: stmt.for
+// Тело parallel for и всё, что оно вызывает, не читает файлы и аргументы
+// программы и не зовёт C (Р69); вывод можно.
+import os
+import step
+
+extern fn abs(x: i32) i32
+
+fn local(x: i32) i32 {
+    println("local " + str(x))
+    return x * 2
+}
+
+fn main() {
+    let input = os.args()
+    var out: List[i32] = repeat(i32(0), 4)
+    parallel for i in 0..4 {
+        out[i] = local(i32(i)) + step.advance(i32(i)) + abs(i32(-i))
+        out[i] += step.size(input)
+        let a = os.args()
+        out[i] += i32(len(a))
+    }
+    println(str(out[3] + abs(-1)))
+}

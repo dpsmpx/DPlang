@@ -77,6 +77,10 @@ private:
                     s += "[%" + std::to_string(pr.index) + "]";
                     if (t) t = t->elem;
                     break;
+                case ProjKind::MutexValue:
+                    s += ".data";
+                    if (t) t = t->elem;
+                    break;
                 case ProjKind::Payload: {
                     if (!t || t->kind != TK::Enum) {
                         s += ".?";
@@ -178,7 +182,9 @@ private:
             "checked_neg", "map_set", "map_get", "map_contains", "map_remove", "map_clear", "map_keys",
             "map_order", "map_reserve", "pool_add", "pool_remove", "pool_clear", "pool_reserve", "pool_get",
             "pool_contains", "pool_handles", "pool_slots", "pool_live",
-            "c_arena_mark", "c_arena_release", "probe",
+            "c_arena_mark", "c_arena_release", "atomic", "atomic_load", "atomic_store", "atomic_add", "atomic_sub",
+            "atomic_swap", "atomic_cas", "mutex", "mutex_lock", "mutex_unlock", "channel", "channel_send",
+            "channel_recv", "channel_try_recv", "channel_close", "tasks_begin", "tasks_end", "probe",
         };
         return names[static_cast<size_t>(k)];
     }
@@ -215,9 +221,10 @@ private:
                 if (rv.ops.size() > 1) s += operand(rv.ops[1]);
                 return s + "]";
             }
-            case RvKind::Call: case RvKind::CallPtr: {
+            case RvKind::Call: case RvKind::CallPtr: case RvKind::Spawn: {
                 std::string s = rv.kind == RvKind::CallPtr ? "call_ptr " + ops(rv.ops) + "("
-                                                           : "call " + (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(";
+                                                           : (rv.kind == RvKind::Spawn ? "spawn " : "call ") +
+                                                                 (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(";
                 for (size_t i = 0; i < rv.args.size(); i++) {
                     const Arg& a = rv.args[i];
                     if (i) s += ", ";
@@ -236,6 +243,12 @@ private:
             case RvKind::IsOk: return "is_ok " + place(rv.place);
             case RvKind::Zero: return "zero " + type(rv.type);
             case RvKind::AddrOf: return "addr " + place(rv.place);
+            case RvKind::ParFor: {
+                std::string s = "parallel " + (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(" +
+                                operand(rv.ops[0]) + ".." + operand(rv.ops[1]);
+                for (const Arg& a : rv.args) s += std::string(", ") + (a.kind == Arg::Kind::Ref ? "&" : "&mut ") + place(a.place);
+                return s + ")";
+            }
         }
         return "?";
     }

@@ -1,0 +1,23 @@
+--- stderr ---
+channels.dpm:9:13: error[E0518]: 'Channel[i64]' cannot be passed by value: it is shared, not copied; keep it in a variable and pass '&'
+   9 | fn give(ch: Channel[int]) {
+     |             ^~~~~~~~~~~~
+channels.dpm:14:5: error[E0425]: a 'Channel' is shared between threads; 'pure' is class D and cannot use it
+  14 |     ch.send(1)
+     |     ^~~~~~~~~~
+channels.dpm:18:13: error[E0401]: write the element type: 'let ch: Channel[T] = channel(n)'
+  18 |     let a = channel(4)
+     |             ^~~~~~~~~~
+channels.dpm:20:13: error[E0518]: 'c' would hold a copy of 'Channel[i64]'; it is shared, not copied: create it with 'atomic(v)', 'mutex(v)' or 'channel(n)' and pass '&c'
+  20 |     let c = b
+     |             ^
+channels.dpm:21:12: error[E0514]: 'Channel[Res]' holds a '@linear' value in a List, a Map, a Pool or a slice; keep resources in variables
+  21 |     let d: Channel[Res] = channel(1)
+     |            ^~~~~~~~~~~~
+channels.dpm:22:7: error[E0410]: 'Channel[i64]' has no method 'push'
+  22 |     b.push(1)
+     |       ^~~~
+channels.dpm:23:12: error[E0401]: expected 'i64', found 'str'
+  23 |     b.send("x")
+     |            ^~~
+[exit 1]

@@ -1,0 +1,104 @@
+// spec: stmt.tasks ffi.extern (Р70)
+// Вариант А: задачи блока не делят место, которое кто-то меняет (E0521),
+// берут только места до блока и вызов функции dpl без результата (E0520),
+// из блока не выходят (E0516); класс D задач не ставит (E0425).
+extern type Win
+
+@send
+extern type Buf
+
+fn work(out: &mut int) {
+    out = 1
+}
+
+fn peek(x: &int) {
+}
+
+fn ret() int {
+    return 1
+}
+
+fn take(w: ?Win) {
+}
+
+fn share(b: ?Buf) {
+}
+
+fn view(xs: []int) {
+}
+
+fn grid(row: &mut List[int]) {
+}
+
+struct Box {
+    v: int
+}
+
+fn hold(b: &Box) {
+}
+
+@det
+fn pure() {
+    tasks {
+    }
+}
+
+fn main() {
+    var a = 0
+    var b = 0
+    var c = 0
+    var xs = [0, 0]
+    var g = [[0], [0]]
+    tasks {
+        spawn work(&mut a)
+        let copy = a
+    }
+    tasks {
+        spawn work(&mut b)
+        spawn peek(&b)
+    }
+    tasks {
+        for i in 0..2 {
+            spawn work(&mut c)
+        }
+        spawn peek(&xs[0])
+        xs[0] = 5
+    }
+    tasks {
+        var local = 0
+        spawn work(&mut local)
+        spawn ret()
+        spawn print("x")
+        spawn take(none)
+        spawn view(xs[0..1])
+        spawn hold(&Box { v: 1 })
+    }
+    tasks {
+        for i in 0..2 {
+            for j in 0..1 {
+                spawn grid(&mut g[i])
+            }
+        }
+    }
+    while true {
+        tasks {
+            break
+        }
+    }
+    tasks {
+        return
+    }
+    spawn work(&mut a)
+    // Можно: разные элементы, длина, чтение того, что задачи только читают.
+    tasks {
+        spawn work(&mut xs[0])
+        spawn work(&mut xs[1])
+        let n = len(xs)
+        spawn peek(&a)
+        let k = a + n
+        for row in &mut g {
+            spawn grid(&mut row)
+        }
+        spawn share(none)
+    }
+}

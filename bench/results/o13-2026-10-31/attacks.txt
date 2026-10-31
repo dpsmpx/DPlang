@@ -1,0 +1,80 @@
+a a01  race  rejected E0521                две задачи пишут одну переменную
+a a02  race  rejected E0521                задача пишет, код блока читает
+a a03  race  rejected E0521                задача читает, код блока пишет
+a a04  race  rejected E0521                spawn в цикле с одной и той же &mut
+a a05  race  rejected E0521                spawn в цикле с постоянным индексом
+a a06  race  rejected E0521                индекс из списка значений (может повторяться)
+a a07  race  rejected E0521                две задачи, вычисленные индексы i и j
+a a08  race  rejected E0521                задача держит элемент, код блока растит список
+a a09  race  rejected E0521                задача читает список, код блока растит его
+a a10  safe  clean                         разные поля одной структуры двум задачам
+a a11  race  rejected E0521                вложенный блок берёт то же место, что внешняя задача
+a a12  race  rejected E0520                задача берёт переменную блока (живёт меньше задачи)
+a a13  race  rejected E0520                срез в задачу, код блока растит список
+a a14  race  rejected E0521                обход &mut в коде блока, задача читает список
+a a15  race  rejected E0521                Map — задача читает, код блока вставляет
+a a16  logic clean                         атомик, но чтение и запись по отдельности
+a a17  safe  clean                         атомик add — верно
+a a18  safe  clean                         мьютекс — верно
+a a19  race  rejected E0412                задачи в теле parallel for
+a a20  race  rejected E0412                parallel for пишет общую переменную
+a a21  race  rejected E0521                в одной итерации out[w] и out[w + 1]
+a a22  safe  clean                         две задачи читают одно
+a a23  safe  clean                         обход &mut — задача на элемент
+a a24  safe  clean                         элемент по переменной цикла, длина в заголовке
+a a25  race  rejected E0521                два элемента одной итерации через обход &mut
+a a26  race  rejected E0521                задача берёт структуру, код блока читает поле
+a a27  race  rejected E0521                параметр &mut функции двум задачам
+a a28  race  rejected E0521                строка ряда задаче, код блока читает ячейку ряда
+a a29  safe  clean                         данные мьютекса задаче под lock
+a a30  safe  clean                         канал — производитель и потребитель
+b b01  race  rejected E0521                два оператора пишут одну переменную
+b b02  race  rejected E0521                один оператор пишет, другой читает
+b b03  race  rejected E0521                оператор растит список, другой читает длину
+b b04  safe  clean                         разные поля структуры
+b b05  safe  clean                         постоянные индексы 0 и 1
+b b06  race  rejected E0521                вычисленные индексы i и j
+b b07  race  rejected E0521                &mut и & одного места в вызовах
+b b08  race  rejected E0521                два блока-оператора меняют одно
+b b09  race  rejected E0521                цикл в операторе пишет, другой читает
+b b10  race  rejected E0521                parallel for в операторе пишет out, другой читает out
+b b11  race  rejected E0521                вложенный блок пишет то же, что внешний оператор
+b b12  race  rejected E0521                Map — вставка и чтение
+b b13  safe  clean                         атомик add в двух операторах
+b b14  logic clean                         атомик load/store по отдельности
+b b15  safe  clean                         мьютекс в двух операторах
+b b16  safe  clean                         канал — производитель и потребитель
+b b17  race  rejected E0521                обход &mut в одном операторе, чтение в другом
+b b18  safe  clean                         два оператора читают одно
+b b19  race  rejected E0521                структура целиком и её поле
+b b20  race  rejected E0521                параметр &mut функции в двух операторах
+b b21  race  rejected E0412                parallel for пишет общую переменную
+b b22  race  rejected E0412                parallel for по значениям элементов как индексам
+b b23  safe  clean                         два оператора растят разные списки
+b b24  race  rejected E0521                swap двух мест и чтение одного
+b b25  race  rejected E0521                метод меняет список, вызов читает его
+c c01  race  rejected E0520                задаче &mut переменной
+c c02  race  rejected E0520                задаче &, код меняет
+c c03  safe  clean                         список по значению, код меняет свой
+c c04  race  rejected E0520                срез в задачу
+c c05  safe  clean                         атомик add через ручки
+c c06  logic clean                         атомик load/store по отдельности
+c c07  safe  clean                         мьютекс через ручки
+c c08  safe  clean                         канал через ручку
+c c09  logic clean                         задача меняет свою копию, код ждёт общее
+c c10  safe  clean                         атомики в списке ручек
+c c11  safe  clean                         задача в поле, join позже
+c c12  safe  clean                         отсоединённая задача пишет в канал после ухода
+c c13  race  rejected E0412                parallel for пишет общую переменную
+c c14  race  rejected E0520                задаче &mut мьютекса
+c c15  safe  clean                         данные мьютекса копией в задачу
+c c16  safe  clean                         две задачи, канал результатов
+c c17  safe  clean                         Map по значению в задачу, код меняет свою
+c c18  race  rejected E0412                parallel for по значениям элементов как индексам
+c c19  race  rejected E0520                задаче & поля структуры
+c c20  safe  clean                         счётчик под мьютексом в N задачах из списка
+
+вариант | атак | гонок | гонок отвергнуто | гонок принято (TSan) | безопасных принято | логических принято
+a | 30 | 21 | 21 | 0 | 8/8 | 1/1
+b | 25 | 17 | 17 | 0 | 7/7 | 1/1
+c | 20 | 7 | 7 | 0 | 11/11 | 2/2

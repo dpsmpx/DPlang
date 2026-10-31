@@ -1,0 +1,25 @@
+// t20: заготовка — напишите тело run по task.md.
+pub fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn build(chunk: i64, seed: u64) i64 {
+    var h = u64.wrap(chunk) ^ seed
+    for i in 0..20000 {
+        h = mix(h)
+    }
+    return i64(h % 100000)
+}
+
+pub struct Cmd {
+    kind: i32
+    chunk: i64
+    seed: u64
+}
+
+pub fn run(script: &List[Cmd], limit: i32) List[str] {
+    // ...
+}

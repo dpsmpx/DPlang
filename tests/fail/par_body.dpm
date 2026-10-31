@@ -1,0 +1,58 @@
+// spec: stmt.for
+// Тело parallel for (Р69): из него не выходят, а внешнюю переменную,
+// которую тело пишет как out[i], читают только так.
+enum E {
+    Bad
+}
+
+fn check(x: int) E!int {
+    if x > 5 {
+        fail .Bad
+    }
+    return x
+}
+
+fn exits(n: int) E!int {
+    var out: List[int] = repeat(0, n)
+    parallel for i in 0..n {
+        if i == 1 {
+            continue
+        }
+        for j in 0..3 {
+            if j == 1 {
+                break
+            }
+        }
+        if i == 2 {
+            break
+        }
+        out[i] = try check(i)
+        if i == 3 {
+            return 1
+        }
+        if i == 4 {
+            fail .Bad
+        }
+    }
+    return out[0]
+}
+
+fn reads(n: int) List[int] {
+    var out: List[int] = repeat(0, n)
+    var seen: List[bool] = repeat(false, n)
+    let base: List[int] = repeat(1, n)
+    parallel for i in 0..n {
+        out[i] = base[i] + base[0] + len(out)
+        if i > 0 {
+            seen[i] = out[i - 1] > 0
+        }
+        seen[i] = seen[i] || out[i] > 1
+        let copy = seen
+    }
+    return out
+}
+
+fn main() {
+    _ = exits(4)
+    _ = reads(4)
+}

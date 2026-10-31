@@ -33,6 +33,9 @@ enum class TK : uint8_t {
     Map,       // Map[K, V] (Р54): key — ключ, elem — значение
     Pool,        // Pool[T] (Р67): elem — элемент
     PoolHandle,  // Handle[T] (Р67): номер слота и поколение; elem — элемент пула
+    Atomic,      // Atomic[T] (Р70): целое или bool; elem
+    Mutex,       // Mutex[T] (Р70): данные под блокировкой; elem
+    Channel,     // Channel[T] (Р70): очередь между потоками; elem
     Slice,     // []T
     Optional,  // ?T
     Result,    // E!T; err — перечисление ошибок
@@ -74,6 +77,9 @@ public:
     const Type* map(const Type* key, const Type* value) { return make(TK::Map, value, nullptr, nullptr, nullptr, key); }
     const Type* pool(const Type* elem) { return make(TK::Pool, elem, nullptr, nullptr, nullptr); }
     const Type* pool_handle(const Type* elem) { return make(TK::PoolHandle, elem, nullptr, nullptr, nullptr); }
+    const Type* atomic(const Type* elem) { return make(TK::Atomic, elem, nullptr, nullptr, nullptr); }
+    const Type* mutex(const Type* elem) { return make(TK::Mutex, elem, nullptr, nullptr, nullptr); }
+    const Type* channel(const Type* elem) { return make(TK::Channel, elem, nullptr, nullptr, nullptr); }
     const Type* slice(const Type* elem) { return make(TK::Slice, elem, nullptr, nullptr, nullptr); }
     const Type* optional(const Type* elem) { return make(TK::Optional, elem, nullptr, nullptr, nullptr); }
     const Type* result(const Type* err, const Type* value) { return make(TK::Result, value, err, nullptr, nullptr); }
@@ -132,6 +138,10 @@ bool map_key_type(const Type* t);
 // Линейный тип (Р60): структура `@linear`, ?T и E!T с линейным T.
 bool linear_type(const Type* t);
 // Линейное значение в List, Map или срезе где-либо в типе (E0514, Р60).
+// Конкурентное значение (Р70): Atomic, Mutex, Channel. Не копируется — живёт в
+// переменной и делится по `&`; holds_concurrent — оно или внутри.
+bool concurrent(const Type* t);
+bool holds_concurrent(const Type* t);
 bool linear_in_container(const Type* t);
 
 // Значение типа переходит границу C как есть (Р59): целое, плавающее,
