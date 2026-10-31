@@ -141,7 +141,8 @@ void dp_sys_signal(void* c) { WakeConditionVariable((CONDITION_VARIABLE*)c); }
 
 void dp_sys_cond_free(void* c) { free(c); }
 
-FILE* dp_os_open_read(const char* path) {
+/* Путь UTF-8 в UTF-16 для _wfopen; NULL — путь не UTF-8 (errno ENOENT). */
+static wchar_t* dp_os_wpath(const char* path) {
     int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
     if (n <= 0) {
         errno = ENOENT;
@@ -149,6 +150,22 @@ FILE* dp_os_open_read(const char* path) {
     }
     wchar_t* w = (wchar_t*)dp_alloc(n, sizeof(wchar_t), NULL);
     MultiByteToWideChar(CP_UTF8, 0, path, -1, w, n);
+    return w;
+}
+
+FILE* dp_os_open_write(const char* path) {
+    wchar_t* w = dp_os_wpath(path);
+    if (!w) return NULL;
+    FILE* f = _wfopen(w, L"wb");
+    int err = errno;
+    dp_free(w);
+    errno = err;
+    return f;
+}
+
+FILE* dp_os_open_read(const char* path) {
+    wchar_t* w = dp_os_wpath(path);
+    if (!w) return NULL;
     FILE* f = _wfopen(w, L"rb");
     int err = errno;
     /* Каталог Windows не открывает (EACCES); как под Linux, это не отказ в

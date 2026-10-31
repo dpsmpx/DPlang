@@ -112,6 +112,8 @@ enum class CastKind : uint8_t {
     Wrap,   // T.wrap(x): по модулю 2^N
     ToStr,  // str(x)
     RefUp,  // &S → &B по общему началу (Р62): тот же адрес
+    Bits,     // f64.bits(x), f32.bits(x): биты IEEE 754 в u64, u32 (Р71)
+    FromBits, // f64.from_bits(u), f32.from_bits(u): обратно
 };
 
 enum class Intrinsic : uint8_t {
@@ -123,6 +125,10 @@ enum class Intrinsic : uint8_t {
     // внутренние стандартной библиотеки (Р51): аргументы программы и файл;
     // у ReadFile place — строка для текста, ops[0] — путь, результат i32
     ArgsLen, ArgAt, ReadFile,
+    // файлы (Р71): FileCreate и FileOpen (ops[0] — путь → i64), FileWrite
+    // (дескриптор, срез байтов → i32), FileRead (place — List[u8], ops —
+    // дескриптор и число байтов → i64), FileClose (дескриптор → i32)
+    FileCreate, FileOpen, FileWrite, FileRead, FileClose,
     // проверяемая арифметика целых (Р53): результат ?T, none — вне типа
     CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
     // Map (Р54). Изменяющие — получатель-место: MapSet (ops: ключ, значение;

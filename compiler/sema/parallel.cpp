@@ -31,7 +31,10 @@ std::string direct(const CallExpr* c) {
         case CallKind::Ptr: return "calls C through a function pointer";
         case CallKind::Builtin: {
             auto b = static_cast<BuiltinFn>(c->builtin);
-            if (b == BuiltinFn::ReadFile) return "reads files";
+            if (b == BuiltinFn::ReadFile || b == BuiltinFn::FileOpen || b == BuiltinFn::FileRead) return "reads files";
+            if (b == BuiltinFn::FileCreate || b == BuiltinFn::FileWrite || b == BuiltinFn::FileClose) {
+                return "writes files";
+            }
             if (b == BuiltinFn::ArgsLen || b == BuiltinFn::ArgAt) return "reads program arguments";
             return "";
         }

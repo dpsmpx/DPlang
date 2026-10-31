@@ -541,6 +541,7 @@ private:
     std::deque<Frame> frames_;
     std::deque<TaskRec> tasks_;  // [0] — main; адреса кадров стабильны
     uint32_t cur_ = 0;
+    std::vector<FILE*> files_;  // файлы os.File (Р71): дескриптор — номер + 1
     bool wait_ = false;     // инструкция ждёт и повторится, когда до задачи дойдёт очередь
     size_t stalled_ = 0;    // ожиданий подряд без шага
     uint32_t slice_ = 0;    // шагов текущей задачи
@@ -1212,6 +1213,28 @@ private:
         switch (rv.cast) {
             case CastKind::Widen: case CastKind::RefUp: return a;
             case CastKind::Wrap: return int_value(canon(a.i, to));
+            case CastKind::Bits:  // Р71: у f32 — биты значения f32
+                if (from->kind == TK::F32) {
+                    float f = static_cast<float>(a.f);
+                    uint32_t u;
+                    std::memcpy(&u, &f, sizeof u);
+                    return int_value(u);
+                } else {
+                    uint64_t u;
+                    std::memcpy(&u, &a.f, sizeof u);
+                    return int_value(u);
+                }
+            case CastKind::FromBits:
+                if (to->kind == TK::F32) {
+                    uint32_t u = static_cast<uint32_t>(a.i);
+                    float f;
+                    std::memcpy(&f, &u, sizeof f);
+                    return float_value(static_cast<double>(f));
+                } else {
+                    double d;
+                    std::memcpy(&d, &a.i, sizeof d);
+                    return float_value(d);
+                }
             case CastKind::ToStr:
                 if (from->kind == TK::Bool) return str_value(a.i ? "true" : "false");
                 if (sema::is_float(from)) return str_value(format_float(a.f, from->kind == TK::F32));
@@ -1572,9 +1595,94 @@ private:
                 return str_value(args_[static_cast<size_t>(i)]);
             }
             case Intrinsic::ReadFile: return read_file(fr, rv, ops[0].s);
+            case Intrinsic::FileCreate: case Intrinsic::FileOpen: {
+                const std::string& path = arg(0, s0).s;
+                FILE* f = path.find('\0') == std::string::npos
+                              ? std::fopen(path.c_str(), rv.intrinsic == Intrinsic::FileCreate ? "wb" : "rb")
+                              : nullptr;
+                if (!f) {
+                    int code = path.find('\0') != std::string::npos ? 1 : io_code(errno);
+                    return int_value(static_cast<uint64_t>(-static_cast<int64_t>(code)));
+                }
+                files_.push_back(f);
+                return int_value(files_.size());
+            }
+            case Intrinsic::FileWrite: {
+                FILE* f = file_of(arg(0, s0));
+                if (!f) return Value{};
+                const Value& data = arg(1, s1);
+                std::string bytes;
+                bytes.reserve(seq_len(data));
+                for (size_t k = 0; k < seq_len(data); k++) bytes.push_back(static_cast<char>(seq_at(data, k).i));
+                errno = 0;
+                if (!bytes.empty() && std::fwrite(bytes.data(), 1, bytes.size(), f) != bytes.size()) {
+                    return int_value(static_cast<uint64_t>(io_code(errno)));
+                }
+                return int_value(0);
+            }
+            case Intrinsic::FileRead: {
+                FILE* f = file_of(ops[0]);
+                if (!f) return Value{};
+                int64_t n = static_cast<int64_t>(ops[1].i);
+                if (n < 0) {
+                    trap("read count " + std::to_string(n) + " is negative");
+                    return Value{};
+                }
+                Ref r = resolve(fr, rv.place, true);
+                if (stop_) return Value{};
+                if (r.v->items.size() + static_cast<uint64_t>(n) > kMaxLen) {
+                    if (r.v->items.size() >= kMaxLen) {
+                        trap("out of memory");
+                        return Value{};
+                    }
+                    n = static_cast<int64_t>(kMaxLen - r.v->items.size());
+                }
+                std::string bytes(static_cast<size_t>(n), '\0');
+                errno = 0;
+                size_t got = n > 0 ? std::fread(&bytes[0], 1, bytes.size(), f) : 0;
+                if (got == 0 && n > 0 && std::ferror(f)) {
+                    return int_value(static_cast<uint64_t>(-static_cast<int64_t>(io_code(errno))));
+                }
+                for (size_t k = 0; k < got; k++) r.v->items.push_back(int_value(static_cast<uint8_t>(bytes[k])));
+                return int_value(got);
+            }
+            case Intrinsic::FileClose: {
+                const Value& id = arg(0, s0);
+                FILE* f = file_of(id);
+                if (!f) return Value{};
+                files_[id.i - 1] = nullptr;
+                errno = 0;
+                bool bad = std::ferror(f) != 0;
+                int e = errno;
+                if (std::fclose(f) != 0 || bad) return int_value(static_cast<uint64_t>(io_code(e ? e : errno)));
+                return int_value(0);
+            }
             default: break;
         }
         return list_method(fr, rv, ops);
+    }
+
+    // Код os.IoError по errno (Р51, Р71): 1 NotFound, 2 PermissionDenied,
+    // 4 Other, 5 NoSpace (3 — InvalidUtf8 у read_file).
+    static int io_code(int e) {
+        if (e == ENOENT || e == ENOTDIR) return 1;
+        if (e == EACCES || e == EPERM) return 2;
+#ifdef EDQUOT
+        if (e == EDQUOT) return 5;
+#endif
+        if (e == ENOSPC || e == EFBIG) return 5;
+        return 4;
+    }
+
+    // Открытый файл дескриптора. os.File можно собрать литералом и вне os:
+    // неоткрытый или закрытый дескриптор — ловушка (как у runtime). Слоты
+    // не переиспользуются — закрытый не станет чужим открытым.
+    FILE* file_of(const Value& id) {
+        if (id.i == 0 || id.i > files_.size() || !files_[id.i - 1]) {
+            trap("file is not open");
+            return nullptr;
+        }
+        return files_[id.i - 1];
     }
 
     // __read_file (Р51): 0 и текст в месте; иначе 1 + номер варианта os.IoError

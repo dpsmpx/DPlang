@@ -27,6 +27,7 @@ fn io_error_text(e: os.IoError) str {
         .NotFound => return "file not found"
         .PermissionDenied => return "permission denied"
         .InvalidUtf8 => return "file is not valid UTF-8"
+        .NoSpace => return "no space left on the device"
         .Other => return "cannot read the file"
     }
 }

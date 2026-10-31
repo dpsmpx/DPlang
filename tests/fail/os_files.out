@@ -1,0 +1,8 @@
+--- stderr ---
+os_files.dpm:9:5: error[E0511]: 'f' is not closed when the function returns an error here; add 'errdefer' to close it
+   9 |     try os.write(&mut f, [1, 2, 3])
+     |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+os_files.dpm:20:18: error[E0512]: 'f' is already closed or moved
+  20 |     try os.close(f)
+     |                  ^
+[exit 1]

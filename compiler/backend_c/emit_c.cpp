@@ -1457,6 +1457,9 @@ std::string FnEmitter::cast(const Rvalue& rv) {
             }
             if (sema::is_signed(from)) return "dp_str_from_s((int64_t)" + a + ")";
             return "dp_str_from_u((uint64_t)" + a + ")";
+        case CastKind::Bits: return std::string(from->kind == TK::F32 ? "dp_f32_bits(" : "dp_f64_bits(") + a + ")";
+        case CastKind::FromBits:
+            return std::string(to->kind == TK::F32 ? "dp_f32_from_bits(" : "dp_f64_from_bits(") + a + ")";
         case CastKind::Check: break;
     }
     std::string to_name = tname(to);
@@ -1488,6 +1491,13 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         std::string path = operand(rv.ops[0], false);
         Lv out = place(rv.place);
         return "dp_read_file(" + path + ", &" + out.expr + ", " + loc_ + ")";
+    }
+    if (rv.has_place && rv.intrinsic == Intrinsic::FileRead) {
+        // __file_read (Р71): байты дописываются в List[u8] места.
+        std::string f = operand(rv.ops[0], false), n = operand(rv.ops[1], false);
+        Lv b = place(rv.place);
+        return "dp_file_read(" + f + ", &" + b.expr + ".ptr, &" + b.expr + ".len, &" + b.expr + ".cap, " + n + ", " +
+               loc_ + ")";
     }
     if (rv.has_place && rv.intrinsic >= Intrinsic::AtomicLoad && rv.intrinsic <= Intrinsic::AtomicCas) {
         // Atomic[T] (Р70): T в памяти, операции — __atomic_* с
@@ -1668,6 +1678,14 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         case Intrinsic::StrSplit: return "dp_split__" + mangle(rv.type) + "(" + ops[0] + ", " + ops[1] + ", " + loc_ + ")";
         case Intrinsic::ArgsLen: return "dp_args_len()";
         case Intrinsic::ArgAt: return "dp_arg((int64_t)" + ops[0] + ", " + loc_ + ")";
+        case Intrinsic::FileCreate: return "dp_file_create(" + ops[0] + ", " + loc_ + ")";
+        case Intrinsic::FileOpen: return "dp_file_open(" + ops[0] + ", " + loc_ + ")";
+        case Intrinsic::FileWrite: {  // Р71: срез []u8 — указатель и длина
+            std::string d = fresh("dp_bytes");
+            line(ctype(op_type(rv.ops[1])) + " " + d + " = " + ops[1] + ";");
+            return "dp_file_write(" + ops[0] + ", " + d + ".ptr, " + d + ".len, " + loc_ + ")";
+        }
+        case Intrinsic::FileClose: return "dp_file_close(" + ops[0] + ", " + loc_ + ")";
         default: break;
     }
     error("unknown intrinsic");

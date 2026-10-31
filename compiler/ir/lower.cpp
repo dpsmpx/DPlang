@@ -483,7 +483,7 @@ private:
         switch (rv.kind) {
             case RvKind::Binary:
             case RvKind::Unary: see = false; break;
-            case RvKind::Cast: see = rv.cast == CastKind::ToStr; break;
+            case RvKind::Cast: see = rv.cast == CastKind::ToStr || rv.cast == CastKind::Bits; break;
             case RvKind::Use: see = !(k == InstKind::Assign && raw(dst)); break;
             case RvKind::Intrinsic:
                 see = !(rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min ||
@@ -1359,6 +1359,8 @@ private:
                     Intrinsic::CheckedAdd, Intrinsic::CheckedSub, Intrinsic::CheckedMul, Intrinsic::CheckedDiv,
                     Intrinsic::CheckedNeg,  Intrinsic::AtomicNew, Intrinsic::MutexNew, Intrinsic::ChannelNew,
                     Intrinsic::ArgsLen, Intrinsic::ArgAt,   Intrinsic::ReadFile,
+                    Intrinsic::FileCreate, Intrinsic::FileOpen, Intrinsic::FileWrite, Intrinsic::FileRead,
+                    Intrinsic::FileClose,
                 };
                 static_assert(sizeof kMap / sizeof kMap[0] == static_cast<size_t>(sema::BuiltinFn::Count));
                 rv = intrinsic(kMap[c->builtin], c->type);
@@ -1367,6 +1369,14 @@ private:
                     bool fresh = false;
                     rv.place = lvalue(static_cast<const RefExpr*>(args[1])->operand, fresh);
                     rv.has_place = true;
+                    return true;
+                }
+                if (b == sema::BuiltinFn::FileRead) {  // __file_read(f, &mut buf, n): buf — изменяемое место
+                    rv.ops.push_back(rd(expr(args[0])));
+                    bool fresh = false;
+                    rv.place = lvalue(static_cast<const RefExpr*>(args[1])->operand, fresh);
+                    rv.has_place = true;
+                    rv.ops.push_back(rd(expr(args[2])));
                     return true;
                 }
                 rv.ops = exprs(args);
@@ -1489,6 +1499,13 @@ private:
                     rv.ops = exprs(all);
                     for (Operand& o : rv.ops) o = rd(std::move(o));
                 }
+                return true;
+            }
+            case CallKind::Bits: case CallKind::FromBits: {  // Р71
+                Operand a = expr(args[0]);  // неявное расширение аргумента — в expr
+                rv = make(RvKind::Cast, c->target);
+                rv.cast = c->call == CallKind::Bits ? CastKind::Bits : CastKind::FromBits;
+                rv.ops.push_back(rd(std::move(a)));
                 return true;
             }
             case CallKind::Convert: case CallKind::Wrap: {

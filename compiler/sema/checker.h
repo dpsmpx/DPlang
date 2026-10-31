@@ -124,6 +124,7 @@ private:
     const Type* builtin_call(ast::CallExpr* c, uint32_t b, const Type* hint);
     const Type* method_call(ast::CallExpr* c, ast::FieldExpr* f);
     const Type* convert_call(ast::CallExpr* c, const Type* target, bool wrap);
+    const Type* bits_call(ast::CallExpr* c, TK fk, bool from);
     const Type* atomic_method(ast::CallExpr* c, ast::FieldExpr* f, const Type* t, ast::Method m, bool known);
     const Type* channel_method(ast::CallExpr* c, ast::FieldExpr* f, const Type* t, ast::Method m, bool known);
     const Type* variant_value(const EnumDef* en, uint32_t index, ast::VariantForm form, std::vector<ast::Expr*>* args,

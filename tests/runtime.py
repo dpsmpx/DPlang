@@ -78,6 +78,9 @@ TRAPS = {
     'concat': _trap('out of memory'),
     'depth': _trap('stack overflow: calls are nested too deeply'),
     'long': _trap('x' * 511),  # буфер сообщения — 512 байт с нулём: длинное обрезается
+    'file_forged': _trap('file is not open'),
+    'file_closed': _trap('file is not open'),
+    'file_read_negative': _trap('read count -1 is negative'),
     'noloc': ('', 'trap: boom\n', 101),
     'emptyloc': ('', 'trap: boom\n', 101),
     'unreachable': ('', 'internal error: reached code marked unreachable in m.f\n', 3),

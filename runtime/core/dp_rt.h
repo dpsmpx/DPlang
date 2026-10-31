@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 /* Плавающие (trap.float, docs/policy/DETERMINISM.md): каждая операция
  * округляется до своего типа. Промежуточная точность сверх типа (x87)
@@ -355,8 +356,40 @@ dp_str dp_arg(int64_t i, const char* loc);
  * 3 InvalidUtf8, 4 Other — и *out не меняется. Файл больше предела
  * буфера — ловушка «out of memory». */
 int32_t dp_read_file(dp_str path, dp_str* out, const char* loc);
+/* Файлы os.File (Р71): дескриптор — номер в таблице открытых (больше 0);
+ * неоткрытый или закрытый — ловушка «file is not open»; ошибка открытия —
+ * минус код os.IoError (1 NotFound, 2 PermissionDenied, 4 Other,
+ * 5 NoSpace). write и close — 0 или код; read дописывает в List[u8] (ptr,
+ * len, cap) до n байтов и возвращает их число, 0 — конец файла. */
+int64_t dp_file_create(dp_str path, const char* loc);
+int64_t dp_file_open(dp_str path, const char* loc);
+int32_t dp_file_write(int64_t f, const uint8_t* ptr, int64_t len, const char* loc);
+int64_t dp_file_read(int64_t f, uint8_t** ptr, int64_t* len, int64_t* cap, int64_t n, const char* loc);
+int32_t dp_file_close(int64_t f, const char* loc);
 /* Канонический NaN класса D (Р56): положительный тихий, без полезной
  * нагрузки; остальные значения — как есть. */
+/* Биты IEEE 754 (Р71): f64.bits, f64.from_bits, у f32 — то же. */
+static inline uint64_t dp_f64_bits(double x) {
+    uint64_t u;
+    memcpy(&u, &x, sizeof u);
+    return u;
+}
+static inline double dp_f64_from_bits(uint64_t u) {
+    double x;
+    memcpy(&x, &u, sizeof x);
+    return x;
+}
+static inline uint32_t dp_f32_bits(float x) {
+    uint32_t u;
+    memcpy(&u, &x, sizeof u);
+    return u;
+}
+static inline float dp_f32_from_bits(uint32_t u) {
+    float x;
+    memcpy(&x, &u, sizeof x);
+    return x;
+}
+
 static inline double dp_canon_f64(double x) {
     union { uint64_t u; double d; } c = {UINT64_C(0x7ff8000000000000)};
     return x != x ? c.d : x;
@@ -388,6 +421,7 @@ dp_str dp_str_from_c_arg(const char* p, const char* param, const char* fn, const
 /* Открывает файл для чтения байтов по пути в UTF-8 (порт платформы:
  * runtime/linux, runtime/windows). NULL — нет; errno — причина. */
 FILE* dp_os_open_read(const char* path);
+FILE* dp_os_open_write(const char* path);
 /* Байты — корректный UTF-8: без обрезанных, избыточных записей,
  * суррогатов и символов больше U+10FFFF. */
 bool dp_utf8_valid(const uint8_t* p, int64_t n);

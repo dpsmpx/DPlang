@@ -1,0 +1,12 @@
+a.bin: 1010 bytes, 81 63
+a.bin: 4 parts, 1010 bytes
+a.bin: 1 parts, 1010 bytes
+b.txt: строка
+empty: 0 bytes
+0.1 true
+-2.5 true
+1e+300 true
+-0 true
+missing.bin: not found
+no/such/dir.bin: not found
+a.bin as text: not UTF-8

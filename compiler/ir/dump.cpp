@@ -178,7 +178,8 @@ private:
             "len",  "repeat", "min",   "max",    "abs",    "parse_int", "is_digit", "is_alpha",
             "is_space", "is_alnum", "print", "println", "eprintln", "push", "pop", "insert",
             "remove", "clear", "sort", "reserve", "contains", "trim", "find", "starts_with", "split",
-            "__args_len", "__arg", "__read_file", "checked_add", "checked_sub", "checked_mul", "checked_div",
+            "__args_len", "__arg", "__read_file", "__file_create", "__file_open", "__file_write", "__file_read",
+            "__file_close", "checked_add", "checked_sub", "checked_mul", "checked_div",
             "checked_neg", "map_set", "map_get", "map_contains", "map_remove", "map_clear", "map_keys",
             "map_order", "map_reserve", "pool_add", "pool_remove", "pool_clear", "pool_reserve", "pool_get",
             "pool_contains", "pool_handles", "pool_slots", "pool_live",
@@ -201,7 +202,8 @@ private:
                        ops(rv.ops);
             case RvKind::Cast: {
                 const char* k = rv.cast == CastKind::Widen ? "widen" : rv.cast == CastKind::Check ? "check"
-                              : rv.cast == CastKind::Wrap ? "wrap" : rv.cast == CastKind::RefUp ? "ref_up" : "str";
+                              : rv.cast == CastKind::Wrap ? "wrap" : rv.cast == CastKind::RefUp ? "ref_up"
+                              : rv.cast == CastKind::Bits ? "bits" : rv.cast == CastKind::FromBits ? "from_bits" : "str";
                 return std::string(k) + " " + ops(rv.ops) + " to " + type(rv.type);
             }
             case RvKind::MakeStruct: return type(rv.type) + " { " + ops(rv.ops) + " }";

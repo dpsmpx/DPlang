@@ -326,6 +326,19 @@ static void trap_case(const char* name) {
         memset(text, 'x', 1000);
         dp_trapf(LOC, "%s", text);  /* сообщение обрезается, не переполняет */
     }
+    if (!strcmp(name, "file_forged")) dp_file_close(1, LOC); /* os.File { id: 1 } вне os (Р71) */
+    if (!strcmp(name, "file_closed")) {
+        int64_t f = dp_file_create(S("/dev/null"), LOC);
+        if (f <= 0 || dp_file_close(f, LOC) != 0) exit(3);
+        dp_file_write(f, NULL, 0, LOC); /* закрытый дескриптор */
+    }
+    if (!strcmp(name, "file_read_negative")) {
+        int64_t f = dp_file_open(S("/dev/null"), LOC);
+        uint8_t* p = NULL;
+        int64_t len = 0, cap = 0;
+        if (f <= 0) exit(3);
+        dp_file_read(f, &p, &len, &cap, -1, LOC);
+    }
     if (!strcmp(name, "noloc")) dp_trap(NULL, "boom");
     if (!strcmp(name, "emptyloc")) dp_trap("", "boom");
     if (!strcmp(name, "unreachable")) dp_unreachable("m.f");

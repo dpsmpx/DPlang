@@ -203,7 +203,7 @@ struct SliceExpr : Expr {  // `a[lo..hi]`, концы необязательны
 
 // Что вызывает вызов (заполняет проверка типов).
 // Ptr — вызов через переменную типа `extern fn(...)` (Р61): callee — её NameExpr.
-enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Variant, Ptr };
+enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Bits, FromBits, Variant, Ptr };
 
 // Методы встроенных типов: List и str.
 // Методы: List — Push…Contains, str — Trim…Split, Map (Р54) — Get, Keys и
@@ -228,7 +228,7 @@ struct CallExpr : Expr {
     const sema::FnDef* fn = nullptr;      // Fn
     uint32_t builtin = 0;                 // Builtin — номер BuiltinFn
     Method method = Method::Push;         // Method; получатель — объект FieldExpr вызываемого
-    const sema::Type* target = nullptr;   // Convert и Wrap — тип результата
+    const sema::Type* target = nullptr;   // Convert, Wrap, Bits, FromBits — тип результата
     const sema::EnumDef* en = nullptr;    // Variant
     uint32_t variant = 0;                 // Variant
 };
