@@ -1,0 +1,61 @@
+pub struct Move {
+    from: i32
+    to: i32
+    amount: i64
+}
+
+pub struct Report {
+    table: List[i64]
+    reads: i64
+    bad: i64
+}
+
+// Писатель: переводы по порядку, каждый — под блокировкой таблицы.
+fn writer(table: Mutex[List[i64]], moves: List[Move]) {
+    for mv in &moves {
+        lock table as t {
+            let a = min(mv.amount, t[mv.from])
+            t[mv.from] -= a
+            t[mv.to] += a
+        }
+    }
+}
+
+// Читатель: сумма таблицы под блокировкой; результат — число неверных.
+fn reader(table: Mutex[List[i64]], reads: i32, total: i64) i64 {
+    var bad: i64 = 0
+    for k in 0..reads {
+        lock table as t {
+            var s: i64 = 0
+            for v in &t {
+                s += v
+            }
+            if s != total {
+                bad += 1
+            }
+        }
+    }
+    return bad
+}
+
+// Вариант В: писатель и читатели — задачи-значения; таблица — ручка,
+// переводы уходят в задачу копией.
+pub fn run_bank(accounts: i32, moves: &List[Move], readers: i32, reads: i32) Report {
+    let table = mutex(repeat(i64(1000), accounts))
+    let total = i64(accounts) * 1000
+    let w = spawn writer(table, moves)
+    var rs: List[Task[i64]] = []
+    for r in 0..readers {
+        rs.push(spawn reader(table, reads, total))
+    }
+    w.join()
+    var bad: i64 = 0
+    for t in &rs {
+        bad += t.join()
+    }
+    var out: List[i64] = []
+    lock table as t {
+        out = t
+    }
+    return Report { table: out, reads: i64(readers) * i64(reads), bad }
+}

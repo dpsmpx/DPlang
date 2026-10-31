@@ -1,0 +1,42 @@
+// Драйвер t24 (скрыт от модели): те же входы, что у ref.cpp.
+import sol
+
+fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+fn show(name: str, r: &sol.Report) {
+    var check: i64 = 0
+    for i in 0..len(r.table) {
+        check += (i + 1) * r.table[i]
+    }
+    var first: i64 = 0
+    var last: i64 = 0
+    if len(r.table) > 0 {
+        first = r.table[0]
+        last = r.table[len(r.table) - 1]
+    }
+    println(name + " check=" + str(check) + " first=" + str(first) + " last=" + str(last) + " reads=" + str(r.reads) + " bad=" + str(r.bad))
+}
+
+fn main() {
+    let accounts: i32 = 64
+    var moves: List[sol.Move] = []
+    for i in 0..200000 {
+        let h = mix(u64(i))
+        moves.push(sol.Move { from: i32(h % u64(accounts)), to: i32((h >> 8) % u64(accounts)), amount: i64((h >> 16) % 1500) })
+    }
+    let r1 = sol.run_bank(accounts, &moves, 1, 3000)
+    show("r=1", &r1)
+    let r4 = sol.run_bank(accounts, &moves, 4, 3000)
+    show("r=4", &r4)
+    let few = [sol.Move { from: 0, to: 1, amount: 300 }, sol.Move { from: 1, to: 2, amount: 5000 }, sol.Move { from: 2, to: 2, amount: 7 }, sol.Move { from: 2, to: 0, amount: 1 }]
+    let s = sol.run_bank(3, &few, 2, 10)
+    println("small " + str(s.table[0]) + " " + str(s.table[1]) + " " + str(s.table[2]) + " reads=" + str(s.reads) + " bad=" + str(s.bad))
+    let empty: List[sol.Move] = []
+    let n = sol.run_bank(5, &empty, 3, 0)
+    show("none", &n)
+}

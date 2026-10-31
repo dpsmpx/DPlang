@@ -1,0 +1,4 @@
+r=1 check=2021921 first=235 last=1026 reads=3000 bad=0
+r=4 check=2021921 first=235 last=1026 reads=12000 bad=0
+small 701 0 2299 reads=20 bad=0
+none check=15000 first=1000 last=1000 reads=0 bad=0
