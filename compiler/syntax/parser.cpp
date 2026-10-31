@@ -370,7 +370,9 @@ private:
             if (auto* f = as<FnItem>(it)) f->attrs = std::move(attrs);
             else if (auto* im = as<ImportItem>(it)) im->attrs = std::move(attrs);
             else if (auto* st = as<StructItem>(it)) st->attrs = std::move(attrs);
-            else error_at(Code::E0205, attrs[0].span, "attributes are only allowed before a function, a struct or an import");
+            else if (auto* et = as<ExternTypeItem>(it)) et->attrs = std::move(attrs);
+            else error_at(Code::E0205, attrs[0].span,
+                          "attributes are only allowed before a function, a struct, an 'extern type' or an import");
         }
         it->pub = pub;
         it->span = span_from(begin);

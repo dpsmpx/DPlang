@@ -4,6 +4,9 @@
 // из блока не выходят (E0516); класс D задач не ставит (E0425).
 extern type Win
 
+@send
+extern type Buf
+
 fn work(out: &mut int) {
     out = 1
 }
@@ -16,6 +19,9 @@ fn ret() int {
 }
 
 fn take(w: ?Win) {
+}
+
+fn share(b: ?Buf) {
 }
 
 fn view(xs: []int) {
@@ -93,5 +99,6 @@ fn main() {
         for row in &mut g {
             spawn grid(&mut row)
         }
+        spawn share(none)
     }
 }

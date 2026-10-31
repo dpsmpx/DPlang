@@ -208,7 +208,10 @@ private:
                 block(f->body, 0);
                 break;
             }
-            case ItemKind::ExternType: out += pub + "extern type " + it->name; break;
+            case ItemKind::ExternType:
+                for (const Attr& a : static_cast<const ExternTypeItem*>(it)->attrs) out += a.text() + "\n";
+                out += pub + "extern type " + it->name;
+                break;
             case ItemKind::Struct: {
                 auto* s = static_cast<const StructItem*>(it);
                 for (const Attr& a : s->attrs) out += a.text() + "\n";

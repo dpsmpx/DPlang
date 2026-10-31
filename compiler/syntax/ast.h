@@ -657,6 +657,7 @@ struct ImportItem : Item {  // name — имя модуля
 struct ExternTypeItem : Item {  // `extern type Name` — непрозрачный тип C (Р59)
     static constexpr ItemKind Kind = ItemKind::ExternType;
     ExternTypeItem() : Item(Kind) {}
+    std::vector<Attr> attrs;  // `@send` — дескриптор можно передать в задачу (Р70)
 };
 
 struct ErrorItem : Item {

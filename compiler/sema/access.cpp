@@ -560,10 +560,11 @@ void Checker::views(Stmt* s) {
 
 namespace {
 
-// Значение с дескриптором C (`extern type`): поток его не создавал.
+// Значение с дескриптором C (`extern type`) без `@send`: поток его не
+// создавал, а библиотека C может привязывать дескриптор к потоку.
 bool holds_handle(const Type* t, std::vector<const Type*>& seen) {
     if (!t) return false;
-    if (t->kind == TK::Handle) return true;
+    if (t->kind == TK::Handle) return !t->hdef || !t->hdef->send;
     if (std::find(seen.begin(), seen.end(), t) != seen.end()) return false;
     seen.push_back(t);
     if (t->kind == TK::Struct && t->sdef) {
@@ -615,7 +616,8 @@ void Checker::task_spawn(SpawnExpr* sp, CallExpr* c, const std::vector<size_t>& 
             std::vector<const Type*> seen;
             if (holds_handle(a->type, seen)) {
                 error(Code::E0520, a->span, "'" + tn(a->type) + "' holds a C handle ('extern type'); a task cannot "
-                                            "take it: the C library may tie it to the thread that made it");
+                                            "take it: the C library may tie it to the thread that made it; mark "
+                                            "the type '@send' if the library allows it");
                 continue;
             }
         }

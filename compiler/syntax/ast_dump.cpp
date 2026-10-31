@@ -106,7 +106,12 @@ public:
                 if (!f->is_extern) block(f->body, d + 1);
                 break;
             }
-            case ItemKind::ExternType: line(d, "ExternType " + it->name + pub); break;
+            case ItemKind::ExternType: {
+                std::string attrs;
+                for (const Attr& a : static_cast<const ExternTypeItem*>(it)->attrs) attrs += " " + a.text();
+                line(d, "ExternType " + it->name + pub + attrs);
+                break;
+            }
             case ItemKind::Struct: {
                 auto* s = static_cast<const StructItem*>(it);
                 std::string attrs;

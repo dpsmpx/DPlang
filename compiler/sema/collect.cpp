@@ -113,6 +113,11 @@ private:
                     d.module = &m;
                     d.pub = it->pub;
                     d.span = it->name_span;
+                    for (const Attr& a : static_cast<ExternTypeItem*>(it)->attrs) {
+                        if (a.name == "send" && !a.has_arg) d.send = true;
+                        else diags_.error(Code::E0319, a.span, "unknown attribute '@" + a.name +
+                                                                   "' for an 'extern type'; use '@send'");
+                    }
                     s.kind = SymKind::Handle;
                     s.hd = &d;
                     break;
