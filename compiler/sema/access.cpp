@@ -551,32 +551,6 @@ void Checker::views(Stmt* s) {
 
 namespace {
 
-// Значение с дескриптором C (`extern type`): поток его не создавал.
-bool holds_handle(const Type* t, std::vector<const Type*>& seen) {
-    if (!t) return false;
-    if (t->kind == TK::Handle) return true;
-    if (std::find(seen.begin(), seen.end(), t) != seen.end()) return false;
-    seen.push_back(t);
-    if (t->kind == TK::Struct && t->sdef) {
-        for (const FieldDef& f : t->sdef->fields) {
-            if (holds_handle(f.type, seen)) return true;
-        }
-        return false;
-    }
-    if (t->kind == TK::Enum && t->edef) {
-        for (const VariantDef& v : t->edef->variants) {
-            for (const Type* x : v.types) {
-                if (holds_handle(x, seen)) return true;
-            }
-            for (const FieldDef& f : v.fields) {
-                if (holds_handle(f.type, seen)) return true;
-            }
-        }
-        return false;
-    }
-    return holds_handle(t->elem, seen) || holds_handle(t->key, seen) || holds_handle(t->err, seen);
-}
-
 const char* variant_name(char v) { return v == 'a' ? "A" : v == 'b' ? "B" : "C"; }
 
 }  // namespace
@@ -615,13 +589,10 @@ void Checker::task_spawn(SpawnExpr* sp, CallExpr* c, const std::vector<size_t>& 
     TasksScope& sc = tasks_.back();
     std::vector<Expr*> borrowed;
     for (Expr* a : c->args) {
-        if (a->type) {
-            std::vector<const Type*> seen;
-            if (holds_handle(a->type, seen)) {
-                error(Code::E0520, a->span, "'" + tn(a->type) + "' holds a C handle ('extern type'); a task cannot "
-                                            "take it: the C library may tie it to the thread that made it");
-                continue;
-            }
+        if (a->type && holds_c_handle(a->type)) {
+            error(Code::E0520, a->span, "'" + tn(a->type) + "' holds a C handle ('extern type'); a task cannot "
+                                        "take it: the C library may tie it to the thread that made it");
+            continue;
         }
         if (a->type && holds_view(a->type)) {
             error(Code::E0520, a->span, "'" + tn(a->type) + "' views memory of the code that starts the task; pass "
@@ -638,7 +609,7 @@ void Checker::task_spawn(SpawnExpr* sp, CallExpr* c, const std::vector<size_t>& 
             continue;
         }
         Expr* place = bare(r->operand);
-        if (concurrent(place->type)) continue;
+        if (concurrent(place->type) && as<NameExpr>(place)) continue;  // делится по `&`
         std::vector<Step> steps;
         const Local* root = path(place, loop_iters_, steps);
         if (!root) continue;

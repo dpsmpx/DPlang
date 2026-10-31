@@ -52,7 +52,7 @@ bool is_scalar(const Type* t) {
     switch (t->kind) {
         case TK::Bool: case TK::I8: case TK::I16: case TK::I32: case TK::I64: case TK::Int: case TK::U8:
         case TK::U16: case TK::U32: case TK::U64: case TK::F32: case TK::F64: case TK::Handle: case TK::CFn:
-        case TK::Ref: case TK::Atomic:
+        case TK::Ref:
             return true;
         default: return false;
     }
@@ -62,7 +62,7 @@ bool is_composite(const Type* t) {
     if (niche(t)) return false;
     switch (t->kind) {
         case TK::List: case TK::Map: case TK::Slice: case TK::Optional: case TK::Result: case TK::Struct: case TK::Enum:
-        case TK::Array: case TK::Pool: case TK::Mutex: case TK::Channel:
+        case TK::Array: case TK::Pool: case TK::Mutex: case TK::Channel: case TK::Atomic: case TK::Task:
             return true;
         default: return false;
     }
@@ -94,6 +94,8 @@ std::string mangle(const Type* t) {
         case TK::Map: return "M_" + mangle(t->key) + "_" + mangle(t->elem);
         case TK::Pool: return "Q_" + mangle(t->elem);  // Р67
         case TK::Mutex: return "X_" + mangle(t->elem);  // О13, прототип
+        case TK::Atomic: return "A_" + mangle(t->elem);
+        case TK::Task: return "J_" + mangle(t->elem);
         case TK::Channel: return "K_" + mangle(t->elem);
         case TK::PoolHandle: return "hnd";             // dp_hnd из runtime: один на все T
         case TK::Handle: return "H_" + lp(t->hdef->module->name) + lp(t->hdef->name);
@@ -133,7 +135,6 @@ std::string ctype(const Type* t) {
         case TK::Str: return "dp_str";
         case TK::Handle: return "void*";  // `extern type` — дескриптор C (Р59)
         case TK::Ref: return ctype(t->elem) + "*";  // Р62: адрес на время вызова C
-        case TK::Atomic: return ctype(t->elem);    // О13, прототип: операции — __atomic_*
         default: return "dp_" + mangle(t);
     }
 }
@@ -378,18 +379,26 @@ public:
                     task_ids_[&in.rv] = id;
                     const Function& g = p_.fns[in.rv.fn];
                     std::string n = std::to_string(id);
+                    // Вариант В: результат — первым полем (его читает join).
+                    bool res = in.rv.type->kind == TK::Task && g.ret->kind != TK::Void;
                     out += "struct dp_tke" + n + " {\n";
+                    if (res) out += "    " + ctype(g.ret) + " res;\n";
                     for (uint32_t i = 0; i < g.param_count; i++) {
                         const ir::Local& l = g.locals[i];
                         bool ref = l.kind == LocalKind::ParamRef || l.kind == LocalKind::ParamMut;
                         out += "    " + ctype(l.type) + (ref ? "* a" : " a") + std::to_string(i) + ";\n";
                     }
-                    if (g.param_count == 0) out += "    char unused;\n";
+                    if (g.param_count == 0 && !res) out += "    char unused;\n";
                     out += "};\n\nstatic void dp_tkb" + n + "(void* env) {\n";
                     out += "    struct dp_tke" + n + "* e = (struct dp_tke" + n + "*)env;\n";
-                    out += "    " + (g.param_count == 0 ? std::string("(void)e;\n    ") : std::string()) + fn_name(g) + "(";
+                    out += "    " + (g.param_count == 0 && !res ? std::string("(void)e;\n    ") : std::string()) +
+                           (res ? "e->res = " : "") + fn_name(g) + "(";
                     for (uint32_t i = 0; i < g.param_count; i++) out += std::string(i ? ", " : "") + "e->a" + std::to_string(i);
                     out += ");\n}\n\n";
+                    if (res && ir::needs_drop(g.ret)) {  // результат, который не забрал join
+                        out += "static void dp_tkd" + n + "(void* env) {\n    struct dp_tke" + n + "* e = (struct dp_tke" +
+                               n + "*)env;\n    " + drop_of(g.ret, "e->res") + "\n}\n\n";
+                    }
                 }
             }
         }
@@ -442,6 +451,7 @@ private:
         seen_.insert(t);
         switch (t->kind) {
             case TK::List: case TK::Slice: case TK::Array: case TK::Ref: case TK::Pool: case TK::Mutex: case TK::Channel:
+            case TK::Atomic: case TK::Task:
                 add_type(t->elem);
                 break;
             case TK::Map:
@@ -549,8 +559,15 @@ private:
             case TK::Slice: out += "    " + ctype(t->elem) + "* ptr;\n    int64_t len;\n"; break;
             // Р67: значения слотов и служебная часть той же ёмкости (dp_pool, runtime).
             case TK::Pool: out += "    " + ctype(t->elem) + "* vals;\n    dp_pool m;\n"; break;
-            // О13, прототип: мьютекс runtime и данные.
-            case TK::Mutex: out += "    dp_mtx mx;\n    " + ctype(t->elem) + " v;\n"; break;
+            // О13, прототип: ручки — ячейка со счётчиком ссылок; копия — та же ячейка.
+            case TK::Mutex:
+                out += "    struct " + n + "_cell {\n        dp_rc rc;\n        dp_mtx mx;\n        " + ctype(t->elem) +
+                       " v;\n    }* c;\n";
+                break;
+            case TK::Atomic:
+                out += "    struct " + n + "_cell {\n        dp_rc rc;\n        " + ctype(t->elem) + " v;\n    }* c;\n";
+                break;
+            case TK::Task: out += "    dp_vtask* t;\n"; break;
             // Синхронизация — в runtime, значения — кольцо ёмкости канала.
             case TK::Channel: out += "    dp_chan* c;\n    " + ctype(t->elem) + "* buf;\n"; break;
             // Массив C (Р62) — в обёртке: так его можно присвоить; раскладка — как у массива.
@@ -621,6 +638,7 @@ private:
             if (t->kind == TK::Map) def += map_methods(t);
             if (t->kind == TK::Pool) def += pool_methods(t);
             if (t->kind == TK::Channel) def += channel_methods(t);
+            if (t->kind == TK::Atomic || t->kind == TK::Mutex) def += cell_new(t);
         }
         return decl + "\n" + def;
     }
@@ -640,7 +658,7 @@ private:
                 break;
             case TK::Result: b += "    (void)a;\n    (void)b;\n    return true;\n"; break;
             case TK::Map: b += "    (void)a;\n    (void)b;\n    return false;\n"; break;  // не сравниваются (Р54)
-            case TK::Pool: case TK::Mutex: case TK::Channel:  // и пулы (Р67)
+            case TK::Pool: case TK::Mutex: case TK::Channel: case TK::Atomic: case TK::Task:  // и пулы (Р67)
                 b += "    (void)a;\n    (void)b;\n    return false;\n";
                 break;
             // Р62: массив и объединение dpl не сравнивает — функция нужна для сборки C.
@@ -701,7 +719,7 @@ private:
                 b += "    }\n    return a->len < b->len;\n";
                 break;
             case TK::Optional: case TK::Result: case TK::Map: case TK::Array: case TK::Pool: case TK::Mutex:
-            case TK::Channel:
+            case TK::Channel: case TK::Atomic: case TK::Task:
                 b += "    (void)a;\n    (void)b;\n    return false;\n";
                 break;
             case TK::Struct: {
@@ -766,14 +784,20 @@ private:
                 }
                 b += "    dp_free(v->vals);\n    dp_pool_drop(&v->m);\n";
                 break;
-            case TK::Mutex: b += "    dp_mtx_drop(&v->mx);\n" + drop_line(t->elem, "v->v", "    "); break;
+            // О13, прототип: последняя ручка освобождает значение.
+            case TK::Mutex:
+                b += "    if (v->c && dp_rc_release(&v->c->rc)) {\n        dp_mtx_drop(&v->c->mx);\n" +
+                     drop_line(t->elem, "v->c->v", "        ") + "        dp_free(v->c);\n    }\n";
+                break;
+            case TK::Atomic: b += "    if (v->c && dp_rc_release(&v->c->rc)) dp_free(v->c);\n"; break;
+            case TK::Task: b += "    if (v->t) dp_task_release(v->t);\n"; break;
             case TK::Channel:
-                b += "    if (v->c) {\n";
+                b += "    if (v->c && dp_chan_release(v->c)) {\n";
                 if (ir::needs_drop(t->elem)) {
                     b += "        int64_t cap = dp_chan_cap(v->c), head = dp_chan_head(v->c), n = dp_chan_len(v->c);\n";
                     b += "        for (int64_t i = 0; i < n; i++) " + drop_of(t->elem, "v->buf[(head + i) % cap]") + "\n";
                 }
-                b += "        dp_chan_free(v->c);\n    }\n    dp_free(v->buf);\n";
+                b += "        dp_chan_free(v->c);\n        dp_free(v->buf);\n    }\n";
                 break;
             case TK::Optional: b += "    if (v->has) {\n" + drop_line(t->elem, "v->value", "        ") + "    }\n"; break;
             case TK::Result:
@@ -826,9 +850,12 @@ private:
                 b += "        memcpy(r.slots, v->slots, (size_t)v->nslots * sizeof(int64_t));\n        r.nslots = v->nslots;\n    }\n";
                 break;
             }
-            case TK::Mutex: case TK::Channel:  // О13, прототип: не копируются (E0518) — функция нужна для сборки C
-                b += "    " + n + " r = {0};\n    (void)v;\n    dp_unreachable(\"copy of a Mutex\");\n";
+            // О13, прототип: копия ручки — то же значение, счётчик ссылок +1.
+            case TK::Mutex: case TK::Atomic:
+                b += "    " + n + " r = *v;\n    dp_rc_retain(&r.c->rc);\n";
                 break;
+            case TK::Channel: b += "    " + n + " r = *v;\n    dp_chan_retain(r.c);\n"; break;
+            case TK::Task: b += "    " + n + " r = *v;\n    dp_task_retain(r.t);\n"; break;
             case TK::Pool: {  // Р67: копируются живые значения; номера и поколения те же
                 std::string ec = ctype(t->elem);
                 b += "    " + n + " r = {0};\n    r.m = dp_pool_copy(&v->m);\n";
@@ -1011,6 +1038,15 @@ private:
     // в vals той же ёмкости: она растёт в dp_pool_take и dp_pool_grow.
     // Channel[T] (О13, прототип): значения — в кольце buf, ожидание и номера
     // ячеек — dp_chan_* runtime.
+    // Atomic[T] и Mutex[T] (О13, прототип): новая ячейка со счётчиком 1.
+    std::string cell_new(const Type* t) {
+        std::string n = ctype(t), ec = ctype(t->elem);
+        std::string b = "DP_INLINE " + n + " dp_cellnew__" + mangle(t) + "(" + ec + " v, const char* loc) {\n    " + n +
+                        " r;\n    r.c = dp_alloc(1, sizeof *r.c, loc);\n    r.c->rc.n = 1;\n";
+        if (t->kind == TK::Mutex) b += "    r.c->mx = dp_mtx_new();\n";
+        return b + "    r.c->v = v;\n    return r;\n}\n\n";
+    }
+
     std::string channel_methods(const Type* t) {
         std::string n = ctype(t), m = mangle(t), ec = ctype(t->elem), em = mangle(t->elem);
         std::string b;
@@ -1246,7 +1282,7 @@ private:
                     break;
                 }
                 case ProjKind::MutexValue:  // данные Mutex (О13, прототип)
-                    r.expr = "(" + r.expr + ").v";
+                    r.expr = "(" + r.expr + ").c->v";
                     r.type = t->elem;
                     break;
                 case ProjKind::PoolSlot:  // живой слот из обхода
@@ -1495,7 +1531,7 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
         std::vector<std::string> ops;
         for (const Operand& o : rv.ops) ops.push_back(operand(o, false));
         Lv a = place(rv.place);
-        std::string p = "&" + a.expr;
+        std::string p = "&(" + a.expr + ").c->v";
         const Type* t = a.type->elem;
         const std::string sc = "__ATOMIC_SEQ_CST";
         switch (rv.intrinsic) {
@@ -1535,8 +1571,14 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
     }
     if (rv.has_place && (rv.intrinsic == Intrinsic::MutexLock || rv.intrinsic == Intrinsic::MutexUnlock)) {
         Lv m = place(rv.place);  // О13, прототип
-        if (rv.intrinsic == Intrinsic::MutexUnlock) return "dp_mtx_unlock(&(" + m.expr + ").mx)";
-        return "dp_mtx_lock(&(" + m.expr + ").mx, " + loc_ + ")";
+        if (rv.intrinsic == Intrinsic::MutexUnlock) return "dp_mtx_unlock(&(" + m.expr + ").c->mx)";
+        return "dp_mtx_lock(&(" + m.expr + ").c->mx, " + loc_ + ")";
+    }
+    if (rv.has_place && rv.intrinsic == Intrinsic::TaskJoin) {  // вариант В: результат — в начале окружения
+        Lv k = place(rv.place);
+        std::string j = "dp_task_join((" + k.expr + ").t, " + loc_ + ")";
+        if (rv.type->kind == TK::Void) return "((void)" + j + ")";
+        return "(*(" + ctype(rv.type) + "*)" + j + ")";
     }
     if (rv.has_place) {
         // Метод List: операнды — копии, вычисленные до места списка.
@@ -1596,8 +1638,8 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
             line(ctype(op_type(rv.ops[0])) + " " + x + " = " + ops[0] + ";");
             return "dp_repeat__" + mangle(rv.type) + "(&" + x + ", " + n + ", " + loc_ + ")";
         }
-        case Intrinsic::AtomicNew: return ops[0];  // Atomic[T] — T в памяти (О13, прототип)
-        case Intrinsic::MutexNew: return "((" + ctype(rv.type) + "){dp_mtx_new(), " + ops[0] + "})";
+        case Intrinsic::AtomicNew: case Intrinsic::MutexNew:  // ячейка со счётчиком (О13, прототип)
+            return "dp_cellnew__" + mangle(rv.type) + "(" + ops[0] + ", " + loc_ + ")";
         case Intrinsic::ChannelNew: return "dp_cnew__" + mangle(rv.type) + "((int64_t)" + ops[0] + ", " + loc_ + ")";
         case Intrinsic::Min: return "(" + ops[0] + " < " + ops[1] + " ? " + ops[0] + " : " + ops[1] + ")";
         case Intrinsic::Max: return "(" + ops[0] + " < " + ops[1] + " ? " + ops[1] + " : " + ops[0] + ")";
@@ -1814,23 +1856,28 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
                        ? "((" + ctype(rv.type) + "){0})"
                        : "((" + ctype(rv.type) + ")0)";
         case RvKind::AddrOf: return "(&" + place(rv.place).expr + ")";  // Р62
-        case RvKind::Spawn: {  // О13, прототип: задача блока — в своём потоке
+        case RvKind::Spawn: {  // О13, прототип: задача — в своём потоке
             std::string n = std::to_string(em_.task_id(rv));
             std::string env = fresh("dp_env");
-            std::string init = "{";
+            line("struct dp_tke" + n + " " + env + ";");
+            line("memset(&" + env + ", 0, sizeof " + env + ");");
             for (size_t i = 0; i < rv.args.size(); i++) {
                 const Arg& a = rv.args[i];
-                if (i) init += ", ";
+                std::string field = env + ".a" + std::to_string(i);
                 if (a.kind == Arg::Kind::Value) {
-                    init += operand(a.op, true);
+                    line(field + " = " + operand(a.op, true) + ";");
                     continue;
                 }
                 Lv lv = place(a.place);
                 if (lv.byte) error("task borrows a str byte");
-                init += "&" + lv.expr;
+                line(field + " = &" + lv.expr + ";");
             }
-            if (rv.args.empty()) init += "0";
-            line("struct dp_tke" + n + " " + env + " = " + init + "};");
+            if (rv.type->kind == TK::Task) {  // вариант В: ручка задачи
+                const Function& g = p_.fns[rv.fn];
+                bool drop = g.ret->kind != TK::Void && ir::needs_drop(g.ret);
+                return "((" + ctype(rv.type) + "){dp_task_start(dp_tkb" + n + ", &" + env + ", sizeof " + env + ", " +
+                       (drop ? "dp_tkd" + n : std::string("NULL")) + ", " + loc_ + ")})";
+            }
             line("dp_spawn(dp_tkb" + n + ", &" + env + ", sizeof " + env + ", " + loc_ + ");");
             return "((void)0)";
         }

@@ -997,9 +997,23 @@ private:
             case ExprKind::Unary: return unary(static_cast<const UnaryExpr*>(e));
             case ExprKind::Binary: return binary(static_cast<const BinaryExpr*>(e));
             case ExprKind::Try: return try_expr(static_cast<const TryExpr*>(e));
-            case ExprKind::Spawn: {  // задача блока — инструкция (effect); значения нет
-                effect(e);
-                return cbool(false);
+            case ExprKind::Spawn: {
+                auto* sp = static_cast<const SpawnExpr*>(e);
+                if (sp->group) {  // задача блока — инструкция (effect); значения нет
+                    effect(e);
+                    return cbool(false);
+                }
+                Rvalue rv;  // вариант В: значение Task[T]
+                uint32_t mark = UINT32_MAX;
+                if (!call(static_cast<const CallExpr*>(sp->operand), rv, &mark) || rv.kind != RvKind::Call) {
+                    release(mark, e->span);
+                    return cbool(false);
+                }
+                rv.kind = RvKind::Spawn;
+                rv.type = e->type;
+                Operand out = to_temp(std::move(rv), e->span);
+                release(mark, e->span);
+                return out;
             }
             case ExprKind::Paren: return expr(static_cast<const ParenExpr*>(e)->inner);
             case ExprKind::StructLit: return struct_lit(static_cast<const StructLitExpr*>(e));
@@ -1431,6 +1445,13 @@ private:
                     rv.ops = exprs(args);  // send: значение уходит в канал целиком
                     return true;
                 }
+                if (f->object->type->kind == TK::Task) {  // вариант В: ждёт задачу
+                    rv = intrinsic(Intrinsic::TaskJoin, c->type);
+                    bool fresh = false;
+                    rv.place = object(f->object, fresh);
+                    rv.has_place = true;
+                    return true;
+                }
                 if (f->object->type->kind == TK::Pool) {  // методы Pool (Р67)
                     bool changes = m < Method::Contains;
                     rv = intrinsic(m == Method::Add        ? Intrinsic::PoolAdd
@@ -1701,7 +1722,7 @@ private:
 
     // Инструкция-вызов: результат, если он есть, освобождается.
     void effect(const Expr* e) {
-        if (auto* sp = as<const SpawnExpr>(e)) {  // задача блока `tasks`
+        if (auto* sp = as<const SpawnExpr>(e); sp && sp->group) {  // задача блока `tasks`
             Rvalue rv;
             uint32_t mark = UINT32_MAX;
             if (call(static_cast<const CallExpr*>(sp->operand), rv, &mark) && rv.kind == RvKind::Call) {

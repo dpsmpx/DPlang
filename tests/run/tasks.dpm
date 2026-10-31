@@ -88,8 +88,7 @@ fn main() {
             }
         }
     }
-    println(str(out[0]) + " " + str(out[1]) + " " + str(out[2]) + " " + str(out[3]) + " " + str(c.load()) + " " +
-            str(total))
+    println(str(out[0]) + " " + str(out[1]) + " " + str(out[2]) + " " + str(out[3]) + " " + str(c.load()) + " " + str(total))
 
     var sq: List[int] = []
     var s1 = 0

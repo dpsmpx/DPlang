@@ -18,7 +18,7 @@ inline constexpr BuiltinType kBuiltinTypes[] = {
     {"int", TK::I64},   {"u8", TK::U8},   {"u16", TK::U16}, {"u32", TK::U32}, {"u64", TK::U64},
     {"f32", TK::F32},   {"f64", TK::F64}, {"str", TK::Str}, {"void", TK::Void}, {"List", TK::List},
     {"Map", TK::Map},   {"Pool", TK::Pool}, {"Handle", TK::PoolHandle}, {"Atomic", TK::Atomic},
-    {"Mutex", TK::Mutex}, {"Channel", TK::Channel},
+    {"Mutex", TK::Mutex}, {"Channel", TK::Channel}, {"Task", TK::Task},
 };
 
 enum class BuiltinFn : uint8_t {

@@ -1,0 +1,100 @@
+// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// Вариант В: spawn f(…) — значение Task[T], join отдаёт результат; задачи —
+// в List и поле; Atomic, Mutex, Channel — ручки по значению; задача без
+// join отсоединяется, main ждёт её в конце.
+fn sum(xs: List[int]) int {
+    var s = 0
+    for x in &xs {
+        s += x
+    }
+    println("sum of " + str(len(xs)))
+    return s
+}
+
+fn count(c: Atomic[int], n: int) {
+    for i in 0..n {
+        _ = c.add(1)
+    }
+}
+
+fn produce(ch: Channel[int], n: int) {
+    for i in 0..n {
+        ch.send(i)
+    }
+    ch.close()
+}
+
+fn bump(m: Mutex[List[int]], id: int) {
+    for i in 0..100 {
+        lock m as xs {
+            xs.push(id)
+        }
+    }
+}
+
+fn main() {
+    var ts: List[Task[int]] = []
+    for i in 0..4 {
+        var xs: List[int] = []
+        for k in 0..i + 1 {
+            xs.push(k)
+        }
+        ts.push(spawn sum(xs))
+    }
+    var total = 0
+    for t in &ts {
+        total += t.join()
+    }
+    println("total " + str(total))
+
+    let c = atomic(0)
+    let a = spawn count(c, 1000)
+    let b = spawn count(c, 1000)
+    a.join()
+    b.join()
+    println("count " + str(c.load()))
+
+    let ch: Channel[int] = channel(2)
+    let p = spawn produce(ch, 10)
+    var got = 0
+    while true {
+        if let v = ch.recv() {
+            got += v
+        } else {
+            break
+        }
+    }
+    p.join()
+    println("got " + str(got))
+
+    let m = mutex([0])
+    let w1 = spawn bump(m, 1)
+    let w2 = spawn bump(m, 2)
+    w1.join()
+    w2.join()
+    lock m as xs {
+        println("locked " + str(len(xs)))
+    }
+    let d = spawn count(c, 5)
+
+    // Задача в поле, результат с памятью; без join — отсоединяется.
+    let h = Holder { t: spawn squares(4), label: "sq" }
+    let sq = h.t.join()
+    println(h.label + " " + str(len(sq)) + " " + str(sq[3]))
+    let lost = spawn squares(3)
+    let quiet: Task[void] = spawn count(c, 1)
+    quiet.join()
+}
+
+struct Holder {
+    t: Task[List[int]]
+    label: str
+}
+
+fn squares(n: int) List[int] {
+    var out: List[int] = []
+    for i in 0..n {
+        out.push(i * i)
+    }
+    return out
+}

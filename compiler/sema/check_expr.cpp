@@ -71,7 +71,7 @@ constexpr MethodInfo kMethods[] = {
     {"contains", Method::Contains}, {"trim", Method::Trim},   {"find", Method::Find},
     {"starts_with", Method::StartsWith}, {"split", Method::Split}, {"get", Method::Get},
     {"keys", Method::Keys}, {"load", Method::Load}, {"store", Method::Store}, {"sub", Method::Sub},
-    {"swap", Method::Swap}, {"cas", Method::Cas}, {"send", Method::Send}, {"recv", Method::Recv},
+    {"swap", Method::Swap}, {"cas", Method::Cas}, {"send", Method::Send}, {"recv", Method::Recv}, {"join", Method::Join},
     {"try_recv", Method::TryRecv}, {"close", Method::Close},
 };
 
@@ -159,7 +159,7 @@ bool Checker::type_prop(const Type* root, bool ord) {
                 case TK::Error: return 1;
                 // Р54: отображения не сравниваются; указатель C (Р61), массив и ссылка-поле C (Р62) — тоже.
                 case TK::Void: case TK::Result: case TK::Map: case TK::Pool: case TK::CFn: case TK::Array: case TK::Ref:
-                case TK::Atomic: case TK::Mutex: case TK::Channel:
+                case TK::Atomic: case TK::Mutex: case TK::Channel: case TK::Task:
                     return 0;
                 case TK::PoolHandle: return ord ? 0 : 1;  // Р67: хэндлы сравниваются ==, но не упорядочены
                 case TK::Bool: case TK::Str: return 1;
@@ -925,6 +925,20 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     }
     if (t->kind == TK::Atomic) return atomic_method(c, f, t, mi ? mi->m : Method::Push, mi != nullptr);
     if (t->kind == TK::Channel) return channel_method(c, f, t, mi ? mi->m : Method::Push, mi != nullptr);
+    if (t->kind == TK::Task) {  // О13, прототип, вариант В
+        if (!mi || mi->m != Method::Join) {
+            error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
+            infer_loose(c->args);
+            return err();
+        }
+        c->call = CallKind::Method;
+        c->method = Method::Join;
+        if (!c->args.empty()) {
+            error(Code::E0407, c->span, "method 'join' takes 0 arguments, found " + std::to_string(c->args.size()));
+            infer_loose(c->args);
+        }
+        return t->elem;
+    }
     bool list = t->kind == TK::List, slice = t->kind == TK::Slice, str = t->kind == TK::Str, map = t->kind == TK::Map;
     bool pool = t->kind == TK::Pool;
     bool list_method = mi && mi->m <= Method::Contains && mi->m != Method::Add;
@@ -1016,7 +1030,7 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         case Method::Split: check(c->args[0], prim(TK::Str)); return tt_.list(prim(TK::Str));
         case Method::Get: case Method::Keys: case Method::Add: case Method::Handles: break;
         case Method::Load: case Method::Store: case Method::Sub: case Method::Swap: case Method::Cas: break;
-        case Method::Send: case Method::Recv: case Method::TryRecv: case Method::Close: break;
+        case Method::Send: case Method::Recv: case Method::TryRecv: case Method::Close: case Method::Join: break;
     }
     return err();
 }
@@ -1393,12 +1407,7 @@ const Type* Checker::try_expr(TryExpr* t) {
 // `spawn f(…)` (О13, прототип). В блоке `tasks` — задача блока (вариант А);
 // иначе — `Task[T]` (вариант В).
 const Type* Checker::spawn_expr(SpawnExpr* sp) {
-    if (!sp->group) {
-        variant_ok('c', sp->span, "'spawn' outside a 'tasks' block");
-        error(Code::E0519, sp->span, "'spawn' outside a 'tasks' block (variant C) is not implemented yet in the prototype");
-        infer(sp->operand, nullptr);
-        return err();
-    }
+    if (!sp->group) return task_value(sp);
     std::vector<size_t> marks;
     for (const TasksScope& sc : tasks_) marks.push_back(sc.accesses.size());
     const Type* t = infer(sp->operand, nullptr);
@@ -1420,6 +1429,49 @@ const Type* Checker::spawn_expr(SpawnExpr* sp) {
     }
     task_spawn(sp, c, marks);
     return prim(TK::Void);
+}
+
+// `let t = spawn f(…)` — вариант В: задача — значение `Task[T]`, аргументы
+// — значения (копии; конкурентные — ручки), ссылок задача не держит.
+const Type* Checker::task_value(SpawnExpr* sp) {
+    variant_ok('c', sp->span, "'spawn' outside a 'tasks' block");
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, sp->span, "tasks run at the same time; '" + fn_->name + "' is class D and cannot start them");
+    }
+    const Type* t = infer(sp->operand, nullptr);
+    auto* c = as<CallExpr>(sp->operand);
+    if (!c) {
+        if (t->kind != TK::Error) error(Code::E0520, sp->operand->span, "'spawn' needs a call: 'spawn f(...)'");
+        return err();
+    }
+    if (c->call != CallKind::Fn || !c->fn || c->fn->is_extern) {
+        if (t->kind != TK::Error) {
+            error(Code::E0520, c->span, "a task runs a dpl function: 'spawn f(...)'; call methods, built-in "
+                                        "functions and C from that function");
+        }
+        return err();
+    }
+    for (Expr* a : c->args) {
+        if (as<RefExpr>(a)) {
+            error(Code::E0520, a->span, "a task started with 'let t = spawn f(...)' takes its arguments by value: it "
+                                        "may outlive this function; pass a copy, or share an Atomic, a Mutex or a "
+                                        "Channel by value");
+            continue;
+        }
+        if (!a->type) continue;
+        if (holds_view(a->type)) {
+            error(Code::E0520, a->span, "'" + tn(a->type) + "' views memory of the code that starts the task; pass "
+                                        "a copy of the List");
+        }
+    }
+    for (Expr* a : c->args) {
+        if (a->type && holds_c_handle(a->type)) {
+            error(Code::E0520, a->span, "'" + tn(a->type) + "' holds a C handle ('extern type'); a task cannot take "
+                                        "it: the C library may tie it to the thread that made it");
+        }
+    }
+    if (t->kind == TK::Error) return err();
+    return tt_.task(t);
 }
 
 // --- выражение целиком

@@ -1,7 +1,6 @@
 // Проверка тел: инструкции и поток (docs/spec/core.md, разделы 6–8).
 // Выражения — check_expr.cpp, образцы — check_pat.cpp.
 #include <algorithm>
-#include <cstdlib>
 #include <set>
 #include <string>
 
@@ -14,11 +13,7 @@ using namespace ast;
 
 Checker::Checker(Program& prog, ModuleInfo& m, Diagnostics& diags)
     : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags), tt_(prog.types) {
-    // Вариант модели задач (О13, прототип): режим замера, не часть языка.
-    if (const char* v = std::getenv("DPL_TASKS"); v && *v) {
-        std::string s(v);
-        tasks_mode_ = s == "a" || s == "b" || s == "c" ? s[0] : '?';
-    }
+    tasks_mode_ = tasks_variant();  // О13, прототип: режим замера, не часть языка
 }
 
 // Константы модуля, на которые ссылается значение c (по имени).
@@ -323,8 +318,9 @@ void Checker::let_stmt(LetStmt* l) {
             }
         }
     }
-    // О13, прототип: конкурентное значение — только из atomic(…), не копия.
-    if (t && holds_concurrent(t)) {
+    // О13, прототип: в вариантах А и Б конкурентное значение — только из
+    // atomic(…), не копия; иначе копия — ручка того же значения.
+    if (t && holds_concurrent(t) && !concurrent_copies()) {
         auto* c = as<CallExpr>(l->value);
         bool fresh = c && c->call == CallKind::Builtin && concurrent(t) && !holds_concurrent(t->elem) &&
                      (c->builtin == static_cast<uint32_t>(BuiltinFn::AtomicNew) ||
@@ -461,7 +457,7 @@ void Checker::assign_stmt(AssignStmt* a) {
     // Простое присваивание переменной инициализирует её; остальное читает цель.
     if (n && a->op == AssignOp::Set) {
         resolve_name(n);
-        if (n->res.kind == ResKind::Local && holds_concurrent(n->res.local->type)) {  // О13, прототип
+        if (n->res.kind == ResKind::Local && holds_concurrent(n->res.local->type) && !concurrent_copies()) {
             error(Code::E0518, n->span, "cannot assign to '" + n->name + "': '" + tn(n->res.local->type) +
                                             "' is shared, not replaced; use its methods");
             infer(a->value, nullptr);

@@ -1,5 +1,10 @@
 #include "sema/types.h"
 
+#include <algorithm>
+#include <cstdlib>
+#include <string>
+#include <vector>
+
 #include "sema/defs.h"
 
 namespace dp::sema {
@@ -88,6 +93,7 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
         case TK::Atomic: return "Atomic[" + type_name(t->elem, from) + "]";
         case TK::Mutex: return "Mutex[" + type_name(t->elem, from) + "]";
         case TK::Channel: return "Channel[" + type_name(t->elem, from) + "]";
+        case TK::Task: return "Task[" + type_name(t->elem, from) + "]";
         case TK::Slice: return "[]" + type_name(t->elem, from);
         case TK::Optional: return (t->elem->kind == TK::Optional ? "? " : "?") + type_name(t->elem, from);
         case TK::Result: return (t->err ? type_name(t->err, from) : "") + "!" + type_name(t->elem, from);
@@ -151,6 +157,51 @@ bool holds_concurrent(const Type* t) {
         case TK::Result: return holds_concurrent(t->elem);
         default: return false;
     }
+}
+
+static bool holds_c_handle(const Type* t, std::vector<const Type*>& seen) {
+    if (!t) return false;
+    if (t->kind == TK::Handle) return true;
+    if (std::find(seen.begin(), seen.end(), t) != seen.end()) return false;
+    seen.push_back(t);
+    if (t->kind == TK::Struct && t->sdef) {
+        for (const FieldDef& f : t->sdef->fields) {
+            if (holds_c_handle(f.type, seen)) return true;
+        }
+        return false;
+    }
+    if (t->kind == TK::Enum && t->edef) {
+        for (const VariantDef& v : t->edef->variants) {
+            for (const Type* x : v.types) {
+                if (holds_c_handle(x, seen)) return true;
+            }
+            for (const FieldDef& f : v.fields) {
+                if (holds_c_handle(f.type, seen)) return true;
+            }
+        }
+        return false;
+    }
+    return holds_c_handle(t->elem, seen) || holds_c_handle(t->key, seen) || holds_c_handle(t->err, seen);
+}
+
+bool holds_c_handle(const Type* t) {
+    std::vector<const Type*> seen;
+    return holds_c_handle(t, seen);
+}
+
+char tasks_variant() {
+    static const char v = [] {
+        const char* e = std::getenv("DPL_TASKS");
+        if (!e || !*e) return '\0';
+        std::string s(e);
+        return s == "a" || s == "b" || s == "c" ? s[0] : '?';
+    }();
+    return v;
+}
+
+bool concurrent_copies() {
+    char v = tasks_variant();
+    return v != 'a' && v != 'b';
 }
 
 bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str); }

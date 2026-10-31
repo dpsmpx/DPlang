@@ -526,6 +526,13 @@ private:
                 args(0);
                 same(rv.type, prim(TK::Void), "result");
                 break;
+            case Intrinsic::TaskJoin: {
+                args(0);
+                const Type* tk = rv.has_place ? place(rv.place) : nullptr;
+                if (!tk || tk->kind != TK::Task) return fail("join of a non-Task");
+                same(rv.type, tk->elem, "result");
+                break;
+            }
             case Intrinsic::MutexLock: case Intrinsic::MutexUnlock: {
                 args(0);
                 const Type* m = rv.has_place ? place(rv.place) : nullptr;
@@ -605,6 +612,7 @@ private:
             rv.intrinsic != Intrinsic::MapClear && rv.intrinsic != Intrinsic::Probe &&
             (rv.intrinsic < Intrinsic::AtomicLoad || rv.intrinsic > Intrinsic::AtomicCas) &&
             rv.intrinsic != Intrinsic::MutexLock && rv.intrinsic != Intrinsic::MutexUnlock &&
+            rv.intrinsic != Intrinsic::TaskJoin &&
             (rv.intrinsic < Intrinsic::ChannelSend || rv.intrinsic > Intrinsic::ChannelClose)) {
             fail("receiver place on a method that only reads");
         }
@@ -726,9 +734,16 @@ private:
             case RvKind::Call: case RvKind::Spawn: {
                 if (rv.fn >= p_.fns.size()) return fail("call of an unknown function");
                 const Function& g = p_.fns[rv.fn];
-                same(t, g.ret, "result");
-                if (rv.kind == RvKind::Spawn && (g.is_extern || g.ret->kind != TK::Void)) {
-                    fail("a task must be a dpl function without a result");
+                if (rv.kind == RvKind::Spawn && t->kind == TK::Task) {  // вариант В: результат — в задаче
+                    if (g.is_extern || t->elem != g.ret) fail("a task of a wrong result type");
+                    for (const Arg& a : rv.args) {
+                        if (a.kind != Arg::Kind::Value) fail("a task of variant C takes arguments by value");
+                    }
+                } else {
+                    same(t, g.ret, "result");
+                    if (rv.kind == RvKind::Spawn && (g.is_extern || g.ret->kind != TK::Void)) {
+                        fail("a task must be a dpl function without a result");
+                    }
                 }
                 if (rv.args.size() != g.param_count) return fail("wrong number of arguments to " + g.name);
                 for (size_t i = 0; i < rv.args.size(); i++) {

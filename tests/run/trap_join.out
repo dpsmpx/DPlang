@@ -1,0 +1,5 @@
+work 21
+42
+--- stderr ---
+trap_join.dpm:12:17: trap: task is already joined
+[exit 101]

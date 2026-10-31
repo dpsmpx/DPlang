@@ -453,6 +453,7 @@ private:
     // Конкурентные значения (О13, прототип, E0518): не копируются — только
     // переменная и параметр `&`/`&mut`.
     void concurrent_placement() {
+        if (concurrent_copies()) return;  // вариант В и все формы: ручки копируются
         auto bad = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m, const std::string& where) {
             if (!node || !holds_concurrent(t)) return;
             diags_.error(Code::E0518, node->span, "'" + type_name(t, m) + "' cannot be " + where +

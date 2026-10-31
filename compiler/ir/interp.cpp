@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cstdio>
 #include <deque>
+#include <memory>
 #include <tuple>
 
 #include "support/format.h"
@@ -39,7 +40,18 @@ struct Value {
     std::vector<Value> items;     // Seq: элементы List, поля, данные варианта
     const Value* base = nullptr;  // Slice: List
     int64_t lo = 0, hi = 0;       // Slice: границы в base
+    // Ручка (О13, прототип): Atomic, Mutex, Channel, Task — копии делят одно
+    // значение box.
+    std::shared_ptr<Value> box;
 };
+
+// Ручка на значение v (Seq с box).
+Value handle(Value v) {
+    Value h;
+    h.k = Value::K::Seq;
+    h.box = std::make_shared<Value>(std::move(v));
+    return h;
+}
 
 Value int_value(uint64_t i) {
     Value v;
@@ -292,6 +304,11 @@ struct TaskRec {
     bool done = false;
     std::vector<std::pair<int, std::string>> out;  // вывод до конца блока: поток (1, 2) и байты
     std::vector<std::vector<uint32_t>> groups;      // открытые блоки задач: задачи по порядку запуска
+    // Задача варианта В: ручки (последняя ушла — отсоединена), результат.
+    bool loose = false;
+    std::weak_ptr<Value> handle;
+    Value result;
+    bool joined = false;
 };
 
 constexpr uint32_t kSlice = 1024;
@@ -508,10 +525,13 @@ public:
         frames_.push_back(std::move(fr));
         tasks_.emplace_back();
         while (!stop_) {
-            if (frames_.empty()) {  // задача кончилась; main — программа
-                if (cur_ == 0) break;
+            if (frames_.empty()) {  // задача кончилась; main — и программа, когда кончились все
                 tasks_[cur_].done = true;
                 stalled_ = 0;
+                reap();
+                bool live = false;
+                for (const TaskRec& t : tasks_) live = live || !t.done;
+                if (!live) break;
                 switch_task();
                 continue;
             }
@@ -530,6 +550,7 @@ public:
             stalled_ = 0;
             if (tasks_.size() > 1 && ++slice_ >= kSlice) switch_task();
         }
+        reap();
         std::fflush(stdout);
         return res_;
     }
@@ -685,12 +706,12 @@ private:
                     r.v = &v.items[static_cast<size_t>(i)].items[0];
                     break;
                 }
-                case ProjKind::MutexValue:  // данные Mutex (О13): items[0], tag — захвачен
-                    if (v.k != Value::K::Seq || v.items.empty()) {
+                case ProjKind::MutexValue:  // данные Mutex (О13): box — items[0], tag — захвачен
+                    if (!v.box || v.box->items.empty()) {
                         internal("data of a non-mutex");
                         return Ref{};
                     }
-                    r.v = &v.items[0];
+                    r.v = &v.box->items[0];
                     break;
                 case ProjKind::PoolSlot: {  // живой слот из обхода
                     const Value& iv = fr.locals[pr.index];
@@ -847,7 +868,19 @@ private:
         frames_.push_back(std::move(nf));
     }
 
-    // Задача блока `tasks`: кадр fn с аргументами — в новую задачу группы.
+    // Значение ручки в месте pl (Atomic, Mutex, Channel, Task).
+    Value* boxed(Frame& fr, const Place& pl) {
+        Ref r = resolve(fr, pl);
+        if (stop_ || !r.v) return nullptr;
+        if (!r.v->box) {
+            internal("handle without a value");
+            return nullptr;
+        }
+        return r.v->box.get();
+    }
+
+    // Задача блока `tasks` (или `parallel`): кадр fn с аргументами — в новую
+    // задачу группы. Вариант В — задача без группы, значение — её ручка.
     void spawn(Frame& fr, const Rvalue& rv) {
         const Function& g = p_.fns[rv.fn];
         Frame nf;
@@ -860,12 +893,38 @@ private:
             else nf.refs[i] = resolve(fr, a.place, a.kind == Arg::Kind::Mut);
             if (stop_) return;
         }
-        if (tasks_[cur_].groups.empty()) return internal("spawn outside a block of tasks");
         uint32_t id = static_cast<uint32_t>(tasks_.size());
+        if (rv.type->kind == TK::Task) {
+            Value h = handle(int_value(id));
+            tasks_.emplace_back();
+            tasks_.back().frames.push_back(std::move(nf));
+            tasks_.back().loose = true;
+            tasks_.back().handle = h.box;
+            const Inst& in = fn(fr).blocks[fr.block].insts[fr.inst];
+            Ref r = resolve(fr, in.dst, true);
+            if (stop_) return;
+            *r.v = std::move(h);
+            fr.inst++;
+            return;
+        }
+        if (tasks_[cur_].groups.empty()) return internal("spawn outside a block of tasks");
         tasks_.emplace_back();
         tasks_.back().frames.push_back(std::move(nf));
         tasks_[cur_].groups.back().push_back(id);
         fr.inst++;
+    }
+
+    // Отсоединённые задачи варианта В (ручек нет), которые кончились: их
+    // вывод выходит сейчас (all — и незаконченные: конец программы).
+    void reap() {
+        for (TaskRec& t : tasks_) {
+            if (!t.loose || t.joined || !t.done || !t.handle.expired() || t.out.empty()) continue;
+            for (auto& [stream, bytes] : t.out) {
+                if (stream == 2) std::fflush(stdout);
+                std::fwrite(bytes.data(), 1, bytes.size(), stream == 2 ? stderr : stdout);
+            }
+            t.out.clear();
+        }
     }
 
     // Инструкция ждёт: канал полон или пуст, мьютекс у другой задачи, задачи
@@ -874,16 +933,19 @@ private:
     bool waits(Frame& fr, const Rvalue& rv) {
         switch (rv.intrinsic) {
             case Intrinsic::ChannelSend: case Intrinsic::ChannelRecv: {
-                Ref r = resolve(fr, rv.place);
-                if (stop_ || !r.v) return false;
-                bool closed = r.v->tag == 1;
-                if (rv.intrinsic == Intrinsic::ChannelSend) return !closed && r.v->items.size() >= r.v->i;
-                return !closed && r.v->items.empty();
+                Value* ch = boxed(fr, rv.place);
+                if (!ch) return false;
+                bool closed = ch->tag == 1;
+                if (rv.intrinsic == Intrinsic::ChannelSend) return !closed && ch->items.size() >= ch->i;
+                return !closed && ch->items.empty();
             }
             case Intrinsic::MutexLock: {
-                Ref r = resolve(fr, rv.place);
-                if (stop_ || !r.v) return false;
-                return r.v->tag == 1 && r.v->i != cur_;
+                Value* m = boxed(fr, rv.place);
+                return m && m->tag == 1 && m->i != cur_;
+            }
+            case Intrinsic::TaskJoin: {
+                Value* h = boxed(fr, rv.place);
+                return h && h->i < tasks_.size() && !tasks_[h->i].done;
             }
             case Intrinsic::TasksEnd: {
                 const auto& gs = tasks_[cur_].groups;
@@ -947,7 +1009,11 @@ private:
         const Type* ret = f.ret;
         bool det = f.det;
         frames_.pop_back();
-        if (frames_.empty()) return cur_ == 0 ? finish_main(v, ret) : void();  // задача: результата нет
+        if (frames_.empty()) {
+            if (cur_ == 0) return finish_main(v, ret);
+            tasks_[cur_].result = std::move(v);  // вариант В — для join
+            return;
+        }
         Frame& caller = frames_.back();
         const Inst& in = fn(caller).blocks[caller.block].insts[caller.inst];
         if (in.rv.kind == RvKind::ParFor) return;  // следующая итерация — в par_step
@@ -1372,12 +1438,12 @@ private:
             }
             case Intrinsic::PoolAdd: case Intrinsic::PoolRemove: case Intrinsic::PoolClear: case Intrinsic::PoolReserve:
                 return pool_method(fr, rv, ops);
-            case Intrinsic::AtomicNew: return arg(0, s0);
-            case Intrinsic::MutexNew: {  // данные — items[0]; tag — захвачен
+            case Intrinsic::AtomicNew: return handle(arg(0, s0));
+            case Intrinsic::MutexNew: {  // данные — items[0]; tag — захвачен, i — задача
                 Value m = seq_value(0);
                 m.items.push_back(rv.ops[0].kind == OpKind::Move ? std::move(ops[0]) : arg(0, s0));
                 m.tag = 0;
-                return m;
+                return handle(std::move(m));
             }
             case Intrinsic::ChannelNew: {  // очередь — items, ёмкость — i, tag — закрыт
                 int64_t cap = static_cast<int64_t>(arg(0, s0).i);
@@ -1387,26 +1453,39 @@ private:
                 }
                 Value ch = seq_value(0);
                 ch.i = static_cast<uint64_t>(cap);
-                return ch;
+                return handle(std::move(ch));
             }
             case Intrinsic::ChannelSend: case Intrinsic::ChannelRecv: case Intrinsic::ChannelTryRecv:
             case Intrinsic::ChannelClose:
                 return channel_method(fr, rv, ops);
             case Intrinsic::MutexLock: case Intrinsic::MutexUnlock: {
-                Ref r = resolve(fr, rv.place);
-                if (stop_) return Value{};
+                Value* m = boxed(fr, rv.place);
+                if (!m) return Value{};
                 if (rv.intrinsic == Intrinsic::MutexUnlock) {
-                    r.v->tag = 0;
+                    m->tag = 0;
                     return Value{};
                 }
                 // Занятый другой задачей ждёт в waits(): здесь — этой же.
-                if (r.v->tag == 1) {
+                if (m->tag == 1) {
                     trap("mutex is already locked by this thread");
                     return Value{};
                 }
-                r.v->tag = 1;
-                r.v->i = cur_;
+                m->tag = 1;
+                m->i = cur_;
                 return Value{};
+            }
+            case Intrinsic::TaskJoin: {  // задача кончилась (waits): результат и её вывод
+                Value* h = boxed(fr, rv.place);
+                if (!h) return Value{};
+                TaskRec& t = tasks_[h->i];
+                if (t.joined) {
+                    trap("task is already joined");
+                    return Value{};
+                }
+                t.joined = true;
+                for (auto& [stream, bytes] : t.out) emit(stream, bytes);
+                t.out.clear();
+                return std::move(t.result);
             }
             case Intrinsic::TasksBegin: tasks_[cur_].groups.emplace_back(); return Value{};
             case Intrinsic::TasksEnd: {  // задачи кончились (waits): вывод по порядку запуска
@@ -1624,9 +1703,9 @@ private:
     // Atomic[T] (О13, прототип): задачи интерпретатора идут по очереди,
     // поэтому операция — обычное чтение и запись места.
     Value atomic_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
-        Ref r = resolve(fr, rv.place);
-        if (stop_) return Value{};
-        Value& v = *r.v;
+        Value* box = boxed(fr, rv.place);
+        if (!box) return Value{};
+        Value& v = *box;
         const Type* t = place_type(p_, fn(fr), rv.place)->elem;
         Value old = v;
         switch (rv.intrinsic) {
@@ -1655,9 +1734,9 @@ private:
     // Channel[T] (О13, прототип): очередь items, ёмкость i, tag 1 — закрыт.
     // Ожидание места или значения — в waits() до вызова.
     Value channel_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
-        Ref r = resolve(fr, rv.place);
-        if (stop_) return Value{};
-        Value& ch = *r.v;
+        Value* box = boxed(fr, rv.place);
+        if (!box) return Value{};
+        Value& ch = *box;
         bool closed = ch.tag == 1;
         switch (rv.intrinsic) {
             case Intrinsic::ChannelSend:

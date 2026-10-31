@@ -36,6 +36,7 @@ enum class TK : uint8_t {
     Atomic,      // Atomic[T] (О13, прототип): целое или bool; elem
     Mutex,       // Mutex[T] (О13, прототип): данные под блокировкой; elem
     Channel,     // Channel[T] (О13, прототип): очередь между потоками; elem
+    Task,        // Task[T] (О13, прототип, вариант В): задача с результатом elem (Void — без него)
     Slice,     // []T
     Optional,  // ?T
     Result,    // E!T; err — перечисление ошибок
@@ -80,6 +81,7 @@ public:
     const Type* atomic(const Type* elem) { return make(TK::Atomic, elem, nullptr, nullptr, nullptr); }
     const Type* mutex(const Type* elem) { return make(TK::Mutex, elem, nullptr, nullptr, nullptr); }
     const Type* channel(const Type* elem) { return make(TK::Channel, elem, nullptr, nullptr, nullptr); }
+    const Type* task(const Type* elem) { return make(TK::Task, elem, nullptr, nullptr, nullptr); }
     const Type* slice(const Type* elem) { return make(TK::Slice, elem, nullptr, nullptr, nullptr); }
     const Type* optional(const Type* elem) { return make(TK::Optional, elem, nullptr, nullptr, nullptr); }
     const Type* result(const Type* err, const Type* value) { return make(TK::Result, value, err, nullptr, nullptr); }
@@ -142,6 +144,14 @@ bool linear_type(const Type* t);
 // переменной и делится по `&`; holds_concurrent — оно или внутри.
 bool concurrent(const Type* t);
 bool holds_concurrent(const Type* t);
+// Значение с дескриптором C (`extern type`) внутри: в задачу не передаётся.
+bool holds_c_handle(const Type* t);
+// Вариант модели задач (О13, прототип) из переменной DPL_TASKS: 'a', 'b',
+// 'c'; 0 — не задан (все формы), '?' — другое значение.
+char tasks_variant();
+// Конкурентные значения копируются ручками (вариант В и все формы); в
+// вариантах А и Б — нет (E0518).
+bool concurrent_copies();
 bool linear_in_container(const Type* t);
 
 // Значение типа переходит границу C как есть (Р59): целое, плавающее,

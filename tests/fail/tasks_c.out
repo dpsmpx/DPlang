@@ -1,0 +1,8 @@
+--- stderr ---
+tasks_c.dpm:14:5: error[E0519]: 'tasks { ... }' is variant A of the concurrency prototype; this program is checked as variant C (DPL_TASKS=c)
+  14 |     tasks {
+     |     ^
+tasks_c.dpm:17:5: error[E0519]: 'parallel { ... }' is variant B of the concurrency prototype; this program is checked as variant C (DPL_TASKS=c)
+  17 |     parallel {
+     |     ^
+[exit 1]

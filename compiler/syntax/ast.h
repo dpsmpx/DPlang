@@ -216,7 +216,9 @@ enum class Method : uint8_t {
     // «меняется» для правила доступа (Р66); `add` — Add.
     Load, Store, Sub, Swap, Cas,
     // Channel[T] (О13, прототип): тоже через общий доступ.
-    Send, Recv, TryRecv, Close
+    Send, Recv, TryRecv, Close,
+    // Task[T] (О13, прототип, вариант В): ждёт задачу, отдаёт результат.
+    Join
 };
 
 struct CallExpr : Expr {

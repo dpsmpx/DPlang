@@ -135,6 +135,7 @@ private:
     const Type* slice_expr(ast::SliceExpr* s);
     const Type* try_expr(ast::TryExpr* t);
     const Type* spawn_expr(ast::SpawnExpr* sp);
+    const Type* task_value(ast::SpawnExpr* sp);
     void field_inits(std::vector<ast::FieldInit>& inits, const std::vector<FieldDef>& fields, bool defaults_ok, Span span,
                      const std::string& what, bool c_zero = false);
     const EnumDef* enum_for_variant(const std::string& name, const Type* hint, Span span);

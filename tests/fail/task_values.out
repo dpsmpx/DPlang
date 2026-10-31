@@ -1,0 +1,32 @@
+--- stderr ---
+task_values.dpm:19:13: error[E0425]: tasks run at the same time; 'pure' is class D and cannot start them
+  19 |     let t = spawn take(none)
+     |             ^~~~~~~~~~~~~~~~
+task_values.dpm:19:19: error[E0425]: 'take' is not deterministic; 'pure' is class D and cannot call it. Mark it '@det'
+  19 |     let t = spawn take(none)
+     |                   ^~~~~~~~~~
+task_values.dpm:19:24: error[E0520]: '?Win' holds a C handle ('extern type'); a task cannot take it: the C library may tie it to the thread that made it
+  19 |     let t = spawn take(none)
+     |                        ^~~~
+task_values.dpm:25:25: error[E0520]: a task started with 'let t = spawn f(...)' takes its arguments by value: it may outlive this function; pass a copy, or share an Atomic, a Mutex or a Channel by value
+  25 |     let t1 = spawn work(&a)
+     |                         ^~
+task_values.dpm:26:25: error[E0520]: '[]i64' views memory of the code that starts the task; pass a copy of the List
+  26 |     let t2 = spawn view(xs[0..1])
+     |                         ^~~~~~~~
+task_values.dpm:27:25: error[E0520]: '?Win' holds a C handle ('extern type'); a task cannot take it: the C library may tie it to the thread that made it
+  27 |     let t3 = spawn take(none)
+     |                         ^~~~
+task_values.dpm:28:20: error[E0520]: a task runs a dpl function: 'spawn f(...)'; call methods, built-in functions and C from that function
+  28 |     let t4 = spawn print("x")
+     |                    ^~~~~~~~~~
+task_values.dpm:29:14: error[E0307]: cannot find 'spawn' in this scope
+  29 |     let t5 = spawn (a + 1)
+     |              ^~~~~
+task_values.dpm:31:8: error[E0410]: 'Task[i64]' has no method 'wait'
+  31 |     t6.wait()
+     |        ^~~~
+task_values.dpm:32:18: error[E0407]: method 'join' takes 0 arguments, found 1
+  32 |     let n: int = t6.join(1)
+     |                  ^~~~~~~~~~
+[exit 1]

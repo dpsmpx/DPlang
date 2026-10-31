@@ -21,8 +21,7 @@ fn main() {
         total += t
     }
     println("hits " + str(hits.load()) + ", done " + str(done.load()) + ", tickets " + str(total))
-    println("swap " + str(hits.swap(7)) + ", cas " + str(hits.cas(7, 9)) + " " + str(hits.cas(7, 1)) + ", now " +
-            str(hits.load()))
+    println("swap " + str(hits.swap(7)) + ", cas " + str(hits.cas(7, 9)) + " " + str(hits.cas(7, 1)) + ", now " + str(hits.load()))
     println("sub " + str(small.sub(10)) + ", now " + str(small.load()))
     _ = small.add(20)
 }
