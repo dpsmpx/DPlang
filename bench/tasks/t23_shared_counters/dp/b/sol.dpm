@@ -1,0 +1,65 @@
+fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn cost(v: i64) i64 {
+    var h = u64(v)
+    for i in 0..2000 {
+        h = mix(h)
+    }
+    return i64(h % 1000)
+}
+
+pub struct Totals {
+    ok: bool
+    bad: i64
+    count: i64
+    sum: i64
+    odd: i64
+}
+
+// Рабочий: номера — из общего счётчика, итоги — в общие атомики.
+fn worker(jobs: &List[i64], next: &Atomic[i64], stop: &Atomic[bool], bad: &Atomic[i64], count: &Atomic[i64], sum: &Atomic[i64], odd: &Atomic[i64]) {
+    let n = i64(len(jobs))
+    while !stop.load() {
+        let j = next.add(1)
+        if j >= n {
+            break
+        }
+        if jobs[j] < 0 {
+            stop.store(true)
+            var cur = bad.load()
+            while j < cur && !bad.cas(cur, j) {
+                cur = bad.load()
+            }
+            continue
+        }
+        let r = cost(jobs[j])
+        _ = count.add(1)
+        _ = sum.add(r)
+        if r % 2 != 0 {
+            _ = odd.add(1)
+        }
+    }
+}
+
+// Вариант Б: число рабочих задано при вызове — parallel for по рабочим.
+pub fn run_jobs(jobs: &List[i64], workers: i32) Totals {
+    let n = i64(len(jobs))
+    let next = atomic(i64(0))
+    let stop = atomic(false)
+    let bad = atomic(n)
+    let count = atomic(i64(0))
+    let sum = atomic(i64(0))
+    let odd = atomic(i64(0))
+    parallel for w in 0..workers {
+        worker(&jobs, &next, &stop, &bad, &count, &sum, &odd)
+    }
+    if bad.load() < n {
+        return Totals { ok: false, bad: bad.load(), count: 0, sum: 0, odd: 0 }
+    }
+    return Totals { ok: true, bad: -1, count: count.load(), sum: sum.load(), odd: odd.load() }
+}

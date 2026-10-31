@@ -1,0 +1,10 @@
+w=1 ok=true bad=-1 count=20000 sum=10040451 odd=9947
+w=4 ok=true bad=-1 count=20000 sum=10040451 odd=9947
+w=8 ok=true bad=-1 count=20000 sum=10040451 odd=9947
+bad w=1 ok=false bad=12345 count=0 sum=0 odd=0
+bad w=3 ok=false bad=12345 count=0 sum=0 odd=0
+bad w=8 ok=false bad=12345 count=0 sum=0 odd=0
+empty ok=true bad=-1 count=0 sum=0 odd=0
+one ok=false bad=0 count=0 sum=0 odd=0
+small ok=false bad=1 count=0 sum=0 odd=0
+tiny ok=true bad=-1 count=3 sum=1444 odd=2
