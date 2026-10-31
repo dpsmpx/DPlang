@@ -716,6 +716,32 @@ void Checker::tasks_end() {
                       text(a.mut ? a.place : b.place) + "'); give each task its own element or field");
         }
     }
+    // `parallel { … }`: два оператора, одно место, хоть один меняет его.
+    if (sc.each) {
+        std::vector<Path> ap(sc.accesses.size());
+        for (size_t i = 0; i < sc.accesses.size(); i++) ap[i].root = path(sc.accesses[i].place, loop_iters_, ap[i].steps);
+        for (size_t i = 0; i < sc.accesses.size(); i++) {
+            const TaskAccess& y = sc.accesses[i];
+            if (!ap[i].root || ap[i].root->id >= sc.first_inner) continue;
+            for (size_t j = 0; j < i; j++) {
+                const TaskAccess& x = sc.accesses[j];
+                if (x.stmt == y.stmt || ap[j].root != ap[i].root || !(x.write || y.write)) continue;
+                if (!crosses(ap[i].steps, ap[j].steps)) continue;
+                if ((x.len && !y.write) || (y.len && !x.write)) continue;
+                if ((x.len && ap[i].steps.size() > ap[j].steps.size()) ||
+                    (y.len && ap[j].steps.size() > ap[i].steps.size())) {
+                    continue;
+                }
+                if (!once(ap[i].root)) break;
+                const TaskAccess& w = y.write ? y : x;
+                error(Code::E0521, y.place->span,
+                      "'" + text(w.place) + "' is changed by one statement of 'parallel { ... }' and used by another: "
+                      "the statements run at the same time; give each statement its own variable, element or field");
+                break;
+            }
+        }
+        return;
+    }
     // Код блока и задача: одно место, хоть кто-то меняет его.
     for (const TaskAccess& x : sc.accesses) {
         std::vector<Step> steps;

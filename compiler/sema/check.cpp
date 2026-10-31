@@ -411,24 +411,41 @@ void Checker::lock_stmt(LockStmt* s) {
     pop_scope();
 }
 
-// `tasks { … }` — вариант А (О13, прототип): задачи ставит `spawn`; блок
-// кончается, когда кончились они. Выйти из блока раньше нельзя (E0516).
+// `tasks { … }` — вариант А (О13, прототип): задачи ставит `spawn`.
+// `parallel { … }` — вариант Б: каждый оператор — задача. Блок кончается,
+// когда кончились его задачи; выйти из него раньше нельзя (E0516).
 void Checker::tasks_stmt(TasksStmt* s) {
-    if (s->each) {
-        variant_ok('b', s->span, "'parallel { ... }'");
-        error(Code::E0519, s->span, "'parallel { ... }' is not implemented yet in the prototype");
-        return;
-    }
-    variant_ok('a', s->span, "'tasks { ... }'");
+    variant_ok(s->each ? 'b' : 'a', s->span, s->each ? "'parallel { ... }'" : "'tasks { ... }'");
     if (fn_ && is_det(*fn_)) {
         error(Code::E0425, s->span, "tasks run at the same time; '" + fn_->name + "' is class D and cannot start them");
     }
     TasksScope sc;
     sc.first_inner = next_local_;
+    sc.each = s->each;
     tasks_.push_back(std::move(sc));
     loops_.emplace_back();
     loops_.back().tasks = true;
-    block(s->body);
+    if (!s->each) {
+        block(s->body);
+    } else if (s->body) {
+        push_scope();
+        int k = 0;
+        for (Stmt* x : s->body->stmts) {
+            if (x->kind == StmtKind::Let || x->kind == StmtKind::Defer) {
+                error(Code::E0520, x->span, x->kind == StmtKind::Let
+                                                ? "a variable of a statement in 'parallel { ... }' ends with it; "
+                                                  "declare it before the block and assign it here"
+                                                : "'parallel { ... }' runs each statement as a task; put 'defer' "
+                                                  "before the block");
+            }
+            size_t mark = tasks_.back().accesses.size();
+            stmt(x);
+            std::vector<TaskAccess>& acc = tasks_.back().accesses;
+            for (size_t i = mark; i < acc.size(); i++) acc[i].stmt = k;
+            k++;
+        }
+        pop_scope();
+    }
     loops_.pop_back();
     tasks_end();
     tasks_.pop_back();
@@ -631,9 +648,9 @@ void Checker::loop_jump(Stmt* s, bool is_break) {
             error(Code::E0420, s->span, std::string("'") + (is_break ? "break" : "continue") + "' outside of a loop");
         }
     } else if (loops_.back().tasks) {
-        error(Code::E0516, s->span, std::string("'") + (is_break ? "break" : "continue") +
-                                        "' cannot leave 'tasks': the block waits for its tasks; leave the loop "
-                                        "after the block");
+        error(Code::E0516, s->span, std::string("'") + (is_break ? "break" : "continue") + "' cannot leave '" +
+                                        (!tasks_.empty() && tasks_.back().each ? "parallel { ... }" : "tasks") +
+                                        "': the block waits for its tasks; leave the loop after the block");
     } else if (is_break) {
         if (loops_.back().parallel) parallel_exit(s->span, "break");
         loops_.back().breaks.push_back(flow_);

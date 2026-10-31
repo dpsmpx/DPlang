@@ -303,7 +303,7 @@ def uses_parallel(path):
     for f in files:
         with open(f, encoding='utf-8') as h:
             text = h.read()
-            if 'parallel for' in text or 'tasks {' in text or 'spawn ' in text:
+            if 'parallel for' in text or 'parallel {' in text or 'tasks {' in text or 'spawn ' in text:
                 return True
     return False
 

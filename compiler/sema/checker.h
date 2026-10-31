@@ -201,6 +201,7 @@ public:
         ast::Expr* place = nullptr;
         bool write = false;
         bool len = false;  // `len(x)`: читает только длину
+        int stmt = -1;     // `parallel { … }`: номер оператора блока
     };
     struct TasksScope {
         uint32_t first_inner = 0;  // переменные блока — с номером не меньше

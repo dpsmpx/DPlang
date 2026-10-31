@@ -1,0 +1,17 @@
+--- stderr ---
+par_block.dpm:9:9: error[E0521]: 'a' is changed by one statement of 'parallel { ... }' and used by another: the statements run at the same time; give each statement its own variable, element or field
+   9 |         a = 2
+     |         ^
+par_block.dpm:13:9: error[E0521]: 'a' is changed by one statement of 'parallel { ... }' and used by another: the statements run at the same time; give each statement its own variable, element or field
+  13 |         a = 3
+     |         ^
+par_block.dpm:18:9: error[E0520]: a variable of a statement in 'parallel { ... }' ends with it; declare it before the block and assign it here
+  18 |         let k = 1
+     |         ^~~~~~~~~
+par_block.dpm:19:9: error[E0516]: 'return' cannot leave 'parallel { ... }': the block waits for its tasks; write the outcome to a variable and act on it after the block
+  19 |         return
+     |         ^~~~~~
+par_block.dpm:23:25: error[E0521]: 'xs' is changed by one statement of 'parallel { ... }' and used by another: the statements run at the same time; give each statement its own variable, element or field
+  23 |         println(str(len(xs)))
+     |                         ^~
+[exit 1]
