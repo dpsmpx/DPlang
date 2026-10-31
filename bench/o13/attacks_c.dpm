@@ -1,0 +1,319 @@
+// Атаки на модель задач В (DPL_TASKS=c): каждая — отдельная программа
+// между строками «// === имя: что пробует | ожидание» (race — гонка данных,
+// safe — без гонки, logic — логическая гонка). Разбор — bench/o13/attacks.py.
+
+// === c01: задаче &mut переменной | race
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    var x: i64 = 0
+    let t = spawn add(&mut x)
+    x += 1
+    t.join()
+}
+
+// === c02: задаче &, код меняет | race
+fn show(x: &i64) {
+    println(str(x))
+}
+
+fn main() {
+    var x: i64 = 0
+    let t = spawn show(&x)
+    x += 1
+    t.join()
+}
+
+// === c03: список по значению, код меняет свой | safe
+fn total(xs: List[i64]) i64 {
+    var s: i64 = 0
+    for x in &xs {
+        s += x
+    }
+    return s
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2, 3]
+    let t = spawn total(xs)
+    xs.push(4)
+    println(str(t.join()))
+}
+
+// === c04: срез в задачу | race
+fn total(xs: []i64) i64 {
+    var s: i64 = 0
+    for x in &xs {
+        s += x
+    }
+    return s
+}
+
+fn main() {
+    var xs: List[i64] = [1, 2, 3]
+    let t = spawn total(xs[0..2])
+    xs.push(4)
+    println(str(t.join()))
+}
+
+// === c05: атомик add через ручки | safe
+fn bump(c: Atomic[i64]) {
+    for i in 0..10000 {
+        _ = c.add(1)
+    }
+}
+
+fn main() {
+    let c = atomic(i64(0))
+    let a = spawn bump(c)
+    let b = spawn bump(c)
+    a.join()
+    b.join()
+    println(str(c.load()))
+}
+
+// === c06: атомик load/store по отдельности | logic
+fn bump(c: Atomic[i64]) {
+    for i in 0..10000 {
+        c.store(c.load() + 1)
+    }
+}
+
+fn main() {
+    let c = atomic(i64(0))
+    let a = spawn bump(c)
+    let b = spawn bump(c)
+    a.join()
+    b.join()
+    println(str(c.load() <= 20000))
+}
+
+// === c07: мьютекс через ручки | safe
+fn bump(m: Mutex[List[i64]], id: i64) {
+    for i in 0..1000 {
+        lock m as xs {
+            xs.push(id)
+        }
+    }
+}
+
+fn main() {
+    let m = mutex([i64(0)])
+    let a = spawn bump(m, 1)
+    let b = spawn bump(m, 2)
+    a.join()
+    b.join()
+    lock m as xs {
+        println(str(len(xs)))
+    }
+}
+
+// === c08: канал через ручку | safe
+fn produce(ch: Channel[i64]) {
+    for i in 0..100 {
+        ch.send(i64(i))
+    }
+    ch.close()
+}
+
+fn main() {
+    let ch: Channel[i64] = channel(4)
+    let p = spawn produce(ch)
+    var s: i64 = 0
+    while true {
+        if let v = ch.recv() {
+            s += v
+        } else {
+            break
+        }
+    }
+    p.join()
+    println(str(s))
+}
+
+// === c09: задача меняет свою копию, код ждёт общее | logic
+fn fill(xs: List[i64]) {
+    var ys = xs
+    ys.push(9)
+}
+
+fn main() {
+    var xs: List[i64] = []
+    let t = spawn fill(xs)
+    t.join()
+    println(str(len(xs)))
+}
+
+// === c10: атомики в списке ручек | safe
+fn bump(cs: List[Atomic[i64]], k: i64) {
+    for c in &cs {
+        _ = c.add(k)
+    }
+}
+
+fn main() {
+    let cs = [atomic(i64(0)), atomic(i64(0))]
+    let a = spawn bump(cs, 1)
+    let b = spawn bump(cs, 2)
+    a.join()
+    b.join()
+    println(str(cs[0].load() + cs[1].load()))
+}
+
+// === c11: задача в поле, join позже | safe
+struct Job {
+    t: Task[i64],
+}
+
+fn square(x: i64) i64 {
+    return x * x
+}
+
+fn main() {
+    let j = Job { t: spawn square(7) }
+    println(str(j.t.join()))
+}
+
+// === c12: отсоединённая задача пишет в канал после ухода | safe
+fn late(ch: Channel[i64]) {
+    ch.send(1)
+}
+
+fn start(ch: Channel[i64]) {
+    _ = spawn late(ch)
+}
+
+fn main() {
+    let ch: Channel[i64] = channel(2)
+    start(ch)
+    if let v = ch.recv() {
+        println(str(v))
+    }
+}
+
+// === c13: parallel for пишет общую переменную | race
+fn main() {
+    var s: i64 = 0
+    parallel for i in 0..1000 {
+        s += 1
+    }
+    println(str(s))
+}
+
+// === c14: задаче &mut мьютекса | race
+fn bump(m: &mut Mutex[i64]) {
+    lock m as v {
+        v += 1
+    }
+}
+
+fn main() {
+    var m = mutex(i64(0))
+    let t = spawn bump(&mut m)
+    t.join()
+}
+
+// === c15: данные мьютекса копией в задачу | safe
+fn total(xs: List[i64]) i64 {
+    return i64(len(xs))
+}
+
+fn main() {
+    let m = mutex([i64(1), 2])
+    var copy: List[i64] = []
+    lock m as xs {
+        copy = xs
+    }
+    let t = spawn total(copy)
+    lock m as xs {
+        xs.push(3)
+    }
+    println(str(t.join()))
+}
+
+// === c16: две задачи, канал результатов | safe
+fn work(id: i64, out: Channel[i64]) {
+    out.send(id * 10)
+}
+
+fn main() {
+    let out: Channel[i64] = channel(4)
+    var ts: List[Task[void]] = []
+    for i in 0..4 {
+        ts.push(spawn work(i64(i), out))
+    }
+    for t in &ts {
+        t.join()
+    }
+    var s: i64 = 0
+    for i in 0..4 {
+        if let v = out.recv() {
+            s += v
+        }
+    }
+    println(str(s))
+}
+
+// === c17: Map по значению в задачу, код меняет свою | safe
+fn count(m: Map[i64, i64]) i64 {
+    return i64(len(m))
+}
+
+fn main() {
+    var m: Map[i64, i64] = []
+    m[1] = 1
+    let t = spawn count(m)
+    m[2] = 2
+    println(str(t.join()))
+}
+
+// === c18: parallel for по значениям элементов как индексам | race
+fn main() {
+    var out: List[i64] = repeat(i64(0), 4)
+    let idx = [1, 1, 2, 3]
+    parallel for i in &idx {
+        out[i] += 1
+    }
+}
+
+// === c19: задаче & поля структуры | race
+struct Pair {
+    a: i64,
+    b: i64,
+}
+
+fn show(x: &i64) {
+    println(str(x))
+}
+
+fn main() {
+    var p = Pair { a: 0, b: 0 }
+    let t = spawn show(&p.a)
+    p.a = 1
+    t.join()
+}
+
+// === c20: счётчик под мьютексом в N задачах из списка | safe
+fn bump(m: Mutex[i64]) {
+    for i in 0..1000 {
+        lock m as v {
+            v += 1
+        }
+    }
+}
+
+fn main() {
+    let m = mutex(i64(0))
+    var ts: List[Task[void]] = []
+    for i in 0..4 {
+        ts.push(spawn bump(m))
+    }
+    for t in &ts {
+        t.join()
+    }
+    lock m as v {
+        println(str(v))
+    }
+}
