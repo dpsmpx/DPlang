@@ -1,0 +1,91 @@
+pub struct Stats {
+    distinct: List[i64]
+    longest: str
+    anagrams: i64
+}
+
+// Рабочий w: слова части w; буфер отметок — один на рабочего, очищается
+// перед каждым словом.
+fn count_part(words: &List[str], w: i32, workers: i32, out: &mut List[i64]) {
+    let n = i64(len(words))
+    var seen: List[bool] = repeat(false, 26)
+    for i in n * i64(w) / i64(workers)..n * i64(w + 1) / i64(workers) {
+        for j in 0..26 {
+            seen[j] = false
+        }
+        var k = 0
+        for c in &words[i] {
+            if c >= 'a' && c <= 'z' && !seen[c - 'a'] {
+                seen[c - 'a'] = true
+                k += 1
+            }
+        }
+        out[k] += 1
+    }
+}
+
+fn find_longest(words: &List[str], out: &mut str) {
+    for x in &words {
+        if len(x) > len(out) {
+            out = x
+        }
+    }
+}
+
+fn anagram(a: str, b: str) bool {
+    if len(a) != len(b) {
+        return false
+    }
+    var c: List[i32] = repeat(0, 256)
+    for x in &a {
+        c[x] += 1
+    }
+    for x in &b {
+        c[x] -= 1
+    }
+    for v in &c {
+        if v != 0 {
+            return false
+        }
+    }
+    return true
+}
+
+fn count_anagrams(words: &List[str], out: &mut i64) {
+    for i in 0..len(words) - 1 {
+        if anagram(words[i], words[i + 1]) {
+            out += 1
+        }
+    }
+}
+
+fn merge(parts: &List[List[i64]]) List[i64] {
+    var out: List[i64] = repeat(0, 27)
+    for p in &parts {
+        for k in 0..27 {
+            out[k] += p[k]
+        }
+    }
+    return out
+}
+
+fn count_all(words: &List[str], workers: i32) List[i64] {
+    var parts: List[List[i64]] = repeat(repeat(0, 27), workers)
+    parallel for w in 0..workers {
+        count_part(&words, w, workers, &mut parts[w])
+    }
+    return merge(&parts)
+}
+
+// Вариант Б: три оператора блока — три задачи; рабочие — parallel for.
+pub fn analyze(words: &List[str], workers: i32) Stats {
+    var distinct: List[i64] = []
+    var longest = ""
+    var anagrams: i64 = 0
+    parallel {
+        distinct = count_all(&words, workers)
+        find_longest(&words, &mut longest)
+        count_anagrams(&words, &mut anagrams)
+    }
+    return Stats { distinct, longest, anagrams }
+}

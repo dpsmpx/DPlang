@@ -1,0 +1,64 @@
+// Драйвер t22 (скрыт от модели): те же входы, что у ref.cpp.
+import sol
+
+const LETTERS: str = "abcdefghijklmnopqrstuvwxyz"
+
+fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+fn reversed(w: str) str {
+    var out = ""
+    let n = len(w)
+    for j in 0..n {
+        out += w[n - 1 - j..n - j]
+    }
+    return out
+}
+
+fn show(name: str, s: &sol.Stats) {
+    var line = name
+    for c in &s.distinct {
+        line += " " + str(c)
+    }
+    println(line + " | " + s.longest + " | " + str(s.anagrams))
+}
+
+fn main() {
+    var words: List[str] = []
+    for i in 0..150000 {
+        var h = mix(u64(i))
+        let n = i32(h % 7)
+        var w = ""
+        for k in 0..n {
+            h = mix(h)
+            var m: u64 = 26
+            if k % 2 == 0 {
+                m = 4
+            }
+            let c = i32(h % m)
+            w += LETTERS[c..c + 1]
+        }
+        if i % 9 == 0 && len(words) > 0 {
+            w = reversed(words[len(words) - 1])
+        }
+        if i == 77777 {
+            w = "the-longest-word-of-all"
+        }
+        words.push(w)
+    }
+    let ws: List[i32] = [1, 4, 7]
+    for t in &ws {
+        let s = sol.analyze(&words, t)
+        show("w=" + str(t), &s)
+    }
+    let empty: List[str] = []
+    let e = sol.analyze(&empty, 3)
+    show("empty", &e)
+    let small = ["ab", "ba", "x", "x", "Zz9"]
+    let s = sol.analyze(&small, 2)
+    show("small", &s)
+}

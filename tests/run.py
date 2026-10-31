@@ -239,6 +239,9 @@ def discover(pattern):
         for t in sorted(os.listdir(BENCH_TASKS)):
             if os.path.isdir(os.path.join(BENCH_TASKS, t, 'dp')):
                 cases = BENCH_CASES + (('before',) if bench_kind(t) == 'refactor' else ())
+                if bench_variants(t) and not os.path.isfile(os.path.join(BENCH_TASKS, t, 'dp', 'sol.dpm')):
+                    cases = tuple(c for c in cases if c != 'ref')  # только решения вариантов
+                cases += bench_variants(t)
                 deep += [('bench', f'{t}/{c}') for c in cases if pattern in f'bench/{t}/{c}']
     wdir = os.path.join(TESTS, 'worker')
     online = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
@@ -558,12 +561,20 @@ def bench_kind(task):
     return 'fix' if os.path.exists(os.path.join(path, 'buggy.cpp')) else 'write'
 
 
+def bench_variants(task):
+    """Свои решения вариантов модели задач О13: dp/a, dp/b, dp/c → ref_a, …."""
+    dp = os.path.join(BENCH_TASKS, task, 'dp')
+    return tuple('ref_' + v for v in 'abc' if os.path.isfile(os.path.join(dp, v, 'sol.dpm')))
+
+
 def bench_files(task, which):
     """Модули решения задачи (имя → текст): эталон ref, начальный код start, before."""
     dp = os.path.join(BENCH_TASKS, task, 'dp')
     if bench_kind(task) == 'refactor':
         d = os.path.join(dp, 'before' if which in ('start', 'before') else 'ref')
         return {n: dp_check.read(os.path.join(d, n)) for n in sorted(os.listdir(d)) if n.endswith('.dpm')}
+    if which.startswith('ref_'):  # вариант модели задач О13
+        return {'sol.dpm': dp_check.read(os.path.join(dp, which[4:], 'sol.dpm'))}
     name = 'sol.dpm' if which == 'ref' else ('buggy.dpm' if bench_kind(task) == 'fix' else 'stub.dpm')
     return {'sol.dpm': dp_check.read(os.path.join(dp, name))}
 
@@ -602,14 +613,15 @@ def bench_one(case):
         got = capture([DPL, 'fmt', '--check'] + srcs, dp)
         return None if got == '' else 'не в каноническом виде (dpl fmt):\n' + got
     want = dp_check.expected(path)
-    if kind == 'ref' and os.path.exists(os.path.join(dp, 'expected.txt')):
+    if kind.startswith('ref') and os.path.exists(os.path.join(dp, 'expected.txt')):
         if not same_numbers(want, dp_check.read(os.path.join(path, 'expected.txt'))):
             return 'dp/expected.txt не равен expected.txt задачи даже с точностью до записи чисел'
     driver = dp_check.read(os.path.join(dp, 'before_main.dpm' if kind == 'before' else dp_check.DRIVER))
     build_dir = os.path.join(NATIVE, 'bench', task, kind)
     if os.path.isdir(build_dir):
         shutil.rmtree(build_dir)
-    cls, msg = dp_check.evaluate(bench_files(task, kind), driver, want, build_dir, DPL)
+    variant = kind[4:] if kind.startswith('ref_') else None
+    cls, msg = dp_check.evaluate(bench_files(task, kind), driver, want, build_dir, DPL, variant)
     if kind == 'start':
         if cls in BENCH_START[bench_kind(task)]:
             return None
