@@ -1,0 +1,292 @@
+// Замер «большие данные» (заметка 11): генератор мира по чанкам,
+// кодирование чанка в канонические байты (порядок от младшего) и чтение
+// обратно. Эталон — world.cpp: тот же алгоритм, вывод должен совпасть.
+//
+//     world <g|ge|encode|roundtrip> <чанков по стороне> <зерно>
+//
+// Режимы накопительные, разность времени соседних — цена шага: g —
+// генерация; ge — ещё кодирование в List[u8]; encode — ещё хэш байтов;
+// roundtrip — ещё чтение байтов обратно и сверка с чанком. Все шаги —
+// `parallel for` по чанкам.
+import os
+
+const SIDE: i64 = 64
+
+const TILES: i64 = 4096
+
+struct Obj {
+    kind: u8
+    x: u8
+    y: u8
+    value: u32
+}
+
+struct Chunk {
+    cx: i32
+    cy: i32
+    heights: List[u16]
+    biomes: List[u8]
+    objects: List[Obj]
+}
+
+enum Failure {
+    Usage
+    Corrupt
+}
+
+@det
+fn mix(seed: u64, a: i64, b: i64) u64 {
+    var z = seed ^ (u64.wrap(a) *% 0x9E3779B97F4A7C15) ^ (u64.wrap(b) *% 0xD1B54A32D192ED03)
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+// Решётка шума слоя layer с шагом 2^lg клеток над чанком: (n + 1)^2
+// значений 0..65535, n = SIDE >> lg.
+@det
+fn lattice(seed: u64, cx: i64, cy: i64, lg: i64, layer: i64) List[i64] {
+    let n = SIDE >> lg
+    var g: List[i64] = []
+    g.reserve((n + 1) * (n + 1))
+    for j in 0..n + 1 {
+        for i in 0..n + 1 {
+            g.push(i64(mix(seed ^ u64(layer), cx * n + i, cy * n + j) & 0xFFFF))
+        }
+    }
+    return g
+}
+
+// Значение шума в клетке (x, y) чанка: билинейно в фиксированной точке.
+@det
+fn sample(g: &List[i64], lg: i64, x: i64, y: i64) i64 {
+    let n = SIDE >> lg
+    let s = i64(1) << lg
+    let x0 = x >> lg
+    let y0 = y >> lg
+    let fx = x & (s - 1)
+    let fy = y & (s - 1)
+    let a = g[y0 * (n + 1) + x0]
+    let b = g[y0 * (n + 1) + x0 + 1]
+    let c = g[(y0 + 1) * (n + 1) + x0]
+    let d = g[(y0 + 1) * (n + 1) + x0 + 1]
+    let top = a + (b - a) * fx / s
+    let bot = c + (d - c) * fx / s
+    return top + (bot - top) * fy / s
+}
+
+@det
+fn gen_chunk(seed: u64, cx: i64, cy: i64) Chunk {
+    let o6 = lattice(seed, cx, cy, 6, 0)
+    let o4 = lattice(seed, cx, cy, 4, 1)
+    let o2 = lattice(seed, cx, cy, 2, 2)
+    let wet = lattice(seed, cx, cy, 5, 3)
+    var c = Chunk { cx: i32(cx), cy: i32(cy), heights: [], biomes: [], objects: [] }
+    c.heights.reserve(TILES)
+    c.biomes.reserve(TILES)
+    for y in 0..SIDE {
+        for x in 0..SIDE {
+            let h = (sample(&o6, 6, x, y) * 4 + sample(&o4, 4, x, y) * 2 + sample(&o2, 2, x, y)) / 7
+            let m = sample(&wet, 5, x, y)
+            var b: u8 = 1
+            if h < 20000 {
+                b = 0
+            } else if h > 52000 {
+                b = 4
+            } else if m > 40000 {
+                b = 2
+            } else if m < 15000 {
+                b = 3
+            }
+            c.heights.push(u16(h))
+            c.biomes.push(b)
+            let r = mix(seed ^ 7, cx * SIDE + x, cy * SIDE + y)
+            if (b == 2 && r % 16 == 0) || (b == 1 && r % 64 == 0) {
+                c.objects.push(Obj { kind: b, x: u8(x), y: u8(y), value: u32(r >> 32) })
+            }
+        }
+    }
+    return c
+}
+
+@det
+fn put16(out: &mut List[u8], v: u16) {
+    out.push(u8(v & 255))
+    out.push(u8(v >> 8))
+}
+
+@det
+fn put32(out: &mut List[u8], v: u32) {
+    out.push(u8(v & 255))
+    out.push(u8((v >> 8) & 255))
+    out.push(u8((v >> 16) & 255))
+    out.push(u8(v >> 24))
+}
+
+// Чанк в байты: cx, cy (i32), число объектов (u32), высоты (u16),
+// биомы (u8), объекты (kind, x, y — u8, value — u32); порядок от младшего.
+@det
+fn encode(c: &Chunk) List[u8] {
+    var out: List[u8] = []
+    out.reserve(12 + TILES * 3 + len(c.objects) * 7)
+    put32(&mut out, u32.wrap(c.cx))
+    put32(&mut out, u32.wrap(c.cy))
+    put32(&mut out, u32(len(c.objects)))
+    for h in &c.heights {
+        put16(&mut out, h)
+    }
+    for b in &c.biomes {
+        out.push(b)
+    }
+    for o in &c.objects {
+        out.push(o.kind)
+        out.push(o.x)
+        out.push(o.y)
+        put32(&mut out, o.value)
+    }
+    return out
+}
+
+@det
+fn get16(b: &List[u8], at: i64) u16 {
+    return u16(b[at]) | (u16(b[at + 1]) << 8)
+}
+
+@det
+fn get32(b: &List[u8], at: i64) u32 {
+    return u32(b[at]) | (u32(b[at + 1]) << 8) | (u32(b[at + 2]) << 16) | (u32(b[at + 3]) << 24)
+}
+
+// Байты в чанк; none — длина не сходится.
+@det
+fn decode(b: &List[u8]) ?Chunk {
+    if len(b) < 12 + TILES * 3 {
+        return none
+    }
+    let n = i64(get32(&b, 8))
+    if len(b) != 12 + TILES * 3 + n * 7 {
+        return none
+    }
+    var c = Chunk { cx: i32.wrap(get32(&b, 0)), cy: i32.wrap(get32(&b, 4)), heights: [], biomes: [], objects: [] }
+    c.heights.reserve(TILES)
+    c.biomes.reserve(TILES)
+    for k in 0..TILES {
+        c.heights.push(get16(&b, 12 + k * 2))
+    }
+    for k in 0..TILES {
+        c.biomes.push(b[12 + TILES * 2 + k])
+    }
+    var at = 12 + TILES * 3
+    for k in 0..n {
+        c.objects.push(Obj { kind: b[at], x: b[at + 1], y: b[at + 2], value: get32(&b, at + 3) })
+        at += 7
+    }
+    return c
+}
+
+@det
+fn same(a: &Chunk, b: &Chunk) bool {
+    if a.cx != b.cx || a.cy != b.cy || a.heights != b.heights || a.biomes != b.biomes {
+        return false
+    }
+    if len(a.objects) != len(b.objects) {
+        return false
+    }
+    for k in 0..len(a.objects) {
+        let p = a.objects[k]
+        let q = b.objects[k]
+        if p.kind != q.kind || p.x != q.x || p.y != q.y || p.value != q.value {
+            return false
+        }
+    }
+    return true
+}
+
+@det
+fn fnv(h: u64, v: u64) u64 {
+    return (h ^ v) *% 0x100000001B3
+}
+
+@det
+fn hash_bytes(b: &List[u8]) u64 {
+    var h: u64 = 0xCBF29CE484222325
+    for v in &b {
+        h = fnv(h, u64(v))
+    }
+    return h
+}
+
+fn hex(h: u64) str {
+    let digits = "0123456789abcdef"
+    var s = ""
+    for i in 0..16 {
+        let d = i64((h >> u64(60 - 4 * i)) & 15)
+        s += digits[d..d + 1]
+    }
+    return s
+}
+
+fn main() Failure!void {
+    let args = os.args()
+    let modes: List[str] = ["g", "ge", "encode", "roundtrip"]
+    if len(args) != 3 || !modes.contains(args[0]) {
+        eprintln("usage: world <g|ge|encode|roundtrip> <chunks per side> <seed>")
+        fail .Usage
+    }
+    let mode = args[0]
+    let w = parse_int(args[1]) ?? 0
+    let seed = u64(max(parse_int(args[2]) ?? 0, 0))
+    let n = w * w
+    var chunks: List[Chunk] = []
+    chunks.reserve(n)
+    for i in 0..n {
+        chunks.push(Chunk { cx: 0, cy: 0, heights: [], biomes: [], objects: [] })
+    }
+    parallel for i in 0..n {
+        chunks[i] = gen_chunk(seed, i % w, i / w)
+    }
+    var objects: i64 = 0
+    for c in &chunks {
+        objects += len(c.objects)
+    }
+    var sums: List[u64] = repeat(u64(0), n)
+    var total: i64 = 0
+    if mode != "g" {
+        var blobs: List[List[u8]] = []
+        blobs.reserve(n)
+        for i in 0..n {
+            blobs.push([])
+        }
+        parallel for i in 0..n {
+            blobs[i] = encode(&chunks[i])
+        }
+        for b in &blobs {
+            total += len(b)
+        }
+        if mode != "ge" {
+            parallel for i in 0..n {
+                sums[i] = hash_bytes(&blobs[i])
+            }
+        }
+        if mode == "roundtrip" {
+            var ok: List[bool] = repeat(false, n)
+            parallel for i in 0..n {
+                match decode(&blobs[i]) {
+                    some(c) => ok[i] = same(&c, &chunks[i])
+                    none => ok[i] = false
+                }
+            }
+            for k in &ok {
+                if !k {
+                    eprintln("roundtrip: a chunk does not match")
+                    fail .Corrupt
+                }
+            }
+        }
+    }
+    var h: u64 = 0xCBF29CE484222325
+    for s in &sums {
+        h = fnv(h, s)
+    }
+    println(mode + " chunks=" + str(n) + " objects=" + str(objects) + " bytes=" + str(total) + " hash=" + hex(h))
+}
