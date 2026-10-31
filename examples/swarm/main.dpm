@@ -1,0 +1,218 @@
+// swarm — рой агентов с записью и повтором (README.md рядом).
+//
+//     swarm record <зерно> <агентов> <тактов>   — запись в stdout
+//     swarm replay <файл>...                    — повтор записей
+//
+// Запись — заголовок, вход каждого такта и хэш состояния после него.
+// Повтор строит мир от зерна, подаёт записанный вход и сверяет хэш на
+// каждом такте; расхождение — «файл:строка: error: …» в stderr и код
+// выхода 1.
+import os
+@det import swarm
+
+enum Failure {
+    Usage
+    Mismatch
+}
+
+fn cmd_line(t: i64, c: &swarm.Cmd) str {
+    match c {
+        .Goal(x, y) => return str(t) + " goal " + str(x) + " " + str(y)
+        .Spawn(x, y) => return str(t) + " spawn " + str(x) + " " + str(y)
+        .Kill(n) => return str(t) + " kill " + str(n)
+    }
+}
+
+// Запись прогона: входы «игрока» по тактам и хэш после каждого такта.
+fn record(seed: u64, agents: i64, ticks: i64) str {
+    var out = "swarm-record 1\nseed " + str(seed) + "\nagents " + str(agents) + "\n"
+    var w = swarm.new_world(seed, agents)
+    var s = swarm.new_scratch()
+    for t in 1..ticks + 1 {
+        let cmds = swarm.player(seed, t, len(w.agents))
+        for c in &cmds {
+            out += cmd_line(t, &c) + "\n"
+        }
+        swarm.step(&mut w, &mut s, &cmds)
+        out += str(t) + " hash " + swarm.hex(swarm.hash(&w)) + "\n"
+    }
+    return out
+}
+
+// Итог повтора: line > 0 — строка ошибки error.
+struct Outcome {
+    line: i64
+    error: str
+    ticks: i64
+    agents: i64
+    hash: str
+}
+
+fn failed(line: i64, error: str) Outcome {
+    return Outcome { line, error, ticks: 0, agents: 0, hash: "" }
+}
+
+// Число из строки заголовка «имя число»; -1 — не то.
+fn header(line: str, name: str) i64 {
+    let f = line.split(" ")
+    if len(f) != 2 || f[0] != name {
+        return -1
+    }
+    return max(parse_int(f[1]) ?? -1, -1)
+}
+
+// Аргументы команды: «такт имя числа…»; none — не числа.
+fn numbers(f: &List[str], from: i64) ?List[i64] {
+    var xs: List[i64] = []
+    for i in from..len(f) {
+        match parse_int(f[i]) {
+            some(v) => xs.push(v)
+            none => return none
+        }
+    }
+    return xs
+}
+
+fn replay(text: str) Outcome {
+    let lines = text.split("\n")
+    if len(lines) < 3 || lines[0] != "swarm-record 1" {
+        return failed(1, "not a swarm record: the first line must be 'swarm-record 1'")
+    }
+    let seed = header(lines[1], "seed")
+    let agents = header(lines[2], "agents")
+    if seed < 0 {
+        return failed(2, "expected 'seed <n>' with n >= 0")
+    }
+    if agents < 0 {
+        return failed(3, "expected 'agents <n>' with n >= 0")
+    }
+    var w = swarm.new_world(u64(seed), agents)
+    var s = swarm.new_scratch()
+    var cmds: List[swarm.Cmd] = []
+    var ticks: i64 = 0
+    for i in 3..len(lines) {
+        let n = i + 1
+        if lines[i] == "" {
+            continue
+        }
+        let f = lines[i].split(" ")
+        let t = parse_int(f[0]) ?? -1
+        if len(f) < 2 || t != ticks + 1 {
+            return failed(n, "expected '" + str(ticks + 1) + " <goal|spawn|kill|hash> ...'")
+        }
+        if f[1] == "hash" && len(f) == 3 {
+            swarm.step(&mut w, &mut s, &cmds)
+            cmds.clear()
+            ticks = t
+            let got = swarm.hex(swarm.hash(&w))
+            if got != f[2] {
+                return failed(n, "tick " + str(t) + ": recorded hash " + f[2] + ", replay gives " + got)
+            }
+            continue
+        }
+        let xs = numbers(&f, 2) ?? []
+        if f[1] == "goal" && len(xs) == 2 && len(f) == 4 {
+            cmds.push(.Goal(xs[0], xs[1]))
+        } else if f[1] == "spawn" && len(xs) == 2 && len(f) == 4 {
+            cmds.push(.Spawn(xs[0], xs[1]))
+        } else if f[1] == "kill" && len(xs) == 1 && len(f) == 3 {
+            cmds.push(.Kill(xs[0]))
+        } else {
+            return failed(n, "bad command '" + lines[i] + "'")
+        }
+    }
+    if len(cmds) > 0 {
+        return failed(len(lines), "commands of tick " + str(ticks + 1) + " have no hash line")
+    }
+    return Outcome { line: 0, error: "", ticks, agents: len(w.agents), hash: swarm.hex(swarm.hash(&w)) }
+}
+
+fn replay_file(path: str) bool {
+    match os.read_file(path) {
+        err(e) => {
+            eprintln(path + ": error: cannot read the file")
+            return false
+        }
+        ok(text) => {
+            let r = replay(text)
+            if r.line > 0 {
+                eprintln(path + ":" + str(r.line) + ": error: " + r.error)
+                return false
+            }
+            println(path + ": replay ok, " + str(r.ticks) + " ticks, " + str(r.agents) + " agents, hash " + r.hash)
+            return true
+        }
+    }
+}
+
+fn main() Failure!void {
+    let args = os.args()
+    if len(args) == 4 && args[0] == "record" {
+        let seed = parse_int(args[1]) ?? -1
+        let agents = parse_int(args[2]) ?? -1
+        let ticks = parse_int(args[3]) ?? -1
+        if seed >= 0 && agents >= 0 && ticks >= 0 {
+            print(record(u64(seed), agents, ticks))
+            return
+        }
+    }
+    if len(args) >= 2 && args[0] == "replay" {
+        var ok = true
+        for i in 1..len(args) {
+            ok = replay_file(args[i]) && ok
+        }
+        if !ok {
+            fail .Mismatch
+        }
+        return
+    }
+    eprintln("usage: swarm record <seed> <agents> <ticks> | swarm replay <file>...")
+    fail .Usage
+}
+
+@test
+fn record_replays() {
+    let r = replay(record(7, 20, 12))
+    assert(r.line == 0 && r.ticks == 12)
+}
+
+@test
+fn replay_finds_a_changed_input() {
+    let text = record(7, 20, 12)
+    var edited = ""
+    var changed = false
+    for line in &text.split("\n") {
+        let f = line.split(" ")
+        if !changed && len(f) == 4 && f[1] == "spawn" {
+            edited += f[0] + " spawn 1 1\n"
+            changed = true
+        } else if line != "" {
+            edited += line + "\n"
+        }
+    }
+    assert(changed)
+    let r = replay(edited)
+    assert(r.line > 0 && r.error.starts_with("tick "))
+    assert(replay(text + "13 spawn 1 1\n").error == "commands of tick 13 have no hash line")
+}
+
+@test
+fn replay_rejects_a_wrong_hash() {
+    let r = replay("swarm-record 1\nseed 7\nagents 5\n1 hash 0000000000000000\n")
+    assert(r.line == 4)
+    assert(r.error.starts_with("tick 1: recorded hash 0000000000000000, replay gives "))
+}
+
+@test
+fn hash_sees_every_agent() {
+    var a = swarm.new_world(7, 10)
+    let b = swarm.new_world(7, 10)
+    assert(swarm.hash(&a) == swarm.hash(&b))
+    var s = swarm.new_scratch()
+    let kill9: List[swarm.Cmd] = [.Kill(9)]
+    let kill8: List[swarm.Cmd] = [.Kill(8)]
+    swarm.step(&mut a, &mut s, &kill9)
+    var c = swarm.new_world(7, 10)
+    swarm.step(&mut c, &mut s, &kill8)
+    assert(swarm.hash(&a) != swarm.hash(&c))
+}

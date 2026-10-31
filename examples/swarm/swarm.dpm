@@ -1,0 +1,270 @@
+// Рой агентов на плоскости — модуль класса D: main импортирует его с
+// `@det`, поэтому шаг даёт побитово один результат при любом числе
+// потоков, в профилях debug и release и на всех целях (Р12, Р55).
+//
+// Координаты и скорости — целые с фиксированной точкой (1/1000 единицы),
+// «нагрев» агента — f64. Шаг: команды по порядку, снимок агентов и сетка
+// соседей, затем `parallel for` по пулу — каждый агент меняет только себя,
+// соседей читает из снимка (Р69).
+
+pub const SIZE: i64 = 400000
+
+const CELL: i64 = 25000
+
+const CELLS: i64 = 16
+
+const RADIUS: i64 = 25000
+
+const CLOSE: i64 = 6000
+
+const MAX_SPEED: i64 = 4000
+
+pub struct Agent {
+    id: i64
+    x: i64
+    y: i64
+    vx: i64
+    vy: i64
+    heat: f64
+    sig: u64
+}
+
+// Вход такта: цель роя, новый агент, удаление n-го живого агента.
+pub enum Cmd {
+    Goal(i64, i64)
+    Spawn(i64, i64)
+    Kill(i64)
+}
+
+pub struct World {
+    agents: Pool[Agent]
+    goal_x: i64
+    goal_y: i64
+    next_id: i64
+    tick: i64
+}
+
+// Рабочая память шага: снимок агентов и номера в снимке по ячейкам
+// сетки. Ёмкость переживает такты (Р68).
+pub struct Scratch {
+    snap: List[Agent]
+    cells: List[List[i64]]
+}
+
+// splitmix64 от зерна и двух ключей: случайность по ключам, без общего
+// изменяемого генератора (docs/policy/DETERMINISM.md).
+pub fn mix(seed: u64, a: i64, b: i64) u64 {
+    var z = seed ^ (u64.wrap(a) *% 0x9E3779B97F4A7C15) ^ (u64.wrap(b) *% 0xD1B54A32D192ED03)
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+// Число в [0, n) от ключей.
+fn pick(seed: u64, a: i64, b: i64, n: i64) i64 {
+    return i64(mix(seed, a, b) % u64(n))
+}
+
+pub fn new_world(seed: u64, n: i64) World {
+    var w = World { agents: [], goal_x: SIZE / 2, goal_y: SIZE / 2, next_id: 0, tick: 0 }
+    w.agents.reserve(n)
+    for k in 0..n {
+        let x = pick(seed, -1, k * 4, SIZE)
+        let y = pick(seed, -1, k * 4 + 1, SIZE)
+        let vx = pick(seed, -1, k * 4 + 2, 2 * MAX_SPEED + 1) - MAX_SPEED
+        let vy = pick(seed, -1, k * 4 + 3, 2 * MAX_SPEED + 1) - MAX_SPEED
+        spawn(&mut w, x, y, vx, vy)
+    }
+    return w
+}
+
+pub fn new_scratch() Scratch {
+    var s = Scratch { snap: [], cells: [] }
+    for c in 0..CELLS * CELLS {
+        s.cells.push([])
+    }
+    return s
+}
+
+fn spawn(w: &mut World, x: i64, y: i64, vx: i64, vy: i64) {
+    var a = Agent { id: w.next_id, x, y, vx, vy, heat: 0.0, sig: 0 }
+    a.sig = sign(&a)
+    let _ = w.agents.add(a)
+    w.next_id += 1
+}
+
+// Входы «игрока» такта t — от зерна и номера такта, как запись ввода.
+pub fn player(seed: u64, t: i64, live: i64) List[Cmd] {
+    var cmds: List[Cmd] = []
+    if t % 25 == 1 {
+        cmds.push(.Goal(pick(seed, t, 0, SIZE), pick(seed, t, 1, SIZE)))
+    }
+    if pick(seed, t, 2, 4) == 0 {
+        cmds.push(.Spawn(pick(seed, t, 3, SIZE), pick(seed, t, 4, SIZE)))
+    }
+    if live > 0 && pick(seed, t, 5, 5) == 0 {
+        cmds.push(.Kill(pick(seed, t, 6, live)))
+    }
+    return cmds
+}
+
+fn apply(w: &mut World, c: &Cmd) {
+    match c {
+        .Goal(x, y) => {
+            w.goal_x = x
+            w.goal_y = y
+        }
+        .Spawn(x, y) => spawn(&mut w, x, y, 0, 0)
+        .Kill(n) => {
+            let hs = w.agents.handles()
+            if n >= 0 && n < len(hs) {
+                let _ = w.agents.remove(hs[n])
+            }
+        }
+    }
+}
+
+fn cell_of(v: i64) i64 {
+    return min(max(v / CELL, 0), CELLS - 1)
+}
+
+fn clamp_speed(v: i64) i64 {
+    return min(max(v, -MAX_SPEED), MAX_SPEED)
+}
+
+// Новое состояние агента a по соседям из снимка: сближение с центром
+// соседей, выравнивание скорости, отталкивание вблизи, тяга к цели.
+fn steer(a: &mut Agent, s: &Scratch, gx: i64, gy: i64) {
+    var count: i64 = 0
+    var sx: i64 = 0
+    var sy: i64 = 0
+    var svx: i64 = 0
+    var svy: i64 = 0
+    var px: i64 = 0
+    var py: i64 = 0
+    let cx = cell_of(a.x)
+    let cy = cell_of(a.y)
+    for dy in -1..2 {
+        for dx in -1..2 {
+            let x = cx + dx
+            let y = cy + dy
+            if x < 0 || y < 0 || x >= CELLS || y >= CELLS {
+                continue
+            }
+            for j in &s.cells[y * CELLS + x] {
+                let o = s.snap[j]
+                if o.id == a.id {
+                    continue
+                }
+                let ddx = o.x - a.x
+                let ddy = o.y - a.y
+                let d2 = ddx * ddx + ddy * ddy
+                if d2 >= RADIUS * RADIUS {
+                    continue
+                }
+                count += 1
+                sx += o.x
+                sy += o.y
+                svx += o.vx
+                svy += o.vy
+                if d2 < CLOSE * CLOSE {
+                    px -= ddx
+                    py -= ddy
+                }
+            }
+        }
+    }
+    var vx = a.vx + (gx - a.x) / 2000
+    var vy = a.vy + (gy - a.y) / 2000
+    if count > 0 {
+        vx += (sx / count - a.x) / 100 + (svx / count - a.vx) / 8 + px / 4
+        vy += (sy / count - a.y) / 100 + (svy / count - a.vy) / 8 + py / 4
+    }
+    a.vx = clamp_speed(vx)
+    a.vy = clamp_speed(vy)
+    a.x += a.vx
+    a.y += a.vy
+    if a.x < 0 || a.x >= SIZE {
+        a.vx = -a.vx
+        a.x = min(max(a.x, 0), SIZE - 1)
+    }
+    if a.y < 0 || a.y >= SIZE {
+        a.vy = -a.vy
+        a.y = min(max(a.y, 0), SIZE - 1)
+    }
+    a.heat = a.heat * 0.9 + f64(count) * 0.1
+    a.sig = sign(&a)
+}
+
+// Такт: команды по порядку, снимок и сетка, шаг агентов в пуле потоков.
+pub fn step(w: &mut World, s: &mut Scratch, cmds: &List[Cmd]) {
+    for c in &cmds {
+        apply(&mut w, &c)
+    }
+    s.snap.clear()
+    for c in &mut s.cells {
+        c.clear()
+    }
+    for a in &w.agents {
+        s.cells[cell_of(a.y) * CELLS + cell_of(a.x)].push(len(s.snap))
+        s.snap.push(a)
+    }
+    let gx = w.goal_x
+    let gy = w.goal_y
+    parallel for a in &mut w.agents {
+        steer(&mut a, &s, gx, gy)
+    }
+    w.tick += 1
+}
+
+fn fnv(h: u64, v: u64) u64 {
+    return (h ^ v) *% 0x100000001B3
+}
+
+// Подпись агента — хэш всех его полей; нагрев — по точной записи
+// (Р48). Её считает сам шаг, в пуле потоков: запись f64 — самая дорогая
+// часть хэша.
+fn sign(a: &Agent) u64 {
+    var h: u64 = 0xCBF29CE484222325
+    h = fnv(h, u64.wrap(a.id))
+    h = fnv(h, u64.wrap(a.x))
+    h = fnv(h, u64.wrap(a.y))
+    h = fnv(h, u64.wrap(a.vx))
+    h = fnv(h, u64.wrap(a.vy))
+    for b in &str(a.heat) {
+        h = fnv(h, u64(b))
+    }
+    return h
+}
+
+// Хэш состояния: такт, цель и подписи агентов по номеру слота — порядок
+// объединения не зависит от потоков.
+pub fn hash(w: &World) u64 {
+    var h: u64 = 0xCBF29CE484222325
+    h = fnv(h, u64.wrap(w.tick))
+    h = fnv(h, u64.wrap(w.goal_x))
+    h = fnv(h, u64.wrap(w.goal_y))
+    for a in &w.agents {
+        h = fnv(h, a.sig)
+    }
+    return h
+}
+
+// Сумма нагрева по номеру слота — порядок сложения не зависит от потоков.
+pub fn total_heat(w: &World) f64 {
+    var sum: f64 = 0.0
+    for a in &w.agents {
+        sum += a.heat
+    }
+    return sum
+}
+
+pub fn hex(h: u64) str {
+    let digits = "0123456789abcdef"
+    var s = ""
+    for i in 0..16 {
+        let d = i64((h >> u64(60 - 4 * i)) & 15)
+        s += digits[d..d + 1]
+    }
+    return s
+}

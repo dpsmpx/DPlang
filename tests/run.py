@@ -15,7 +15,8 @@ build/compiler/ и прогоняет золотые тесты наборов t
 каждой программе наборов; проход native — различающие тесты C-бэкенда:
 программа набора run собирается в нативную (debug c, runtime, компилятор
 C — $CC или cc, с ASan и UBSan, если они есть), и её вывод сверяется с тем
-же ожидаемым, что у эталонного интерпретатора; проход build — то же
+же ожидаемым, что у эталонного интерпретатора (программа с `parallel for`
+или задачами — ещё и при DPL_THREADS из THREAD_COUNTS); проход build — то же
 через `dpl build` в профилях debug и release; проходы windows и android —
 то же для целей windows-x86_64 (под Wine) и android-arm64 (под
 qemu-aarch64; docs/policy/PLATFORMS.md), если их инструменты есть; иначе
@@ -282,6 +283,12 @@ def tsan_cc():
     return _tsan_cc
 
 
+# Число потоков пула у программ с параллелизмом в проходе native и у
+# сборки примеров: кроме числа по умолчанию — по очереди, нечётное и
+# больше ядер (docs/policy/DETERMINISM.md, раздел 5: 1…N потоков).
+THREAD_COUNTS = ('1', '3', '8')
+
+
 def uses_parallel(path):
     """В программе (или в модулях её каталога) есть `parallel for` или задачи (О13)."""
     d = os.path.dirname(path)
@@ -484,10 +491,11 @@ def lib_one(arg, bless=False):
     return 'вывод хоста расходится:\n' + '\n'.join(list(diff)[:20])
 
 
-def capture(argv, cwd):
+def capture(argv, cwd, env=None):
     """Вывод команды в формате ожидаемого: stdout, stderr, код."""
     try:
-        r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd)
+        r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd,
+                           env=env)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout
@@ -502,7 +510,8 @@ def example_one(case, bless):
     """Проход example (examples/X/, шаг 12 v0.1): test — отчёт `dpl test`
     (expected/test.out); run — интерпретатор с аргументами expected/run.args
     (expected/run.out); build — `dpl build --release` и запуск, вывод тот
-    же; fmt — исходники в каноническом виде."""
+    же (у программы с параллелизмом — и при DPL_THREADS из THREAD_COUNTS);
+    fmt — исходники в каноническом виде."""
     ex, kind = case.split('/')
     cwd = os.path.join(EXAMPLES, ex)
     exp = os.path.join(cwd, 'expected')
@@ -521,7 +530,15 @@ def example_one(case, bless):
                            timeout=TIMEOUT, cwd=cwd)
         if r.returncode != 0:
             return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
-        got, want_path = capture([exe] + args, cwd), os.path.join(exp, 'run.out')
+        want_path = os.path.join(exp, 'run.out')
+        if os.path.exists(want_path) and uses_parallel(os.path.join(cwd, 'main.dpm')):
+            with open(want_path, encoding='utf-8') as f:
+                want = f.read()
+            for threads in THREAD_COUNTS:
+                got = capture([exe] + args, cwd, dict(os.environ, DPL_THREADS=threads))
+                if got != want:
+                    return f'DPL_THREADS={threads}: вывод расходится с интерпретатором'
+        got = capture([exe] + args, cwd)
         bless = False  # ожидаемое пишет случай run
     if bless:
         with open(want_path, 'w', encoding='utf-8') as f:
@@ -620,12 +637,17 @@ def native_one(path):
         return None  # программа не проходит проверку: её диагностику сверяет набор run
     if err:
         return err
-    try:
-        p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
-                           timeout=TIMEOUT, cwd=cwd)
-    except subprocess.TimeoutExpired:
-        return f'[timeout {TIMEOUT} s]'
-    return compare_native(p, path)
+    for threads in (None,) + (THREAD_COUNTS if uses_parallel(path) else ()):
+        env = dict(os.environ, DPL_THREADS=threads) if threads else None
+        try:
+            p = subprocess.run([exe] + program_args(path), capture_output=True, text=True, errors='backslashreplace',
+                               timeout=TIMEOUT, cwd=cwd, env=env)
+        except subprocess.TimeoutExpired:
+            return f'[timeout {TIMEOUT} s]'
+        err = compare_native(p, path)
+        if err:
+            return (f'DPL_THREADS={threads}: ' if threads else '') + err
+    return None
 
 
 def compare_native(p, path):
