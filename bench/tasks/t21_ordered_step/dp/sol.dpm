@@ -1,0 +1,52 @@
+const K: f64 = 0.25
+
+const DT: f64 = 0.1
+
+// Шаг — parallel for по грузам: каждая итерация читает прежнее состояние и
+// пишет свой элемент нового; энергия — по порядку индексов, поэтому итог не
+// зависит от числа потоков (их задаёт runtime, threads не нужен).
+pub fn simulate(x0: []f64, steps: i32, threads: i32) List[f64] {
+    let n = len(x0)
+    var x: List[f64] = []
+    for a in &x0 {
+        x.push(a)
+    }
+    var v: List[f64] = repeat(0.0, n)
+    var nx: List[f64] = repeat(0.0, n)
+    var nv: List[f64] = repeat(0.0, n)
+    var out: List[f64] = []
+    for s in 0..steps {
+        parallel for i in 0..n {
+            var l = 0.0
+            var r = 0.0
+            if i > 0 {
+                l = x[i - 1]
+            }
+            if i + 1 < n {
+                r = x[i + 1]
+            }
+            let f = K * (l - 2.0 * x[i] + r)
+            nv[i] = v[i] + f * DT
+            nx[i] = x[i] + nv[i] * DT
+        }
+        for i in 0..n {
+            x[i] = nx[i]
+            v[i] = nv[i]
+        }
+        var e = 0.0
+        for i in 0..n {
+            var left = 0.0
+            if i > 0 {
+                left = x[i - 1]
+            }
+            let d = x[i] - left
+            e = e + 0.5 * v[i] * v[i]
+            e = e + 0.5 * K * d * d
+        }
+        if n > 0 {
+            e = e + 0.5 * K * x[n - 1] * x[n - 1]
+        }
+        out.push(e)
+    }
+    return out
+}
