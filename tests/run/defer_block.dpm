@@ -1,0 +1,62 @@
+// spec: stmt.defer stmt.errdefer ffi.linear (Р57, Р60)
+// defer и errdefer с телом-блоком прикрывают ресурс так же, как с одной
+// инструкцией; errdefer одного ресурса снимается, когда он закрыт.
+enum Fail {
+    Bad
+}
+
+@linear
+struct Res {
+    name: str
+}
+
+fn open(name: str) Res {
+    println("open " + name)
+    return Res { name }
+}
+
+fn close(r: Res) Fail!void {
+    let Res { name } = r
+    println("close " + name)
+}
+
+fn use(r: &Res, bad: bool) Fail!void {
+    println("use " + r.name)
+    if bad {
+        fail .Bad
+    }
+}
+
+// Ошибка: тело errdefer выполняется целиком, ресурс закрыт раз.
+fn err_block(bad: bool) Fail!void {
+    let r = open("a")
+    errdefer {
+        println("cleanup a")
+        _ = close(r)
+    }
+    try use(&r, bad)
+    try close(r)
+}
+
+// defer с блоком: ресурс по ссылке до конца блока, закрыт на выходе.
+fn defer_block() Fail!void {
+    let r = open("b")
+    defer {
+        println("leaving")
+        _ = close(r)
+    }
+    try use(&r, false)
+}
+
+fn show(what: str, r: Fail!void) {
+    match r {
+        ok(_) => println(what + ": ok")
+        err(_) => println(what + ": error")
+    }
+}
+
+fn main() {
+    show("err_block bad", err_block(true))
+    show("err_block good", err_block(false))
+    show("defer_block", defer_block())
+}

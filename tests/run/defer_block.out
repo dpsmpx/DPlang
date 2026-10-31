@@ -1,0 +1,14 @@
+open a
+use a
+cleanup a
+close a
+err_block bad: error
+open a
+use a
+close a
+err_block good: ok
+open b
+use b
+leaving
+close b
+defer_block: ok
