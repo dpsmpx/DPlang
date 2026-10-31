@@ -1,0 +1,68 @@
+// t24: заготовка — напишите тело функции по task.md.
+pub struct Move {
+    from: i32
+    to: i32
+    amount: i64
+}
+
+pub struct Report {
+    table: List[i64]
+    reads: i64
+    bad: i64
+}
+
+fn writer(m: Mutex[List[i64]], moves: List[Move]) {
+    for mv in &moves {
+        if mv.from == mv.to {
+            continue
+        }
+        lock m as tab {
+            let fi = int(mv.from)
+            let ti = int(mv.to)
+            var amt = mv.amount
+            if tab[fi] < amt {
+                amt = tab[fi]
+            }
+            tab[fi] -= amt
+            tab[ti] += amt
+        }
+    }
+}
+
+fn reader(m: Mutex[List[i64]], reads: i32, expect: i64) i64 {
+    var bad: i64 = 0
+    for r in 0..int(reads) {
+        var s: i64 = 0
+        lock m as tab {
+            for v in &tab {
+                s += v
+            }
+        }
+        if s != expect {
+            bad += 1
+        }
+    }
+    return bad
+}
+
+pub fn run_bank(accounts: i32, moves: &List[Move], readers: i32, reads: i32) Report {
+    let init: List[i64] = repeat(i64(1000), int(accounts))
+    let m: Mutex[List[i64]] = mutex(init)
+    let ms: List[Move] = moves
+    let expect = i64(accounts) * 1000
+    let wt = spawn writer(m, ms)
+    var rts: List[Task[i64]] = []
+    for k in 0..int(readers) {
+        rts.push(spawn reader(m, reads, expect))
+    }
+    wt.join()
+    var bad: i64 = 0
+    for rt in &rts {
+        bad += rt.join()
+    }
+    var table: List[i64] = []
+    lock m as fin {
+        table = fin
+    }
+    return Report { table, reads: i64(readers) * i64(reads), bad }
+}

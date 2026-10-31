@@ -1,0 +1,84 @@
+// t23: заготовка — напишите тело run_jobs по task.md.
+pub fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn cost(v: i64) i64 {
+    var h = u64(v)
+    for i in 0..2000 {
+        h = mix(h)
+    }
+    return i64(h % 1000)
+}
+
+pub struct Totals {
+    ok: bool
+    bad: i64
+    count: i64
+    sum: i64
+    odd: i64
+}
+
+struct Shared {
+    next: Atomic[i64]
+    stop: Atomic[bool]
+    bad: Atomic[i64]
+    count: Atomic[i64]
+    sum: Atomic[i64]
+    odd: Atomic[i64]
+}
+
+fn worker(jobs: List[i64], sh: Shared) {
+    let n = i64(len(jobs))
+    while !sh.stop.load() {
+        let j = sh.next.add(1)
+        if j >= n {
+            break
+        }
+        let v = jobs[j]
+        if v < 0 {
+            sh.stop.store(true)
+            var cur = sh.bad.load()
+            while j < cur {
+                if sh.bad.cas(cur, j) {
+                    break
+                }
+                cur = sh.bad.load()
+            }
+        } else {
+            let r = cost(v)
+            _ = sh.count.add(1)
+            _ = sh.sum.add(r)
+            if r % 2 != 0 {
+                _ = sh.odd.add(1)
+            }
+        }
+    }
+}
+
+pub fn run_jobs(jobs: &List[i64], workers: i32) Totals {
+    let js: List[i64] = jobs
+    let n = i64(len(js))
+    let sh = Shared {
+        next: atomic(i64(0)),
+        stop: atomic(false),
+        bad: atomic(n),
+        count: atomic(i64(0)),
+        sum: atomic(i64(0)),
+        odd: atomic(i64(0)),
+    }
+    var ts: List[Task[void]] = []
+    for w in 0..int(workers) {
+        ts.push(spawn worker(js, sh))
+    }
+    for t in &ts {
+        t.join()
+    }
+    if sh.stop.load() {
+        return Totals { ok: false, bad: sh.bad.load(), count: 0, sum: 0, odd: 0 }
+    }
+    return Totals { ok: true, bad: -1, count: sh.count.load(), sum: sh.sum.load(), odd: sh.odd.load() }
+}

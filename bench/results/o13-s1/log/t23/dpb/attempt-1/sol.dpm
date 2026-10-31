@@ -1,0 +1,70 @@
+// t23: заготовка — напишите тело run_jobs по task.md.
+pub fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn cost(v: i64) i64 {
+    var h = u64(v)
+    for i in 0..2000 {
+        h = mix(h)
+    }
+    return i64(h % 1000)
+}
+
+pub struct Totals {
+    ok: bool
+    bad: i64
+    count: i64
+    sum: i64
+    odd: i64
+}
+
+// Рабочий: пока флаг не поднят, берёт следующий номер из общего счётчика
+// и делает работу; взятый номер делается всегда.
+fn worker(jobs: &List[i64], next_job: &Atomic[i64], flag: &Atomic[bool], first_bad: &Atomic[i64], c_count: &Atomic[i64], c_sum: &Atomic[i64], c_odd: &Atomic[i64]) {
+    let n = len(jobs)
+    while !flag.load() {
+        let j = next_job.add(1)
+        if j >= n {
+            break
+        }
+        let v = jobs[j]
+        if v < 0 {
+            flag.store(true)
+            var cur = first_bad.load()
+            while j < cur {
+                if first_bad.cas(cur, j) {
+                    break
+                }
+                cur = first_bad.load()
+            }
+        } else {
+            let r = cost(v)
+            _ = c_count.add(1)
+            _ = c_sum.add(r)
+            if r % 2 != 0 {
+                _ = c_odd.add(1)
+            }
+        }
+    }
+}
+
+pub fn run_jobs(jobs: &List[i64], workers: i32) Totals {
+    let next_job = atomic(i64(0))
+    let flag = atomic(false)
+    let first_bad = atomic(i64(len(jobs)))
+    let c_count = atomic(i64(0))
+    let c_sum = atomic(i64(0))
+    let c_odd = atomic(i64(0))
+    let nw = int(workers)
+    parallel for w in 0..nw {
+        worker(&jobs, &next_job, &flag, &first_bad, &c_count, &c_sum, &c_odd)
+    }
+    if flag.load() {
+        return Totals { ok: false, bad: first_bad.load(), count: 0, sum: 0, odd: 0 }
+    }
+    return Totals { ok: true, bad: -1, count: c_count.load(), sum: c_sum.load(), odd: c_odd.load() }
+}

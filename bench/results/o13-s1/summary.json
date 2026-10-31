@@ -60,16 +60,18 @@
    "task": "t20",
    "lang": "dpb",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 655,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 2903,
+    "final": 3423
    },
    "tokens": null,
    "token_model": null,
@@ -86,16 +88,18 @@
    "task": "t20",
    "lang": "dpc",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 655,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 1785,
+    "final": 2305
    },
    "tokens": null,
    "token_model": null,
@@ -168,16 +172,18 @@
    "task": "t22",
    "lang": "dpb",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 341,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 2532,
+    "final": 2738
    },
    "tokens": null,
    "token_model": null,
@@ -194,16 +200,18 @@
    "task": "t22",
    "lang": "dpc",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 341,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 2117,
+    "final": 2323
    },
    "tokens": null,
    "token_model": null,
@@ -276,16 +284,18 @@
    "task": "t23",
    "lang": "dpb",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 654,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 1447,
+    "final": 1966
    },
    "tokens": null,
    "token_model": null,
@@ -302,16 +312,18 @@
    "task": "t23",
    "lang": "dpc",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 654,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 1420,
+    "final": 1939
    },
    "tokens": null,
    "token_model": null,
@@ -384,16 +396,18 @@
    "task": "t24",
    "lang": "dpb",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 425,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 1752,
+    "final": 2042
    },
    "tokens": null,
    "token_model": null,
@@ -410,16 +424,18 @@
    "task": "t24",
    "lang": "dpc",
    "kind": "write",
-   "status": "не начато",
-   "attempts": 0,
-   "accepted_at": null,
-   "first_try": false,
-   "path": [],
+   "status": "принято",
+   "attempts": 1,
+   "accepted_at": 1,
+   "first_try": true,
+   "path": [
+    "принято"
+   ],
    "chars": {
     "prompt": 425,
-    "diagnostics": 0,
-    "written": 0,
-    "final": 0
+    "diagnostics": 23,
+    "written": 1272,
+    "final": 1562
    },
    "tokens": null,
    "token_model": null,
@@ -446,7 +462,12 @@
    "t23",
    "t24"
   ],
-  "common": [],
+  "common": [
+   "t20",
+   "t22",
+   "t23",
+   "t24"
+  ],
   "unit": "chars",
   "by_lang": {
    "cpp": {
@@ -466,10 +487,10 @@
      "компилятор": 0
     },
     "common": {
-     "prompt": 0,
-     "diagnostics": 0,
-     "written": 0,
-     "final": 0
+     "prompt": 2690,
+     "diagnostics": 92,
+     "written": 9625,
+     "final": 11839
     },
     "session": null
    },
@@ -490,18 +511,18 @@
      "компилятор": 0
     },
     "common": {
-     "prompt": 0,
-     "diagnostics": 0,
-     "written": 0,
-     "final": 0
+     "prompt": 2075,
+     "diagnostics": 92,
+     "written": 7856,
+     "final": 9391
     },
     "session": null
    },
    "dpb": {
     "cells": 4,
-    "accepted": 0,
-    "first_try": 0,
-    "mean_attempts": null,
+    "accepted": 4,
+    "first_try": 4,
+    "mean_attempts": 1.0,
     "classes": {
      "разбор": 0,
      "перевод": 0,
@@ -514,18 +535,18 @@
      "компилятор": 0
     },
     "common": {
-     "prompt": 0,
-     "diagnostics": 0,
-     "written": 0,
-     "final": 0
+     "prompt": 2075,
+     "diagnostics": 92,
+     "written": 8634,
+     "final": 10169
     },
     "session": null
    },
    "dpc": {
     "cells": 4,
-    "accepted": 0,
-    "first_try": 0,
-    "mean_attempts": null,
+    "accepted": 4,
+    "first_try": 4,
+    "mean_attempts": 1.0,
     "classes": {
      "разбор": 0,
      "перевод": 0,
@@ -538,10 +559,10 @@
      "компилятор": 0
     },
     "common": {
-     "prompt": 0,
-     "diagnostics": 0,
-     "written": 0,
-     "final": 0
+     "prompt": 2075,
+     "diagnostics": 92,
+     "written": 6594,
+     "final": 8129
     },
     "session": null
    }

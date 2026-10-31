@@ -1,0 +1,109 @@
+// t22: заготовка — напишите тело функции по task.md.
+pub struct Stats {
+    distinct: List[i64]
+    longest: str
+    anagrams: i64
+}
+
+// Счётчики одного рабочего: слова от n*w/nw до n*(w+1)/nw.
+// Буфер отметок — один на рабочего, очищается перед каждым словом.
+fn worker_counts(words: &List[str], w: int, nw: int) List[i64] {
+    let n = len(words)
+    let lo = n * w / nw
+    let hi = n * (w + 1) / nw
+    var counts: List[i64] = repeat(i64(0), 27)
+    var marks: List[bool] = repeat(false, 26)
+    var i = lo
+    while i < hi {
+        for m in &mut marks {
+            m = false
+        }
+        var d: int = 0
+        for c in &words[i] {
+            if c >= 'a' && c <= 'z' {
+                let idx = int(c - 'a')
+                if !marks[idx] {
+                    marks[idx] = true
+                    d += 1
+                }
+            }
+        }
+        counts[d] += 1
+        i += 1
+    }
+    return counts
+}
+
+// Расчёт 1: делится между рабочими, счётчики складываются после.
+fn count_distinct(words: &List[str], workers: i32) List[i64] {
+    let nw = int(workers)
+    var parts: List[List[i64]] = repeat(repeat(i64(0), 27), nw)
+    parallel for w in 0..nw {
+        parts[w] = worker_counts(&words, w, nw)
+    }
+    var total: List[i64] = repeat(i64(0), 27)
+    for w2 in 0..nw {
+        for k in 0..27 {
+            total[k] += parts[w2][k]
+        }
+    }
+    return total
+}
+
+// Расчёт 2: первое из самых длинных слов.
+fn find_longest(words: &List[str]) str {
+    var best = ""
+    for s in &words {
+        if len(s) > len(best) {
+            best = s
+        }
+    }
+    return best
+}
+
+// Одинаковые ли счётчики байтов; буфер после проверки — снова нули.
+fn is_anagram(x: &str, y: &str, buf: &mut List[i64]) bool {
+    if len(x) != len(y) {
+        return false
+    }
+    for c1 in &x {
+        buf[int(c1)] += 1
+    }
+    for c2 in &y {
+        buf[int(c2)] -= 1
+    }
+    var same = true
+    for v in &mut buf {
+        if v != 0 {
+            same = false
+        }
+        v = 0
+    }
+    return same
+}
+
+// Расчёт 3: пары соседних слов-анаграмм.
+fn count_anagrams(words: &List[str]) i64 {
+    var cnt: i64 = 0
+    var buf: List[i64] = repeat(i64(0), 256)
+    var i = 0
+    while i + 1 < len(words) {
+        if is_anagram(&words[i], &words[i + 1], &mut buf) {
+            cnt += 1
+        }
+        i += 1
+    }
+    return cnt
+}
+
+pub fn analyze(words: &List[str], workers: i32) Stats {
+    var distinct: List[i64] = []
+    var longest = ""
+    var anagrams: i64 = 0
+    parallel {
+        distinct = count_distinct(&words, workers)
+        longest = find_longest(&words)
+        anagrams = count_anagrams(&words)
+    }
+    return Stats { distinct: distinct, longest: longest, anagrams: anagrams }
+}

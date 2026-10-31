@@ -24,5 +24,10 @@
   "t23",
   "t24"
  ],
- "created": "2026-10-31T12:11:14"
+ "created": "2026-10-31T12:11:14",
+ "session": {
+  "total_tokens": 83616,
+  "tool_uses": 10,
+  "seconds": 144.0
+ }
 }
