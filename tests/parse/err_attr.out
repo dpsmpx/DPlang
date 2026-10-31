@@ -5,7 +5,7 @@ Module err_attr
   Fn ok @det
     Block
 --- stderr ---
-err_attr.dpm:2:1: error[E0205]: attributes are only allowed before a function, a struct or an import
+err_attr.dpm:2:1: error[E0205]: attributes are only allowed before a function, a struct, an 'extern type' or an import
    2 | @det
      | ^~~~
 err_attr.dpm:7:1: error[E0206]: 'pub' cannot be applied to 'import'
