@@ -1,0 +1,28 @@
+// spec: stmt.for (Р69), О13 прототип
+// Элемент по переменной цикла различен в итерациях только у диапазона: у
+// обхода `&xs` переменная — значение элемента, оно может повторяться
+// (атака a06, bench/o13/attacks_a.dpm).
+fn add(x: &mut i64) {
+    x += 1
+}
+
+fn main() {
+    var out: List[i64] = repeat(i64(0), 4)
+    let idx = [1, 1, 2, 3]
+    parallel for i in &idx {
+        out[i] += 1
+    }
+    tasks {
+        for i in &idx {
+            spawn add(&mut out[i])
+        }
+    }
+    // Можно: диапазон и сам элемент обхода.
+    parallel for k in 0..len(idx) {
+        out[k] = idx[k]
+    }
+    var ys = [1, 2, 3]
+    parallel for y in &mut ys {
+        y += 1
+    }
+}

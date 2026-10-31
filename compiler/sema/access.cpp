@@ -212,14 +212,22 @@ void Checker::note_write(Expr* place, const char* why, bool loops) {
         }
         if (!L.parallel || base->id >= L.first_inner) continue;
         // Снаружи тела `parallel for` пишется только элемент по переменной
-        // цикла (`out[i]`, `out[i].push(x)`): итерации идут одновременно, и
-        // у каждой свой элемент.
-        if (by_var(steps, L.var)) {
+        // диапазона (`out[i]`, `out[i].push(x)`): итерации идут одновременно,
+        // и у каждой свой элемент. У обхода `&xs` переменная — значение
+        // элемента, оно может повторяться.
+        if (L.range && by_var(steps, L.var)) {
             // Р69: читать эту переменную тело дальше может только как out[i].
             if (std::find(L.written.begin(), L.written.end(), root) == L.written.end()) L.written.push_back(root);
             continue;
         }
         std::string var = L.var ? L.var->name : "i";
+        if (by_var(steps, L.var)) {
+            error(Code::E0412, place->span,
+                  head + " inside 'parallel for': '" + var + "' is an element of '" + text(L.iter) +
+                      "', and elements may repeat, so two iterations could write the same place; iterate over a "
+                      "range: 'parallel for k in 0..len(" + text(L.iter) + ")'");
+            return;
+        }
         error(Code::E0412, place->span,
               head + " inside 'parallel for': iterations run at the same time; write each result to an element "
                      "indexed by the loop variable, such as 'out[" + var + "]', and combine them after the loop");
@@ -269,6 +277,7 @@ void Checker::loop_begin(ForStmt* s) {
     L.var = s->local;
     L.mut = s->mode == ForMode::Mut;
     L.parallel = s->parallel;
+    L.range = s->mode == ForMode::Range;
     L.first_inner = s->local ? s->local->id : next_local_;
     L.iter = s->iter;
     if ((s->mode == ForMode::Ref || L.mut) && s->iter && s->iter->type) {
@@ -319,7 +328,7 @@ void Checker::loop_end() {
         if (r.par) {
             // Р69: переменную, которую тело пишет как out[i], оно и читает
             // только так — другой элемент пишет другая итерация.
-            if (!root || by_var(steps, L.var) ||
+            if (!root || (L.range && by_var(steps, L.var)) ||
                 std::find(L.written.begin(), L.written.end(), root) == L.written.end() ||
                 std::find(reported.begin(), reported.end(), root) != reported.end()) {
                 continue;
@@ -569,12 +578,14 @@ bool Checker::variant_ok(char variant, Span span, const char* form) {
 }
 
 void Checker::task_loop_begin(const ForStmt* f) {
-    // Разные итерации — разные элементы только у диапазона и обхода `&`/`&mut`.
-    const Local* var = nullptr;
+    // Разные итерации — разные места только у диапазона (`out[i]`) и обхода
+    // `&`/`&mut` (сам элемент); у обхода значений — ничего.
+    TaskLoop l;
     if (f && f->local && (f->mode == ForMode::Range || f->mode == ForMode::Ref || f->mode == ForMode::Mut)) {
-        var = f->local;
+        l.var = f->local;
+        l.range = f->mode == ForMode::Range;
     }
-    for (TasksScope& sc : tasks_) sc.loops.push_back(var);
+    for (TasksScope& sc : tasks_) sc.loops.push_back(l);
 }
 
 void Checker::task_loop_end() {
@@ -664,12 +675,13 @@ void Checker::tasks_end() {
         const TaskBorrow& b = sc.borrows[i];
         if (!b.mut) continue;
         const Local* base = raw_base(b.place);
-        for (const Local* var : b.loops) {
-            if (var && (by_var(bp[i].steps, var) || derived(base, var, loop_iters_))) continue;
+        for (const TaskLoop& l : b.loops) {
+            const Local* var = l.var;
+            if (var && ((l.range && by_var(bp[i].steps, var)) || derived(base, var, loop_iters_))) continue;
             if (!once(bp[i].root)) break;
-            std::string hint = var ? "; borrow an element indexed by the loop variable, such as '&mut out[" +
-                                         var->name + "]'"
-                                   : "; start one task per element in a 'for' over a range";
+            std::string hint = var && l.range ? "; borrow an element indexed by the loop variable, such as '&mut out[" +
+                                                    var->name + "]'"
+                                              : "; start one task per element in a 'for' over a range";
             error(Code::E0521, b.place->span, "every iteration of this loop starts a task with '&mut " +
                                                   text(b.place) + "': the tasks would change it at the same time" + hint);
             break;

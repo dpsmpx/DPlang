@@ -159,6 +159,7 @@ private:
         ast::Expr* iter = nullptr;
         bool mut = false;             // `for … in &mut`
         bool parallel = false;
+        bool range = false;  // `for i in a..b`: i в итерациях разная — `out[i]` у каждой свой
         uint32_t first_inner = 0;  // переменные с номером не меньше — объявлены в теле
         TK coll = TK::Error;       // List, Map, Slice; Error — диапазон или срез str
         std::vector<const Local*> written;  // `parallel for`: внешние переменные, которые тело пишет как out[i]
@@ -191,11 +192,18 @@ private:
     bool variant_ok(char variant, Span span, const char* form);
 public:
     // Заимствование `&x` или `&mut x` задачей блока: живёт до конца блока.
+    // Цикл блока задач вокруг `spawn`: переменная (nullptr — while) и
+    // диапазон ли он — у диапазона `out[i]` в итерациях разные, у обхода
+    // разные только сами элементы.
+    struct TaskLoop {
+        const Local* var = nullptr;
+        bool range = false;
+    };
     struct TaskBorrow {
         ast::Expr* place = nullptr;
         bool mut = false;
         const ast::SpawnExpr* spawn = nullptr;
-        std::vector<const Local*> loops;  // циклы блока вокруг `spawn`; nullptr — без своей переменной
+        std::vector<TaskLoop> loops;
     };
     // Доступ кода блока (вне задач) к месту: читает или меняет.
     struct TaskAccess {
@@ -207,7 +215,7 @@ public:
     struct TasksScope {
         uint32_t first_inner = 0;  // переменные блока — с номером не меньше
         bool each = false;         // `parallel { … }`
-        std::vector<const Local*> loops;
+        std::vector<TaskLoop> loops;
         std::vector<TaskBorrow> borrows;
         std::vector<TaskAccess> accesses;
     };
