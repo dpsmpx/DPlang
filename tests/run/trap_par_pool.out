@@ -1,0 +1,8 @@
+0
+1
+3
+4
+5
+--- stderr ---
+trap_par_pool.dpm:14:9: trap: assertion failed
+[exit 101]
