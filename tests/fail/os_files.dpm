@@ -1,0 +1,23 @@
+// spec: ffi.linear (Р57, Р71)
+// os.File — линейный: не закрыт на пути ошибки (E0511), закрыт дважды
+// (E0512). Литерал os.File вне os допустим: дескриптор проверяет runtime
+// (ловушка «file is not open», docs/stdlib/README.md).
+import os
+
+fn leak(path: str) os.IoError!void {
+    var f = try os.create(path)
+    try os.write(&mut f, [1, 2, 3])
+}
+
+fn forge() {
+    let f = os.File { id: 1 }
+    _ = os.close(f)
+}
+
+fn twice(path: str) os.IoError!void {
+    let f = try os.open(path)
+    try os.close(f)
+    try os.close(f)
+}
+
+fn main() {}

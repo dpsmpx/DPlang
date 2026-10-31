@@ -1,0 +1,15 @@
+// spec: stmt.for module.det (Р69, Р71)
+// Файлы — ввод-вывод: в теле parallel for и в функциях, которые оно
+// зовёт, их нет (E0517).
+import os
+
+fn save(path: str) {
+    _ = os.write_file(path, "x")
+}
+
+fn main() {
+    let paths: List[str] = ["a", "b"]
+    parallel for i in 0..len(paths) {
+        save(paths[i])
+    }
+}

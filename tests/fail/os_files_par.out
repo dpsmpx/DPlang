@@ -1,0 +1,5 @@
+--- stderr ---
+os_files_par.dpm:13:9: error[E0517]: 'save' calls 'os.write_file', which calls 'os.write_bytes', which calls 'os.create', which writes files: 'parallel for' cannot use files, program arguments, C or tasks, also in the functions it calls; read the input before the loop and call C after it
+  13 |         save(paths[i])
+     |         ^~~~~~~~~~~~~~
+[exit 1]
