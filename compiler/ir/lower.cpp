@@ -1841,15 +1841,28 @@ private:
         return !t || t->kind == TK::Str;
     }
 
+    // Обход коллекции в `parallel for`: тип коллекции, режим, у Map — тип
+    // списка номеров пар.
+    struct ParColl {
+        const Type* type = nullptr;  // nullptr — диапазон
+        Arg::Kind kind = Arg::Kind::Ref;
+        const Type* ord = nullptr;
+    };
+
     // `parallel for` (Р69): тело — отдельная функция, внешние переменные —
-    // ссылками на их места. Диапазон и обход `&`/`&mut` списка; остальное
-    // (Map, Pool, срез, str, обход значений) — по очереди, это допустимый
-    // порядок. false — не вынесено.
+    // ссылками на их места. Диапазон и обход `&`/`&mut` списка, пула,
+    // отображения, среза и строки: номер итерации — индекс элемента, у
+    // пула — номер слота (мёртвый пропускается), у Map — номер в списке
+    // номеров пар по возрастанию ключа. false — не вынесено.
     bool par_for(const ForStmt* s) {
         bool range = s->mode == ForMode::Range;
-        bool list = (s->mode == ForMode::Ref || s->mode == ForMode::Mut) && s->iter->type &&
-                    s->iter->type->kind == TK::List && !s->iter->conv;
-        if (!range && !list) return false;
+        TK ck_kind = s->iter->type ? s->iter->type->kind : TK::Error;
+        bool coll_ok = (s->mode == ForMode::Ref || s->mode == ForMode::Mut) && !s->iter->conv &&
+                       (ck_kind == TK::List || ck_kind == TK::Pool || ck_kind == TK::Map || ck_kind == TK::Slice ||
+                        ck_kind == TK::Str);
+        if (!range && !coll_ok) return false;
+        bool over_map = !range && ck_kind == TK::Map;
+        bool over_pool = !range && ck_kind == TK::Pool;
         std::vector<const sema::Local*> used;
         for (const Stmt* x : s->body->stmts) names(x, used);
         std::vector<Capture> caps;
@@ -1871,7 +1884,7 @@ private:
         push_scope();
         const Type* t = range ? s->elem : prim(TK::I64);
         Operand lo, hi;
-        Place coll;
+        Place coll, ord;
         if (range) {
             uint32_t l = temp(t), h = temp(t);
             assign(local(l), use(rd(expr(s->iter)), t), s->iter->span);
@@ -1879,11 +1892,18 @@ private:
             lo = copy(local(l));
             hi = copy(local(h));
         } else {
-            // Длина — раз: тело длину не меняет (Р66).
+            // Длина (у пула — число слотов) — раз: тело её не меняет (Р66).
             bool fresh = false;
             coll = object(s->iter, fresh);
-            Rvalue len = intrinsic(Intrinsic::Len, t);
-            len.ops.push_back(copy(coll));
+            Place counted = coll;
+            if (over_map) {
+                Rvalue o = intrinsic(Intrinsic::MapOrder, tt_.list(t));
+                o.ops.push_back(copy(coll));
+                ord = place_of(to_temp(std::move(o), s->iter->span), s->iter->span, fresh);
+                counted = ord;
+            }
+            Rvalue len = intrinsic(over_pool ? Intrinsic::PoolSlots : Intrinsic::Len, t);
+            len.ops.push_back(copy(counted));
             hi = to_temp(std::move(len), s->iter->span);
             lo = cint(0, t);
         }
@@ -1894,17 +1914,27 @@ private:
         g.def = f_.def;
         g.det = f_.det;
         g.ret = prim(TK::Void);
-        Arg::Kind ck = s->mode == ForMode::Mut ? Arg::Kind::Mut : Arg::Kind::Ref;
-        const Type* ct = list ? place_type(out_, f_, coll) : nullptr;
-        FnLower(out_, prog_, fns_, strings_, g, outl_).outline(s, t, ct, ck, caps);
+        ParColl pc;
+        if (!range) {
+            pc.type = place_type(out_, f_, coll);
+            pc.kind = s->mode == ForMode::Mut ? Arg::Kind::Mut : Arg::Kind::Ref;
+            if (over_map) pc.ord = place_type(out_, f_, ord);
+        }
+        FnLower(out_, prog_, fns_, strings_, g, outl_).outline(s, t, pc, caps);
         Rvalue rv = make(RvKind::ParFor, prim(TK::Void));
         rv.fn = idx;
         rv.ops.push_back(rd(std::move(lo)));
         rv.ops.push_back(rd(std::move(hi)));
-        if (list) {
+        if (!range) {
             Arg a;
-            a.kind = ck;
+            a.kind = pc.kind;
             a.place = coll;
+            rv.args.push_back(std::move(a));
+        }
+        if (over_map) {
+            Arg a;
+            a.kind = Arg::Kind::Ref;
+            a.place = ord;
             rv.args.push_back(std::move(a));
         }
         for (const Capture& c : caps) {
@@ -1920,25 +1950,47 @@ private:
 
 public:
     // Тело `parallel for` функцией: параметр 0 — значение переменной
-    // цикла (у обхода списка — номер элемента), дальше — список (если
-    // обход) и захваченные переменные; `continue` — возврат.
-    void outline(const ForStmt* s, const Type* t, const Type* coll_t, Arg::Kind coll_kind,
-                 const std::vector<Capture>& caps) {
+    // цикла (у обхода — номер итерации), дальше — коллекция и у Map
+    // список номеров пар (если обход), затем захваченные переменные;
+    // `continue` и мёртвый слот пула — возврат.
+    void outline(const ForStmt* s, const Type* t, const ParColl& pc, const std::vector<Capture>& caps) {
+        const Type* i64 = prim(TK::I64);
         uint32_t v = add_local(t, LocalKind::Param, s->mode == ForMode::Range ? s->var : "");
-        uint32_t coll = UINT32_MAX;
-        if (coll_t) coll = add_local(coll_t, coll_kind == Arg::Kind::Mut ? LocalKind::ParamMut : LocalKind::ParamRef, "");
+        uint32_t coll = UINT32_MAX, ord = UINT32_MAX;
+        if (pc.type) coll = add_local(pc.type, pc.kind == Arg::Kind::Mut ? LocalKind::ParamMut : LocalKind::ParamRef, "");
+        if (pc.ord) ord = add_local(pc.ord, LocalKind::ParamRef, "");
         for (const Capture& c : caps) {
             locals_[c.var] = add_local(c.type, c.kind == Arg::Kind::Mut ? LocalKind::ParamMut : LocalKind::ParamRef,
                                        c.var->name);
         }
         f_.param_count = static_cast<uint32_t>(f_.locals.size());
-        if (s->local) {
-            if (coll_t) aliases_[s->local] = proj(local(coll), ProjKind::Index, v);
-            else locals_[s->local] = v;
-        }
         cur_ = new_block();
         scopes_.emplace_back();
         uint32_t done = new_block();
+        TK kind = pc.type ? pc.type->kind : TK::Error;
+        if (kind == TK::Pool) {  // слот k живой — иначе итерации нет (Р67)
+            Rvalue live = intrinsic(Intrinsic::PoolLive, prim(TK::Bool));
+            live.ops.push_back(copy(local(coll)));
+            live.ops.push_back(copy(local(v)));
+            uint32_t inner = new_block();
+            branch(to_temp(std::move(live), s->iter->span), inner, done, s->var_span);
+            cur_ = inner;
+            if (s->local) aliases_[s->local] = proj(local(coll), ProjKind::PoolSlot, v);
+        } else if (kind == TK::Map) {
+            // Ключ — пары с номером ord[k], не копия; `m[k]` в теле — значение
+            // этой пары (как у `for`), и по месту коллекции, и по захвату m.
+            uint32_t pos = temp(i64);
+            assign(local(pos), use(copy(proj(local(ord), ProjKind::Index, v)), i64), s->var_span);
+            if (s->local) aliases_[s->local] = proj(local(coll), ProjKind::MapKeyAt, pos);
+            map_loops_.push_back(MapLoop{s->local, local(coll), pos});
+            if (auto* n = as<const NameExpr>(strip_parens(s->iter)); n && n->res.kind == ResKind::Local) {
+                auto c = locals_.find(n->res.local);
+                if (c != locals_.end()) map_loops_.push_back(MapLoop{s->local, local(c->second), pos});
+            }
+        } else if (s->local) {
+            if (pc.type) aliases_[s->local] = proj(local(coll), ProjKind::Index, v);
+            else locals_[s->local] = v;
+        }
         loops_.push_back(Loop{done, done, scopes_.size()});
         block(s->body);
         loops_.pop_back();

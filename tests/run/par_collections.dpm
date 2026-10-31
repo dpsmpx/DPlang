@@ -1,0 +1,49 @@
+// spec: stmt.for type.pool type.map (Р67, Р69)
+// `parallel for` по пулу (мёртвые слоты пропускаются), Map (ключи по
+// возрастанию, `m[k]` — значение пары), срезу и строке: итерации идут
+// в пуле потоков, вывод — по номеру итерации, как при исполнении по
+// очереди.
+struct Unit {
+    hp: i64
+    name: str
+}
+
+fn main() {
+    var p: Pool[Unit] = []
+    var hs: List[Handle[Unit]] = []
+    for i in 0..20 {
+        hs.push(p.add(Unit { hp: i * 10, name: "u" + str(i) }))
+    }
+    let _ = p.remove(hs[3])
+    let _ = p.remove(hs[7])
+    parallel for u in &mut p {
+        u.hp = u.hp + 1
+    }
+    parallel for u in &p {
+        println(u.name + "=" + str(u.hp))
+    }
+    var m: Map[str, i64] = []
+    for i in 0..12 {
+        m["k" + str(i)] = i * i
+    }
+    parallel for k in &m {
+        println(k + ":" + str(m[k]))
+    }
+    let xs: List[i64] = [5, 6, 7, 8, 9, 10, 11]
+    var out: List[i64] = repeat(i64(0), 4)
+    parallel for x in &xs[2..6] {
+        println("s" + str(x))
+    }
+    parallel for i in 0..4 {
+        out[i] = xs[i + 2] * 2
+    }
+    println(str(out[0]) + " " + str(out[1]) + " " + str(out[2]) + " " + str(out[3]))
+    let s = "hello"
+    parallel for b in &s {
+        println(str(b))
+    }
+    var empty: Map[str, i64] = []
+    parallel for k in &empty {
+        println("never " + k)
+    }
+}

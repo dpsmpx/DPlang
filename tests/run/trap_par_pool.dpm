@@ -1,0 +1,16 @@
+// spec: stmt.for trap.concurrent type.pool (Р67, Р69)
+// Ловушка в `parallel for` по пулу: номер итерации — номер слота, вывод
+// живых слотов до ловушки выходит, после — нет, как при исполнении по
+// очереди.
+fn main() {
+    var p: Pool[i64] = []
+    var hs: List[Handle[i64]] = []
+    for i in 0..40 {
+        hs.push(p.add(i))
+    }
+    let _ = p.remove(hs[2])
+    parallel for v in &p {
+        println(str(v))
+        assert(v != 5)
+    }
+}
