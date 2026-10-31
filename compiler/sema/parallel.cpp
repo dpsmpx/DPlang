@@ -230,7 +230,7 @@ public:
         report(c->span, chain(c->fn));
     }
 
-    // Задачи в теле (О13, прототип): поток итерации их не запускает.
+    // Задачи в теле (Р70): поток итерации их не запускает.
     void tasks(Span span) {
         if (depth_ > 0) report(span, "this starts tasks");
     }

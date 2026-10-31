@@ -18,14 +18,14 @@ inline constexpr BuiltinType kBuiltinTypes[] = {
     {"int", TK::I64},   {"u8", TK::U8},   {"u16", TK::U16}, {"u32", TK::U32}, {"u64", TK::U64},
     {"f32", TK::F32},   {"f64", TK::F64}, {"str", TK::Str}, {"void", TK::Void}, {"List", TK::List},
     {"Map", TK::Map},   {"Pool", TK::Pool}, {"Handle", TK::PoolHandle}, {"Atomic", TK::Atomic},
-    {"Mutex", TK::Mutex}, {"Channel", TK::Channel}, {"Task", TK::Task},
+    {"Mutex", TK::Mutex}, {"Channel", TK::Channel},
 };
 
 enum class BuiltinFn : uint8_t {
     Len, Repeat, Min, Max, Abs, ParseInt, IsDigit, IsAlpha, IsSpace, IsAlnum, Assert, Print, Println, Eprintln,
     // Проверяемая арифметика целых (Р53): ?T, none — вне типа (и делитель 0).
     CheckedAdd, CheckedSub, CheckedMul, CheckedDiv, CheckedNeg,
-    // Конкурентные значения (О13, прототип): atomic(v) → Atomic[T].
+    // Конкурентные значения (Р70): atomic(v) → Atomic[T].
     AtomicNew, MutexNew, ChannelNew,
     // Внутренние — только для модулей стандартной библиотеки (Р51): простые
     // типы, обёртки с нормальным API — в stdlib/os.dpm.

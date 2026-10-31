@@ -184,7 +184,7 @@ private:
             "pool_contains", "pool_handles", "pool_slots", "pool_live",
             "c_arena_mark", "c_arena_release", "atomic", "atomic_load", "atomic_store", "atomic_add", "atomic_sub",
             "atomic_swap", "atomic_cas", "mutex", "mutex_lock", "mutex_unlock", "channel", "channel_send",
-            "channel_recv", "channel_try_recv", "channel_close", "tasks_begin", "tasks_end", "task_join", "probe",
+            "channel_recv", "channel_try_recv", "channel_close", "tasks_begin", "tasks_end", "probe",
         };
         return names[static_cast<size_t>(k)];
     }

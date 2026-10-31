@@ -23,7 +23,6 @@ static const char* dp_main_error;
 static DWORD WINAPI dp_thread(LPVOID arg) {
     (void)arg;
     dp_main_error = dp_entry_main();
-    dp_tasks_wait_all(); /* отсоединённые задачи варианта В (О13, прототип) */
     return 0;
 }
 
@@ -65,7 +64,6 @@ static int dp_run_as(dp_entry_fn entry, const char* what) {
         CloseHandle(th);
     } else {
         dp_main_error = entry();
-        dp_tasks_wait_all();
     }
     fflush(stdout);
     dp_alloc_report();

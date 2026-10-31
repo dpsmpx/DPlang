@@ -69,23 +69,18 @@ fn merge(parts: &List[List[i64]]) List[i64] {
     return out
 }
 
-fn count_all(words: &List[str], workers: i32) List[i64] {
-    var parts: List[List[i64]] = repeat(repeat(0, 27), workers)
-    parallel for w in 0..workers {
-        count_part(&words, w, workers, &mut parts[w])
-    }
-    return merge(&parts)
-}
-
-// Вариант Б: три оператора блока — три задачи; рабочие — parallel for.
+// Блок задач — рабочие и два других расчёта; список — по `&`,
+// у каждого рабочего свой элемент parts[w].
 pub fn analyze(words: &List[str], workers: i32) Stats {
-    var distinct: List[i64] = []
+    var parts: List[List[i64]] = repeat(repeat(0, 27), workers)
     var longest = ""
     var anagrams: i64 = 0
-    parallel {
-        distinct = count_all(&words, workers)
-        find_longest(&words, &mut longest)
-        count_anagrams(&words, &mut anagrams)
+    tasks {
+        for w in 0..workers {
+            spawn count_part(&words, w, workers, &mut parts[w])
+        }
+        spawn find_longest(&words, &mut longest)
+        spawn count_anagrams(&words, &mut anagrams)
     }
-    return Stats { distinct, longest, anagrams }
+    return Stats { distinct: merge(&parts), longest, anagrams }
 }

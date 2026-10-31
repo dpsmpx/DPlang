@@ -55,7 +55,7 @@ private:
     bool writable(const Place& pl) {
         if (pl.local >= f_.locals.size()) return false;
         LocalKind k = f_.locals[pl.local].kind;
-        // Данные Mutex (О13, прототип) пишут в блоке `lock` и через `&`: доступ
+        // Данные Mutex (Р70) пишут в блоке `lock` и через `&`: доступ
         // исключителен по захвату, а не по ссылке.
         bool locked = false;
         for (const Proj& pr : pl.proj) locked = locked || pr.kind == ProjKind::MutexValue;
@@ -214,7 +214,7 @@ private:
         return t;
     }
 
-    // Получатель Atomic[T] (О13, прототип): место, можно и `&` — общий доступ.
+    // Получатель Atomic[T] (Р70): место, можно и `&` — общий доступ.
     const Type* atomic_receiver(const Rvalue& rv) {
         const Type* t = rv.has_place ? place(rv.place) : nullptr;
         if (!t || t->kind != TK::Atomic) {
@@ -526,13 +526,6 @@ private:
                 args(0);
                 same(rv.type, prim(TK::Void), "result");
                 break;
-            case Intrinsic::TaskJoin: {
-                args(0);
-                const Type* tk = rv.has_place ? place(rv.place) : nullptr;
-                if (!tk || tk->kind != TK::Task) return fail("join of a non-Task");
-                same(rv.type, tk->elem, "result");
-                break;
-            }
             case Intrinsic::MutexLock: case Intrinsic::MutexUnlock: {
                 args(0);
                 const Type* m = rv.has_place ? place(rv.place) : nullptr;
@@ -612,7 +605,6 @@ private:
             rv.intrinsic != Intrinsic::MapClear && rv.intrinsic != Intrinsic::Probe &&
             (rv.intrinsic < Intrinsic::AtomicLoad || rv.intrinsic > Intrinsic::AtomicCas) &&
             rv.intrinsic != Intrinsic::MutexLock && rv.intrinsic != Intrinsic::MutexUnlock &&
-            rv.intrinsic != Intrinsic::TaskJoin &&
             (rv.intrinsic < Intrinsic::ChannelSend || rv.intrinsic > Intrinsic::ChannelClose)) {
             fail("receiver place on a method that only reads");
         }
@@ -734,16 +726,9 @@ private:
             case RvKind::Call: case RvKind::Spawn: {
                 if (rv.fn >= p_.fns.size()) return fail("call of an unknown function");
                 const Function& g = p_.fns[rv.fn];
-                if (rv.kind == RvKind::Spawn && t->kind == TK::Task) {  // вариант В: результат — в задаче
-                    if (g.is_extern || t->elem != g.ret) fail("a task of a wrong result type");
-                    for (const Arg& a : rv.args) {
-                        if (a.kind != Arg::Kind::Value) fail("a task of variant C takes arguments by value");
-                    }
-                } else {
-                    same(t, g.ret, "result");
-                    if (rv.kind == RvKind::Spawn && (g.is_extern || g.ret->kind != TK::Void)) {
-                        fail("a task must be a dpl function without a result");
-                    }
+                same(t, g.ret, "result");
+                if (rv.kind == RvKind::Spawn && (g.is_extern || g.ret->kind != TK::Void)) {
+                    fail("a task must be a dpl function without a result");
                 }
                 if (rv.args.size() != g.param_count) return fail("wrong number of arguments to " + g.name);
                 for (size_t i = 0; i < rv.args.size(); i++) {

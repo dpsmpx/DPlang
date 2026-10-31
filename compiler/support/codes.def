@@ -333,38 +333,30 @@ DP_CODE(E0516, "control flow out of parallel for",
         "The iterations of `parallel for` run at the same time, so its body cannot leave the loop early: "
         "`break`, `return`, `fail` and `try` are not allowed there (spec: stmt.for, decision R69). `continue` "
         "ends the current iteration. Handle an error with `match` inside the body and write the outcome to an "
-        "element indexed by the loop variable, `out[i]`; combine the results after the loop. A block of tasks "
-        "(`tasks { ... }`, `parallel { ... }`; concurrency prototype) waits for its tasks, so `break`, "
-        "`continue`, `return`, `fail` and `try` cannot leave it either.")
+        "element indexed by the loop variable, `out[i]`; combine the results after the loop. A `tasks` block "
+        "waits for its tasks, so `break`, `continue`, `return`, `fail` and `try` cannot leave it either (spec: "
+        "stmt.tasks, decision R70).")
 DP_CODE(E0517, "input, output or C inside parallel for",
-        "The body of `parallel for` and every function it calls cannot read files or program arguments (`os`) "
-        "or call C (`extern fn`, a function pointer): C libraries often require one thread, and the result "
-        "would depend on the order of iterations (spec: stmt.for, decision R69). `print`, `println` and "
+        "The body of `parallel for` and every function it calls cannot read files or program arguments (`os`), "
+        "call C (`extern fn`, a function pointer) or start tasks: C libraries often require one thread, and the "
+        "result would depend on the order of iterations (spec: stmt.for, decision R69). `print`, `println` and "
         "`eprintln` are allowed: the output comes out in the order of iterations. Read the input before the "
-        "loop and call C after it. Tasks of the concurrency prototype are not started there either.")
+        "loop and call C after it.")
 DP_CODE(E0518, "concurrent value cannot be copied",
-        "In variants A and B of the concurrency prototype (DPL_TASKS=a or b; research note 10) an `Atomic`, a "
-        "`Mutex` or a `Channel` is shared between threads, so it is never copied: it lives in a variable created "
-        "with `atomic(v)`, `mutex(v)` or `channel(n)` and is passed by reference, `&a`. "
-        "It cannot be copied into another variable, assigned, passed or returned by value, or kept in a field, "
-        "a List, a Map, a Pool or an optional. In variant C and without DPL_TASKS a copy is a handle to the "
-        "same value.")
-DP_CODE(E0519, "concurrency variant",
-        "The concurrency model is a prototype with three variants measured side by side (research note 10): "
-        "A — `tasks { spawn f(...) }`, B — `parallel { ... }`, C — `let t = spawn f(...)` and `t.join()`. "
-        "The environment variable DPL_TASKS selects one variant ('a', 'b' or 'c'); a form of another variant "
-        "is an error. Without DPL_TASKS every form is accepted.")
+        "An `Atomic`, a `Mutex` or a `Channel` is shared between threads, so it is never copied (spec: "
+        "type.concurrent, decision R70): it lives in a variable created with `atomic(v)`, `mutex(v)` or "
+        "`channel(n)` and is passed by reference, `&a`. It cannot be copied into another variable, assigned, "
+        "passed or returned by value, or kept in a field, a List, a Map, a Pool or an optional.")
 DP_CODE(E0520, "invalid task",
-        "A task runs a call of a dpl function: `spawn f(...)`. In a `tasks` block the result of the task is "
-        "lost, so the function returns nothing and writes its result through a `&mut` parameter. A task "
-        "borrows (`&x`, `&mut x`) only variables declared before the block: they outlive its tasks. A task of "
-        "variant C, `let t = spawn f(...)`, may outlive the function that starts it, so it takes its arguments "
-        "by value only. A value holding a C handle (`extern type`) or a slice cannot be passed to a task "
-        "(research note 10, prototype).")
+        "A task runs a call of a dpl function: `spawn f(...)`, a statement inside `tasks { ... }` (spec: "
+        "stmt.tasks, decision R70). The result of the task is lost, so the function returns nothing and writes "
+        "its result through a `&mut` parameter. A task borrows (`&x`, `&mut x`) only variables declared before "
+        "the block: they outlive its tasks. A slice cannot be passed to a task, nor a value holding a C handle "
+        "(`extern type`) unless the type is marked `@send`.")
 DP_CODE(E0521, "place shared between tasks",
         "A task of a `tasks` block holds its `&` and `&mut` arguments until the end of the block, and its "
-        "tasks and the code of the block run at the same time. While the block runs, a place borrowed with "
-        "`&mut` is used only by that task, and a place borrowed with `&` is not changed by anyone. A `spawn` "
-        "in a loop starts a task on every iteration, so `&mut` must be an element indexed by the loop "
-        "variable, `&mut out[w]`. `Atomic`, `Mutex` and `Channel` are shared with `&` and are not limited "
-        "(research note 10, prototype).")
+        "tasks and the code of the block run at the same time (spec: stmt.tasks, decision R70). While the "
+        "block runs, a place borrowed with `&mut` is used only by that task, and a place borrowed with `&` is "
+        "not changed by anyone. A `spawn` in a loop starts a task on every iteration, so `&mut` must be an "
+        "element indexed by the variable of a range, `&mut out[w]`, or the element of `for x in &mut xs`. "
+        "`Atomic`, `Mutex` and `Channel` are shared with `&` and are not limited.")

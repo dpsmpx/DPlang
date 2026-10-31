@@ -385,7 +385,7 @@ private:
             }
             case StmtKind::Tasks: {
                 auto* t = static_cast<const TasksStmt*>(s);
-                out += t->each ? "parallel " : "tasks ";
+                out += "tasks ";
                 block(t->body, d);
                 break;
             }

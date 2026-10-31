@@ -46,7 +46,7 @@ fn worker(jobs: &List[i64], next: &Atomic[i64], stop: &Atomic[bool], bad: &Atomi
     }
 }
 
-// Вариант А: рабочие — задачи блока; общие значения — по `&`.
+// Рабочие — задачи блока; общие значения — по `&`.
 pub fn run_jobs(jobs: &List[i64], workers: i32) Totals {
     let n = i64(len(jobs))
     let next = atomic(i64(0))

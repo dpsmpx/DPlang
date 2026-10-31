@@ -17,7 +17,6 @@ static const char* dp_main_error;
 static void* dp_thread(void* arg) {
     (void)arg;
     dp_main_error = dp_entry_main();
-    dp_tasks_wait_all(); /* отсоединённые задачи варианта В (О13, прототип) */
     return NULL;
 }
 
@@ -29,10 +28,7 @@ static int dp_run_as(dp_entry_fn entry, const char* what) {
     int ok = pthread_attr_init(&attr) == 0 && pthread_attr_setstacksize(&attr, DP_STACK_BYTES) == 0 &&
              pthread_create(&th, &attr, dp_thread, NULL) == 0;
     if (ok) pthread_join(th, NULL);
-    else {
-        dp_main_error = entry();
-        dp_tasks_wait_all();
-    }
+    else dp_main_error = entry();
     fflush(stdout);
     dp_alloc_report();
     if (dp_main_error) {

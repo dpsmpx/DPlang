@@ -212,13 +212,11 @@ enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Varian
 // Contains..Split — читающие List и методы str, дальше — читающие Map и Pool.
 enum class Method : uint8_t {
     Push, Pop, Insert, Remove, Clear, Sort, Reserve, Add, Contains, Trim, Find, StartsWith, Split, Get, Keys, Handles,
-    // Atomic[T] (О13, прототип): все — через общий доступ, получатель не
+    // Atomic[T] (Р70): все — через общий доступ, получатель не
     // «меняется» для правила доступа (Р66); `add` — Add.
     Load, Store, Sub, Swap, Cas,
-    // Channel[T] (О13, прототип): тоже через общий доступ.
-    Send, Recv, TryRecv, Close,
-    // Task[T] (О13, прототип, вариант В): ждёт задачу, отдаёт результат.
-    Join
+    // Channel[T] (Р70): тоже через общий доступ.
+    Send, Recv, TryRecv, Close
 };
 
 struct CallExpr : Expr {
@@ -265,7 +263,7 @@ struct TryExpr : Expr {  // `try e`
     Expr* operand = nullptr;
 };
 
-// `spawn f(…)` (О13, прототип): задача — вызов функции dpl. В блоке
+// `spawn f(…)` (Р70): задача — вызов функции dpl. В блоке
 // `tasks` (вариант А) — оператор, задача блока; иначе (вариант В) —
 // значение `Task[T]`.
 struct SpawnExpr : Expr {
@@ -531,7 +529,7 @@ struct DeferStmt : Stmt {  // `defer s`; `errdefer s` — только при в
     bool on_error = false;  // errdefer
 };
 
-// `lock m as t { … }` (О13, прототип): t — данные мьютекса m до конца
+// `lock m as t { … }` (Р70): t — данные мьютекса m до конца
 // блока; снятие — на любом выходе.
 struct LockStmt : Stmt {
     static constexpr StmtKind Kind = StmtKind::Lock;
@@ -543,14 +541,11 @@ struct LockStmt : Stmt {
     sema::Local* local = nullptr;
 };
 
-// `tasks { … }` (вариант А) и `parallel { … }` (вариант Б) — О13,
-// прототип. Блок кончается, когда кончились его задачи. В `tasks` задачи
-// ставит `spawn`; в `parallel` каждый оператор — задача, первый идёт в
-// текущем потоке.
+// `tasks { … }` (Р70): задачи ставит `spawn`; блок кончается, когда
+// кончились его задачи.
 struct TasksStmt : Stmt {
     static constexpr StmtKind Kind = StmtKind::Tasks;
     TasksStmt() : Stmt(Kind) {}
-    bool each = false;  // `parallel { … }`
     Block* body = nullptr;
 };
 

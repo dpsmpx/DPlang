@@ -20,7 +20,7 @@ const Type* place_type(const Program& prog, const Function& f, const Place& p) {
                 if (t->kind != TK::Struct || pr.index >= t->sdef->fields.size()) return nullptr;
                 t = t->sdef->fields[pr.index].type;
                 break;
-            case ProjKind::MutexValue:  // О13, прототип
+            case ProjKind::MutexValue:  // Р70
                 if (t->kind != TK::Mutex) return nullptr;
                 t = t->elem;
                 break;
@@ -87,7 +87,6 @@ bool needs_drop(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
         case TK::Str: case TK::List: case TK::Map: case TK::Pool: case TK::Mutex: case TK::Channel: return true;
-        case TK::Atomic: case TK::Task: return true;  // ручки со счётчиком ссылок (О13, прототип)
         case TK::Optional: return needs_drop(t->elem);
         case TK::Result: return needs_drop(t->elem) || needs_drop(t->err);
         case TK::Struct:

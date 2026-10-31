@@ -549,7 +549,7 @@ void Checker::views(Stmt* s) {
     }
 }
 
-// --- задачи (О13, прототип): `tasks { spawn f(&x, &mut y) }`
+// --- задачи (Р70): `tasks { spawn f(&x, &mut y) }`
 //
 // Заимствование задачей живёт до конца блока. Пока блок идёт, место
 // `&mut` не трогает никто, кроме задачи, место `&` никто не меняет; код
@@ -560,22 +560,33 @@ void Checker::views(Stmt* s) {
 
 namespace {
 
-const char* variant_name(char v) { return v == 'a' ? "A" : v == 'b' ? "B" : "C"; }
+// Значение с дескриптором C (`extern type`): поток его не создавал.
+bool holds_handle(const Type* t, std::vector<const Type*>& seen) {
+    if (!t) return false;
+    if (t->kind == TK::Handle) return true;
+    if (std::find(seen.begin(), seen.end(), t) != seen.end()) return false;
+    seen.push_back(t);
+    if (t->kind == TK::Struct && t->sdef) {
+        for (const FieldDef& f : t->sdef->fields) {
+            if (holds_handle(f.type, seen)) return true;
+        }
+        return false;
+    }
+    if (t->kind == TK::Enum && t->edef) {
+        for (const VariantDef& v : t->edef->variants) {
+            for (const Type* x : v.types) {
+                if (holds_handle(x, seen)) return true;
+            }
+            for (const FieldDef& f : v.fields) {
+                if (holds_handle(f.type, seen)) return true;
+            }
+        }
+        return false;
+    }
+    return holds_handle(t->elem, seen) || holds_handle(t->key, seen) || holds_handle(t->err, seen);
+}
 
 }  // namespace
-
-bool Checker::variant_ok(char variant, Span span, const char* form) {
-    if (tasks_mode_ == 0 || tasks_mode_ == variant) return true;
-    if (tasks_mode_ == '?') {
-        error(Code::E0519, span, std::string(form) + " needs a variant of the concurrency prototype: DPL_TASKS must "
-                                                     "be 'a', 'b' or 'c'");
-    } else {
-        error(Code::E0519, span, std::string(form) + " is variant " + variant_name(variant) +
-                                     " of the concurrency prototype; this program is checked as variant " +
-                                     variant_name(tasks_mode_) + " (DPL_TASKS=" + tasks_mode_ + ")");
-    }
-    return false;
-}
 
 void Checker::task_loop_begin(const ForStmt* f) {
     // Разные итерации — разные места только у диапазона (`out[i]`) и обхода
@@ -600,10 +611,13 @@ void Checker::task_spawn(SpawnExpr* sp, CallExpr* c, const std::vector<size_t>& 
     TasksScope& sc = tasks_.back();
     std::vector<Expr*> borrowed;
     for (Expr* a : c->args) {
-        if (a->type && holds_c_handle(a->type)) {
-            error(Code::E0520, a->span, "'" + tn(a->type) + "' holds a C handle ('extern type'); a task cannot "
-                                        "take it: the C library may tie it to the thread that made it");
-            continue;
+        if (a->type) {
+            std::vector<const Type*> seen;
+            if (holds_handle(a->type, seen)) {
+                error(Code::E0520, a->span, "'" + tn(a->type) + "' holds a C handle ('extern type'); a task cannot "
+                                            "take it: the C library may tie it to the thread that made it");
+                continue;
+            }
         }
         if (a->type && holds_view(a->type)) {
             error(Code::E0520, a->span, "'" + tn(a->type) + "' views memory of the code that starts the task; pass "
@@ -620,7 +634,7 @@ void Checker::task_spawn(SpawnExpr* sp, CallExpr* c, const std::vector<size_t>& 
             continue;
         }
         Expr* place = bare(r->operand);
-        if (concurrent(place->type) && as<NameExpr>(place)) continue;  // делится по `&`
+        if (concurrent(place->type)) continue;
         std::vector<Step> steps;
         const Local* root = path(place, loop_iters_, steps);
         if (!root) continue;
@@ -698,32 +712,6 @@ void Checker::tasks_end() {
                   "'" + text(b.place) + "' is borrowed by two tasks of this block, and one of them changes it ('&mut " +
                       text(a.mut ? a.place : b.place) + "'); give each task its own element or field");
         }
-    }
-    // `parallel { … }`: два оператора, одно место, хоть один меняет его.
-    if (sc.each) {
-        std::vector<Path> ap(sc.accesses.size());
-        for (size_t i = 0; i < sc.accesses.size(); i++) ap[i].root = path(sc.accesses[i].place, loop_iters_, ap[i].steps);
-        for (size_t i = 0; i < sc.accesses.size(); i++) {
-            const TaskAccess& y = sc.accesses[i];
-            if (!ap[i].root || ap[i].root->id >= sc.first_inner) continue;
-            for (size_t j = 0; j < i; j++) {
-                const TaskAccess& x = sc.accesses[j];
-                if (x.stmt == y.stmt || ap[j].root != ap[i].root || !(x.write || y.write)) continue;
-                if (!crosses(ap[i].steps, ap[j].steps)) continue;
-                if ((x.len && !y.write) || (y.len && !x.write)) continue;
-                if ((x.len && ap[i].steps.size() > ap[j].steps.size()) ||
-                    (y.len && ap[j].steps.size() > ap[i].steps.size())) {
-                    continue;
-                }
-                if (!once(ap[i].root)) break;
-                const TaskAccess& w = y.write ? y : x;
-                error(Code::E0521, y.place->span,
-                      "'" + text(w.place) + "' is changed by one statement of 'parallel { ... }' and used by another: "
-                      "the statements run at the same time; give each statement its own variable, element or field");
-                break;
-            }
-        }
-        return;
     }
     // Код блока и задача: одно место, хоть кто-то меняет его.
     for (const TaskAccess& x : sc.accesses) {

@@ -82,6 +82,7 @@ fn main() {
     tasks {
         return
     }
+    spawn work(&mut a)
     // Можно: разные элементы, длина, чтение того, что задачи только читают.
     tasks {
         spawn work(&mut xs[0])

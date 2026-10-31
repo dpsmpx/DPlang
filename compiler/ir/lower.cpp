@@ -997,23 +997,9 @@ private:
             case ExprKind::Unary: return unary(static_cast<const UnaryExpr*>(e));
             case ExprKind::Binary: return binary(static_cast<const BinaryExpr*>(e));
             case ExprKind::Try: return try_expr(static_cast<const TryExpr*>(e));
-            case ExprKind::Spawn: {
-                auto* sp = static_cast<const SpawnExpr*>(e);
-                if (sp->group) {  // задача блока — инструкция (effect); значения нет
-                    effect(e);
-                    return cbool(false);
-                }
-                Rvalue rv;  // вариант В: значение Task[T]
-                uint32_t mark = UINT32_MAX;
-                if (!call(static_cast<const CallExpr*>(sp->operand), rv, &mark) || rv.kind != RvKind::Call) {
-                    release(mark, e->span);
-                    return cbool(false);
-                }
-                rv.kind = RvKind::Spawn;
-                rv.type = e->type;
-                Operand out = to_temp(std::move(rv), e->span);
-                release(mark, e->span);
-                return out;
+            case ExprKind::Spawn: {  // задача блока — инструкция (effect); значения нет
+                effect(e);
+                return cbool(false);
             }
             case ExprKind::Paren: return expr(static_cast<const ParenExpr*>(e)->inner);
             case ExprKind::StructLit: return struct_lit(static_cast<const StructLitExpr*>(e));
@@ -1418,7 +1404,7 @@ private:
                     for (Operand& o : rv.ops) o = rd(std::move(o));
                     return true;
                 }
-                if (f->object->type->kind == TK::Atomic) {  // О13, прототип: получатель — место, общий доступ
+                if (f->object->type->kind == TK::Atomic) {  // Р70: получатель — место, общий доступ
                     rv = intrinsic(m == Method::Load    ? Intrinsic::AtomicLoad
                                    : m == Method::Store ? Intrinsic::AtomicStore
                                    : m == Method::Add   ? Intrinsic::AtomicAdd
@@ -1433,7 +1419,7 @@ private:
                     for (Operand& o : rv.ops) o = rd(std::move(o));
                     return true;
                 }
-                if (f->object->type->kind == TK::Channel) {  // О13, прототип: получатель — место, общий доступ
+                if (f->object->type->kind == TK::Channel) {  // Р70: получатель — место, общий доступ
                     rv = intrinsic(m == Method::Send      ? Intrinsic::ChannelSend
                                    : m == Method::Recv    ? Intrinsic::ChannelRecv
                                    : m == Method::TryRecv ? Intrinsic::ChannelTryRecv
@@ -1443,13 +1429,6 @@ private:
                     rv.place = object(f->object, fresh);
                     rv.has_place = true;
                     rv.ops = exprs(args);  // send: значение уходит в канал целиком
-                    return true;
-                }
-                if (f->object->type->kind == TK::Task) {  // вариант В: ждёт задачу
-                    rv = intrinsic(Intrinsic::TaskJoin, c->type);
-                    bool fresh = false;
-                    rv.place = object(f->object, fresh);
-                    rv.has_place = true;
                     return true;
                 }
                 if (f->object->type->kind == TK::Pool) {  // методы Pool (Р67)
@@ -1635,7 +1614,7 @@ private:
         }
     }
 
-    // `lock m as t { … }` (О13, прототип): захват, t — данные m, снятие —
+    // `lock m as t { … }` (Р70): захват, t — данные m, снятие —
     // очисткой области на любом выходе.
     void lock_stmt(const LockStmt* s) {
         push_scope();
@@ -1655,74 +1634,19 @@ private:
         pop_scope(end);
     }
 
-    // `tasks { … }` (О13, прототип): группа задач вокруг тела; выйти из тела
+    // `tasks { … }` (Р70): группа задач вокруг тела; выйти из тела
     // раньше нельзя (E0516), поэтому TasksEnd — после его области: места,
     // которые держат задачи, объявлены до блока.
-    // `parallel { … }`: операторы со второго — задачи (вынесенные функции),
-    // первый — в текущем потоке; вывод выходит в порядке операторов.
     void tasks_stmt(const TasksStmt* s) {
         eval(intrinsic(Intrinsic::TasksBegin, prim(TK::Void)), s->span);
-        if (!s->each) {
-            block(s->body);
-        } else if (s->body && !s->body->stmts.empty()) {
-            push_scope();
-            const std::vector<Stmt*>& xs = s->body->stmts;
-            std::vector<const Stmt*> inline_;  // их не вынести: идут по очереди после первого
-            for (size_t k = 1; k < xs.size(); k++) {
-                if (!spawn_stmt(xs[k])) inline_.push_back(xs[k]);
-            }
-            stmt(xs[0]);
-            for (const Stmt* x : inline_) stmt(x);
-            pop_scope(s->span);
-        }
+        block(s->body);
         Span end{s->body->span.file, s->body->span.end > 0 ? s->body->span.end - 1 : 0, s->body->span.end};
         eval(intrinsic(Intrinsic::TasksEnd, prim(TK::Void)), end);
     }
 
-    // Оператор `parallel { … }` — задача: функция с захваченными
-    // переменными. false — не вынесен (байт строки ссылкой не передать).
-    bool spawn_stmt(const Stmt* x) {
-        std::vector<const sema::Local*> used;
-        names(x, used);
-        std::vector<Capture> caps;
-        for (const sema::Local* v : used) {
-            Place p;
-            auto a = aliases_.find(v);
-            if (a != aliases_.end()) {
-                p = a->second;
-                if (byte_place(p)) return false;
-            } else {
-                auto l = locals_.find(v);
-                if (l == locals_.end()) continue;  // объявлена в операторе
-                p = local(l->second);
-            }
-            LocalKind lk = f_.locals[p.local].kind;
-            bool mut = v->mutable_ && lk != LocalKind::ParamRef && lk != LocalKind::Param;
-            caps.push_back(Capture{v, mut ? Arg::Kind::Mut : Arg::Kind::Ref, p, place_type(out_, f_, p)});
-        }
-        uint32_t idx = outl_.base + static_cast<uint32_t>(outl_.fns.size());
-        outl_.fns.emplace_back();
-        Function& g = outl_.fns.back();
-        g.name = f_.name.substr(0, f_.name.find('#')) + "#" + std::to_string(idx);
-        g.def = f_.def;
-        g.det = f_.det;
-        g.ret = prim(TK::Void);
-        FnLower(out_, prog_, fns_, strings_, g, outl_).outline_stmt(x, caps);
-        Rvalue rv = make(RvKind::Spawn, prim(TK::Void));
-        rv.fn = idx;
-        for (const Capture& c : caps) {
-            Arg a;
-            a.kind = c.kind;
-            a.place = c.place;
-            rv.args.push_back(std::move(a));
-        }
-        eval(std::move(rv), x->span);
-        return true;
-    }
-
     // Инструкция-вызов: результат, если он есть, освобождается.
     void effect(const Expr* e) {
-        if (auto* sp = as<const SpawnExpr>(e); sp && sp->group) {  // задача блока `tasks`
+        if (auto* sp = as<const SpawnExpr>(e)) {  // задача блока `tasks`
             Rvalue rv;
             uint32_t mark = UINT32_MAX;
             if (call(static_cast<const CallExpr*>(sp->operand), rv, &mark) && rv.kind == RvKind::Call) {
@@ -2021,22 +1945,6 @@ public:
         Span end{s->body->span.file, s->body->span.end > 0 ? s->body->span.end - 1 : 0, s->body->span.end};
         jump(done, end);
         cur_ = done;
-        ret_term(false, end);
-        scopes_.pop_back();
-        prune();
-    }
-
-    // Оператор `parallel { … }` функцией: параметры — захваченные переменные.
-    void outline_stmt(const Stmt* x, const std::vector<Capture>& caps) {
-        for (const Capture& c : caps) {
-            locals_[c.var] = add_local(c.type, c.kind == Arg::Kind::Mut ? LocalKind::ParamMut : LocalKind::ParamRef,
-                                       c.var->name);
-        }
-        f_.param_count = static_cast<uint32_t>(f_.locals.size());
-        cur_ = new_block();
-        scopes_.emplace_back();
-        stmt(x);
-        Span end{x->span.file, x->span.end > 0 ? x->span.end - 1 : 0, x->span.end};
         ret_term(false, end);
         scopes_.pop_back();
         prune();

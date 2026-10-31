@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Атаки на варианты модели задач О13 (заметка 10, раздел 6, мера «атаки»).
+"""Атаки на модель задач (Р70; замер О13 — заметка 10, раздел 6).
 
-Корпус bench/o13/attacks_<v>.dpm: программы между строками
+Корпус bench/o13/attacks.dpm: программы между строками
 «// === имя: что пробует | ожидание». Ожидание: race — гонка данных,
 safe — без гонки, logic — логическая гонка без гонки данных. Каждая
-программа проверяется `dpl check` с DPL_TASKS=<v>; принятая собирается
-из `dpl debug c` с TSan и запускается RUNS раз (DPL_THREADS=4).
+программа проверяется `dpl check`; принятая собирается из `dpl debug c`
+с TSan и запускается RUNS раз (DPL_THREADS=4). Итоги замера вариантов
+А, Б, В — bench/results/o13-2026-10-31/.
 
 Итог по атаке: отвергнута (коды ошибок), принята и TSan молчит, принята и
 TSan сообщил о гонке, принята и упала или не кончилась.
 
-    python3 bench/o13/attacks.py [a b c] [--json OUT]
+    python3 bench/o13/attacks.py [--json OUT]
 """
 import json
 import os
@@ -31,10 +32,10 @@ HEAD = re.compile(r'^// === (?P<name>\w+): (?P<what>.*?) \| (?P<expect>race|safe
 CODE = re.compile(r'error\[(E\d{4})\]')
 
 
-def corpus(v):
-    """Атаки варианта: [(имя, что пробует, ожидание, текст программы)]."""
+def corpus():
+    """Атаки: [(имя, что пробует, ожидание, текст программы)]."""
     out, cur = [], None
-    with open(os.path.join(HERE, f'attacks_{v}.dpm'), encoding='utf-8') as f:
+    with open(os.path.join(HERE, 'attacks.dpm'), encoding='utf-8') as f:
         for ln in f:
             m = HEAD.match(ln.rstrip('\n'))
             if m:
@@ -53,19 +54,18 @@ def run(argv, cwd, env=None, timeout=TIMEOUT):
         return None
 
 
-def attack(v, text, tmp):
+def attack(text, tmp):
     """(итог, подробность): rejected, clean, race, crash, timeout, tool."""
     with open(os.path.join(tmp, 'main.dpm'), 'w', encoding='utf-8') as f:
         f.write(text)
-    env = dict(os.environ, DPL_TASKS=v)
-    r = run([DPL, 'check', 'main.dpm'], tmp, env)
+    r = run([DPL, 'check', 'main.dpm'], tmp)
     if r is None:
         return 'tool', 'check: время'
     if r.returncode == 1:
         return 'rejected', ' '.join(sorted(set(CODE.findall(r.stderr))))
     if r.returncode != 0:
         return 'tool', 'check: код ' + str(r.returncode)
-    r = run([DPL, 'debug', 'c', 'main.dpm'], tmp, env)
+    r = run([DPL, 'debug', 'c', 'main.dpm'], tmp)
     if r is None or r.returncode != 0:
         return 'tool', 'debug c'
     c_path = os.path.join(tmp, 'main.c')
@@ -92,38 +92,32 @@ def attack(v, text, tmp):
 def main(argv):
     out_json = None
     if '--json' in argv:
-        i = argv.index('--json')
-        out_json = argv[i + 1]
-        argv = argv[:i] + argv[i + 2:]
-    variants = argv or [v for v in 'abc' if os.path.exists(os.path.join(HERE, f'attacks_{v}.dpm'))]
+        out_json = argv[argv.index('--json') + 1]
     if not os.path.exists(DPL):
         print(f'атаки: нет компилятора {DPL}')
         return 1
-    results = {}
+    rows = []
     with tempfile.TemporaryDirectory() as tmp:
-        for v in variants:
-            rows = []
-            for name, what, expect, text in corpus(v):
-                d = os.path.join(tmp, v + name)
-                os.makedirs(d)
-                verdict, detail = attack(v, text, d)
-                shutil.rmtree(d)
-                rows.append({'name': name, 'what': what, 'expect': expect, 'verdict': verdict, 'detail': detail})
-                print(f'{v} {name:4} {expect:5} {verdict:8} {detail:20} {what}')
-            results[v] = rows
+        for name, what, expect, text in corpus():
+            d = os.path.join(tmp, name)
+            os.makedirs(d)
+            verdict, detail = attack(text, d)
+            shutil.rmtree(d)
+            rows.append({'name': name, 'what': what, 'expect': expect, 'verdict': verdict, 'detail': detail})
+            print(f'{name:4} {expect:5} {verdict:8} {detail:20} {what}')
+    race = [r for r in rows if r['expect'] == 'race']
+    safe = [r for r in rows if r['expect'] == 'safe']
+    logic = [r for r in rows if r['expect'] == 'logic']
+    ok = lambda rs, k: sum(1 for r in rs if r['verdict'] in k)
     print()
-    print('вариант | атак | гонок | гонок отвергнуто | гонок принято (TSan) | безопасных принято | логических принято')
-    for v, rows in results.items():
-        race = [r for r in rows if r['expect'] == 'race']
-        safe = [r for r in rows if r['expect'] == 'safe']
-        logic = [r for r in rows if r['expect'] == 'logic']
-        ok = lambda rs, k: sum(1 for r in rs if r['verdict'] in k)
-        print(f'{v} | {len(rows)} | {len(race)} | {ok(race, ("rejected",))} | {ok(race, ("race",))} | '
-              f'{ok(safe, ("clean",))}/{len(safe)} | {ok(logic, ("clean",))}/{len(logic)}')
+    print(f'атак {len(rows)}; гонок {len(race)}: отвергнуто {ok(race, ("rejected",))}, принято с гонкой '
+          f'{ok(race, ("race",))}; безопасных принято {ok(safe, ("clean",))} из {len(safe)}; логических принято '
+          f'{ok(logic, ("clean",))} из {len(logic)}')
     if out_json:
         with open(out_json, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=1)
-    return 0
+            json.dump(rows, f, ensure_ascii=False, indent=1)
+    bad = ok(race, ('race', 'clean')) + (len(safe) - ok(safe, ('clean',)))
+    return 1 if bad else 0
 
 
 if __name__ == '__main__':

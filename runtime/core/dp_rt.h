@@ -424,7 +424,7 @@ int dp_run_test(dp_entry_fn entry);
  * очереди в своём потоке. */
 typedef void (*dp_par_body)(void* env, uint64_t k);
 
-/* Mutex[T] (О13, прототип): мьютекс платформы и поток-владелец; повторный
+/* Mutex[T] (Р70): мьютекс платформы и поток-владелец; повторный
  * захват тем же потоком — ловушка. */
 typedef struct dp_mtx {
     void* sys;
@@ -435,24 +435,13 @@ void dp_mtx_lock(dp_mtx* m, const char* loc);
 void dp_mtx_unlock(dp_mtx* m);
 void dp_mtx_drop(dp_mtx* m);
 
-/* Channel[T] (О13, прототип): синхронизация и кольцо номеров; значения —
+/* Channel[T] (Р70): синхронизация и кольцо номеров; значения —
  * в массиве типа T у сгенерированного кода. send_begin ждёт места и
  * отдаёт номер ячейки, recv_begin — значения (false — его нет: канал пуст
  * и закрыт или wait = false); между begin и end канал захвачен. Все потоки
  * ждут каналы — ловушка deadlock. */
-/* Счётчик ссылок ручки: Atomic, Mutex (О13, прототип). Копия ручки —
- * та же ячейка; последняя освобождает её. */
-typedef struct dp_rc {
-    int64_t n;
-} dp_rc;
-DP_INLINE void dp_rc_retain(dp_rc* r) { __atomic_fetch_add(&r->n, 1, __ATOMIC_RELAXED); }
-DP_INLINE bool dp_rc_release(dp_rc* r) { return __atomic_fetch_sub(&r->n, 1, __ATOMIC_ACQ_REL) == 1; }
-
 typedef struct dp_chan dp_chan;
 dp_chan* dp_chan_new(int64_t cap, const char* loc);
-void dp_chan_retain(dp_chan* c);
-/* true — ручка последняя: значения забирает и освобождает вызывающий. */
-bool dp_chan_release(dp_chan* c);
 int64_t dp_chan_send_begin(dp_chan* c, const char* loc);
 void dp_chan_send_end(dp_chan* c);
 bool dp_chan_recv_begin(dp_chan* c, bool wait, int64_t* slot, const char* loc);
@@ -465,24 +454,12 @@ int64_t dp_chan_len(const dp_chan* c);
 void dp_chan_free(dp_chan* c);
 void dp_parallel_for(uint64_t n, dp_par_body body, void* env);
 
-/* Блок задач `tasks` (О13, прототип): группа задач потока; задача —
+/* Блок задач `tasks` (Р70): группа задач потока; задача —
  * body(копия env) в своём потоке; конец блока ждёт задачи и выводит их
  * вывод по порядку запуска. */
 void dp_tasks_begin(void);
 void dp_spawn(void (*body)(void*), const void* env, size_t size, const char* loc);
 void dp_tasks_end(const char* loc);
-
-/* Задача варианта В (О13, прототип): body(копия env) в своём потоке;
- * результат — в начале env. dp_task_join ждёт задачу и отдаёт env
- * (повторно — ловушка); ручка без join отсоединяет задачу: её вывод
- * выходит, когда она кончилась, результат освобождает drop. В конце
- * программы main ждёт оставшиеся задачи (dp_tasks_wait_all). */
-typedef struct dp_vtask dp_vtask;
-dp_vtask* dp_task_start(void (*body)(void*), const void* env, size_t size, void (*drop)(void*), const char* loc);
-void* dp_task_join(dp_vtask* t, const char* loc);
-void dp_task_retain(dp_vtask* t);
-void dp_task_release(dp_vtask* t);
-void dp_tasks_wait_all(void);
 
 /* Потоки платформы для пула (runtime/linux, runtime/windows). */
 int dp_sys_cpus(void);

@@ -45,7 +45,7 @@ static _Thread_local uint64_t dp_par_iter;
 static _Thread_local dp_par_out* dp_par_buf;
 static _Thread_local jmp_buf* dp_par_jb;
 
-/* Задача блока `tasks` (О13, прототип): свой поток; её вывод — в её буфер
+/* Задача блока `tasks` (Р70): свой поток; её вывод — в её буфер
  * до конца блока. */
 typedef struct dp_task {
     void (*body)(void*);
@@ -893,7 +893,7 @@ static void dp_par_flush(dp_par_job* j, uint64_t parts, uint64_t trap_at) {
 void dp_parallel_for(uint64_t n, dp_par_body body, void* env) {
     if (n == 0) return;
     if (dp_par_workers < 0) dp_par_start();
-    /* Вложенный цикл, цикл в задаче (О13, прототип: пул — у main), пул из
+    /* Вложенный цикл, цикл в задаче (Р70: пул — у main), пул из
      * одного потока, одна итерация — по очереди. */
     if (dp_par_cur || dp_task_cur || dp_par_workers == 0 || n == 1) {
         for (uint64_t k = 0; k < n; k++) body(env, k);
@@ -930,7 +930,7 @@ void dp_parallel_for(uint64_t n, dp_par_body body, void* env) {
     if (trap_at != UINT64_MAX) dp_die(j.trap_loc, j.trap_msg);
 }
 
-/* --- Mutex[T] (О13, прототип) */
+/* --- Mutex[T] (Р70) */
 
 static _Thread_local char dp_thread_id; /* адрес — имя потока */
 
@@ -960,10 +960,9 @@ void dp_mtx_drop(dp_mtx* m) {
     m->sys = NULL;
 }
 
-/* --- Channel[T] (О13, прототип) */
+/* --- Channel[T] (Р70) */
 
 struct dp_chan {
-    int64_t rc; /* ручки (вариант В): копия — та же очередь */
     void* m;
     void* not_empty;
     void* not_full;
@@ -1016,8 +1015,8 @@ static void dp_dl_block(int* waiting, const char* loc) {
     dp_sys_lock(m);
     dp_dl_blocked++;
     (*waiting)++;
-    if (loc) dp_dl_loc = loc;
-    if (dp_dl_blocked >= dp_dl_live) dp_die_now(dp_dl_loc, "deadlock: every thread is waiting");
+    dp_dl_loc = loc;
+    if (dp_dl_blocked >= dp_dl_live) dp_die_now(loc, "deadlock: every thread is waiting");
     dp_sys_unlock(m);
 }
 
@@ -1057,13 +1056,8 @@ dp_chan* dp_chan_new(int64_t cap, const char* loc) {
     c->not_full = dp_sys_cond();
     if (!c->m || !c->not_empty || !c->not_full) dp_trap(loc, "out of memory");
     c->cap = cap;
-    c->rc = 1;
     return c;
 }
-
-void dp_chan_retain(dp_chan* c) { __atomic_fetch_add(&c->rc, 1, __ATOMIC_RELAXED); }
-
-bool dp_chan_release(dp_chan* c) { return __atomic_fetch_sub(&c->rc, 1, __ATOMIC_ACQ_REL) == 1; }
 
 int64_t dp_chan_send_begin(dp_chan* c, const char* loc) {
     dp_sys_lock(c->m);
@@ -1142,7 +1136,7 @@ void dp_chan_free(dp_chan* c) {
 }
 
 
-/* --- задачи блока `tasks` (О13, прототип)
+/* --- задачи блока `tasks` (Р70)
  *
  * Задача — свой поток ОС; группа — задачи блока по порядку запуска, стек
  * групп — у потока. Конец блока ждёт задачи (в счёте взаимной блокировки)
@@ -1225,114 +1219,4 @@ void dp_tasks_end(const char* loc) {
     dp_sys_mutex_free(g->m);
     dp_sys_cond_free(g->cv);
     free(g);
-}
-
-/* --- задачи варианта В (О13, прототип)
- *
- * Ссылки на задачу — её ручки и сам поток, пока он идёт; последняя
- * освобождает задачу. Не присоединённая задача (join не было) выводит свой
- * вывод прямо в stdout и stderr, когда уходит последняя ссылка. */
-struct dp_vtask {
-    dp_task t; /* body, env, out */
-    int64_t rc;
-    void* m;
-    void* cv;
-    bool done, joined;
-    int waiting;          /* join ждёт (учёт взаимной блокировки) */
-    void (*drop)(void*);  /* освобождает результат в env */
-};
-
-static void* dp_vt_m;  /* счёт идущих задач — для конца программы */
-static void* dp_vt_cv;
-static int dp_vt_running;
-static int dp_vt_waiting;
-
-static void dp_vt_free(dp_vtask* v) {
-    if (!v->joined) {
-        dp_out_write(&v->t.out);
-        if (v->drop) v->drop(v->t.env);
-    }
-    free(v->t.out.buf);
-    free(v->t.env);
-    dp_sys_mutex_free(v->m);
-    dp_sys_cond_free(v->cv);
-    free(v);
-}
-
-void dp_task_retain(dp_vtask* t) { __atomic_fetch_add(&t->rc, 1, __ATOMIC_RELAXED); }
-
-void dp_task_release(dp_vtask* t) {
-    if (__atomic_fetch_sub(&t->rc, 1, __ATOMIC_ACQ_REL) == 1) dp_vt_free(t);
-}
-
-static void dp_vt_main(void* arg) {
-    dp_vtask* v = (dp_vtask*)arg;
-    dp_task_cur = &v->t;
-    v->t.body(v->t.env);
-    dp_task_cur = NULL;
-    dp_sys_lock(v->m);
-    v->done = true;
-    dp_dl_wake(&v->waiting);
-    dp_sys_broadcast(v->cv);
-    dp_sys_unlock(v->m);
-    dp_task_release(v);
-    dp_sys_lock(dp_vt_m);
-    if (--dp_vt_running == 0) {
-        dp_dl_wake(&dp_vt_waiting);
-        dp_sys_broadcast(dp_vt_cv);
-    }
-    dp_sys_unlock(dp_vt_m);
-    dp_dl_exit();
-}
-
-dp_vtask* dp_task_start(void (*body)(void*), const void* env, size_t size, void (*drop)(void*), const char* loc) {
-    void* m = dp_lazy_mutex(&dp_vt_m);
-    dp_sys_lock(m);
-    if (!dp_vt_cv) dp_vt_cv = dp_sys_cond();
-    bool ok = dp_vt_cv != NULL;
-    if (ok) dp_vt_running++;
-    dp_sys_unlock(m);
-    if (!ok) dp_trap(loc, "out of memory");
-    dp_vtask* v = (dp_vtask*)calloc(1, sizeof(dp_vtask));
-    void* e = malloc(size ? size : 1);
-    if (!v || !e) dp_trap(loc, "out of memory");
-    memcpy(e, env, size);
-    v->t.body = body;
-    v->t.env = e;
-    v->rc = 2; /* ручка и поток */
-    v->drop = drop;
-    v->m = dp_sys_mutex();
-    v->cv = dp_sys_cond();
-    if (!v->m || !v->cv) dp_trap(loc, "out of memory");
-    dp_dl_enter();
-    if (dp_sys_thread(dp_vt_main, v) != 0) dp_trap(loc, "cannot start a thread for a task");
-    return v;
-}
-
-void* dp_task_join(dp_vtask* v, const char* loc) {
-    dp_sys_lock(v->m);
-    if (v->joined) {
-        dp_sys_unlock(v->m);
-        dp_trap(loc, "task is already joined");
-    }
-    while (!v->done) {
-        if (!v->waiting) dp_dl_block(&v->waiting, loc);
-        dp_sys_wait(v->cv, v->m);
-    }
-    v->joined = true;
-    dp_sys_unlock(v->m);
-    dp_out_emit(&v->t.out);
-    v->t.out.len = 0;
-    return v->t.env;
-}
-
-void dp_tasks_wait_all(void) {
-    void* m = __atomic_load_n(&dp_vt_m, __ATOMIC_ACQUIRE);
-    if (!m) return;
-    dp_sys_lock(m);
-    while (dp_vt_running > 0) {
-        if (!dp_vt_waiting) dp_dl_block(&dp_vt_waiting, NULL);
-        dp_sys_wait(dp_vt_cv, m);
-    }
-    dp_sys_unlock(m);
 }

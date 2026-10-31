@@ -107,20 +107,6 @@ def program_args(path):
     return args_file(a) if os.path.exists(a) else []
 
 
-def test_env(path):
-    """Окружение теста: X.env рядом — строки KEY=VALUE (вариант задач DPL_TASKS, О13); None — как у run.py."""
-    e = path[:-len('.dpm')] + '.env'
-    if not path.endswith('.dpm') or not os.path.exists(e):
-        return None
-    env = dict(os.environ)
-    with open(e, encoding='utf-8') as f:
-        for ln in f:
-            if '=' in ln:
-                k, v = ln.strip().split('=', 1)
-                env[k] = v
-    return env
-
-
 # Набор → (расширение входа, программа, построитель аргументов по имени входа).
 SUITES = {
     'cli': ('.args', DPL, lambda name, path: args_file(path)),
@@ -239,9 +225,6 @@ def discover(pattern):
         for t in sorted(os.listdir(BENCH_TASKS)):
             if os.path.isdir(os.path.join(BENCH_TASKS, t, 'dp')):
                 cases = BENCH_CASES + (('before',) if bench_kind(t) == 'refactor' else ())
-                if bench_variants(t) and not os.path.isfile(os.path.join(BENCH_TASKS, t, 'dp', 'sol.dpm')):
-                    cases = tuple(c for c in cases if c != 'ref')  # только решения вариантов
-                cases += bench_variants(t)
                 deep += [('bench', f'{t}/{c}') for c in cases if pattern in f'bench/{t}/{c}']
     wdir = os.path.join(TESTS, 'worker')
     online = [('worker', os.path.join(wdir, name)) for name in sorted(os.listdir(wdir))
@@ -306,7 +289,7 @@ def uses_parallel(path):
     for f in files:
         with open(f, encoding='utf-8') as h:
             text = h.read()
-            if 'parallel for' in text or 'parallel {' in text or 'tasks {' in text or 'spawn ' in text:
+            if 'parallel for' in text or 'tasks {' in text:
                 return True
     return False
 
@@ -561,20 +544,12 @@ def bench_kind(task):
     return 'fix' if os.path.exists(os.path.join(path, 'buggy.cpp')) else 'write'
 
 
-def bench_variants(task):
-    """Свои решения вариантов модели задач О13: dp/a, dp/b, dp/c → ref_a, …."""
-    dp = os.path.join(BENCH_TASKS, task, 'dp')
-    return tuple('ref_' + v for v in 'abc' if os.path.isfile(os.path.join(dp, v, 'sol.dpm')))
-
-
 def bench_files(task, which):
     """Модули решения задачи (имя → текст): эталон ref, начальный код start, before."""
     dp = os.path.join(BENCH_TASKS, task, 'dp')
     if bench_kind(task) == 'refactor':
         d = os.path.join(dp, 'before' if which in ('start', 'before') else 'ref')
         return {n: dp_check.read(os.path.join(d, n)) for n in sorted(os.listdir(d)) if n.endswith('.dpm')}
-    if which.startswith('ref_'):  # вариант модели задач О13
-        return {'sol.dpm': dp_check.read(os.path.join(dp, which[4:], 'sol.dpm'))}
     name = 'sol.dpm' if which == 'ref' else ('buggy.dpm' if bench_kind(task) == 'fix' else 'stub.dpm')
     return {'sol.dpm': dp_check.read(os.path.join(dp, name))}
 
@@ -613,15 +588,14 @@ def bench_one(case):
         got = capture([DPL, 'fmt', '--check'] + srcs, dp)
         return None if got == '' else 'не в каноническом виде (dpl fmt):\n' + got
     want = dp_check.expected(path)
-    if kind.startswith('ref') and os.path.exists(os.path.join(dp, 'expected.txt')):
+    if kind == 'ref' and os.path.exists(os.path.join(dp, 'expected.txt')):
         if not same_numbers(want, dp_check.read(os.path.join(path, 'expected.txt'))):
             return 'dp/expected.txt не равен expected.txt задачи даже с точностью до записи чисел'
     driver = dp_check.read(os.path.join(dp, 'before_main.dpm' if kind == 'before' else dp_check.DRIVER))
     build_dir = os.path.join(NATIVE, 'bench', task, kind)
     if os.path.isdir(build_dir):
         shutil.rmtree(build_dir)
-    variant = kind[4:] if kind.startswith('ref_') else None
-    cls, msg = dp_check.evaluate(bench_files(task, kind), driver, want, build_dir, DPL, variant)
+    cls, msg = dp_check.evaluate(bench_files(task, kind), driver, want, build_dir, DPL)
     if kind == 'start':
         if cls in BENCH_START[bench_kind(task)]:
             return None
@@ -682,7 +656,7 @@ def actual_output(suite, path):
     argv = [program] + make_args(name, path)
     try:
         r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
-                           cwd=cwd, env=test_env(path))
+                           cwd=cwd)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout

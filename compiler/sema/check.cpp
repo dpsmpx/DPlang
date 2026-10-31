@@ -1,6 +1,7 @@
 // Проверка тел: инструкции и поток (docs/spec/core.md, разделы 6–8).
 // Выражения — check_expr.cpp, образцы — check_pat.cpp.
 #include <algorithm>
+#include <cstdlib>
 #include <set>
 #include <string>
 
@@ -12,9 +13,7 @@ namespace dp::sema {
 using namespace ast;
 
 Checker::Checker(Program& prog, ModuleInfo& m, Diagnostics& diags)
-    : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags), tt_(prog.types) {
-    tasks_mode_ = tasks_variant();  // О13, прототип: режим замера, не часть языка
-}
+    : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags), tt_(prog.types) {}
 
 // Константы модуля, на которые ссылается значение c (по имени).
 std::vector<ConstDef*> Checker::const_deps(const ConstDef& c) {
@@ -318,9 +317,8 @@ void Checker::let_stmt(LetStmt* l) {
             }
         }
     }
-    // О13, прототип: в вариантах А и Б конкурентное значение — только из
-    // atomic(…), не копия; иначе копия — ручка того же значения.
-    if (t && holds_concurrent(t) && !concurrent_copies()) {
+    // Р70: конкурентное значение — только из atomic(…), не копия.
+    if (t && holds_concurrent(t)) {
         auto* c = as<CallExpr>(l->value);
         bool fresh = c && c->call == CallKind::Builtin && concurrent(t) && !holds_concurrent(t->elem) &&
                      (c->builtin == static_cast<uint32_t>(BuiltinFn::AtomicNew) ||
@@ -384,7 +382,7 @@ void Checker::destructure(LetStmt* l) {
     }
 }
 
-// `lock m as t { … }` (О13, прототип): t — данные m (`&mut`) до конца блока.
+// `lock m as t { … }` (Р70): t — данные m (`&mut`) до конца блока.
 void Checker::lock_stmt(LockStmt* s) {
     const Type* t = infer(s->mutex, nullptr);
     const Type* elem = err();
@@ -407,41 +405,18 @@ void Checker::lock_stmt(LockStmt* s) {
     pop_scope();
 }
 
-// `tasks { … }` — вариант А (О13, прототип): задачи ставит `spawn`.
-// `parallel { … }` — вариант Б: каждый оператор — задача. Блок кончается,
-// когда кончились его задачи; выйти из него раньше нельзя (E0516).
+// `tasks { … }` (Р70): задачи ставит `spawn`; блок кончается, когда
+// кончились они. Выйти из блока раньше нельзя (E0516).
 void Checker::tasks_stmt(TasksStmt* s) {
-    variant_ok(s->each ? 'b' : 'a', s->span, s->each ? "'parallel { ... }'" : "'tasks { ... }'");
     if (fn_ && is_det(*fn_)) {
         error(Code::E0425, s->span, "tasks run at the same time; '" + fn_->name + "' is class D and cannot start them");
     }
     TasksScope sc;
     sc.first_inner = next_local_;
-    sc.each = s->each;
     tasks_.push_back(std::move(sc));
     loops_.emplace_back();
     loops_.back().tasks = true;
-    if (!s->each) {
-        block(s->body);
-    } else if (s->body) {
-        push_scope();
-        int k = 0;
-        for (Stmt* x : s->body->stmts) {
-            if (x->kind == StmtKind::Let || x->kind == StmtKind::Defer) {
-                error(Code::E0520, x->span, x->kind == StmtKind::Let
-                                                ? "a variable of a statement in 'parallel { ... }' ends with it; "
-                                                  "declare it before the block and assign it here"
-                                                : "'parallel { ... }' runs each statement as a task; put 'defer' "
-                                                  "before the block");
-            }
-            size_t mark = tasks_.back().accesses.size();
-            stmt(x);
-            std::vector<TaskAccess>& acc = tasks_.back().accesses;
-            for (size_t i = mark; i < acc.size(); i++) acc[i].stmt = k;
-            k++;
-        }
-        pop_scope();
-    }
+    block(s->body);
     loops_.pop_back();
     tasks_end();
     tasks_.pop_back();
@@ -457,7 +432,7 @@ void Checker::assign_stmt(AssignStmt* a) {
     // Простое присваивание переменной инициализирует её; остальное читает цель.
     if (n && a->op == AssignOp::Set) {
         resolve_name(n);
-        if (n->res.kind == ResKind::Local && holds_concurrent(n->res.local->type) && !concurrent_copies()) {
+        if (n->res.kind == ResKind::Local && holds_concurrent(n->res.local->type)) {  // Р70
             error(Code::E0518, n->span, "cannot assign to '" + n->name + "': '" + tn(n->res.local->type) +
                                             "' is shared, not replaced; use its methods");
             infer(a->value, nullptr);
@@ -504,9 +479,9 @@ void Checker::assign_stmt(AssignStmt* a) {
 
 void Checker::expr_stmt(ExprStmt* s) {
     Expr* e = s->expr;
-    // `spawn f(…)` оператором в блоке `tasks` — задача блока (вариант А).
+    // `spawn f(…)` — оператор блока `tasks` (Р70).
     auto* sp = as<SpawnExpr>(e);
-    if (sp && !tasks_.empty() && !tasks_.back().each) sp->group = true;
+    if (sp && !tasks_.empty()) sp->group = true;
     const Type* t = infer(e, nullptr);
     if (sp) return;
     Expr* inner = e;
@@ -644,9 +619,9 @@ void Checker::loop_jump(Stmt* s, bool is_break) {
             error(Code::E0420, s->span, std::string("'") + (is_break ? "break" : "continue") + "' outside of a loop");
         }
     } else if (loops_.back().tasks) {
-        error(Code::E0516, s->span, std::string("'") + (is_break ? "break" : "continue") + "' cannot leave '" +
-                                        (!tasks_.empty() && tasks_.back().each ? "parallel { ... }" : "tasks") +
-                                        "': the block waits for its tasks; leave the loop after the block");
+        error(Code::E0516, s->span, std::string("'") + (is_break ? "break" : "continue") +
+                                        "' cannot leave 'tasks': the block waits for its tasks; leave the loop "
+                                        "after the block");
     } else if (is_break) {
         if (loops_.back().parallel) parallel_exit(s->span, "break");
         loops_.back().breaks.push_back(flow_);
@@ -657,9 +632,8 @@ void Checker::loop_jump(Stmt* s, bool is_break) {
 bool Checker::parallel_exit(Span span, const char* what) {
     std::string w(what);
     if (parallel_depth_ == 0 && !tasks_.empty()) {
-        error(Code::E0516, span, "'" + w + "' cannot leave '" + (tasks_.back().each ? "parallel { ... }" : "tasks") +
-                                     "': the block waits for its tasks; write the outcome to a variable and act on "
-                                     "it after the block");
+        error(Code::E0516, span, "'" + w + "' cannot leave 'tasks': the block waits for its tasks; write the outcome "
+                                     "to a variable and act on it after the block");
         return true;
     }
     if (parallel_depth_ == 0) return false;

@@ -71,7 +71,7 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
                 out = tt.list(type(n->args[0]));
                 break;
             }
-            if (k == TK::Atomic) {  // О13, прототип: целое или bool
+            if (k == TK::Atomic) {  // Р70: целое или bool
                 if (n->args.size() != 1) {
                     diags_.error(Code::E0314, node->span, "'Atomic' takes exactly one type argument: Atomic[T]");
                     break;
@@ -86,17 +86,7 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
                 out = tt.atomic(elem);
                 break;
             }
-            if (k == TK::Task) {  // О13, прототип: Task[void] — задача без результата
-                if (n->args.size() != 1) {
-                    diags_.error(Code::E0314, node->span, "'Task' takes exactly one type argument: Task[T]");
-                    break;
-                }
-                const sema::Type* elem = type(n->args[0], true);
-                if (elem->kind == TK::Error) break;
-                out = tt.task(elem);
-                break;
-            }
-            if (k == TK::Mutex || k == TK::Channel) {  // О13, прототип
+            if (k == TK::Mutex || k == TK::Channel) {  // Р70
                 if (n->args.size() != 1) {
                     diags_.error(Code::E0314, node->span, "'" + n->name + "' takes exactly one type argument: " + n->name +
                                                               "[T]");

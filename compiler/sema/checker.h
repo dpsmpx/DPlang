@@ -135,7 +135,6 @@ private:
     const Type* slice_expr(ast::SliceExpr* s);
     const Type* try_expr(ast::TryExpr* t);
     const Type* spawn_expr(ast::SpawnExpr* sp);
-    const Type* task_value(ast::SpawnExpr* sp);
     void field_inits(std::vector<ast::FieldInit>& inits, const std::vector<FieldDef>& fields, bool defaults_ok, Span span,
                      const std::string& what, bool c_zero = false);
     const EnumDef* enum_for_variant(const std::string& name, const Type* hint, Span span);
@@ -185,13 +184,8 @@ private:
     // Выход из тела `parallel for` (Р69) или блока задач: break, return, fail, try.
     bool parallel_exit(Span span, const char* what);
 
-    // --- задачи (О13, прототип; access.cpp)
-    // Вариант модели из DPL_TASKS: 'a', 'b', 'c'; 0 — все формы, '?' — не
-    // a, b, c. Форма другого варианта — E0519.
-    char tasks_mode_ = 0;
-    bool variant_ok(char variant, Span span, const char* form);
+    // --- задачи (Р70; access.cpp)
 public:
-    // Заимствование `&x` или `&mut x` задачей блока: живёт до конца блока.
     // Цикл блока задач вокруг `spawn`: переменная (nullptr — while) и
     // диапазон ли он — у диапазона `out[i]` в итерациях разные, у обхода
     // разные только сами элементы.
@@ -199,6 +193,7 @@ public:
         const Local* var = nullptr;
         bool range = false;
     };
+    // Заимствование `&x` или `&mut x` задачей блока: живёт до конца блока.
     struct TaskBorrow {
         ast::Expr* place = nullptr;
         bool mut = false;
@@ -210,11 +205,9 @@ public:
         ast::Expr* place = nullptr;
         bool write = false;
         bool len = false;  // `len(x)`: читает только длину
-        int stmt = -1;     // `parallel { … }`: номер оператора блока
     };
     struct TasksScope {
         uint32_t first_inner = 0;  // переменные блока — с номером не меньше
-        bool each = false;         // `parallel { … }`
         std::vector<TaskLoop> loops;
         std::vector<TaskBorrow> borrows;
         std::vector<TaskAccess> accesses;

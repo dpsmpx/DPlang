@@ -41,4 +41,7 @@ tasks.dpm:79:13: error[E0516]: 'break' cannot leave 'tasks': the block waits for
 tasks.dpm:83:9: error[E0516]: 'return' cannot leave 'tasks': the block waits for its tasks; write the outcome to a variable and act on it after the block
   83 |         return
      |         ^~~~~~
+tasks.dpm:85:5: error[E0520]: 'spawn' starts a task of a 'tasks' block: write it as a statement inside 'tasks { ... }'
+  85 |     spawn work(&mut a)
+     |     ^~~~~~~~~~~~~~~~~~
 [exit 1]

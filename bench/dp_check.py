@@ -90,12 +90,10 @@ def compare(want, got):
     return None
 
 
-def evaluate(files, driver_text, want, build_dir, compiler=None, variant=None):
+def evaluate(files, driver_text, want, build_dir, compiler=None):
     """Собирает файлы решения (имя → текст) с драйвером в build_dir,
-    запускает и сверяет с want: (класс, сообщение). variant — вариант
-    модели задач О13 ('a', 'b', 'c'): сборка с DPL_TASKS."""
+    запускает и сверяет с want: (класс, сообщение)."""
     compiler = compiler or dpl()
-    env = dict(os.environ, DPL_TASKS=variant) if variant else None
     for name in files:
         if name == DRIVER:
             return 'разбор', f'имя {DRIVER} занято драйвером: переименуйте модуль'
@@ -108,7 +106,7 @@ def evaluate(files, driver_text, want, build_dir, compiler=None, variant=None):
     exe = os.path.join(build_dir, 'program')
     try:
         r = subprocess.run([compiler, 'build', '-o', exe, DRIVER], capture_output=True, text=True,
-                           errors='backslashreplace', timeout=BUILD_TIMEOUT, cwd=build_dir, env=env)
+                           errors='backslashreplace', timeout=BUILD_TIMEOUT, cwd=build_dir)
     except subprocess.TimeoutExpired:
         return 'компилятор', f'сборка не закончилась за {BUILD_TIMEOUT} с'
     except OSError as e:
