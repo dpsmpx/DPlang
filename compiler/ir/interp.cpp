@@ -278,6 +278,10 @@ struct Frame {
     std::vector<Ref> refs;  // параметры-ссылки
     uint32_t block = 0;
     uint32_t inst = 0;
+    // `parallel for` на инструкции inst (Р69): итерации по очереди —
+    // допустимый порядок; k — следующая из n, значение — lo + k.
+    bool par = false;
+    uint64_t par_lo = 0, par_k = 0, par_n = 0;
 };
 
 // --- целые
@@ -703,6 +707,7 @@ private:
             return;
         }
         if (in.rv.kind == RvKind::Call || in.rv.kind == RvKind::CallPtr) return call(fr, in.rv);  // продолжение — при возврате
+        if (in.rv.kind == RvKind::ParFor) return par_step(fr, in.rv);
         Value v = rvalue(fr, in.rv);
         if (stop_) return;
         if (in.kind == InstKind::Assign) {
@@ -757,6 +762,42 @@ private:
         frames_.push_back(std::move(nf));
     }
 
+    // Следующая итерация `parallel for`: вызов тела; после последней —
+    // следующая инструкция.
+    void par_step(Frame& fr, const Rvalue& rv) {
+        const Type* t = op_type(fr, rv.ops[0]);
+        if (!fr.par) {
+            Value s1, s2;
+            uint64_t lo = peek(fr, rv.ops[0], s1).i;
+            if (stop_) return;
+            uint64_t hi = peek(fr, rv.ops[1], s2).i;
+            if (stop_) return;
+            bool less = sema::is_signed(t) ? static_cast<int64_t>(lo) < static_cast<int64_t>(hi) : lo < hi;
+            fr.par = true;
+            fr.par_lo = lo;
+            fr.par_k = 0;
+            fr.par_n = less ? hi - lo : 0;
+        }
+        if (fr.par_k >= fr.par_n) {
+            fr.par = false;
+            fr.inst++;
+            return;
+        }
+        if (frames_.size() >= kMaxFrames) return trap("stack overflow: calls are nested too deeply");
+        const Function& g = p_.fns[rv.fn];
+        Frame nf;
+        nf.fn = rv.fn;
+        nf.locals.resize(g.locals.size());
+        nf.refs.resize(g.param_count);
+        nf.locals[0] = int_value(canon(fr.par_lo + fr.par_k, t));
+        fr.par_k++;
+        for (size_t i = 0; i < rv.args.size(); i++) {
+            nf.refs[i + 1] = resolve(fr, rv.args[i].place, rv.args[i].kind == Arg::Kind::Mut);
+            if (stop_) return;
+        }
+        frames_.push_back(std::move(nf));
+    }
+
     void finish_return(Value v) {
         Frame& fr = frames_.back();
         const Function& f = fn(fr);
@@ -774,6 +815,7 @@ private:
         if (frames_.empty()) return finish_main(v, ret);
         Frame& caller = frames_.back();
         const Inst& in = fn(caller).blocks[caller.block].insts[caller.inst];
+        if (in.rv.kind == RvKind::ParFor) return;  // следующая итерация — в par_step
         if (in.kind == InstKind::Assign) {
             // Через указатель — обёртка `@export`: результат функции класса D
             // уходит в C каноническим (Р56).
@@ -864,7 +906,7 @@ private:
                 if (rv.kind == RvKind::Tag) return int_value(r.v->tag);
                 return bool_value(rv.kind == RvKind::IsSome ? r.v->tag == 1 : r.v->tag == 0);
             }
-            case RvKind::Call: case RvKind::CallPtr: break;  // исполняется в step()
+            case RvKind::Call: case RvKind::CallPtr: case RvKind::ParFor: break;  // исполняются в step()
         }
         internal("unknown rvalue");
         return Value{};

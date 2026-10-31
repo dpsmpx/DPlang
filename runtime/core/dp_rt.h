@@ -99,7 +99,7 @@ void dp_pool_drop(dp_pool* p);
  * функция увеличивает её на входе и уменьшает на выходе, вызов
  * проверяет предел до входа в вызываемую. */
 #define DP_MAX_DEPTH 32768
-extern int64_t dp_depth;
+extern _Thread_local int64_t dp_depth; /* у каждого потока свой: `parallel for` (Р69) */
 #define DP_CALL_CHECK(loc) \
     do { \
         if (dp_depth >= DP_MAX_DEPTH) dp_trap((loc), "stack overflow: calls are nested too deeply"); \
@@ -413,5 +413,27 @@ typedef void (*dp_slot_fn)(void);
 int dp_run(dp_entry_fn entry);
 /* То же для теста (Р50): ошибка — «error: test failed with E.V». */
 int dp_run_test(dp_entry_fn entry);
+
+/* --- `parallel for` (Р69; docs/runtime/README.md)
+ *
+ * body(env, k) для каждого k из [0, n) — в пуле потоков, в любом
+ * порядке; возврат — когда закончились все. Вывод итерации (print,
+ * println, eprintln) копится и выходит по порядку k; ловушка — та, что
+ * при исполнении по очереди: с наименьшим k, после вывода итераций до
+ * неё. Вложенный цикл и пул из одного потока (DPL_THREADS=1) — по
+ * очереди в своём потоке. */
+typedef void (*dp_par_body)(void* env, uint64_t k);
+void dp_parallel_for(uint64_t n, dp_par_body body, void* env);
+
+/* Потоки платформы для пула (runtime/linux, runtime/windows). */
+int dp_sys_cpus(void);
+/* Поток с большим стеком, как у main; не присоединяется. 0 — запущен. */
+int dp_sys_thread(void (*fn)(void*), void* arg);
+void* dp_sys_mutex(void);
+void dp_sys_lock(void* m);
+void dp_sys_unlock(void* m);
+void* dp_sys_cond(void);
+void dp_sys_wait(void* c, void* m);
+void dp_sys_broadcast(void* c);
 
 #endif

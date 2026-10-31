@@ -661,6 +661,35 @@ private:
                 }
                 break;
             }
+            case RvKind::ParFor: {  // Р69: тело — функция (v, ссылки…) без результата
+                same(t, prim(TK::Void), "result");
+                if (rv.fn >= p_.fns.size()) return fail("parallel loop of an unknown function");
+                const Function& g = p_.fns[rv.fn];
+                if (g.is_extern || g.ret->kind != TK::Void) fail("parallel loop body must be a dpl function without a result");
+                if (rv.ops.size() != 2) return fail("parallel loop needs two bounds");
+                if (rv.args.size() + 1 != g.param_count || g.param_count == 0) {
+                    return fail("wrong number of arguments to " + g.name);
+                }
+                const Type* bt = operand(rv.ops[0], false);
+                same(operand(rv.ops[1], false), bt, "bound");
+                if (bt && !sema::is_integer(bt)) fail("parallel loop over a non-integer range");
+                if (g.locals[0].kind != LocalKind::Param) fail("parallel loop body takes the index by value");
+                same(g.locals[0].type, bt, "index");
+                for (size_t i = 0; i < rv.args.size(); i++) {
+                    const Arg& a = rv.args[i];
+                    const Local& prm = g.locals[i + 1];
+                    Arg::Kind want = prm.kind == LocalKind::ParamRef ? Arg::Kind::Ref
+                                     : prm.kind == LocalKind::ParamMut ? Arg::Kind::Mut
+                                                                       : Arg::Kind::Value;
+                    if (a.kind != want || a.kind == Arg::Kind::Value) {
+                        fail("argument " + std::to_string(i + 1) + " of " + g.name + " has a wrong mode");
+                        continue;
+                    }
+                    same(place(a.place), prm.type, "argument");
+                    if (a.kind == Arg::Kind::Mut && !writable(a.place)) fail("'&mut' argument of a read-only place");
+                }
+                break;
+            }
             case RvKind::Intrinsic: intrinsic(rv); break;
             case RvKind::Tag: {
                 const Type* x = rv.has_place ? place(rv.place) : nullptr;

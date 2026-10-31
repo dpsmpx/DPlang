@@ -231,6 +231,7 @@ public:
             if (f.exported) out += export_head(f) + " __asm__(" + cstr(f.c_name) + ");\n";
         }
         out += "\n";
+        out += par_defs();
         for (const Function& f : p_.fns) {
             if (!f.is_extern) out += function(f);
         }
@@ -310,7 +311,47 @@ public:
     static std::string fn_name(const Function& f) {
         size_t dot = f.name.find('.');
         if (dot == std::string::npos) return "dpf_" + lp(f.name);
+        size_t hash = f.name.find('#');  // тело `parallel for` (Р69): «модуль.функция#номер»
+        if (hash != std::string::npos) {
+            return "dpp_" + lp(f.name.substr(0, dot)) + lp(f.name.substr(dot + 1, hash - dot - 1)) + "_" +
+                   f.name.substr(hash + 1);
+        }
         return "dpf_" + lp(f.name.substr(0, dot)) + lp(f.name.substr(dot + 1));
+    }
+
+    // `parallel for` (Р69): у каждого ParFor — окружение (нижняя граница и
+    // указатели на захваченные места) и функция-трамплин для runtime.
+    std::map<const ir::Rvalue*, uint32_t> par_ids_;
+
+    uint32_t par_id(const ir::Rvalue& rv) const {
+        auto it = par_ids_.find(&rv);
+        return it == par_ids_.end() ? 0 : it->second;
+    }
+
+    std::string par_defs() {
+        std::string out;
+        for (const Function& f : p_.fns) {
+            for (const ir::Block& b : f.blocks) {
+                for (const ir::Inst& in : b.insts) {
+                    if (in.rv.kind != RvKind::ParFor || in.rv.fn >= p_.fns.size()) continue;
+                    uint32_t id = static_cast<uint32_t>(par_ids_.size());
+                    par_ids_[&in.rv] = id;
+                    const Function& g = p_.fns[in.rv.fn];
+                    std::string n = std::to_string(id);
+                    std::string t = ctype(g.locals[0].type);
+                    out += "struct dp_pfe" + n + " {\n    " + t + " lo;\n";
+                    for (uint32_t i = 1; i < g.param_count; i++) {
+                        out += "    " + ctype(g.locals[i].type) + "* a" + std::to_string(i) + ";\n";
+                    }
+                    out += "};\n\nstatic void dp_pfb" + n + "(void* env, uint64_t k) {\n";
+                    out += "    struct dp_pfe" + n + "* e = (struct dp_pfe" + n + "*)env;\n";
+                    out += "    " + fn_name(g) + "((" + t + ")((uint64_t)e->lo + k)";
+                    for (uint32_t i = 1; i < g.param_count; i++) out += ", e->a" + std::to_string(i);
+                    out += ");\n}\n\n";
+                }
+            }
+        }
+        return out;
     }
 
     std::string fn_head(const Function& f) {
@@ -1631,6 +1672,24 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
                        ? "((" + ctype(rv.type) + "){0})"
                        : "((" + ctype(rv.type) + ")0)";
         case RvKind::AddrOf: return "(&" + place(rv.place).expr + ")";  // Р62
+        case RvKind::ParFor: {  // Р69: итерации — в пуле потоков runtime
+            line("DP_CALL_CHECK(" + loc_ + ");");
+            std::string n = std::to_string(em_.par_id(rv));
+            const Type* t = rv.ops[0].kind == OpKind::Const ? rv.ops[0].c.type : ir::place_type(p_, f_, rv.ops[0].place);
+            std::string lo = fresh("dp_lo"), hi = fresh("dp_hi"), env = fresh("dp_env");
+            line(ctype(t) + " " + lo + " = " + operand(rv.ops[0], false) + ";");
+            line(ctype(t) + " " + hi + " = " + operand(rv.ops[1], false) + ";");
+            std::string init = "{" + lo;
+            for (const Arg& a : rv.args) {
+                Lv lv = place(a.place);
+                if (lv.byte) error("parallel loop over a str byte");
+                init += ", &" + lv.expr;
+            }
+            line("struct dp_pfe" + n + " " + env + " = " + init + "};");
+            line("dp_parallel_for(" + hi + " > " + lo + " ? (uint64_t)" + hi + " - (uint64_t)" + lo + " : 0, dp_pfb" +
+                 n + ", &" + env + ");");
+            return "((void)0)";
+        }
     }
     error("unknown rvalue");
     return "0";

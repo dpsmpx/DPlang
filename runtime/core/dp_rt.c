@@ -7,17 +7,58 @@
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int64_t dp_depth = 0;
+_Thread_local int64_t dp_depth = 0;
+
+/* --- `parallel for` (Р69): состояние итерации потока
+ *
+ * Итерации раздаются частями по возрастанию k. Часть исполняет один
+ * поток по порядку, её вывод — в своём буфере: записи «поток (1 — stdout,
+ * 2 — stderr), длина, байты». Ловушка в итерации запоминается (наименьшая
+ * k) и прерывает часть через longjmp; части с началом дальше её не
+ * исполняются. */
+typedef struct dp_par_out {
+    char* buf;
+    size_t len, cap;
+} dp_par_out;
+
+typedef struct dp_par_job {
+    dp_par_body body;
+    void* env;
+    uint64_t n, chunk;
+    _Atomic uint64_t next;     /* начало следующей части */
+    _Atomic uint64_t trap_at;  /* наименьшая итерация с ловушкой; UINT64_MAX — нет */
+    char trap_loc[512];
+    char trap_msg[512];
+    dp_par_out* outs; /* по части */
+} dp_par_job;
+
+static void* dp_par_m;
+static _Thread_local dp_par_job* dp_par_cur; /* задание, итерацию которого исполняет поток */
+static _Thread_local uint64_t dp_par_iter;
+static _Thread_local dp_par_out* dp_par_buf;
+static _Thread_local jmp_buf* dp_par_jb;
 
 /* --- ловушки */
 
 static _Noreturn void dp_die(const char* loc, const char* msg) {
+    dp_par_job* j = dp_par_cur;
+    if (j) { /* в итерации `parallel for`: запомнить и прервать часть */
+        dp_sys_lock(dp_par_m);
+        if (dp_par_iter < atomic_load(&j->trap_at)) {
+            atomic_store(&j->trap_at, dp_par_iter);
+            snprintf(j->trap_loc, sizeof j->trap_loc, "%s", loc ? loc : "");
+            snprintf(j->trap_msg, sizeof j->trap_msg, "%s", msg);
+        }
+        dp_sys_unlock(dp_par_m);
+        longjmp(*dp_par_jb, 1);
+    }
     fflush(stdout);
     if (loc && *loc) fprintf(stderr, "%s: trap: %s\n", loc, msg);
     else fprintf(stderr, "trap: %s\n", msg);
@@ -476,16 +517,53 @@ bool dp_str_starts_with(dp_str s, dp_str t) { return s.len >= t.len && (t.len ==
 
 /* --- вывод: stdout буферизован; перед stderr он сбрасывается */
 
+/* Вывод итерации `parallel for` — в буфер её части. Память — malloc, не
+ * dp_alloc: счётчик выделений (Р68) считает только память программы. */
+static void dp_par_put(int stream, const void* p, size_t n, bool nl) {
+    dp_par_out* o = dp_par_buf;
+    size_t need = o->len + 1 + sizeof(uint64_t) + n + (nl ? 1 : 0);
+    if (need > o->cap) {
+        size_t cap = o->cap ? o->cap : 256;
+        while (cap < need) cap *= 2;
+        char* b = (char*)realloc(o->buf, cap);
+        if (!b) {
+            fprintf(stderr, "trap: out of memory\n");
+            _Exit(101);
+        }
+        o->buf = b;
+        o->cap = cap;
+    }
+    uint64_t len = (uint64_t)n + (nl ? 1 : 0);
+    o->buf[o->len++] = (char)stream;
+    memcpy(o->buf + o->len, &len, sizeof len);
+    o->len += sizeof len;
+    if (n) memcpy(o->buf + o->len, p, n);
+    o->len += n;
+    if (nl) o->buf[o->len++] = '\n';
+}
+
 void dp_print(dp_str s) {
+    if (dp_par_cur) {
+        dp_par_put(1, s.ptr, (size_t)s.len, false);
+        return;
+    }
     if (s.len) fwrite(s.ptr, 1, (size_t)s.len, stdout);
 }
 
 void dp_println(dp_str s) {
+    if (dp_par_cur) {
+        dp_par_put(1, s.ptr, (size_t)s.len, true);
+        return;
+    }
     dp_print(s);
     fputc('\n', stdout);
 }
 
 void dp_eprintln(dp_str s) {
+    if (dp_par_cur) {
+        dp_par_put(2, s.ptr, (size_t)s.len, true);
+        return;
+    }
     fflush(stdout);
     if (s.len) fwrite(s.ptr, 1, (size_t)s.len, stderr);
     fputc('\n', stderr);
@@ -673,3 +751,139 @@ void dp_check_repeat(int64_t n, const char* loc) {
 void dp_check_reserve(int64_t n, const char* loc) {
     if (n < 0) dp_trapf(loc, "reserve count %" PRId64 " is negative", n);
 }
+
+/* --- пул `parallel for` (Р69)
+ *
+ * Рабочие потоки запускаются при первом цикле и живут до конца программы.
+ * Задание публикуется под мьютексом (dp_par_pending и номер поколения);
+ * вызывающий поток работает наравне с рабочими, затем ждёт, пока все, кто
+ * взял задание, выйдут из него. */
+static void* dp_par_work_cv;
+static void* dp_par_done_cv;
+static int dp_par_workers = -1; /* -1 — пул ещё не запущен */
+static dp_par_job* dp_par_pending;
+static uint64_t dp_par_gen;
+static int dp_par_active;
+
+/* Части задания, пока они есть и не дальше ловушки. */
+static void dp_par_run(dp_par_job* j) {
+    int64_t depth = dp_depth;
+    for (;;) {
+        uint64_t start = atomic_fetch_add(&j->next, j->chunk);
+        if (start >= j->n || start > atomic_load(&j->trap_at)) break;
+        uint64_t end = j->n - start < j->chunk ? j->n : start + j->chunk;
+        jmp_buf jb;
+        dp_par_cur = j;
+        dp_par_buf = &j->outs[start / j->chunk];
+        dp_par_jb = &jb;
+        if (setjmp(jb) == 0) {
+            for (uint64_t k = start; k < end; k++) {
+                if (k > atomic_load_explicit(&j->trap_at, memory_order_relaxed)) break;
+                dp_par_iter = k;
+                j->body(j->env, k);
+            }
+        } else {
+            dp_depth = depth; /* кадры прерванной итерации брошены */
+        }
+        dp_par_cur = NULL;
+    }
+}
+
+static void dp_par_worker(void* arg) {
+    (void)arg;
+    uint64_t seen = 0;
+    dp_sys_lock(dp_par_m);
+    for (;;) {
+        while (!dp_par_pending || dp_par_gen == seen) dp_sys_wait(dp_par_work_cv, dp_par_m);
+        seen = dp_par_gen;
+        dp_par_job* j = dp_par_pending;
+        dp_par_active++;
+        dp_sys_unlock(dp_par_m);
+        dp_par_run(j);
+        dp_sys_lock(dp_par_m);
+        if (--dp_par_active == 0) dp_sys_broadcast(dp_par_done_cv);
+    }
+}
+
+/* Число потоков: DPL_THREADS или число процессоров; не больше 64. */
+static void dp_par_start(void) {
+    int n = 0;
+    const char* env = getenv("DPL_THREADS");
+    if (env && *env) n = atoi(env);
+    if (n <= 0) n = dp_sys_cpus();
+    if (n < 1) n = 1;
+    if (n > 64) n = 64;
+    dp_par_workers = 0;
+    if (n == 1) return;
+    dp_par_m = dp_sys_mutex();
+    dp_par_work_cv = dp_sys_cond();
+    dp_par_done_cv = dp_sys_cond();
+    if (!dp_par_m || !dp_par_work_cv || !dp_par_done_cv) return;
+    for (int i = 1; i < n; i++) {
+        if (dp_sys_thread(dp_par_worker, NULL) != 0) break;
+        dp_par_workers++;
+    }
+}
+
+/* Вывод частей по порядку — до части за ловушкой. */
+static void dp_par_flush(dp_par_job* j, uint64_t parts, uint64_t trap_at) {
+    for (uint64_t c = 0; c < parts; c++) {
+        dp_par_out* o = &j->outs[c];
+        if (c * j->chunk <= trap_at) {
+            for (size_t at = 0; at < o->len;) {
+                int stream = o->buf[at++];
+                uint64_t len;
+                memcpy(&len, o->buf + at, sizeof len);
+                at += sizeof len;
+                if (stream == 2) {
+                    fflush(stdout);
+                    fwrite(o->buf + at, 1, (size_t)len, stderr);
+                } else {
+                    fwrite(o->buf + at, 1, (size_t)len, stdout);
+                }
+                at += (size_t)len;
+            }
+        }
+        free(o->buf);
+    }
+}
+
+void dp_parallel_for(uint64_t n, dp_par_body body, void* env) {
+    if (n == 0) return;
+    if (dp_par_workers < 0) dp_par_start();
+    /* Вложенный цикл, пул из одного потока, одна итерация — по очереди. */
+    if (dp_par_cur || dp_par_workers == 0 || n == 1) {
+        for (uint64_t k = 0; k < n; k++) body(env, k);
+        return;
+    }
+    dp_par_job j;
+    j.body = body;
+    j.env = env;
+    j.n = n;
+    uint64_t threads = (uint64_t)dp_par_workers + 1;
+    j.chunk = n / (threads * 8);
+    if (j.chunk == 0) j.chunk = 1;
+    uint64_t parts = n / j.chunk + (n % j.chunk != 0);
+    atomic_init(&j.next, 0);
+    atomic_init(&j.trap_at, UINT64_MAX);
+    j.trap_loc[0] = 0;
+    j.trap_msg[0] = 0;
+    j.outs = (dp_par_out*)calloc((size_t)parts, sizeof(dp_par_out));
+    if (!j.outs) dp_trap(NULL, "out of memory");
+    fflush(stdout);
+    dp_sys_lock(dp_par_m);
+    dp_par_pending = &j;
+    dp_par_gen++;
+    dp_sys_broadcast(dp_par_work_cv);
+    dp_sys_unlock(dp_par_m);
+    dp_par_run(&j);
+    dp_sys_lock(dp_par_m);
+    dp_par_pending = NULL;
+    while (dp_par_active > 0) dp_sys_wait(dp_par_done_cv, dp_par_m);
+    dp_sys_unlock(dp_par_m);
+    uint64_t trap_at = atomic_load(&j.trap_at);
+    dp_par_flush(&j, parts, trap_at);
+    free(j.outs);
+    if (trap_at != UINT64_MAX) dp_die(j.trap_loc, j.trap_msg);
+}
+

@@ -236,6 +236,12 @@ private:
             case RvKind::IsOk: return "is_ok " + place(rv.place);
             case RvKind::Zero: return "zero " + type(rv.type);
             case RvKind::AddrOf: return "addr " + place(rv.place);
+            case RvKind::ParFor: {
+                std::string s = "parallel " + (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(" +
+                                operand(rv.ops[0]) + ".." + operand(rv.ops[1]);
+                for (const Arg& a : rv.args) s += std::string(", ") + (a.kind == Arg::Kind::Ref ? "&" : "&mut ") + place(a.place);
+                return s + ")";
+            }
         }
         return "?";
     }
