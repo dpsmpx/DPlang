@@ -1,4 +1,4 @@
-// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// spec: type.concurrent (Р70)
 // Atomic[T]: не копируется (E0518), только целое или bool, не класс D.
 struct Stats {
     hits: Atomic[i64]

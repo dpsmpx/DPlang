@@ -263,9 +263,8 @@ struct TryExpr : Expr {  // `try e`
     Expr* operand = nullptr;
 };
 
-// `spawn f(…)` (Р70): задача — вызов функции dpl. В блоке
-// `tasks` (вариант А) — оператор, задача блока; иначе (вариант В) —
-// значение `Task[T]`.
+// `spawn f(…)` (Р70): задача — вызов функции dpl без результата,
+// оператор блока `tasks`; вне блока — E0520.
 struct SpawnExpr : Expr {
     static constexpr ExprKind Kind = ExprKind::Spawn;
     SpawnExpr() : Expr(Kind) {}

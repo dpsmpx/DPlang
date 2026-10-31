@@ -1,4 +1,4 @@
-// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// spec: type.concurrent builtin.methods trap.concurrent (Р70)
 // Channel[T]: отправка из итераций parallel for, приём до закрытия,
 // try_recv; переполнение без читателя — ловушка deadlock.
 struct Job {

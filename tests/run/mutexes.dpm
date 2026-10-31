@@ -1,4 +1,4 @@
-// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// spec: type.concurrent stmt.lock trap.concurrent (Р70)
 // Mutex[T] и блок lock: общая таблица у итераций parallel for, return из
 // блока снимает мьютекс, повторный захват тем же потоком — ловушка.
 struct Cache {

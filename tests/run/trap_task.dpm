@@ -1,4 +1,4 @@
-// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// spec: stmt.tasks trap.concurrent (Р70)
 // Ловушка в задаче: сначала её вывод, затем ловушка; программа кончается.
 fn boom(xs: &List[int]) {
     println("before")
