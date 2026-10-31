@@ -1,0 +1,16 @@
+// t24: заготовка — напишите тело функции по task.md.
+pub struct Move {
+    from: i32
+    to: i32
+    amount: i64
+}
+
+pub struct Report {
+    table: List[i64]
+    reads: i64
+    bad: i64
+}
+
+pub fn run_bank(accounts: i32, moves: &List[Move], readers: i32, reads: i32) Report {
+    // ...
+}

@@ -1,0 +1,77 @@
+// t23: заготовка — напишите тело run_jobs по task.md.
+pub fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn cost(v: i64) i64 {
+    var h = u64(v)
+    for i in 0..2000 {
+        h = mix(h)
+    }
+    return i64(h % 1000)
+}
+
+pub struct Totals {
+    ok: bool
+    bad: i64
+    count: i64
+    sum: i64
+    odd: i64
+}
+
+fn worker(jobs: &List[i64], next: &Atomic[i64], stop: &Atomic[bool], bad: &Atomic[i64], count: &Atomic[i64], sum: &Atomic[i64], odd: &Atomic[i64]) {
+    let n = len(jobs)
+    var going = true
+    // Флаг проверяется до взятия номера: взятый номер обрабатывается всегда,
+    // поэтому все номера меньше первой найденной плохой работы проверены.
+    while going && !stop.load() {
+        let j = next.add(1)
+        if j >= n {
+            going = false
+        } else {
+            let v = jobs[j]
+            if v < 0 {
+                stop.store(true)
+                var cur = bad.load()
+                while j < cur {
+                    if bad.cas(cur, j) {
+                        cur = j
+                    } else {
+                        cur = bad.load()
+                    }
+                }
+            } else {
+                let r = cost(v)
+                _ = count.add(1)
+                _ = sum.add(r)
+                if r % 2 == 1 {
+                    _ = odd.add(1)
+                }
+            }
+        }
+    }
+}
+
+pub fn run_jobs(jobs: &List[i64], workers: i32) Totals {
+    let n = len(jobs)
+    let next: Atomic[i64] = atomic(i64(0))
+    let stop: Atomic[bool] = atomic(false)
+    let bad: Atomic[i64] = atomic(i64(n))
+    let count: Atomic[i64] = atomic(i64(0))
+    let sum: Atomic[i64] = atomic(i64(0))
+    let odd: Atomic[i64] = atomic(i64(0))
+    let nw = int(workers)
+    tasks {
+        for w in 0..nw {
+            spawn worker(&jobs, &next, &stop, &bad, &count, &sum, &odd)
+        }
+    }
+    let b = bad.load()
+    if b < n {
+        return Totals { ok: false, bad: b, count: 0, sum: 0, odd: 0 }
+    }
+    return Totals { ok: true, bad: -1, count: count.load(), sum: sum.load(), odd: odd.load() }
+}

@@ -1,0 +1,132 @@
+// t20: заготовка — напишите тело run по task.md.
+pub fn mix(x: u64) u64 {
+    var z = x +% 0x9E3779B97F4A7C15
+    z = (z ^ (z >> 30)) *% 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) *% 0x94D049BB133111EB
+    return z ^ (z >> 31)
+}
+
+pub fn build(chunk: i64, seed: u64) i64 {
+    var h = u64.wrap(chunk) ^ seed
+    for i in 0..20000 {
+        h = mix(h)
+    }
+    return i64(h % 100000)
+}
+
+pub struct Cmd {
+    kind: i32
+    chunk: i64
+    seed: u64
+}
+
+const WORKERS: int = 4
+
+struct Job {
+    id: i64
+    chunk: i64
+    seed: u64
+}
+
+struct Res {
+    id: i64
+    chunk: i64
+    value: i64
+}
+
+fn worker(jobs: &Channel[Job], results: &Channel[Res], stop: &Atomic[bool]) {
+    var going = true
+    while going {
+        match jobs.recv() {
+            some(j) => {
+                if !stop.load() {
+                    let v = build(j.chunk, j.seed)
+                    results.send(Res { id: j.id, chunk: j.chunk, value: v })
+                }
+            }
+            none => {
+                going = false
+            }
+        }
+    }
+}
+
+fn apply(values: &mut Map[i64, i64], latest: &Map[i64, i64], r: Res) {
+    if latest[r.chunk] == r.id {
+        values[r.chunk] = r.value
+    }
+}
+
+pub fn run(script: &List[Cmd], limit: i32) List[str] {
+    var out: List[str] = []
+    let cap = len(script) + 1
+    let jobs: Channel[Job] = channel(cap)
+    let results: Channel[Res] = channel(cap)
+    let stop: Atomic[bool] = atomic(false)
+    var latest: Map[i64, i64] = []
+    var values: Map[i64, i64] = []
+    var next_id: i64 = 0
+    var pending: i64 = 0
+    var syncs: i64 = 0
+    tasks {
+        for w in 0..WORKERS {
+            spawn worker(&jobs, &results, &stop)
+        }
+        var k = 0
+        var left = false
+        while k < len(script) && !left {
+            let c = script[k]
+            k += 1
+            match c.kind {
+                0 => {
+                    next_id += 1
+                    latest[c.chunk] = next_id
+                    pending += 1
+                    jobs.send(Job { id: next_id, chunk: c.chunk, seed: c.seed })
+                }
+                1 => {
+                    var taken: i32 = 0
+                    var more = true
+                    while more && taken < limit {
+                        match results.try_recv() {
+                            some(r1) => {
+                                taken += 1
+                                pending -= 1
+                                apply(&mut values, &latest, r1)
+                            }
+                            none => {
+                                more = false
+                            }
+                        }
+                    }
+                }
+                2 => {
+                    while pending > 0 {
+                        match results.recv() {
+                            some(r2) => {
+                                pending -= 1
+                                apply(&mut values, &latest, r2)
+                            }
+                            none => {
+                                pending = 0
+                            }
+                        }
+                    }
+                    syncs += 1
+                    var line = "sync " + str(syncs) + ":"
+                    for ch in &values {
+                        line += " " + str(ch) + "=" + str(values[ch])
+                    }
+                    out.push(line)
+                }
+                3 => {
+                    stop.store(true)
+                    left = true
+                }
+                _ => {}
+            }
+        }
+        jobs.close()
+    }
+    return out
+}

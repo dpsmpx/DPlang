@@ -1,0 +1,10 @@
+// t22: заготовка — напишите тело функции по task.md.
+pub struct Stats {
+    distinct: List[i64]
+    longest: str
+    anagrams: i64
+}
+
+pub fn analyze(words: &List[str], workers: i32) Stats {
+    // ...
+}
