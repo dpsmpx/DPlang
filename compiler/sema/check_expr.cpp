@@ -781,6 +781,7 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     switch (bf) {
         case BuiltinFn::Len: {
             const Type* t = infer(c->args[0], nullptr);
+            note_len(c->args[0]);
             if (t->kind != TK::List && t->kind != TK::Slice && t->kind != TK::Str && t->kind != TK::Map &&
                 t->kind != TK::Pool && t->kind != TK::Array && t->kind != TK::Error) {
                 error(Code::E0401, c->args[0]->span,
@@ -1244,6 +1245,7 @@ const Type* Checker::slice_expr(SliceExpr* s) {
 
 const Type* Checker::try_expr(TryExpr* t) {
     if (defer_depth_ > 0) error(Code::E0508, t->span, "'try' cannot leave a 'defer'");
+    else parallel_exit(t->span, "try");
     const Type* op = infer(t->operand, nullptr);
     if (op->kind == TK::Error) return err();
     if (op->kind != TK::Result) {

@@ -1,0 +1,20 @@
+--- stderr ---
+par_body.dpm:27:13: error[E0516]: 'break' cannot leave 'parallel for': iterations run at the same time; skip the rest of this iteration with 'continue'
+  27 |             break
+     |             ^~~~~
+par_body.dpm:29:18: error[E0516]: 'try' cannot leave 'parallel for': iterations run at the same time; handle the error with 'match' and write it to an element 'out[i]'
+  29 |         out[i] = try check(i)
+     |                  ^~~~~~~~~~~~
+par_body.dpm:31:13: error[E0516]: 'return' cannot leave 'parallel for': iterations run at the same time; write the result to an element 'out[i]' and return after the loop
+  31 |             return 1
+     |             ^~~~~~~~
+par_body.dpm:34:13: error[E0516]: 'fail' cannot leave 'parallel for': iterations run at the same time; handle the error with 'match' and write it to an element 'out[i]'
+  34 |             fail .Bad
+     |             ^~~~~~~~~
+par_body.dpm:47:23: error[E0412]: cannot read 'out[...]' inside 'parallel for': another iteration writes 'out' at the same time; read only this iteration's element 'out[i]', or copy what you need before the loop
+  47 |             seen[i] = out[i - 1] > 0
+     |                       ^~~~~~~~~~
+par_body.dpm:50:20: error[E0412]: cannot read 'seen' inside 'parallel for': another iteration writes 'seen' at the same time; read only this iteration's element 'seen[i]', or copy what you need before the loop
+  50 |         let copy = seen
+     |                    ^~~~
+[exit 1]

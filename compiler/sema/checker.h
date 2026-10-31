@@ -52,9 +52,11 @@ private:
     Flow flow_;
     struct Loop {
         std::vector<Flow> breaks;
+        bool parallel = false;
     };
     std::vector<Loop> loops_;
     int defer_depth_ = 0;
+    int parallel_depth_ = 0;  // тела `parallel for` вокруг: из них не выходят (Р69)
 
     // --- общие
     const Type* err() { return tt_.error(); }
@@ -149,6 +151,7 @@ private:
         bool parallel = false;
         uint32_t first_inner = 0;  // переменные с номером не меньше — объявлены в теле
         TK coll = TK::Error;       // List, Map, Slice; Error — диапазон или срез str
+        std::vector<const Local*> written;  // `parallel for`: внешние переменные, которые тело пишет как out[i]
     };
     std::vector<AccessLoop> access_loops_;
     // Переменная обхода — выражение его коллекции: `for y in &x.items`.
@@ -158,6 +161,7 @@ private:
     struct LoopRead {
         ast::Expr* place = nullptr;
         size_t loop = 0;  // номер в access_loops_
+        bool par = false;  // чтение внешней переменной в теле `parallel for` (Р69)
     };
     std::vector<LoopRead> loop_reads_;
     // Запись в место: присваивание, изменяющий метод, `&mut` (новый ключ
@@ -165,6 +169,10 @@ private:
     // loops = false — только правило `parallel for` (обход сверяет loop_begin).
     void note_write(ast::Expr* place, const char* why, bool loops = true);
     void note_use(ast::NameExpr* n);
+    // `len(x)` в теле `parallel for` — не чтение элементов x (Р69).
+    void note_len(ast::Expr* e);
+    // Выход из тела `parallel for` (Р69): break, return, fail, try.
+    bool parallel_exit(Span span, const char* what);
     void note_extend(ast::Expr* object, ast::Expr* place);
     void loop_begin(ast::ForStmt* s);
     void loop_end();
@@ -201,5 +209,9 @@ void infer_errors(Program& prog, ModuleInfo& m, Diagnostics& diags);
 // Линейные значения (Р57, Р60): закрыты на всех путях, не используются
 // после закрытия — после проверки тел, по типизированному дереву.
 void check_linear(Program& prog, ModuleInfo& m, Diagnostics& diags);
+
+// Тело `parallel for` без `os` и C по графу вызовов (Р69) — после проверки
+// всех модулей.
+void check_parallel(Program& prog, Diagnostics& diags);
 
 }  // namespace dp::sema

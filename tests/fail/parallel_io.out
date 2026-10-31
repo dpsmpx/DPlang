@@ -1,0 +1,11 @@
+--- stderr ---
+parallel_io/main.dpm:18:34: error[E0517]: 'step.advance' calls 'step.clamp', which calls C function 'labs': 'parallel for' cannot use files, program arguments or C, also in the functions it calls; read the input before the loop and call C after it
+  18 |         out[i] = local(i32(i)) + step.advance(i32(i)) + abs(i32(-i))
+     |                                  ^~~~~~~~~~~~~~~~~~~~
+parallel_io/main.dpm:18:57: error[E0517]: 'abs' is a C function: 'parallel for' cannot use files, program arguments or C, also in the functions it calls; read the input before the loop and call C after it
+  18 |         out[i] = local(i32(i)) + step.advance(i32(i)) + abs(i32(-i))
+     |                                                         ^~~~~~~~~~~~
+parallel_io/main.dpm:20:17: error[E0517]: 'os.args' reads program arguments: 'parallel for' cannot use files, program arguments or C, also in the functions it calls; read the input before the loop and call C after it
+  20 |         let a = os.args()
+     |                 ^~~~~~~~~
+[exit 1]

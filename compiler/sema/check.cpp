@@ -510,7 +510,10 @@ void Checker::for_stmt(ForStmt* s) {
     // переменную цикла; `parallel for` пишет снаружи только `out[i]`.
     loop_begin(s);
     loops_.emplace_back();
+    loops_.back().parallel = s->parallel;
+    if (s->parallel) parallel_depth_++;
     block(s->body);
+    if (s->parallel) parallel_depth_--;
     loops_.pop_back();
     loop_end();
     pop_scope();
@@ -543,13 +546,25 @@ void Checker::loop_jump(Stmt* s, bool is_break) {
             error(Code::E0420, s->span, std::string("'") + (is_break ? "break" : "continue") + "' outside of a loop");
         }
     } else if (is_break) {
+        if (loops_.back().parallel) parallel_exit(s->span, "break");
         loops_.back().breaks.push_back(flow_);
     }
     flow_.live = false;
 }
 
+bool Checker::parallel_exit(Span span, const char* what) {
+    if (parallel_depth_ == 0) return false;
+    std::string w(what);
+    std::string hint = w == "break" ? "skip the rest of this iteration with 'continue'"
+                       : w == "return" ? "write the result to an element 'out[i]' and return after the loop"
+                                       : "handle the error with 'match' and write it to an element 'out[i]'";
+    error(Code::E0516, span, "'" + w + "' cannot leave 'parallel for': iterations run at the same time; " + hint);
+    return true;
+}
+
 void Checker::return_stmt(ReturnStmt* s) {
     if (defer_depth_ > 0) error(Code::E0508, s->span, "'return' cannot leave a 'defer'");
+    else parallel_exit(s->span, "return");
     const Type* ret = fn_ ? fn_->ret : prim(TK::Void);
     bool void_ret = ret->kind == TK::Void || (ret->kind == TK::Result && ret->elem->kind == TK::Void);
     if (!s->value) {
@@ -567,6 +582,7 @@ void Checker::return_stmt(ReturnStmt* s) {
 
 void Checker::fail_stmt(FailStmt* s) {
     if (defer_depth_ > 0) error(Code::E0508, s->span, "'fail' cannot leave a 'defer'");
+    else parallel_exit(s->span, "fail");
     const Type* ret = fn_ ? fn_->ret : prim(TK::Void);
     if (ret->kind != TK::Result) {
         infer(s->value, nullptr);
@@ -604,6 +620,7 @@ void check(Program& prog, Diagnostics& diags) {
         // Линейность — по дереву без ошибок, чтобы не множить сообщения.
         if (diags.error_count() == before) check_linear(prog, *m, diags);
     }
+    if (diags.error_count() == 0) check_parallel(prog, diags);
 }
 
 }  // namespace dp::sema

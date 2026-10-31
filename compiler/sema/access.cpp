@@ -127,6 +127,15 @@ void drop_reads(Reads& reads, Expr* place) {
                 reads.end());
 }
 
+// Путь проходит индексом по переменной цикла: `out[i]`, `out[i].x`.
+bool by_var(const std::vector<Step>& steps, const Local* var) {
+    for (const Step& s : steps) {
+        auto* n = s.kind == Step::Index ? as<NameExpr>(const_cast<Expr*>(s.index)) : nullptr;
+        if (n && n->res.kind == ResKind::Local && n->res.local == var) return true;
+    }
+    return false;
+}
+
 // Что обходит цикл — для сообщения.
 std::string over(TK coll) {
     if (coll == TK::Map) return "its Map; iterate over a copy of the keys: 'for k in &m.keys()'";
@@ -159,7 +168,7 @@ void Checker::note_write(Expr* place, const char* why, bool loops) {
     if (!root || !base) return;
     drop_reads(loop_reads_, place);  // цель записи при выводе её типа прочитана
     std::string head = std::string("cannot ") + why + " '" + text(place) + "'";
-    for (const AccessLoop& L : access_loops_) {
+    for (AccessLoop& L : access_loops_) {
         if (derived(base, L.var, loop_iters_)) continue;
         if (loops && L.root && root == L.root && L.coll != TK::Error) {
             std::vector<Step> coll;
@@ -177,12 +186,11 @@ void Checker::note_write(Expr* place, const char* why, bool loops) {
         // Снаружи тела `parallel for` пишется только элемент по переменной
         // цикла (`out[i]`, `out[i].push(x)`): итерации идут одновременно, и
         // у каждой свой элемент.
-        bool by_var = false;
-        for (const Step& s : steps) {
-            auto* n = s.kind == Step::Index ? as<NameExpr>(const_cast<Expr*>(s.index)) : nullptr;
-            if (n && n->res.kind == ResKind::Local && n->res.local == L.var) by_var = true;
+        if (by_var(steps, L.var)) {
+            // Р69: читать эту переменную тело дальше может только как out[i].
+            if (std::find(L.written.begin(), L.written.end(), root) == L.written.end()) L.written.push_back(root);
+            continue;
         }
-        if (by_var) continue;
         std::string var = L.var ? L.var->name : "i";
         error(Code::E0412, place->span,
               head + " inside 'parallel for': iterations run at the same time; write each result to an element "
@@ -194,8 +202,19 @@ void Checker::note_write(Expr* place, const char* why, bool loops) {
 void Checker::note_use(NameExpr* n) {
     if (access_loops_.empty() || n->res.kind != ResKind::Local) return;
     for (size_t k = 0; k < access_loops_.size(); k++) {
-        if (access_loops_[k].mut && access_loops_[k].root == n->res.local) loop_reads_.push_back(LoopRead{n, k});
+        const AccessLoop& L = access_loops_[k];
+        if (L.mut && L.root == n->res.local) loop_reads_.push_back(LoopRead{n, k, false});
+        // Р69: внешняя переменная в теле `parallel for` — проверка в конце
+        // тела, когда известно, что тело пишет.
+        if (L.parallel && n->res.local->id < L.first_inner) loop_reads_.push_back(LoopRead{n, k, true});
     }
+}
+
+void Checker::note_len(Expr* e) {
+    e = bare(e);
+    loop_reads_.erase(std::remove_if(loop_reads_.begin(), loop_reads_.end(),
+                                     [&](const LoopRead& r) { return r.par && r.place == e; }),
+                      loop_reads_.end());
 }
 
 void Checker::note_extend(Expr* object, Expr* place) {
@@ -251,10 +270,27 @@ void Checker::loop_end() {
     const AccessLoop& L = access_loops_[k];
     std::vector<Step> coll;
     path(L.iter, loop_iters_, coll);
+    std::vector<const Local*> reported;
     for (const LoopRead& r : loop_reads_) {
         if (r.loop != k) continue;
         std::vector<Step> steps;
-        path(r.place, loop_iters_, steps);
+        const Local* root = path(r.place, loop_iters_, steps);
+        if (r.par) {
+            // Р69: переменную, которую тело пишет как out[i], оно и читает
+            // только так — другой элемент пишет другая итерация.
+            if (!root || by_var(steps, L.var) ||
+                std::find(L.written.begin(), L.written.end(), root) == L.written.end() ||
+                std::find(reported.begin(), reported.end(), root) != reported.end()) {
+                continue;
+            }
+            reported.push_back(root);
+            std::string var = L.var ? L.var->name : "i";
+            error(Code::E0412, r.place->span,
+                  "cannot read '" + text(r.place) + "' inside 'parallel for': another iteration writes '" + root->name +
+                      "' at the same time; read only this iteration's element '" + root->name + "[" + var +
+                      "]', or copy what you need before the loop");
+            continue;
+        }
         if (!crosses(steps, coll)) continue;
         error(Code::E0412, r.place->span,
               "cannot read '" + text(r.place) + "' while 'for ... in &mut' changes it; read the value before the "

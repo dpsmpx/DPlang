@@ -329,3 +329,14 @@ DP_CODE(E0515, "invalid destructuring",
         "`let S { f, g: x } = v` lists every field of `S` once and works only for a `@linear` struct, inside "
         "the module that declares it (spec: stmt.destructure, decision R60). Outside, close the value with "
         "the functions of that module.")
+DP_CODE(E0516, "control flow out of parallel for",
+        "The iterations of `parallel for` run at the same time, so its body cannot leave the loop early: "
+        "`break`, `return`, `fail` and `try` are not allowed there (spec: stmt.for, decision R69). `continue` "
+        "ends the current iteration. Handle an error with `match` inside the body and write the outcome to an "
+        "element indexed by the loop variable, `out[i]`; combine the results after the loop.")
+DP_CODE(E0517, "input, output or C inside parallel for",
+        "The body of `parallel for` and every function it calls cannot read files or program arguments (`os`) "
+        "or call C (`extern fn`, a function pointer): C libraries often require one thread, and the result "
+        "would depend on the order of iterations (spec: stmt.for, decision R69). `print`, `println` and "
+        "`eprintln` are allowed: the output comes out in the order of iterations. Read the input before the "
+        "loop and call C after it.")
