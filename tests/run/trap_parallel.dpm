@@ -1,0 +1,18 @@
+// spec: stmt.for trap.index
+// Ловушка в parallel for — та же, что при исполнении по очереди (Р69):
+// итерация с наименьшим номером, после вывода итераций до неё.
+fn main() {
+    let xs: List[i32] = [10, 20, 30]
+    var out: List[i32] = repeat(i32(0), 1000)
+    parallel for i in 0..1000 {
+        if i % 100 == 0 {
+            println("at " + str(i))
+        }
+        if i == 450 || i == 720 {
+            println("before " + str(i))
+            out[i] = xs[i]
+        }
+        out[i] = i32(i)
+    }
+    println("unreachable")
+}

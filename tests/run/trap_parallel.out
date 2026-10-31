@@ -1,0 +1,9 @@
+at 0
+at 100
+at 200
+at 300
+at 400
+before 450
+--- stderr ---
+trap_parallel.dpm:13:13: trap: index 450 is out of bounds for length 3
+[exit 101]

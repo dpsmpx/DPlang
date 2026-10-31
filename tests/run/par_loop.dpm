@@ -1,0 +1,102 @@
+// spec: stmt.for
+// parallel for на потоках (Р69): итерации одновременно, вывод — по
+// порядку итераций, как при исполнении по очереди.
+struct Body {
+    name: str
+    mass: i64
+    trail: List[i64]
+}
+
+fn step(b: &Body, k: i64) i64 {
+    var s: i64 = 0
+    for t in 0..k % 50 {
+        s += b.mass * t
+    }
+    return s
+}
+
+@det
+fn det_squares(n: i64) List[i64] {
+    var out: List[i64] = repeat(i64(0), n)
+    parallel for i in 0..n {
+        out[i] = i * i
+    }
+    return out
+}
+
+fn scale(xs: &mut List[i32], by: i32) {
+    parallel for x in &mut xs {
+        x *= by
+    }
+}
+
+fn main() {
+    let n: i64 = 200
+    let factor: i64 = 3
+    var sums: List[i64] = repeat(i64(0), n)
+    var labels: List[str] = repeat("", n)
+    var bodies: List[Body] = []
+    for i in 0..n {
+        bodies.push(Body { name: "b" + str(i), mass: i % 7 + 1, trail: [] })
+    }
+    parallel for i in 0..n {
+        defer labels[i] = labels[i] + "!"
+        if i % 40 == 5 {
+            println("skip " + str(i))
+            continue
+        }
+        sums[i] = step(&bodies[i], i) * factor
+        labels[i] = bodies[i].name + ":" + str(sums[i] % 1000)
+        bodies[i].trail.push(sums[i])
+        if i % 50 == 0 {
+            println("at " + str(i) + " " + labels[i])
+            eprintln("note " + str(i))
+        }
+    }
+    var total: i64 = 0
+    for s in &sums {
+        total += s
+    }
+    println("total " + str(total) + " " + labels[7] + " " + labels[45] + " " + str(len(bodies[9].trail)))
+
+    var names: List[str] = []
+    for b in &bodies {
+        names.push(b.name)
+    }
+    var lens: List[i64] = repeat(i64(0), len(names))
+    parallel for s in &names {
+        println("name " + s)
+    }
+    parallel for i in 0..len(names) {
+        lens[i] = len(names[i])
+    }
+    println("lens " + str(lens[0]) + " " + str(lens[199]))
+
+    var grid: List[List[i32]] = repeat(repeat(i32(0), 5), 4)
+    parallel for r in 0..4 {
+        parallel for c in 0..5 {
+            grid[r][c] = i32(r * 10 + c)
+        }
+        println("row " + str(r))
+    }
+    println("grid " + str(grid[3][4]) + " " + str(grid[1][2]))
+
+    var xs: List[i32] = [1, 2, 3, 4]
+    scale(&mut xs, -2)
+    println("xs " + str(xs[0]) + " " + str(xs[3]))
+
+    let sq = det_squares(10)
+    println("det " + str(sq[9]))
+
+    parallel for v in i32(-3)..3 {
+        println("neg " + str(v * v))
+    }
+    parallel for b in u8(252)..u8(255) {
+        println("byte " + str(b))
+    }
+
+    parallel for i in 5..2 {
+        println("never " + str(i))
+    }
+    println("end")
+}
