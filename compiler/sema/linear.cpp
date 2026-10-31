@@ -7,6 +7,8 @@
 // break, continue) проверяется, что ресурс закрыт. Во время выполнения
 // линейное значение — обычное значение: этот проход ничего не меняет в
 // дереве.
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,15 @@ namespace dp::sema {
 using namespace ast;
 
 namespace {
+
+// Режим замера правил (заметка 12, только для замера; снимается после
+// решения): DPL_LINEAR=a — поглощение внешнего ресурса в цикле, если путь
+// выходит из цикла; b — errdefer снимается, когда ресурс поглощён (понижение
+// не меняется: собранная программа в режиме b неверна); ab — оба.
+bool rule(char r) {
+    static const char* mode = std::getenv("DPL_LINEAR");
+    return mode && std::strchr(mode, r);
+}
 
 // Состояние линейной переменной.
 enum class St : uint8_t {
@@ -61,6 +72,7 @@ public:
         reported_.assign(f.local_count, 0);
         scopes_.clear();
         loops_.clear();
+        loop_flows_.clear();
         scopes_.emplace_back();
         FnItem* node = const_cast<FnItem*>(f.node);
         for (Param& p : node->params) {
@@ -85,6 +97,12 @@ private:
     std::vector<char> reported_;     // по номеру: о переменной уже сообщили (без лавины)
     std::vector<Scope> scopes_;
     std::vector<size_t> loops_;      // число областей снаружи тела каждого цикла
+    // Режим a: состояние на входе в цикл и состояния у его break.
+    struct LoopFlow {
+        Flow entry;
+        std::vector<Flow> breaks;
+    };
+    std::vector<LoopFlow> loop_flows_;
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
     // Нельзя поглотить до конца вызова или присваивания: под ссылкой
     // аргумента (args), получатель изменяющего метода, место присваивания.
@@ -219,15 +237,32 @@ private:
         }
         switch (st) {
             case St::Owned:
-                if (decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
+                if (!rule('a') && decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
                 st = St::Consumed;
                 return;
             case St::ErrDeferred:
-                if (decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
-                st = St::ErrMoved;  // выход с ошибкой дальше — E0512 (exit_check)
+                if (!rule('a') && decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
+                // выход с ошибкой дальше — E0512 (exit_check); в режиме b errdefer снят
+                st = rule('b') ? St::Consumed : St::ErrMoved;
                 return;
             case St::None: st = St::Consumed; return;  // чтение без значения — уже E0503
             default: used_after(l, span, st); return;
+        }
+    }
+
+    // Режим a: на continue и в конце тела внешние ресурсы — как на входе в
+    // цикл, иначе следующая итерация тронет закрытое.
+    void loop_goes_on(Span span) {
+        if (!rule('a') || loop_flows_.empty()) return;
+        const Flow& entry = loop_flows_.back().entry;
+        for (const Scope& sc : scopes_) {
+            for (const Local* l : sc.locals) {
+                if (decl_loop_[l->id] >= static_cast<int>(loops_.size())) continue;
+                if (flow_.st[l->id] == entry.st[l->id] || reported_[l->id]) continue;
+                reported_[l->id] = 1;
+                error(Code::E0513, span, "'" + l->name + "' is closed or moved inside this loop, and the loop goes on: "
+                                         "leave the loop after closing it (break, return, fail)");
+            }
         }
     }
 
@@ -368,6 +403,10 @@ private:
                 break;
             case StmtKind::Break: case StmtKind::Continue:
                 loop_exit(s->span);
+                if (rule('a') && !loop_flows_.empty()) {
+                    if (s->kind == StmtKind::Break) loop_flows_.back().breaks.push_back(flow_);
+                    else loop_goes_on(s->span);
+                }
                 flow_.live = false;
                 break;
             case StmtKind::Defer: {
@@ -466,6 +505,20 @@ private:
 
     void loop_body(Block* body, bool forever) {
         Flow before = flow_;
+        if (rule('a')) {
+            loop_flows_.push_back(LoopFlow{flow_, {}});
+            loops_.push_back(scopes_.size());
+            block(body);
+            if (flow_.live) loop_goes_on(Span{body->span.file, body->span.end > 0 ? body->span.end - 1 : 0, body->span.end});
+            loops_.pop_back();
+            // После цикла: выход по условию (как на входе) и выходы break.
+            Flow after = before;
+            if (forever) after.live = false;
+            for (const Flow& b : loop_flows_.back().breaks) after = merge(after, b);
+            loop_flows_.pop_back();
+            flow_ = after;
+            return;
+        }
         loops_.push_back(scopes_.size());
         block(body);
         loops_.pop_back();
