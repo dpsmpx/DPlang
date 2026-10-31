@@ -1,0 +1,533 @@
+{
+ "a": [
+  {
+   "name": "a01",
+   "what": "две задачи пишут одну переменную",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a02",
+   "what": "задача пишет, код блока читает",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a03",
+   "what": "задача читает, код блока пишет",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a04",
+   "what": "spawn в цикле с одной и той же &mut",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a05",
+   "what": "spawn в цикле с постоянным индексом",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a06",
+   "what": "индекс из списка значений (может повторяться)",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a07",
+   "what": "две задачи, вычисленные индексы i и j",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a08",
+   "what": "задача держит элемент, код блока растит список",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a09",
+   "what": "задача читает список, код блока растит его",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a10",
+   "what": "разные поля одной структуры двум задачам",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a11",
+   "what": "вложенный блок берёт то же место, что внешняя задача",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a12",
+   "what": "задача берёт переменную блока (живёт меньше задачи)",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0520"
+  },
+  {
+   "name": "a13",
+   "what": "срез в задачу, код блока растит список",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0520"
+  },
+  {
+   "name": "a14",
+   "what": "обход &mut в коде блока, задача читает список",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a15",
+   "what": "Map — задача читает, код блока вставляет",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a16",
+   "what": "атомик, но чтение и запись по отдельности",
+   "expect": "logic",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a17",
+   "what": "атомик add — верно",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a18",
+   "what": "мьютекс — верно",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a19",
+   "what": "задачи в теле parallel for",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0412"
+  },
+  {
+   "name": "a20",
+   "what": "parallel for пишет общую переменную",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0412"
+  },
+  {
+   "name": "a21",
+   "what": "в одной итерации out[w] и out[w + 1]",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a22",
+   "what": "две задачи читают одно",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a23",
+   "what": "обход &mut — задача на элемент",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a24",
+   "what": "элемент по переменной цикла, длина в заголовке",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a25",
+   "what": "два элемента одной итерации через обход &mut",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a26",
+   "what": "задача берёт структуру, код блока читает поле",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a27",
+   "what": "параметр &mut функции двум задачам",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a28",
+   "what": "строка ряда задаче, код блока читает ячейку ряда",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "a29",
+   "what": "данные мьютекса задаче под lock",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "a30",
+   "what": "канал — производитель и потребитель",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  }
+ ],
+ "b": [
+  {
+   "name": "b01",
+   "what": "два оператора пишут одну переменную",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b02",
+   "what": "один оператор пишет, другой читает",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b03",
+   "what": "оператор растит список, другой читает длину",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b04",
+   "what": "разные поля структуры",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b05",
+   "what": "постоянные индексы 0 и 1",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b06",
+   "what": "вычисленные индексы i и j",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b07",
+   "what": "&mut и & одного места в вызовах",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b08",
+   "what": "два блока-оператора меняют одно",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b09",
+   "what": "цикл в операторе пишет, другой читает",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b10",
+   "what": "parallel for в операторе пишет out, другой читает out",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b11",
+   "what": "вложенный блок пишет то же, что внешний оператор",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b12",
+   "what": "Map — вставка и чтение",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b13",
+   "what": "атомик add в двух операторах",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b14",
+   "what": "атомик load/store по отдельности",
+   "expect": "logic",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b15",
+   "what": "мьютекс в двух операторах",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b16",
+   "what": "канал — производитель и потребитель",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b17",
+   "what": "обход &mut в одном операторе, чтение в другом",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b18",
+   "what": "два оператора читают одно",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b19",
+   "what": "структура целиком и её поле",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b20",
+   "what": "параметр &mut функции в двух операторах",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b21",
+   "what": "parallel for пишет общую переменную",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0412"
+  },
+  {
+   "name": "b22",
+   "what": "parallel for по значениям элементов как индексам",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0412"
+  },
+  {
+   "name": "b23",
+   "what": "два оператора растят разные списки",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "b24",
+   "what": "swap двух мест и чтение одного",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  },
+  {
+   "name": "b25",
+   "what": "метод меняет список, вызов читает его",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0521"
+  }
+ ],
+ "c": [
+  {
+   "name": "c01",
+   "what": "задаче &mut переменной",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0520"
+  },
+  {
+   "name": "c02",
+   "what": "задаче &, код меняет",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0520"
+  },
+  {
+   "name": "c03",
+   "what": "список по значению, код меняет свой",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c04",
+   "what": "срез в задачу",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0520"
+  },
+  {
+   "name": "c05",
+   "what": "атомик add через ручки",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c06",
+   "what": "атомик load/store по отдельности",
+   "expect": "logic",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c07",
+   "what": "мьютекс через ручки",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c08",
+   "what": "канал через ручку",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c09",
+   "what": "задача меняет свою копию, код ждёт общее",
+   "expect": "logic",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c10",
+   "what": "атомики в списке ручек",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c11",
+   "what": "задача в поле, join позже",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c12",
+   "what": "отсоединённая задача пишет в канал после ухода",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c13",
+   "what": "parallel for пишет общую переменную",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0412"
+  },
+  {
+   "name": "c14",
+   "what": "задаче &mut мьютекса",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0520"
+  },
+  {
+   "name": "c15",
+   "what": "данные мьютекса копией в задачу",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c16",
+   "what": "две задачи, канал результатов",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c17",
+   "what": "Map по значению в задачу, код меняет свою",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  },
+  {
+   "name": "c18",
+   "what": "parallel for по значениям элементов как индексам",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0412"
+  },
+  {
+   "name": "c19",
+   "what": "задаче & поля структуры",
+   "expect": "race",
+   "verdict": "rejected",
+   "detail": "E0520"
+  },
+  {
+   "name": "c20",
+   "what": "счётчик под мьютексом в N задачах из списка",
+   "expect": "safe",
+   "verdict": "clean",
+   "detail": ""
+  }
+ ]
+}
