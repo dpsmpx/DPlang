@@ -182,6 +182,12 @@ private:
             case CastKind::RefUp:  // Р62
                 ok = from->kind == TK::Ref && to->kind == TK::Ref && sema::c_prefix(to->elem, from->elem);
                 break;
+            case CastKind::Bits:  // Р71
+                ok = (from->kind == TK::F64 && to->kind == TK::U64) || (from->kind == TK::F32 && to->kind == TK::U32);
+                break;
+            case CastKind::FromBits:
+                ok = (from->kind == TK::U64 && to->kind == TK::F64) || (from->kind == TK::U32 && to->kind == TK::F32);
+                break;
         }
         if (!ok) fail("invalid cast from '" + sema::type_name(from) + "' to '" + sema::type_name(to) + "'");
     }

@@ -1457,6 +1457,9 @@ std::string FnEmitter::cast(const Rvalue& rv) {
             }
             if (sema::is_signed(from)) return "dp_str_from_s((int64_t)" + a + ")";
             return "dp_str_from_u((uint64_t)" + a + ")";
+        case CastKind::Bits: return std::string(from->kind == TK::F32 ? "dp_f32_bits(" : "dp_f64_bits(") + a + ")";
+        case CastKind::FromBits:
+            return std::string(to->kind == TK::F32 ? "dp_f32_from_bits(" : "dp_f64_from_bits(") + a + ")";
         case CastKind::Check: break;
     }
     std::string to_name = tname(to);

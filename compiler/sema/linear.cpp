@@ -301,7 +301,8 @@ private:
             for (const Expr* a : v->args) ref_roots(a, false);
             for (const FieldInit& fi : v->fields) ref_roots(fi.value ? fi.value : fi.shorthand, false);
         } else if (auto* c = as<const CallExpr>(e)) {
-            if (c->call == CallKind::Wrap || c->call == CallKind::Variant) {
+            if (c->call == CallKind::Wrap || c->call == CallKind::Bits || c->call == CallKind::FromBits ||
+                c->call == CallKind::Variant) {
                 for (const Expr* a : c->args) ref_roots(a, false);
             }
         }

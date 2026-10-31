@@ -1212,6 +1212,28 @@ private:
         switch (rv.cast) {
             case CastKind::Widen: case CastKind::RefUp: return a;
             case CastKind::Wrap: return int_value(canon(a.i, to));
+            case CastKind::Bits:  // Р71: у f32 — биты значения f32
+                if (from->kind == TK::F32) {
+                    float f = static_cast<float>(a.f);
+                    uint32_t u;
+                    std::memcpy(&u, &f, sizeof u);
+                    return int_value(u);
+                } else {
+                    uint64_t u;
+                    std::memcpy(&u, &a.f, sizeof u);
+                    return int_value(u);
+                }
+            case CastKind::FromBits:
+                if (to->kind == TK::F32) {
+                    uint32_t u = static_cast<uint32_t>(a.i);
+                    float f;
+                    std::memcpy(&f, &u, sizeof f);
+                    return float_value(static_cast<double>(f));
+                } else {
+                    double d;
+                    std::memcpy(&d, &a.i, sizeof d);
+                    return float_value(d);
+                }
             case CastKind::ToStr:
                 if (from->kind == TK::Bool) return str_value(a.i ? "true" : "false");
                 if (sema::is_float(from)) return str_value(format_float(a.f, from->kind == TK::F32));

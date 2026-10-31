@@ -483,7 +483,7 @@ private:
         switch (rv.kind) {
             case RvKind::Binary:
             case RvKind::Unary: see = false; break;
-            case RvKind::Cast: see = rv.cast == CastKind::ToStr; break;
+            case RvKind::Cast: see = rv.cast == CastKind::ToStr || rv.cast == CastKind::Bits; break;
             case RvKind::Use: see = !(k == InstKind::Assign && raw(dst)); break;
             case RvKind::Intrinsic:
                 see = !(rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min ||
@@ -1489,6 +1489,13 @@ private:
                     rv.ops = exprs(all);
                     for (Operand& o : rv.ops) o = rd(std::move(o));
                 }
+                return true;
+            }
+            case CallKind::Bits: case CallKind::FromBits: {  // Р71
+                Operand a = expr(args[0]);  // неявное расширение аргумента — в expr
+                rv = make(RvKind::Cast, c->target);
+                rv.cast = c->call == CallKind::Bits ? CastKind::Bits : CastKind::FromBits;
+                rv.ops.push_back(rd(std::move(a)));
                 return true;
             }
             case CallKind::Convert: case CallKind::Wrap: {

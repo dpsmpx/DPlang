@@ -591,8 +591,14 @@ const Type* Checker::call(CallExpr* c, const Type* hint) {
             if (obj->res.kind == ResKind::BuiltinType) {
                 TK k = kBuiltinTypes[obj->res.index].kind;
                 if (f->name == "wrap" && k >= TK::I8 && k <= TK::U64) return convert_call(c, prim(k), true);
-                error(Code::E0409, f->span, "type '" + obj->name + "' has no function '" + f->name +
-                                                 "'; integer types have '" + obj->name + ".wrap(x)'");
+                if ((f->name == "bits" || f->name == "from_bits") && (k == TK::F32 || k == TK::F64)) {
+                    return bits_call(c, k, f->name == "from_bits");
+                }
+                bool fl = k == TK::F32 || k == TK::F64;
+                error(Code::E0409, f->span, "type '" + obj->name + "' has no function '" + f->name + "'; " +
+                                                 (fl ? "float types have '" + obj->name + ".bits(x)' and '" +
+                                                           obj->name + ".from_bits(u)'"
+                                                     : "integer types have '" + obj->name + ".wrap(x)'"));
                 infer_loose(c->args);
                 return err();
             }
@@ -1089,6 +1095,23 @@ const Type* Checker::channel_method(CallExpr* c, FieldExpr* f, const Type* t, Me
         case Method::Recv: case Method::TryRecv: return tt_.optional(t->elem);
         default: return prim(TK::Void);
     }
+}
+
+// `f64.bits(x)`, `f64.from_bits(u)` и то же у f32 (Р71): биты IEEE 754 в
+// беззнаковое целое той же ширины и обратно.
+const Type* Checker::bits_call(CallExpr* c, TK fk, bool from) {
+    const Type* f = prim(fk);
+    const Type* u = prim(fk == TK::F64 ? TK::U64 : TK::U32);
+    c->call = from ? CallKind::FromBits : CallKind::Bits;
+    c->target = from ? f : u;
+    std::string what = type_name(f) + (from ? ".from_bits" : ".bits");
+    if (c->args.size() != 1) {
+        error(Code::E0407, c->span, "'" + what + "' takes 1 argument, found " + std::to_string(c->args.size()));
+        infer_loose(c->args);
+        return c->target;
+    }
+    check(c->args[0], from ? u : f);
+    return c->target;
 }
 
 const Type* Checker::convert_call(CallExpr* c, const Type* target, bool wrap) {

@@ -201,7 +201,8 @@ private:
                        ops(rv.ops);
             case RvKind::Cast: {
                 const char* k = rv.cast == CastKind::Widen ? "widen" : rv.cast == CastKind::Check ? "check"
-                              : rv.cast == CastKind::Wrap ? "wrap" : rv.cast == CastKind::RefUp ? "ref_up" : "str";
+                              : rv.cast == CastKind::Wrap ? "wrap" : rv.cast == CastKind::RefUp ? "ref_up"
+                              : rv.cast == CastKind::Bits ? "bits" : rv.cast == CastKind::FromBits ? "from_bits" : "str";
                 return std::string(k) + " " + ops(rv.ops) + " to " + type(rv.type);
             }
             case RvKind::MakeStruct: return type(rv.type) + " { " + ops(rv.ops) + " }";
