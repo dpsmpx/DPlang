@@ -1,4 +1,4 @@
-# Компилятор dpl (Р34: C++20 в подмножестве VoxelRPG — без исключений
+# Компилятор dpl (Р34: C++20 в подмножестве Galdhold — без исключений
 # и RTTI, без внешних зависимостей). Сборка и тесты — docs/compiler/README.md.
 cmake_minimum_required(VERSION 3.20)
 project(dpl CXX)
