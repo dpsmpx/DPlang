@@ -1,0 +1,4 @@
+start
+--- stderr ---
+trap_deadlock_mutex.dpm:9:9: trap: deadlock: every thread is waiting
+[exit 101]

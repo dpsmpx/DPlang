@@ -1,0 +1,3 @@
+--- stderr ---
+trap_lock.dpm:10:13: trap: assertion failed
+[exit 101]

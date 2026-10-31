@@ -1,0 +1,4 @@
+start
+--- stderr ---
+trap_deadlock_pool.dpm:10:21: trap: deadlock: every thread is waiting
+[exit 101]

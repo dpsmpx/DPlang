@@ -137,6 +137,8 @@ void dp_sys_wait(void* c, void* m) { SleepConditionVariableSRW((CONDITION_VARIAB
 
 void dp_sys_broadcast(void* c) { WakeAllConditionVariable((CONDITION_VARIABLE*)c); }
 
+void dp_sys_signal(void* c) { WakeConditionVariable((CONDITION_VARIABLE*)c); }
+
 void dp_sys_cond_free(void* c) { free(c); }
 
 FILE* dp_os_open_read(const char* path) {

@@ -1,0 +1,26 @@
+// spec: trap.concurrent stmt.lock (Р70)
+// Взаимная блокировка на мьютексах: main и задача берут их крест-накрест.
+// Обмен по каналам гарантирует, что оба держат первый мьютекс, — ждут
+// оба на одном месте (`lock b`), место ловушки одно при любом порядке.
+fn cross(a: &Mutex[i64], b: &Mutex[i64], mine: &Channel[i64], other: &Channel[i64]) {
+    lock a as x {
+        mine.send(1)
+        let got = other.recv()
+        lock b as y {
+            y = y + x + (got ?? 0)
+        }
+    }
+}
+
+fn main() {
+    let m1: Mutex[i64] = mutex(1)
+    let m2: Mutex[i64] = mutex(2)
+    let c1: Channel[i64] = channel(1)
+    let c2: Channel[i64] = channel(1)
+    println("start")
+    tasks {
+        spawn cross(&m1, &m2, &c1, &c2)
+        cross(&m2, &m1, &c2, &c1)
+    }
+    println("unreachable")
+}
