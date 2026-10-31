@@ -461,6 +461,49 @@ defer release(b)                      // закроется при выходе 
 - Ресурс не кладут в `List`, `Map` и данные варианта (E0514); поле с
   ресурсом — только у структуры `@linear`.
 
+## Файлы: `os` и `os.File`
+
+```dpl
+import os
+
+fn copy_file(from: str, to: str) os.IoError!void {
+    let data = try os.read_bytes(from)        // файл целиком: List[u8]
+    try os.write_bytes(to, data)              // новый или усечённый
+}
+
+fn save(path: str, parts: &List[List[u8]]) os.IoError!void {
+    var f = try os.create(path)               // os.File — @linear
+    var failed: ?os.IoError = none
+    for p in &parts {
+        match os.write(&mut f, p) {           // по ссылке файл не забирается
+            ok(_) => {}
+            err(e) => {
+                failed = e
+                break
+            }
+        }
+    }
+    if let e = failed {
+        _ = os.close(f)
+        fail e
+    }
+    try os.close(f)                           // ошибка записи на диск — здесь
+}
+```
+
+- Маленькие файлы — целиком: `os.read_file` (текст UTF-8),
+  `os.read_bytes`, `os.write_bytes`, `os.write_file`. Большие — частями
+  через `os.File`: `create` или `open`, `write`, `read(&mut f, &mut buf,
+  n)` (дописывает до `n` байтов, 0 — конец), `close`.
+- `File` закрывают ровно один раз (E0511, E0512); в цикле, открытый до
+  него, — нельзя (E0513): ошибку запомните, выйдите из цикла и закройте
+  после.
+- Ошибки — `os.IoError`: `NotFound`, `PermissionDenied`, `InvalidUtf8`,
+  `NoSpace`, `Other`. Из `@det` и тела `parallel for` файлов нет (E0425,
+  E0517): прочтите до, запишите после.
+- Числа в байты — сдвигами от младшего байта; плавающие — через
+  `f64.bits(x)` и `f64.from_bits(u)` (у `f32` — то же).
+
 ## Чего в dpl нет и чем заменить
 
 | нет | вместо этого |

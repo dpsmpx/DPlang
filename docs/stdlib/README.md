@@ -31,24 +31,85 @@
 |---|---|
 | `__args_len() i64` | число аргументов программы без её имени |
 | `__arg(i: i64) str` | аргумент `i`; вне границ — ловушка |
-| `__read_file(path: str, out: &mut str) i32` | 0 — текст файла в `out`; иначе 1 + номер варианта `os.IoError`, и `out` не меняется |
+| `__read_file(path: str, out: &mut str) i32` | 0 — текст файла в `out`; иначе код ошибки, и `out` не меняется |
+| `__file_create(path: str) i64`, `__file_open(path: str) i64` | дескриптор файла (больше 0) на запись или чтение; иначе минус код ошибки |
+| `__file_write(f: i64, data: []u8) i32` | 0 — все байты записаны; иначе код ошибки |
+| `__file_read(f: i64, buf: &mut List[u8], n: i64) i64` | дописать в `buf` до `n` байтов; их число, 0 — конец файла; иначе минус код ошибки |
+| `__file_close(f: i64) i32` | 0 — закрыт; иначе код ошибки (в том числе отложенной буфером записи) |
 
-В IR это `Intrinsic` `ArgsLen`, `ArgAt`, `ReadFile` (`docs/ir/README.md`).
-В runtime — `dp_args_len`, `dp_arg`, `dp_read_file`
+Код ошибки: 1 — `NotFound`, 2 — `PermissionDenied`, 3 — `InvalidUtf8`,
+5 — `NoSpace`, остальное — `Other` (`os.io_error`).
+
+В IR это `Intrinsic` `ArgsLen`, `ArgAt`, `ReadFile`, `FileCreate`,
+`FileOpen`, `FileWrite`, `FileRead`, `FileClose` (`docs/ir/README.md`).
+В runtime — `dp_args_len`, `dp_arg`, `dp_read_file`, `dp_file_*`
 (`docs/runtime/README.md`). Аргументы программы runtime получает от
 `main` C через `dp_set_args`.
 
-## 2. Модуль `os` (Р51)
+## 2. Модуль `os` (Р51, Р71)
 
 Аргументы программы и файлы. Ввод-вывод — недетерминированный класс
-(Р12, Р29): когда появится проверка классов (v0.2), из `@det` его звать
-будет нельзя.
+(Р12, Р29): из класса D его звать нельзя (E0425), из тела `parallel for`
+и функций, которые оно зовёт, — тоже (E0517).
 
 | объявление | что делает |
 |---|---|
-| `pub enum IoError { NotFound, PermissionDenied, InvalidUtf8, Other }` | ошибка ввода-вывода |
+| `pub enum IoError { NotFound, PermissionDenied, InvalidUtf8, NoSpace, Other }` | ошибка ввода-вывода |
 | `pub fn args() List[str]` | аргументы программы без её имени, по порядку |
-| `pub fn read_file(path: str) IoError!str` | файл целиком |
+| `pub fn read_file(path: str) IoError!str` | файл целиком, текст UTF-8 |
+| `@linear pub struct File` | открытый файл: закрывается ровно один раз (ffi.linear) |
+| `pub fn create(path: str) IoError!File` | новый файл на запись; существующий усекается |
+| `pub fn open(path: str) IoError!File` | файл на чтение |
+| `pub fn write(f: &mut File, data: []u8) IoError!void` | записать все байты `data` |
+| `pub fn read(f: &mut File, buf: &mut List[u8], n: int) IoError!int` | дописать в `buf` до `n` байтов; их число, 0 — конец файла |
+| `pub fn close(f: File) IoError!void` | закрыть; ошибка записи, отложенная буфером, — здесь |
+| `pub fn read_bytes(path: str) IoError!List[u8]` | файл целиком байтами |
+| `pub fn write_bytes(path: str, data: []u8) IoError!void` | записать файл целиком |
+| `pub fn write_file(path: str, text: str) IoError!void` | записать текст в файл целиком |
+
+Файл целиком (`read_bytes`, `write_bytes`, `write_file`) — обёртки на dpl
+поверх `File`: держит в памяти весь файл. Большие данные пишутся и
+читаются частями через `File` (Р71, замер — заметка
+`docs/research/notes/11_big_data_io.md`).
+
+`File`:
+- дескриптор — номер в таблице открытых файлов runtime; `File`, собранный
+  литералом вне `os` (литерал линейной структуры допустим, разбор — нет),
+  или уже закрытый — ловушка `file is not open`, а не обращение к памяти;
+- `read` с `n < 0` — ловушка `read count N is negative`; буфер больше
+  предела `List` — ловушка `out of memory`;
+- `NoSpace` — диск полон (`ENOSPC`, `EDQUOT`, `EFBIG`); при записи через
+  буфер он может прийти только из `close`;
+- в задачу (Р70) `File` передаётся переносом, как любое значение, и
+  закрывается там.
+
+Пример — запись частями. Файл, открытый до цикла, в цикле не закрыть
+(E0513), а `errdefer` с `try os.close(f)` в конце — E0512 (`errdefer`
+закрыл бы его второй раз). Поэтому ошибка запоминается, цикл кончается, и
+файл закрывается после него на обоих путях:
+
+```
+import os
+
+fn save(path: str, chunks: &List[List[u8]]) os.IoError!void {
+    var f = try os.create(path)
+    var failed: ?os.IoError = none
+    for c in &chunks {
+        match os.write(&mut f, c) {
+            ok(_) => {}
+            err(e) => {
+                failed = e
+                break
+            }
+        }
+    }
+    if let e = failed {
+        _ = os.close(f)
+        fail e
+    }
+    try os.close(f)
+}
+```
 
 `read_file`:
 - путь — как у C `fopen`, относительный — от текущего каталога; байт 0
@@ -75,6 +136,15 @@ fn main() os.IoError!void {
 
 ## 3. Проверки
 
+- **Набор `run`, файлы** — `tests/run/os_files.dpm` (Р71): запись и
+  чтение частями, файл целиком, усечение, пустой файл, биты `f64` через
+  файл, ошибки `NotFound` и `InvalidUtf8`. Каталог для файлов — аргумент
+  `{tmp}` (`os_files.args`): `tests/run.py` даёт каждому запуску свой
+  пустой каталог и удаляет его в конце.
+- **Набор `fail`** — `tests/fail/os_files.dpm` (E0511, E0512 у `File`),
+  `tests/fail/os_files_par.dpm` (E0517 — файлы из тела `parallel for`).
+- **Тесты runtime** — `runtime/trap/file_*`: чужой и закрытый дескриптор,
+  отрицательное `n`.
 - **Набор `run`** — `tests/run/os_io.dpm`. Его аргументы лежат в
   `os_io.args`, данные — в `tests/run/data/`. Проверяются: текст, пустой
   файл, нет файла, не UTF-8, каталог, ошибка из `main`. Та же программа
