@@ -1,0 +1,183 @@
+{
+ "env": {
+  "cpu": "4 CPU, Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "os": "Linux-6.18.44-fc-v185-x86_64-with-glibc2.39",
+  "cc": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "commit": "92d893d"
+ },
+ "runs": 5,
+ "side": 128,
+ "big": 300,
+ "threads": [
+  1,
+  4
+ ],
+ "cells": {
+  "dpl/g/1/128": {
+   "ms": 6303.997556000468,
+   "rss_kb": 214876,
+   "out": "g chunks=16384 objects=1773550 bytes=0 hash=9c1bda7f8c872325"
+  },
+  "dpl/ge/1/128": {
+   "ms": 6944.527624999864,
+   "rss_kb": 425820,
+   "out": "ge chunks=16384 objects=1773550 bytes=213938050 hash=9c1bda7f8c872325"
+  },
+  "dpl/encode/1/128": {
+   "ms": 7169.7200160006105,
+   "rss_kb": 425820,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "dpl/roundtrip/1/128": {
+   "ms": 8076.875678999386,
+   "rss_kb": 425820,
+   "out": "roundtrip chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/g/1/128": {
+   "ms": 2687.720722999984,
+   "rss_kb": 222124,
+   "out": "g chunks=16384 objects=1773550 bytes=0 hash=9c1bda7f8c872325"
+  },
+  "cpp/ge/1/128": {
+   "ms": 3290.8823650004706,
+   "rss_kb": 431660,
+   "out": "ge chunks=16384 objects=1773550 bytes=213938050 hash=9c1bda7f8c872325"
+  },
+  "cpp/encode/1/128": {
+   "ms": 3517.695387000458,
+   "rss_kb": 431788,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/roundtrip/1/128": {
+   "ms": 3558.8293359996896,
+   "rss_kb": 431660,
+   "out": "roundtrip chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/write/1/128": {
+   "ms": 3707.925260999218,
+   "rss_kb": 431784,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/write1/1/128": {
+   "ms": 4943.1361080005445,
+   "rss_kb": 640684,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/readback/1/128": {
+   "ms": 3150.3638550002506,
+   "rss_kb": 431276,
+   "out": "roundtrip chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "dpl/g/4/128": {
+   "ms": 1747.7960630003508,
+   "rss_kb": 215004,
+   "out": "g chunks=16384 objects=1773550 bytes=0 hash=9c1bda7f8c872325"
+  },
+  "dpl/ge/4/128": {
+   "ms": 2004.8935920003714,
+   "rss_kb": 426200,
+   "out": "ge chunks=16384 objects=1773550 bytes=213938050 hash=9c1bda7f8c872325"
+  },
+  "dpl/encode/4/128": {
+   "ms": 2079.928139999538,
+   "rss_kb": 426204,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "dpl/roundtrip/4/128": {
+   "ms": 2201.048195999647,
+   "rss_kb": 426332,
+   "out": "roundtrip chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/g/4/128": {
+   "ms": 753.9686259997325,
+   "rss_kb": 222252,
+   "out": "g chunks=16384 objects=1773550 bytes=0 hash=9c1bda7f8c872325"
+  },
+  "cpp/ge/4/128": {
+   "ms": 975.5790420003905,
+   "rss_kb": 431724,
+   "out": "ge chunks=16384 objects=1773550 bytes=213938050 hash=9c1bda7f8c872325"
+  },
+  "cpp/encode/4/128": {
+   "ms": 1017.9119360000186,
+   "rss_kb": 431788,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/roundtrip/4/128": {
+   "ms": 1023.5166080001363,
+   "rss_kb": 431732,
+   "out": "roundtrip chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/write/4/128": {
+   "ms": 1360.619384000529,
+   "rss_kb": 431660,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/write1/4/128": {
+   "ms": 1393.679496999539,
+   "rss_kb": 640628,
+   "out": "encode chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "cpp/readback/4/128": {
+   "ms": 1063.8799560001644,
+   "rss_kb": 431348,
+   "out": "roundtrip chunks=16384 objects=1773550 bytes=213938050 hash=6bfd7ab6be061b40"
+  },
+  "dpl/g/4/300": {
+   "ms": 9287.889444999564,
+   "rss_kb": 1172188,
+   "out": "g chunks=90000 objects=9761764 bytes=0 hash=b41960eb9ea19a65"
+  },
+  "dpl/ge/4/300": {
+   "ms": 12346.951124000043,
+   "rss_kb": 2329304,
+   "out": "ge chunks=90000 objects=9761764 bytes=1175332348 hash=b41960eb9ea19a65"
+  },
+  "dpl/encode/4/300": {
+   "ms": 13243.467334999877,
+   "rss_kb": 2329556,
+   "out": "encode chunks=90000 objects=9761764 bytes=1175332348 hash=d079a19d4fcf6bae"
+  },
+  "dpl/roundtrip/4/300": {
+   "ms": 14043.379867000112,
+   "rss_kb": 2329436,
+   "out": "roundtrip chunks=90000 objects=9761764 bytes=1175332348 hash=d079a19d4fcf6bae"
+  },
+  "cpp/g/4/300": {
+   "ms": 4244.718685000407,
+   "rss_kb": 1204968,
+   "out": "g chunks=90000 objects=9761764 bytes=0 hash=b41960eb9ea19a65"
+  },
+  "cpp/ge/4/300": {
+   "ms": 6490.6397660006405,
+   "rss_kb": 2356340,
+   "out": "ge chunks=90000 objects=9761764 bytes=1175332348 hash=b41960eb9ea19a65"
+  },
+  "cpp/encode/4/300": {
+   "ms": 7102.968326999871,
+   "rss_kb": 2356396,
+   "out": "encode chunks=90000 objects=9761764 bytes=1175332348 hash=d079a19d4fcf6bae"
+  },
+  "cpp/roundtrip/4/300": {
+   "ms": 7216.122445999645,
+   "rss_kb": 2356340,
+   "out": "roundtrip chunks=90000 objects=9761764 bytes=1175332348 hash=d079a19d4fcf6bae"
+  },
+  "cpp/write/4/300": {
+   "ms": 8706.725817000006,
+   "rss_kb": 2356396,
+   "out": "encode chunks=90000 objects=9761764 bytes=1175332348 hash=d079a19d4fcf6bae"
+  },
+  "cpp/write1/4/300": {
+   "ms": 15495.380563999788,
+   "rss_kb": 3504244,
+   "out": "encode chunks=90000 objects=9761764 bytes=1175332348 hash=d079a19d4fcf6bae"
+  },
+  "cpp/readback/4/300": {
+   "ms": 5698.543271000744,
+   "rss_kb": 2353780,
+   "out": "roundtrip chunks=90000 objects=9761764 bytes=1175332348 hash=d079a19d4fcf6bae"
+  }
+ },
+ "same_output": true
+}
