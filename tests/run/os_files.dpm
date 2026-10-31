@@ -1,0 +1,123 @@
+// spec: module.import expr.convert (Р71)
+// Файлы os.File (Р71): запись и чтение частями, файл целиком, ошибки;
+// биты f64 через файл. Каталог для файлов — аргумент ({tmp} в os_files.args).
+import os
+
+fn describe(e: os.IoError) str {
+    match e {
+        .NotFound => return "not found"
+        .PermissionDenied => return "permission denied"
+        .InvalidUtf8 => return "not UTF-8"
+        .NoSpace => return "no space"
+        .Other => return "other"
+    }
+}
+
+// Чтение частями по n байтов: число частей и байтов. Дескриптор линейный:
+// закрывается после цикла и на пути ошибки.
+fn read_parts(path: str, n: int) os.IoError!str {
+    var f = try os.open(path)
+    var buf: List[u8] = []
+    var parts = 0
+    var failed: ?os.IoError = none
+    while true {
+        match os.read(&mut f, &mut buf, n) {
+            ok(got) => {
+                if got == 0 {
+                    break
+                }
+                parts += 1
+            }
+            err(e) => {
+                failed = e
+                break
+            }
+        }
+    }
+    if let e = failed {
+        _ = os.close(f)
+        fail e
+    }
+    try os.close(f)
+    return str(parts) + " parts, " + str(len(buf)) + " bytes"
+}
+
+fn put_f64(out: &mut List[u8], x: f64) {
+    let b = f64.bits(x)
+    for k in 0..8 {
+        out.push(u8((b >> u64(8 * k)) & 255))
+    }
+}
+
+fn get_f64(b: &List[u8], at: int) f64 {
+    var u: u64 = 0
+    for k in 0..8 {
+        u = u | (u64(b[at + k]) << u64(8 * k))
+    }
+    return f64.from_bits(u)
+}
+
+fn main() os.IoError!void {
+    let dir = os.args()[0]
+    var data: List[u8] = []
+    for i in 0..1000 {
+        data.push(u8.wrap(i * 7))
+    }
+    var f = try os.create(dir + "/a.bin")
+    match os.write(&mut f, data) {
+        ok(_) => {}
+        err(e) => {
+            _ = os.close(f)
+            fail e
+        }
+    }
+    match os.write(&mut f, data[0..10]) {
+        ok(_) => {}
+        err(e) => {
+            _ = os.close(f)
+            fail e
+        }
+    }
+    try os.close(f)
+    let back = try os.read_bytes(dir + "/a.bin")
+    println("a.bin: " + str(len(back)) + " bytes, " + str(back[999]) + " " + str(back[1009]))
+    println("a.bin: " + try read_parts(dir + "/a.bin", 300))
+    println("a.bin: " + try read_parts(dir + "/a.bin", 5000))
+    // Текст целиком; create усекает старый файл.
+    try os.write_file(dir + "/b.txt", "привет\n")
+    try os.write_file(dir + "/b.txt", "строка\n")
+    print("b.txt: " + try os.read_file(dir + "/b.txt"))
+    try os.write_bytes(dir + "/empty", [])
+    println("empty: " + str(len(try os.read_bytes(dir + "/empty"))) + " bytes")
+    // Плавающие — битами, от младшего байта.
+    var floats: List[u8] = []
+    let xs: List[f64] = [0.1, -2.5, 1e300, -0.0]
+    for x in &xs {
+        put_f64(&mut floats, x)
+    }
+    try os.write_bytes(dir + "/f.bin", floats)
+    let fb = try os.read_bytes(dir + "/f.bin")
+    for k in 0..len(xs) {
+        let y = get_f64(&fb, k * 8)
+        println(str(y) + " " + str(f64.bits(y) == f64.bits(xs[k])))
+    }
+    // Ошибки.
+    match os.open(dir + "/missing.bin") {
+        ok(g) => {
+            println("opened?")
+            try os.close(g)
+        }
+        err(e) => println("missing.bin: " + describe(e))
+    }
+    match os.create(dir + "/no/such/dir.bin") {
+        ok(g) => {
+            println("created?")
+            try os.close(g)
+        }
+        err(e) => println("no/such/dir.bin: " + describe(e))
+    }
+    match os.read_file(dir + "/a.bin") {
+        ok(_) => println("a.bin as text?")
+        err(e) => println("a.bin as text: " + describe(e))
+    }
+}

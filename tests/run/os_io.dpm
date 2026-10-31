@@ -7,6 +7,7 @@ fn describe(e: os.IoError) str {
         .NotFound => return "not found"
         .PermissionDenied => return "permission denied"
         .InvalidUtf8 => return "not UTF-8"
+        .NoSpace => return "no space"
         .Other => return "cannot read"
     }
 }

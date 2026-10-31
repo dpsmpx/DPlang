@@ -1,4 +1,4 @@
-// Операционная система: аргументы программы и файлы (Р51;
+// Операционная система: аргументы программы и файлы (Р51, Р71;
 // docs/stdlib/README.md). Ввод-вывод — недетерминированный класс (Р12).
 
 // Ошибка ввода-вывода.
@@ -6,6 +6,7 @@ pub enum IoError {
     NotFound
     PermissionDenied
     InvalidUtf8
+    NoSpace
     Other
 }
 
@@ -18,14 +19,123 @@ pub fn args() List[str] {
     return out
 }
 
+// Ошибка по коду встроенных функций: 1 NotFound, 2 PermissionDenied,
+// 3 InvalidUtf8, 5 NoSpace, иначе Other.
+fn io_error(code: i64) IoError {
+    match code {
+        1 => return .NotFound
+        2 => return .PermissionDenied
+        3 => return .InvalidUtf8
+        5 => return .NoSpace
+        _ => return .Other
+    }
+}
+
 // Файл целиком. Текст должен быть UTF-8 — иначе InvalidUtf8.
 pub fn read_file(path: str) IoError!str {
     var text = ""
-    match __read_file(path, &mut text) {
-        0 => return text
-        1 => fail .NotFound
-        2 => fail .PermissionDenied
-        3 => fail .InvalidUtf8
-        _ => fail .Other
+    let code = __read_file(path, &mut text)
+    if code != 0 {
+        fail io_error(i64(code))
     }
+    return text
+}
+
+// Открытый файл (Р71): линейный — закрывается ровно один раз, os.close.
+@linear
+pub struct File {
+    id: i64
+}
+
+// Новый файл на запись; существующий усекается.
+pub fn create(path: str) IoError!File {
+    let id = __file_create(path)
+    if id < 0 {
+        fail io_error(-id)
+    }
+    return File { id }
+}
+
+// Файл на чтение.
+pub fn open(path: str) IoError!File {
+    let id = __file_open(path)
+    if id < 0 {
+        fail io_error(-id)
+    }
+    return File { id }
+}
+
+// Записать все байты data.
+pub fn write(f: &mut File, data: []u8) IoError!void {
+    let code = __file_write(f.id, data)
+    if code != 0 {
+        fail io_error(i64(code))
+    }
+}
+
+// Дописать в buf до n байтов файла; результат — их число, 0 — конец файла.
+pub fn read(f: &mut File, buf: &mut List[u8], n: int) IoError!int {
+    let got = __file_read(f.id, &mut buf, n)
+    if got < 0 {
+        fail io_error(-got)
+    }
+    return got
+}
+
+// Закрыть файл. Ошибка записи на диск, отложенная буфером, — здесь.
+pub fn close(f: File) IoError!void {
+    let File { id } = f
+    let code = __file_close(id)
+    if code != 0 {
+        fail io_error(i64(code))
+    }
+}
+
+// Файл целиком байтами.
+pub fn read_bytes(path: str) IoError!List[u8] {
+    var f = try open(path)
+    var out: List[u8] = []
+    var failed: ?IoError = none
+    while true {
+        match read(&mut f, &mut out, 65536) {
+            ok(n) => {
+                if n == 0 {
+                    break
+                }
+            }
+            err(e) => {
+                failed = e
+                break
+            }
+        }
+    }
+    if let e = failed {
+        _ = close(f)
+        fail e
+    }
+    try close(f)
+    return out
+}
+
+// Записать файл целиком: новый или усечённый.
+pub fn write_bytes(path: str, data: []u8) IoError!void {
+    var f = try create(path)
+    match write(&mut f, data) {
+        ok(_) => {}
+        err(e) => {
+            _ = close(f)
+            fail e
+        }
+    }
+    try close(f)
+}
+
+// Записать текст в файл: новый или усечённый.
+pub fn write_file(path: str, text: str) IoError!void {
+    var bytes: List[u8] = []
+    bytes.reserve(len(text))
+    for b in &text {
+        bytes.push(b)
+    }
+    try write_bytes(path, bytes)
 }

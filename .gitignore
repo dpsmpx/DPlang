@@ -1,2 +1,4 @@
 build/
 __pycache__/
+# каталоги {tmp} тестов набора run (tests/run.py, program_args) — если прогон оборван
+tests/run/**/tmp-*/

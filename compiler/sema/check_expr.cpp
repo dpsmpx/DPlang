@@ -750,12 +750,14 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     bool checked2 = bf == BuiltinFn::CheckedAdd || bf == BuiltinFn::CheckedSub || bf == BuiltinFn::CheckedMul ||
                     bf == BuiltinFn::CheckedDiv;
     size_t want = bf == BuiltinFn::Repeat || bf == BuiltinFn::Min || bf == BuiltinFn::Max || bf == BuiltinFn::ReadFile ||
-                          checked2
+                          bf == BuiltinFn::FileWrite || checked2
                       ? 2
-                  : bf == BuiltinFn::ArgsLen ? 0
-                                             : 1;
+                  : bf == BuiltinFn::FileRead ? 3
+                  : bf == BuiltinFn::ArgsLen  ? 0
+                                              : 1;
+    bool files = bf >= BuiltinFn::FileCreate && bf <= BuiltinFn::FileClose;
     bool io = bf == BuiltinFn::Print || bf == BuiltinFn::Println || bf == BuiltinFn::Eprintln ||
-              bf == BuiltinFn::ArgsLen || bf == BuiltinFn::ArgAt || bf == BuiltinFn::ReadFile;
+              bf == BuiltinFn::ArgsLen || bf == BuiltinFn::ArgAt || bf == BuiltinFn::ReadFile || files;
     if (io && fn_ && is_det(*fn_)) {  // ввод-вывод — не класс D (Р12, Р55)
         error(Code::E0425, c->span, "'" + name + "' does input or output; '" + fn_->name +
                                         "' is class D and cannot use it. Return the value and use it outside class D");
@@ -768,16 +770,18 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
     }
     for (size_t i = 0; i < c->args.size(); i++) {
         Expr* a = c->args[i];
-        bool out = bf == BuiltinFn::ReadFile && i == 1;  // __read_file(path, &mut out)
+        // __read_file(path, &mut out), __file_read(f, &mut buf, n)
+        bool out = (bf == BuiltinFn::ReadFile || bf == BuiltinFn::FileRead) && i == 1;
+        const Type* out_t = bf == BuiltinFn::FileRead ? tt_.list(prim(TK::U8)) : prim(TK::Str);
         auto* r = as<RefExpr>(a);
         if (out) {
             if (!r || !r->mut) {
-                error(Code::E0408, a->span, "the second argument of '" + name + "' is '&mut str'");
+                error(Code::E0408, a->span, "the second argument of '" + name + "' is '&mut " + tn(out_t) + "'");
                 if (r) r->type = infer(r->operand, nullptr);
                 else infer(a, nullptr);
                 return err();
             }
-            r->type = check(r->operand, prim(TK::Str));
+            r->type = check(r->operand, out_t);
             if (!is_place(r->operand)) {
                 error(Code::E0501, r->operand->span, "a reference needs a variable, a field or an element");
             } else if (mutable_place(r->operand, "mutate")) {
@@ -913,6 +917,20 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
             return prim(TK::Str);
         case BuiltinFn::ReadFile:
             check(c->args[0], prim(TK::Str));
+            return prim(TK::I32);
+        case BuiltinFn::FileCreate: case BuiltinFn::FileOpen:
+            check(c->args[0], prim(TK::Str));
+            return prim(TK::I64);
+        case BuiltinFn::FileWrite:
+            check(c->args[0], prim(TK::I64));
+            check(c->args[1], tt_.slice(prim(TK::U8)));
+            return prim(TK::I32);
+        case BuiltinFn::FileRead:
+            check(c->args[0], prim(TK::I64));
+            check(c->args[2], prim(TK::I64));
+            return prim(TK::I64);
+        case BuiltinFn::FileClose:
+            check(c->args[0], prim(TK::I64));
             return prim(TK::I32);
         case BuiltinFn::Count: break;
     }

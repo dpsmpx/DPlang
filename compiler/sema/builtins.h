@@ -32,6 +32,12 @@ enum class BuiltinFn : uint8_t {
     ArgsLen,   // __args_len() i64 — число аргументов программы без её имени
     ArgAt,     // __arg(i: i64) str — аргумент i
     ReadFile,  // __read_file(path: str, out: &mut str) i32 — 0, или код ошибки os.IoError + 1
+    // Файлы (Р71): дескриптор — i64 > 0; ошибка — минус код (как у ReadFile).
+    FileCreate,  // __file_create(path: str) i64 — новый или усечённый файл на запись
+    FileOpen,    // __file_open(path: str) i64 — на чтение
+    FileWrite,   // __file_write(f: i64, data: []u8) i32 — 0 или код
+    FileRead,    // __file_read(f: i64, buf: &mut List[u8], n: i64) i64 — дописано байтов (0 — конец) или минус код
+    FileClose,   // __file_close(f: i64) i32 — 0 или код
     Count
 };
 
@@ -39,6 +45,7 @@ inline constexpr std::string_view kBuiltinFnNames[] = {
     "len", "repeat", "min", "max", "abs", "parse_int", "is_digit", "is_alpha", "is_space", "is_alnum", "assert",
     "print", "println", "eprintln", "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_neg",
     "atomic", "mutex", "channel", "__args_len", "__arg", "__read_file",
+    "__file_create", "__file_open", "__file_write", "__file_read", "__file_close",
 };
 
 // Встроенная только для стандартной библиотеки.

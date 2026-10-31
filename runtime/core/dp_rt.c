@@ -757,6 +757,117 @@ int32_t dp_read_file(dp_str path, dp_str* out, const char* loc) {
     return 0;
 }
 
+/* --- файлы os.File (Р71) */
+
+static int32_t dp_io_code(int e) {
+    if (e == ENOENT || e == ENOTDIR) return 1;
+    if (e == EACCES || e == EPERM) return 2;
+#ifdef EDQUOT
+    if (e == EDQUOT) return 5;
+#endif
+    if (e == ENOSPC || e == EFBIG) return 5;
+    return 4;
+}
+
+/* Открытые файлы: дескриптор — (поколение << 32) | (номер слота + 1).
+ * os.File можно собрать литералом и вне os, поэтому дескриптор проверяется:
+ * неоткрытый, закрытый или чужой — ловушка, а не обращение к памяти. */
+static void* dp_files_m;
+static FILE** dp_files;
+static uint32_t* dp_files_gen;
+static int64_t dp_files_cap;
+
+static int64_t dp_file_put(FILE* f, const char* loc) {
+    void* m = dp_lazy_mutex(&dp_files_m);
+    dp_sys_lock(m);
+    int64_t i = 0;
+    while (i < dp_files_cap && dp_files[i]) i++;
+    if (i == dp_files_cap) {
+        int64_t nc = dp_files_cap ? dp_files_cap * 2 : 16;
+        dp_files = (FILE**)dp_realloc(dp_files, nc, sizeof(FILE*), loc);
+        dp_files_gen = (uint32_t*)dp_realloc(dp_files_gen, nc, sizeof(uint32_t), loc);
+        for (int64_t k = dp_files_cap; k < nc; k++) {
+            dp_files[k] = NULL;
+            dp_files_gen[k] = 0;
+        }
+        dp_files_cap = nc;
+    }
+    dp_files[i] = f;
+    dp_files_gen[i] = (dp_files_gen[i] + 1) & 0x7FFFFFFF;
+    int64_t id = ((int64_t)dp_files_gen[i] << 32) | (i + 1);
+    dp_sys_unlock(m);
+    return id;
+}
+
+/* Файл дескриптора; take — и освободить слот. */
+static FILE* dp_file_get(int64_t id, bool take, const char* loc) {
+    void* m = dp_lazy_mutex(&dp_files_m);
+    dp_sys_lock(m);
+    int64_t i = (id & 0xFFFFFFFF) - 1;
+    FILE* f = NULL;
+    if (id > 0 && i >= 0 && i < dp_files_cap && dp_files[i] && (int64_t)dp_files_gen[i] == (id >> 32)) {
+        f = dp_files[i];
+        if (take) dp_files[i] = NULL;
+    }
+    dp_sys_unlock(m);
+    if (!f) dp_trap(loc, "file is not open");
+    return f;
+}
+
+static int64_t dp_file_start(dp_str path, bool write, const char* loc) {
+    /* Путь — строка C: байт 0 внутри пути не называет никакого файла. */
+    if (path.len > 0 && memchr(path.ptr, 0, (size_t)path.len)) return -1;
+    char* name = (char*)dp_alloc(path.len + 1, 1, loc);
+    if (path.len) memcpy(name, path.ptr, (size_t)path.len);
+    name[path.len] = 0;
+    errno = 0;
+    FILE* f = write ? dp_os_open_write(name) : dp_os_open_read(name);
+    int err = errno;
+    dp_free(name);
+    if (!f) return -(int64_t)dp_io_code(err);
+    return dp_file_put(f, loc);
+}
+
+int64_t dp_file_create(dp_str path, const char* loc) { return dp_file_start(path, true, loc); }
+int64_t dp_file_open(dp_str path, const char* loc) { return dp_file_start(path, false, loc); }
+
+int32_t dp_file_write(int64_t f, const uint8_t* ptr, int64_t len, const char* loc) {
+    FILE* fp = dp_file_get(f, false, loc);
+    if (len == 0) return 0;
+    errno = 0;
+    if (fwrite(ptr, 1, (size_t)len, fp) != (size_t)len) return dp_io_code(errno);
+    return 0;
+}
+
+int64_t dp_file_read(int64_t f, uint8_t** ptr, int64_t* len, int64_t* cap, int64_t n, const char* loc) {
+    FILE* fp = dp_file_get(f, false, loc);
+    if (n < 0) dp_trapf(loc, "read count %" PRId64 " is negative", n);
+    if (n > DP_MAX_BYTES - *len) {
+        if (*len >= DP_MAX_BYTES) dp_trap(loc, "out of memory");
+        n = DP_MAX_BYTES - *len;
+    }
+    if (*len + n > *cap) {
+        *ptr = (uint8_t*)dp_realloc(*ptr, *len + n, 1, loc);
+        *cap = *len + n;
+    }
+    if (n == 0) return 0;
+    errno = 0;
+    size_t got = fread(*ptr + *len, 1, (size_t)n, fp);
+    if (got == 0 && ferror(fp)) return -(int64_t)dp_io_code(errno);
+    *len += (int64_t)got;
+    return (int64_t)got;
+}
+
+int32_t dp_file_close(int64_t f, const char* loc) {
+    FILE* fp = dp_file_get(f, true, loc);
+    bool bad = ferror(fp) != 0;
+    errno = 0;
+    int r = fclose(fp);
+    int err = errno;
+    if (r != 0 || bad) return dp_io_code(err);
+    return 0;
+}
+
 /* --- индексы и срезы (trap.index) */
 
 int64_t dp_check_index(int64_t i, int64_t len, const char* loc) {

@@ -44,6 +44,7 @@ service идут на второй сборке, Release без санитайз
 Вывод краткий: итог; на красном — сбои и начало диффа.
 """
 import argparse
+import atexit
 import concurrent.futures
 import difflib
 import os
@@ -102,10 +103,23 @@ def args_file(path):
         return shlex.split(f.read())
 
 
+# Каталоги {tmp} программ набора run: удаляются в конце прогона.
+_TMP_DIRS = []
+atexit.register(lambda: [shutil.rmtree(d, ignore_errors=True) for d in _TMP_DIRS])
+
+
 def program_args(path):
-    """run: аргументы программы X.dpm — из X.args рядом, если он есть (os.args)."""
+    """run: аргументы программы X.dpm — из X.args рядом, если он есть (os.args).
+    {tmp} — свой пустой каталог на каждый запуск (файлы Р71): относительный
+    путь от каталога набора, проходы не мешают друг другу."""
     a = path[:-len('.dpm')] + '.args'
-    return args_file(a) if os.path.exists(a) else []
+    args = args_file(a) if os.path.exists(a) else []
+    if any('{tmp}' in x for x in args):
+        d = tempfile.mkdtemp(prefix='tmp-', dir=os.path.dirname(a))
+        _TMP_DIRS.append(d)
+        rel = os.path.relpath(d, os.path.join(TESTS, 'run'))
+        args = [x.replace('{tmp}', rel) for x in args]
+    return args
 
 
 # Набор → (расширение входа, программа, построитель аргументов по имени входа).

@@ -599,9 +599,38 @@ private:
                     if (!writable(rv.place)) fail("read_file into a read-only place");
                 }
                 break;
+            case Intrinsic::FileCreate: case Intrinsic::FileOpen:
+                args(1);
+                same(op(0), prim(TK::Str), "operand");
+                same(rv.type, prim(TK::I64), "result");
+                break;
+            case Intrinsic::FileWrite:
+                args(2);
+                same(op(0), prim(TK::I64), "operand");
+                if (op(1)->kind != TK::Slice || op(1)->elem != prim(TK::U8)) fail("file_write data is not []u8");
+                same(rv.type, prim(TK::I32), "result");
+                break;
+            case Intrinsic::FileRead:
+                args(2);
+                same(op(0), prim(TK::I64), "operand");
+                same(op(1), prim(TK::I64), "operand");
+                same(rv.type, prim(TK::I64), "result");
+                if (!rv.has_place) {
+                    fail("file_read without a place for the bytes");
+                } else {
+                    const Type* bt = place(rv.place);
+                    if (!bt || bt->kind != TK::List || bt->elem != prim(TK::U8)) fail("file_read place is not List[u8]");
+                    if (!writable(rv.place)) fail("file_read into a read-only place");
+                }
+                break;
+            case Intrinsic::FileClose:
+                args(1);
+                same(op(0), prim(TK::I64), "operand");
+                same(rv.type, prim(TK::I32), "result");
+                break;
         }
         if (rv.has_place && rv.intrinsic != Intrinsic::ListPush && rv.intrinsic != Intrinsic::ListPop &&
-            rv.intrinsic != Intrinsic::ReadFile &&
+            rv.intrinsic != Intrinsic::ReadFile && rv.intrinsic != Intrinsic::FileRead &&
             rv.intrinsic != Intrinsic::ListInsert && rv.intrinsic != Intrinsic::ListRemove &&
             rv.intrinsic != Intrinsic::ListClear && rv.intrinsic != Intrinsic::ListSort &&
             rv.intrinsic != Intrinsic::ListReserve && rv.intrinsic != Intrinsic::MapReserve &&

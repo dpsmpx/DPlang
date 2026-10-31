@@ -115,3 +115,5 @@ void dp_sys_cond_free(void* c) {
 int dp_run_test(dp_entry_fn entry) { return dp_run_as(entry, "test"); }
 
 FILE* dp_os_open_read(const char* path) { return fopen(path, "rb"); }
+
+FILE* dp_os_open_write(const char* path) { return fopen(path, "wb"); }
