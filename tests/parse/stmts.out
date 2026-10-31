@@ -167,6 +167,46 @@ Module stmts
               Field .push
                 Name rows
               Name b
+      Tasks
+        Block
+          ExprStmt
+            Spawn
+              Call
+                Name load
+                Ref
+                  Name q
+                Int 1
+          For w in range
+            Int 0
+            Name n
+            Block
+              ExprStmt
+                Spawn
+                  Call
+                    Name work
+                    Ref
+                      Name q
+                    Ref mut
+                      Index
+                        Name out
+                        Name w
+      Parallel
+        Block
+          Assign =
+            Name a
+            Call
+              Name f
+              Name x
+          Assign =
+            Name b
+            Call
+              Name g
+              Name y
+      Let t
+        Spawn
+          Call
+            Name sum
+            Name xs
       Let Pair { left right:r tag:_ }
         Call
           Name make

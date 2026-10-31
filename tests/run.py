@@ -107,6 +107,20 @@ def program_args(path):
     return args_file(a) if os.path.exists(a) else []
 
 
+def test_env(path):
+    """Окружение теста: X.env рядом — строки KEY=VALUE (вариант задач DPL_TASKS, О13); None — как у run.py."""
+    e = path[:-len('.dpm')] + '.env'
+    if not path.endswith('.dpm') or not os.path.exists(e):
+        return None
+    env = dict(os.environ)
+    with open(e, encoding='utf-8') as f:
+        for ln in f:
+            if '=' in ln:
+                k, v = ln.strip().split('=', 1)
+                env[k] = v
+    return env
+
+
 # Набор → (расширение входа, программа, построитель аргументов по имени входа).
 SUITES = {
     'cli': ('.args', DPL, lambda name, path: args_file(path)),
@@ -283,12 +297,13 @@ def tsan_cc():
 
 
 def uses_parallel(path):
-    """В программе (или в модулях её каталога) есть `parallel for`."""
+    """В программе (или в модулях её каталога) есть `parallel for` или задачи (О13)."""
     d = os.path.dirname(path)
     files = [os.path.join(d, n) for n in os.listdir(d) if n.endswith('.dpm')] if os.path.basename(path) == 'main.dpm' else [path]
     for f in files:
         with open(f, encoding='utf-8') as h:
-            if 'parallel for' in h.read():
+            text = h.read()
+            if 'parallel for' in text or 'tasks {' in text or 'spawn ' in text:
                 return True
     return False
 
@@ -655,7 +670,7 @@ def actual_output(suite, path):
     argv = [program] + make_args(name, path)
     try:
         r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
-                           cwd=cwd)
+                           cwd=cwd, env=test_env(path))
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout

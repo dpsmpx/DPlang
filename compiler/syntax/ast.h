@@ -124,7 +124,7 @@ struct ErrorType : Type {
 
 enum class ExprKind : uint8_t {
     Int, Float, Str, Byte, Bool, None, Name, Field, Index, Slice, Call, Unary, Binary, Try, Paren, Ref,
-    StructLit, VariantLit, ListLit, Error
+    StructLit, VariantLit, ListLit, Spawn, Error
 };
 
 struct Expr : Node {
@@ -263,6 +263,16 @@ struct TryExpr : Expr {  // `try e`
     Expr* operand = nullptr;
 };
 
+// `spawn f(…)` (О13, прототип): задача — вызов функции dpl. В блоке
+// `tasks` (вариант А) — оператор, задача блока; иначе (вариант В) —
+// значение `Task[T]`.
+struct SpawnExpr : Expr {
+    static constexpr ExprKind Kind = ExprKind::Spawn;
+    SpawnExpr() : Expr(Kind) {}
+    Expr* operand = nullptr;  // вызов
+    bool group = false;       // задача блока `tasks`: ставит проверка типов
+};
+
 struct ParenExpr : Expr {  // `(e)` — смысла не меняет, хранится для печати
     static constexpr ExprKind Kind = ExprKind::Paren;
     ParenExpr() : Expr(Kind) {}
@@ -395,7 +405,7 @@ struct ErrorPat : Pat {
 // --- инструкции
 
 enum class StmtKind : uint8_t {
-    Let, Assign, Expr, If, While, For, Match, Return, Break, Continue, Defer, Fail, Block, Lock, Error
+    Let, Assign, Expr, If, While, For, Match, Return, Break, Continue, Defer, Fail, Block, Lock, Tasks, Error
 };
 
 struct Stmt : Node {
@@ -529,6 +539,17 @@ struct LockStmt : Stmt {
     Span var_span;
     Block* body = nullptr;
     sema::Local* local = nullptr;
+};
+
+// `tasks { … }` (вариант А) и `parallel { … }` (вариант Б) — О13,
+// прототип. Блок кончается, когда кончились его задачи. В `tasks` задачи
+// ставит `spawn`; в `parallel` каждый оператор — задача, первый идёт в
+// текущем потоке.
+struct TasksStmt : Stmt {
+    static constexpr StmtKind Kind = StmtKind::Tasks;
+    TasksStmt() : Stmt(Kind) {}
+    bool each = false;  // `parallel { … }`
+    Block* body = nullptr;
 };
 
 struct FailStmt : Stmt {  // `fail e`

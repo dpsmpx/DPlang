@@ -235,6 +235,7 @@ public:
         }
         out += "\n";
         out += par_defs();
+        out += task_defs();
         for (const Function& f : p_.fns) {
             if (!f.is_extern) out += function(f);
         }
@@ -350,6 +351,44 @@ public:
                     out += "    struct dp_pfe" + n + "* e = (struct dp_pfe" + n + "*)env;\n";
                     out += "    " + fn_name(g) + "((" + t + ")((uint64_t)e->lo + k)";
                     for (uint32_t i = 1; i < g.param_count; i++) out += ", e->a" + std::to_string(i);
+                    out += ");\n}\n\n";
+                }
+            }
+        }
+        return out;
+    }
+
+    // Задача блока `tasks` (О13, прототип): окружение — значения-аргументы и
+    // указатели на места; runtime копирует его и зовёт трамплин в потоке
+    // задачи.
+    std::map<const ir::Rvalue*, uint32_t> task_ids_;
+
+    uint32_t task_id(const ir::Rvalue& rv) const {
+        auto it = task_ids_.find(&rv);
+        return it == task_ids_.end() ? 0 : it->second;
+    }
+
+    std::string task_defs() {
+        std::string out;
+        for (const Function& f : p_.fns) {
+            for (const ir::Block& b : f.blocks) {
+                for (const ir::Inst& in : b.insts) {
+                    if (in.rv.kind != RvKind::Spawn || in.rv.fn >= p_.fns.size()) continue;
+                    uint32_t id = static_cast<uint32_t>(task_ids_.size());
+                    task_ids_[&in.rv] = id;
+                    const Function& g = p_.fns[in.rv.fn];
+                    std::string n = std::to_string(id);
+                    out += "struct dp_tke" + n + " {\n";
+                    for (uint32_t i = 0; i < g.param_count; i++) {
+                        const ir::Local& l = g.locals[i];
+                        bool ref = l.kind == LocalKind::ParamRef || l.kind == LocalKind::ParamMut;
+                        out += "    " + ctype(l.type) + (ref ? "* a" : " a") + std::to_string(i) + ";\n";
+                    }
+                    if (g.param_count == 0) out += "    char unused;\n";
+                    out += "};\n\nstatic void dp_tkb" + n + "(void* env) {\n";
+                    out += "    struct dp_tke" + n + "* e = (struct dp_tke" + n + "*)env;\n";
+                    out += "    " + (g.param_count == 0 ? std::string("(void)e;\n    ") : std::string()) + fn_name(g) + "(";
+                    for (uint32_t i = 0; i < g.param_count; i++) out += std::string(i ? ", " : "") + "e->a" + std::to_string(i);
                     out += ");\n}\n\n";
                 }
             }
@@ -1534,6 +1573,8 @@ std::string FnEmitter::intrinsic(const Rvalue& rv) {
     for (const Operand& o : rv.ops) ops.push_back(operand(o, rv.intrinsic == Intrinsic::MutexNew));  // данные — мьютексу
     switch (rv.intrinsic) {
         case Intrinsic::CArenaMark: return "dp_carena_mark()";  // Р62
+        case Intrinsic::TasksBegin: return "dp_tasks_begin()";  // О13, прототип
+        case Intrinsic::TasksEnd: return "dp_tasks_end(" + loc_ + ")";
         case Intrinsic::CArenaRelease: return "(dp_carena_release(" + ops[0] + "), (void)0)";
         case Intrinsic::Len: {
             const Type* t = op_type(rv.ops[0]);
@@ -1773,6 +1814,26 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
                        ? "((" + ctype(rv.type) + "){0})"
                        : "((" + ctype(rv.type) + ")0)";
         case RvKind::AddrOf: return "(&" + place(rv.place).expr + ")";  // Р62
+        case RvKind::Spawn: {  // О13, прототип: задача блока — в своём потоке
+            std::string n = std::to_string(em_.task_id(rv));
+            std::string env = fresh("dp_env");
+            std::string init = "{";
+            for (size_t i = 0; i < rv.args.size(); i++) {
+                const Arg& a = rv.args[i];
+                if (i) init += ", ";
+                if (a.kind == Arg::Kind::Value) {
+                    init += operand(a.op, true);
+                    continue;
+                }
+                Lv lv = place(a.place);
+                if (lv.byte) error("task borrows a str byte");
+                init += "&" + lv.expr;
+            }
+            if (rv.args.empty()) init += "0";
+            line("struct dp_tke" + n + " " + env + " = " + init + "};");
+            line("dp_spawn(dp_tkb" + n + ", &" + env + ", sizeof " + env + ", " + loc_ + ");");
+            return "((void)0)";
+        }
         case RvKind::ParFor: {  // Р69: итерации — в пуле потоков runtime
             line("DP_CALL_CHECK(" + loc_ + ");");
             std::string n = std::to_string(em_.par_id(rv));

@@ -155,6 +155,10 @@ enum class Intrinsic : uint8_t {
     // none — закрыт и пуст), ChannelTryRecv (→ ?T, не ждёт), ChannelClose
     // (повторно — ловушка). Все ждут — ловушка deadlock.
     ChannelNew, ChannelSend, ChannelRecv, ChannelTryRecv, ChannelClose,
+    // Блок задач (О13, прототип): TasksBegin открывает группу задач потока,
+    // TasksEnd ждёт её задачи и выводит их вывод по порядку запуска.
+    // Операндов нет.
+    TasksBegin, TasksEnd,
     // Probe: место (place) вычисляется со всеми проверками — индексы, ключ
     // Map — и не читается. Ловушка места раньше ловушек правее (expr.order).
     Probe,
@@ -188,6 +192,10 @@ enum class RvKind : uint8_t {
     // fn — вынесенное тело: параметр 0 — значение типа ops (Param), дальше
     // — args (Ref и Mut), результата нет. Вывод итераций — по порядку v.
     ParFor,
+    // Задача блока `tasks` (О13, прототип): fn(args) в своём потоке, в группе
+    // TasksBegin вокруг; значения-аргументы переходят в задачу, места живут
+    // до TasksEnd. fn — функция dpl без результата.
+    Spawn,
 };
 
 struct Arg {

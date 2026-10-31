@@ -454,6 +454,13 @@ int64_t dp_chan_len(const dp_chan* c);
 void dp_chan_free(dp_chan* c);
 void dp_parallel_for(uint64_t n, dp_par_body body, void* env);
 
+/* Блок задач `tasks` (О13, прототип): группа задач потока; задача —
+ * body(копия env) в своём потоке; конец блока ждёт задачи и выводит их
+ * вывод по порядку запуска. */
+void dp_tasks_begin(void);
+void dp_spawn(void (*body)(void*), const void* env, size_t size, const char* loc);
+void dp_tasks_end(const char* loc);
+
 /* Потоки платформы для пула (runtime/linux, runtime/windows). */
 int dp_sys_cpus(void);
 /* Поток с большим стеком, как у main; не присоединяется. 0 — запущен. */

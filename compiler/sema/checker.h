@@ -53,6 +53,7 @@ private:
     struct Loop {
         std::vector<Flow> breaks;
         bool parallel = false;
+        bool tasks = false;  // граница блока задач: break и continue за неё не выходят
     };
     std::vector<Loop> loops_;
     int defer_depth_ = 0;
@@ -80,6 +81,7 @@ private:
     void let_stmt(ast::LetStmt* l);
     void destructure(ast::LetStmt* l);
     void lock_stmt(ast::LockStmt* s);
+    void tasks_stmt(ast::TasksStmt* s);
     // Мьютексы, захваченные блоками `lock` вокруг (О13): их корни в теле
     // блока не называют — данные только через переменную блока.
     std::vector<const Local*> locked_;
@@ -132,6 +134,7 @@ private:
     const Type* index_expr(ast::IndexExpr* i);
     const Type* slice_expr(ast::SliceExpr* s);
     const Type* try_expr(ast::TryExpr* t);
+    const Type* spawn_expr(ast::SpawnExpr* sp);
     void field_inits(std::vector<ast::FieldInit>& inits, const std::vector<FieldDef>& fields, bool defaults_ok, Span span,
                      const std::string& what, bool c_zero = false);
     const EnumDef* enum_for_variant(const std::string& name, const Type* hint, Span span);
@@ -177,8 +180,42 @@ private:
     void note_use(ast::NameExpr* n);
     // `len(x)` в теле `parallel for` — не чтение элементов x (Р69).
     void note_len(ast::Expr* e);
-    // Выход из тела `parallel for` (Р69): break, return, fail, try.
+    // Выход из тела `parallel for` (Р69) или блока задач: break, return, fail, try.
     bool parallel_exit(Span span, const char* what);
+
+    // --- задачи (О13, прототип; access.cpp)
+    // Вариант модели из DPL_TASKS: 'a', 'b', 'c'; 0 — все формы, '?' — не
+    // a, b, c. Форма другого варианта — E0519.
+    char tasks_mode_ = 0;
+    bool variant_ok(char variant, Span span, const char* form);
+public:
+    // Заимствование `&x` или `&mut x` задачей блока: живёт до конца блока.
+    struct TaskBorrow {
+        ast::Expr* place = nullptr;
+        bool mut = false;
+        const ast::SpawnExpr* spawn = nullptr;
+        std::vector<const Local*> loops;  // циклы блока вокруг `spawn`; nullptr — без своей переменной
+    };
+    // Доступ кода блока (вне задач) к месту: читает или меняет.
+    struct TaskAccess {
+        ast::Expr* place = nullptr;
+        bool write = false;
+        bool len = false;  // `len(x)`: читает только длину
+    };
+    struct TasksScope {
+        uint32_t first_inner = 0;  // переменные блока — с номером не меньше
+        bool each = false;         // `parallel { … }`
+        std::vector<const Local*> loops;
+        std::vector<TaskBorrow> borrows;
+        std::vector<TaskAccess> accesses;
+    };
+
+private:
+    std::vector<TasksScope> tasks_;
+    void task_loop_begin(const ast::ForStmt* f);  // f == nullptr — while
+    void task_loop_end();
+    void task_spawn(ast::SpawnExpr* sp, ast::CallExpr* c, const std::vector<size_t>& marks);
+    void tasks_end();
     void note_extend(ast::Expr* object, ast::Expr* place);
     void loop_begin(ast::ForStmt* s);
     void loop_end();

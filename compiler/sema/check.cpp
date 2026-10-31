@@ -1,7 +1,9 @@
 // Проверка тел: инструкции и поток (docs/spec/core.md, разделы 6–8).
 // Выражения — check_expr.cpp, образцы — check_pat.cpp.
 #include <algorithm>
+#include <cstdlib>
 #include <set>
+#include <string>
 
 #include "sema/builtins.h"
 #include "sema/checker.h"
@@ -11,7 +13,13 @@ namespace dp::sema {
 using namespace ast;
 
 Checker::Checker(Program& prog, ModuleInfo& m, Diagnostics& diags)
-    : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags), tt_(prog.types) {}
+    : prog_(prog), m_(m), diags_(diags), r_(prog, m, diags), tt_(prog.types) {
+    // Вариант модели задач (О13, прототип): режим замера, не часть языка.
+    if (const char* v = std::getenv("DPL_TASKS"); v && *v) {
+        std::string s(v);
+        tasks_mode_ = s == "a" || s == "b" || s == "c" ? s[0] : '?';
+    }
+}
 
 // Константы модуля, на которые ссылается значение c (по имени).
 std::vector<ConstDef*> Checker::const_deps(const ConstDef& c) {
@@ -54,6 +62,7 @@ std::vector<ConstDef*> Checker::const_deps(const ConstDef& c) {
                 push(static_cast<const BinaryExpr*>(e)->rhs);
                 break;
             case ExprKind::Try: push(static_cast<const TryExpr*>(e)->operand); break;
+            case ExprKind::Spawn: push(static_cast<const SpawnExpr*>(e)->operand); break;
             case ExprKind::Paren: push(static_cast<const ParenExpr*>(e)->inner); break;
             case ExprKind::Ref: push(static_cast<const RefExpr*>(e)->operand); break;
             case ExprKind::StructLit:
@@ -280,6 +289,7 @@ void Checker::stmt(Stmt* s) {
         }
         case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
         case StmtKind::Lock: lock_stmt(static_cast<LockStmt*>(s)); break;
+        case StmtKind::Tasks: tasks_stmt(static_cast<TasksStmt*>(s)); break;
         case StmtKind::Error: break;
     }
     views(s);  // Р66: вид левее действия над его местом
@@ -401,6 +411,29 @@ void Checker::lock_stmt(LockStmt* s) {
     pop_scope();
 }
 
+// `tasks { … }` — вариант А (О13, прототип): задачи ставит `spawn`; блок
+// кончается, когда кончились они. Выйти из блока раньше нельзя (E0516).
+void Checker::tasks_stmt(TasksStmt* s) {
+    if (s->each) {
+        variant_ok('b', s->span, "'parallel { ... }'");
+        error(Code::E0519, s->span, "'parallel { ... }' is not implemented yet in the prototype");
+        return;
+    }
+    variant_ok('a', s->span, "'tasks { ... }'");
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, s->span, "tasks run at the same time; '" + fn_->name + "' is class D and cannot start them");
+    }
+    TasksScope sc;
+    sc.first_inner = next_local_;
+    tasks_.push_back(std::move(sc));
+    loops_.emplace_back();
+    loops_.back().tasks = true;
+    block(s->body);
+    loops_.pop_back();
+    tasks_end();
+    tasks_.pop_back();
+}
+
 void Checker::assign_stmt(AssignStmt* a) {
     auto* n = as<NameExpr>(a->target);
     if (n && n->name == "_" && a->op == AssignOp::Set) {  // `_ = e` — явный отброс (Р10)
@@ -458,7 +491,11 @@ void Checker::assign_stmt(AssignStmt* a) {
 
 void Checker::expr_stmt(ExprStmt* s) {
     Expr* e = s->expr;
+    // `spawn f(…)` оператором в блоке `tasks` — задача блока (вариант А).
+    auto* sp = as<SpawnExpr>(e);
+    if (sp && !tasks_.empty() && !tasks_.back().each) sp->group = true;
     const Type* t = infer(e, nullptr);
+    if (sp) return;
     Expr* inner = e;
     if (auto* tr = as<TryExpr>(inner)) inner = tr->operand;
     if (!as<CallExpr>(inner)) {
@@ -500,7 +537,9 @@ void Checker::while_stmt(WhileStmt* s) {
     bool forever = lit && lit->value;
     Flow before = flow_;
     loops_.emplace_back();
+    if (!tasks_.empty()) task_loop_begin(nullptr);
     block(s->body);
+    if (!tasks_.empty()) task_loop_end();
     Loop loop = std::move(loops_.back());
     loops_.pop_back();
     // После цикла — состояние до него (тело могло не выполниться) и состояния у break.
@@ -556,7 +595,9 @@ void Checker::for_stmt(ForStmt* s) {
     loops_.emplace_back();
     loops_.back().parallel = s->parallel;
     if (s->parallel) parallel_depth_++;
+    if (!tasks_.empty()) task_loop_begin(s);
     block(s->body);
+    if (!tasks_.empty()) task_loop_end();
     if (s->parallel) parallel_depth_--;
     loops_.pop_back();
     loop_end();
@@ -589,6 +630,10 @@ void Checker::loop_jump(Stmt* s, bool is_break) {
         } else {
             error(Code::E0420, s->span, std::string("'") + (is_break ? "break" : "continue") + "' outside of a loop");
         }
+    } else if (loops_.back().tasks) {
+        error(Code::E0516, s->span, std::string("'") + (is_break ? "break" : "continue") +
+                                        "' cannot leave 'tasks': the block waits for its tasks; leave the loop "
+                                        "after the block");
     } else if (is_break) {
         if (loops_.back().parallel) parallel_exit(s->span, "break");
         loops_.back().breaks.push_back(flow_);
@@ -597,8 +642,14 @@ void Checker::loop_jump(Stmt* s, bool is_break) {
 }
 
 bool Checker::parallel_exit(Span span, const char* what) {
-    if (parallel_depth_ == 0) return false;
     std::string w(what);
+    if (parallel_depth_ == 0 && !tasks_.empty()) {
+        error(Code::E0516, span, "'" + w + "' cannot leave '" + (tasks_.back().each ? "parallel { ... }" : "tasks") +
+                                     "': the block waits for its tasks; write the outcome to a variable and act on "
+                                     "it after the block");
+        return true;
+    }
+    if (parallel_depth_ == 0) return false;
     std::string hint = w == "break" ? "skip the rest of this iteration with 'continue'"
                        : w == "return" ? "write the result to an element 'out[i]' and return after the loop"
                                        : "handle the error with 'match' and write it to an element 'out[i]'";

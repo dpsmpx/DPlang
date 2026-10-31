@@ -1,0 +1,17 @@
+// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// DPL_TASKS=b (tasks_variant.env): формы вариантов А и В — E0519.
+fn work(out: &mut int) {
+    out = 1
+}
+
+fn one() int {
+    return 1
+}
+
+fn main() {
+    var a = 0
+    tasks {
+        spawn work(&mut a)
+    }
+    let t = spawn one()
+}

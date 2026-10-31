@@ -245,6 +245,12 @@ public:
                 block(l->body, d + 1);
                 break;
             }
+            case StmtKind::Tasks: {
+                auto* t = static_cast<const TasksStmt*>(s);
+                line(d, t->each ? "Parallel" : "Tasks");
+                block(t->body, d + 1);
+                break;
+            }
             case StmtKind::Defer: {
                 auto* df = static_cast<const DeferStmt*>(s);
                 line(d, df->on_error ? "Errdefer" : "Defer");
@@ -320,6 +326,7 @@ public:
                 break;
             }
             case ExprKind::Try: line(d, "Try"); expr(static_cast<const TryExpr*>(e)->operand, d + 1); break;
+            case ExprKind::Spawn: line(d, "Spawn"); expr(static_cast<const SpawnExpr*>(e)->operand, d + 1); break;
             case ExprKind::Paren: line(d, "Paren"); expr(static_cast<const ParenExpr*>(e)->inner, d + 1); break;
             case ExprKind::Ref: {
                 auto* r = static_cast<const RefExpr*>(e);

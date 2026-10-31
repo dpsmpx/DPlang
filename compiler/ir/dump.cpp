@@ -184,7 +184,7 @@ private:
             "pool_contains", "pool_handles", "pool_slots", "pool_live",
             "c_arena_mark", "c_arena_release", "atomic", "atomic_load", "atomic_store", "atomic_add", "atomic_sub",
             "atomic_swap", "atomic_cas", "mutex", "mutex_lock", "mutex_unlock", "channel", "channel_send",
-            "channel_recv", "channel_try_recv", "channel_close", "probe",
+            "channel_recv", "channel_try_recv", "channel_close", "tasks_begin", "tasks_end", "probe",
         };
         return names[static_cast<size_t>(k)];
     }
@@ -221,9 +221,10 @@ private:
                 if (rv.ops.size() > 1) s += operand(rv.ops[1]);
                 return s + "]";
             }
-            case RvKind::Call: case RvKind::CallPtr: {
+            case RvKind::Call: case RvKind::CallPtr: case RvKind::Spawn: {
                 std::string s = rv.kind == RvKind::CallPtr ? "call_ptr " + ops(rv.ops) + "("
-                                                           : "call " + (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(";
+                                                           : (rv.kind == RvKind::Spawn ? "spawn " : "call ") +
+                                                                 (rv.fn < p_.fns.size() ? p_.fns[rv.fn].name : "?") + "(";
                 for (size_t i = 0; i < rv.args.size(); i++) {
                     const Arg& a = rv.args[i];
                     if (i) s += ", ";

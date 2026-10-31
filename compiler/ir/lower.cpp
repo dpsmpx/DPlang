@@ -63,6 +63,7 @@ bool has_effect(const Expr* e) {
         case ExprKind::Binary:
             return has_effect(static_cast<const BinaryExpr*>(e)->lhs) || has_effect(static_cast<const BinaryExpr*>(e)->rhs);
         case ExprKind::Try: return has_effect(static_cast<const TryExpr*>(e)->operand);
+        case ExprKind::Spawn: return true;
         case ExprKind::Paren: return has_effect(static_cast<const ParenExpr*>(e)->inner);
         case ExprKind::Ref: return has_effect(static_cast<const RefExpr*>(e)->operand);
         case ExprKind::StructLit:
@@ -134,6 +135,7 @@ bool may_trap(const Expr* e) {
         }
         case ExprKind::Field: return may_trap(static_cast<const FieldExpr*>(e)->object);
         case ExprKind::Try: return true;  // ошибка выходит из функции: для места левее — как ловушка
+        case ExprKind::Spawn: return true;
         case ExprKind::Paren: return may_trap(static_cast<const ParenExpr*>(e)->inner);
         case ExprKind::Ref: return may_trap(static_cast<const RefExpr*>(e)->operand);
         case ExprKind::StructLit:
@@ -206,6 +208,7 @@ void names(const Stmt* s, std::vector<const sema::Local*>& out) {
             names(static_cast<const LockStmt*>(s)->mutex, out);
             block(static_cast<const LockStmt*>(s)->body);
             break;
+        case StmtKind::Tasks: block(static_cast<const TasksStmt*>(s)->body); break;
         default: break;
     }
 }
@@ -244,6 +247,7 @@ void names(const Expr* e, std::vector<const sema::Local*>& out) {
             names(static_cast<const BinaryExpr*>(e)->rhs, out);
             break;
         case ExprKind::Try: names(static_cast<const TryExpr*>(e)->operand, out); break;
+        case ExprKind::Spawn: names(static_cast<const SpawnExpr*>(e)->operand, out); break;
         case ExprKind::Paren: names(static_cast<const ParenExpr*>(e)->inner, out); break;
         case ExprKind::Ref: names(static_cast<const RefExpr*>(e)->operand, out); break;
         case ExprKind::StructLit:
@@ -485,7 +489,7 @@ private:
                 see = !(rv.intrinsic == Intrinsic::Abs || rv.intrinsic == Intrinsic::Min ||
                         rv.intrinsic == Intrinsic::Max);
                 break;
-            case RvKind::Call: callee_det = det_callee(rv); break;
+            case RvKind::Call: case RvKind::Spawn: callee_det = det_callee(rv); break;
             default: break;
         }
         if (see)
@@ -730,6 +734,7 @@ private:
                 changed(static_cast<const BinaryExpr*>(e)->rhs, out);
                 return;
             case ExprKind::Try: changed(static_cast<const TryExpr*>(e)->operand, out); return;
+            case ExprKind::Spawn: changed(static_cast<const SpawnExpr*>(e)->operand, out); return;
             case ExprKind::Paren: changed(static_cast<const ParenExpr*>(e)->inner, out); return;
             case ExprKind::StructLit:
                 for (const FieldInit& f : static_cast<const StructLitExpr*>(e)->fields) changed(f.value, out);
@@ -992,6 +997,10 @@ private:
             case ExprKind::Unary: return unary(static_cast<const UnaryExpr*>(e));
             case ExprKind::Binary: return binary(static_cast<const BinaryExpr*>(e));
             case ExprKind::Try: return try_expr(static_cast<const TryExpr*>(e));
+            case ExprKind::Spawn: {  // задача блока — инструкция (effect); значения нет
+                effect(e);
+                return cbool(false);
+            }
             case ExprKind::Paren: return expr(static_cast<const ParenExpr*>(e)->inner);
             case ExprKind::StructLit: return struct_lit(static_cast<const StructLitExpr*>(e));
             case ExprKind::VariantLit: return variant_lit(static_cast<const VariantLitExpr*>(e));
@@ -1600,6 +1609,7 @@ private:
             }
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;
             case StmtKind::Lock: lock_stmt(static_cast<const LockStmt*>(s)); break;
+            case StmtKind::Tasks: tasks_stmt(static_cast<const TasksStmt*>(s)); break;
             case StmtKind::Error: break;
         }
     }
@@ -1624,8 +1634,28 @@ private:
         pop_scope(end);
     }
 
+    // `tasks { … }` (О13, прототип): группа задач вокруг тела; выйти из тела
+    // раньше нельзя (E0516), поэтому TasksEnd — после его области: места,
+    // которые держат задачи, объявлены до блока.
+    void tasks_stmt(const TasksStmt* s) {
+        eval(intrinsic(Intrinsic::TasksBegin, prim(TK::Void)), s->span);
+        block(s->body);
+        Span end{s->body->span.file, s->body->span.end > 0 ? s->body->span.end - 1 : 0, s->body->span.end};
+        eval(intrinsic(Intrinsic::TasksEnd, prim(TK::Void)), end);
+    }
+
     // Инструкция-вызов: результат, если он есть, освобождается.
     void effect(const Expr* e) {
+        if (auto* sp = as<const SpawnExpr>(e)) {  // задача блока `tasks`
+            Rvalue rv;
+            uint32_t mark = UINT32_MAX;
+            if (call(static_cast<const CallExpr*>(sp->operand), rv, &mark) && rv.kind == RvKind::Call) {
+                rv.kind = RvKind::Spawn;
+                eval(std::move(rv), e->span);
+            }
+            release(mark, e->span);
+            return;
+        }
         if (auto* c = as<const CallExpr>(e)) {
             Rvalue rv;
             uint32_t mark = UINT32_MAX;

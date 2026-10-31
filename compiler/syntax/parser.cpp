@@ -733,7 +733,12 @@ private:
             case TokKind::KwFor: s = for_stmt(false); break;
             case TokKind::KwParallel:
                 bump();
-                if (!at(TokKind::KwFor)) {
+                if (at(TokKind::LBrace)) {  // вариант Б (О13, прототип)
+                    auto* t = m_.make<TasksStmt>();
+                    t->each = true;
+                    t->body = block();
+                    s = t;
+                } else if (!at(TokKind::KwFor)) {
                     expected("'for' after 'parallel'");
                     s = m_.make<ErrorStmt>();
                 } else {
@@ -771,6 +776,15 @@ private:
                 // ним имя, а выражение не начинается двумя именами подряд.
                 if (text_of(toks_[idx()]) == "lock" && peek(1) == TokKind::Ident) {
                     s = lock_stmt();
+                    break;
+                }
+                // `tasks { … }` (вариант А): выражение не начинается именем и
+                // скобкой блока — литерал структуры пишется с именем типа.
+                if (text_of(toks_[idx()]) == "tasks" && peek(1) == TokKind::LBrace) {
+                    bump();
+                    auto* t = m_.make<TasksStmt>();
+                    t->body = block();
+                    s = t;
                     break;
                 }
                 s = expr_or_assign();
@@ -970,6 +984,21 @@ private:
         TokKind k = peek();
         bool prefix = k == TokKind::Minus || k == TokKind::Bang || k == TokKind::Tilde || k == TokKind::KwTry ||
                       k == TokKind::Amp;
+        // `spawn f(…)` (О13, прототип): слово контекстное — за ним имя.
+        bool spawn = k == TokKind::Ident && text_of(toks_[idx()]) == "spawn" && peek(1) == TokKind::Ident;
+        if (spawn) {
+            Nest nest(*this);
+            if (!nest.ok) {
+                auto* e = m_.make<ErrorExpr>();
+                e->span = span_from(begin);
+                return e;
+            }
+            bump();
+            auto* sp = m_.make<SpawnExpr>();
+            sp->operand = unary(ns);
+            sp->span = span_from(begin);
+            return sp;
+        }
         if (!prefix) return postfix(primary(ns), ns, begin);
         Nest nest(*this);
         if (!nest.ok) {

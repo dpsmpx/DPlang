@@ -1,0 +1,112 @@
+// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// Вариант А: tasks { spawn f(…) }. Задачи берут '&' и '&mut' (элемент по
+// переменной цикла), делят Atomic, Mutex и Channel; вывод задач — после
+// блока по порядку запуска; parallel for в задаче, вложенный блок.
+fn work(id: int, xs: &List[int], out: &mut int) {
+    var s = 0
+    for x in &xs {
+        s += x * id
+    }
+    out = s
+}
+
+fn count(n: int, c: &Atomic[int]) {
+    for i in 0..n {
+        _ = c.add(1)
+    }
+}
+
+fn produce(ch: &Channel[int], n: int) {
+    for i in 0..n {
+        ch.send(i)
+    }
+    ch.close()
+}
+
+fn say(id: int, n: int) {
+    for k in 0..n {
+        println("task " + str(id) + " line " + str(k))
+    }
+    eprintln("task " + str(id) + " done")
+}
+
+fn squares(n: int, out: &mut List[int]) {
+    var tmp: List[int] = []
+    for i in 0..n {
+        tmp.push(0)
+    }
+    parallel for i in 0..n {
+        tmp[i] = i * i
+        println("sq " + str(i))
+    }
+    out = tmp
+}
+
+fn part(v: int, out: &mut int) {
+    println("part " + str(v))
+    out = v
+}
+
+fn nested(id: int, sum: &mut int) {
+    var parts = [0, 0, 0]
+    tasks {
+        for w in 0..len(parts) {
+            spawn part(id * 10 + w, &mut parts[w])
+        }
+    }
+    sum = parts[0] + parts[1] + parts[2]
+    println("nested " + str(id) + " = " + str(sum))
+}
+
+fn bump(m: &Mutex[List[int]], id: int, n: int) {
+    for i in 0..n {
+        lock m as xs {
+            xs.push(id)
+        }
+    }
+}
+
+fn main() {
+    let xs = [1, 2, 3]
+    var out = [0, 0, 0, 0]
+    let c = atomic(0)
+    let ch: Channel[int] = channel(2)
+    var total = 0
+    tasks {
+        for w in 0..len(out) {
+            spawn work(w, &xs, &mut out[w])
+            println("started " + str(w))
+        }
+        spawn count(1000, &c)
+        spawn count(1000, &c)
+        spawn produce(&ch, 50)
+        while true {
+            if let v = ch.recv() {
+                total += v
+            } else {
+                break
+            }
+        }
+    }
+    println(str(out[0]) + " " + str(out[1]) + " " + str(out[2]) + " " + str(out[3]) + " " + str(c.load()) + " " +
+            str(total))
+
+    var sq: List[int] = []
+    var s1 = 0
+    var s2 = 0
+    let m = mutex([0])
+    tasks {
+        spawn say(1, 3)
+        spawn say(2, 2)
+        println("main inside")
+        spawn squares(5, &mut sq)
+        spawn nested(1, &mut s1)
+        spawn nested(2, &mut s2)
+        spawn bump(&m, 1, 500)
+        spawn bump(&m, 2, 500)
+    }
+    println("sq " + str(sq[4]) + " s " + str(s1) + " " + str(s2))
+    lock m as ys {
+        println("locked " + str(len(ys)))
+    }
+}

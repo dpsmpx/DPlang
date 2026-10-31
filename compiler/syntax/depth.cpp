@@ -128,6 +128,7 @@ private:
                 push(K::Block, l->body, d);
                 break;
             }
+            case StmtKind::Tasks: push(K::Block, static_cast<const TasksStmt*>(s)->body, d); break;
             case StmtKind::Fail: push(K::Expr, static_cast<const FailStmt*>(s)->value, d); break;
             case StmtKind::Block: push(K::Block, static_cast<const BlockStmt*>(s)->block, d); break;
             case StmtKind::Break: case StmtKind::Continue: case StmtKind::Error: break;
@@ -164,6 +165,7 @@ private:
                 break;
             }
             case ExprKind::Try: push(K::Expr, static_cast<const TryExpr*>(e)->operand, d); break;
+            case ExprKind::Spawn: push(K::Expr, static_cast<const SpawnExpr*>(e)->operand, d); break;
             case ExprKind::Paren: push(K::Expr, static_cast<const ParenExpr*>(e)->inner, d); break;
             case ExprKind::Ref: push(K::Expr, static_cast<const RefExpr*>(e)->operand, d); break;
             case ExprKind::StructLit: {

@@ -1,0 +1,11 @@
+--- stderr ---
+tasks_variant.dpm:13:5: error[E0519]: 'tasks { ... }' is variant A of the concurrency prototype; this program is checked as variant B (DPL_TASKS=b)
+  13 |     tasks {
+     |     ^
+tasks_variant.dpm:16:13: error[E0519]: 'spawn' outside a 'tasks' block is variant C of the concurrency prototype; this program is checked as variant B (DPL_TASKS=b)
+  16 |     let t = spawn one()
+     |             ^~~~~~~~~~~
+tasks_variant.dpm:16:13: error[E0519]: 'spawn' outside a 'tasks' block (variant C) is not implemented yet in the prototype
+  16 |     let t = spawn one()
+     |             ^~~~~~~~~~~
+[exit 1]

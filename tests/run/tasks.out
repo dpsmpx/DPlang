@@ -1,0 +1,29 @@
+started 0
+started 1
+started 2
+started 3
+0 6 12 18 2000 1225
+main inside
+task 1 line 0
+task 1 line 1
+task 1 line 2
+task 2 line 0
+task 2 line 1
+sq 0
+sq 1
+sq 2
+sq 3
+sq 4
+part 10
+part 11
+part 12
+nested 1 = 33
+part 20
+part 21
+part 22
+nested 2 = 63
+sq 16 s 33 63
+locked 1001
+--- stderr ---
+task 1 done
+task 2 done

@@ -45,6 +45,23 @@ static _Thread_local uint64_t dp_par_iter;
 static _Thread_local dp_par_out* dp_par_buf;
 static _Thread_local jmp_buf* dp_par_jb;
 
+/* Задача блока `tasks` (О13, прототип): свой поток; её вывод — в её буфер
+ * до конца блока. */
+typedef struct dp_task {
+    void (*body)(void*);
+    void* env;
+    struct dp_task* next;
+    struct dp_group* group;
+    dp_par_out out;
+} dp_task;
+
+static _Thread_local dp_task* dp_task_cur; /* задача, которую исполняет поток */
+static void dp_out_write(const dp_par_out* o);
+static void* dp_die_m;
+static void* dp_lazy_mutex(void** slot);
+static void dp_dl_enter(void);
+static void dp_dl_exit(void);
+
 /* --- ловушки */
 
 static _Noreturn void dp_die(const char* loc, const char* msg) {
@@ -58,6 +75,15 @@ static _Noreturn void dp_die(const char* loc, const char* msg) {
         }
         dp_sys_unlock(dp_par_m);
         longjmp(*dp_par_jb, 1);
+    }
+    /* Ловушка в задаче: остальные потоки живы — умирает один, первым — вывод
+     * задачи. Второй умирающий ждёт здесь, пока первый не завершит процесс. */
+    if (dp_task_cur) {
+        dp_sys_lock(dp_lazy_mutex(&dp_die_m));
+        dp_task* t = dp_task_cur;
+        dp_task_cur = NULL;
+        fflush(stdout);
+        dp_out_write(&t->out);
     }
     fflush(stdout);
     if (loc && *loc) fprintf(stderr, "%s: trap: %s\n", loc, msg);
@@ -520,7 +546,7 @@ bool dp_str_starts_with(dp_str s, dp_str t) { return s.len >= t.len && (t.len ==
 /* Вывод итерации `parallel for` — в буфер её части. Память — malloc, не
  * dp_alloc: счётчик выделений (Р68) считает только память программы. */
 static void dp_par_put(int stream, const void* p, size_t n, bool nl) {
-    dp_par_out* o = dp_par_buf;
+    dp_par_out* o = dp_par_cur ? dp_par_buf : &dp_task_cur->out;
     size_t need = o->len + 1 + sizeof(uint64_t) + n + (nl ? 1 : 0);
     if (need > o->cap) {
         size_t cap = o->cap ? o->cap : 256;
@@ -543,7 +569,7 @@ static void dp_par_put(int stream, const void* p, size_t n, bool nl) {
 }
 
 void dp_print(dp_str s) {
-    if (dp_par_cur) {
+    if (dp_par_cur || dp_task_cur) {
         dp_par_put(1, s.ptr, (size_t)s.len, false);
         return;
     }
@@ -551,7 +577,7 @@ void dp_print(dp_str s) {
 }
 
 void dp_println(dp_str s) {
-    if (dp_par_cur) {
+    if (dp_par_cur || dp_task_cur) {
         dp_par_put(1, s.ptr, (size_t)s.len, true);
         return;
     }
@@ -560,7 +586,7 @@ void dp_println(dp_str s) {
 }
 
 void dp_eprintln(dp_str s) {
-    if (dp_par_cur) {
+    if (dp_par_cur || dp_task_cur) {
         dp_par_put(2, s.ptr, (size_t)s.len, true);
         return;
     }
@@ -799,7 +825,9 @@ static void dp_par_worker(void* arg) {
         dp_par_job* j = dp_par_pending;
         dp_par_active++;
         dp_sys_unlock(dp_par_m);
+        dp_dl_enter();
         dp_par_run(j);
+        dp_dl_exit();
         dp_sys_lock(dp_par_m);
         if (--dp_par_active == 0) dp_sys_broadcast(dp_par_done_cv);
     }
@@ -825,25 +853,39 @@ static void dp_par_start(void) {
     }
 }
 
+/* Записи буфера — в вывод потока: у задачи — в её буфер, иначе в stdout и
+ * stderr. */
+static void dp_out_emit(const dp_par_out* o) {
+    for (size_t at = 0; at < o->len;) {
+        int stream = o->buf[at++];
+        uint64_t len;
+        memcpy(&len, o->buf + at, sizeof len);
+        at += sizeof len;
+        if (dp_task_cur) {
+            dp_par_put(stream, o->buf + at, (size_t)len, false);
+        } else if (stream == 2) {
+            fflush(stdout);
+            fwrite(o->buf + at, 1, (size_t)len, stderr);
+        } else {
+            fwrite(o->buf + at, 1, (size_t)len, stdout);
+        }
+        at += (size_t)len;
+    }
+}
+
+/* Записи буфера — прямо в stdout и stderr (ловушка в задаче). */
+static void dp_out_write(const dp_par_out* o) {
+    dp_task* t = dp_task_cur;
+    dp_task_cur = NULL;
+    dp_out_emit(o);
+    dp_task_cur = t;
+}
+
 /* Вывод частей по порядку — до части за ловушкой. */
 static void dp_par_flush(dp_par_job* j, uint64_t parts, uint64_t trap_at) {
     for (uint64_t c = 0; c < parts; c++) {
         dp_par_out* o = &j->outs[c];
-        if (c * j->chunk <= trap_at) {
-            for (size_t at = 0; at < o->len;) {
-                int stream = o->buf[at++];
-                uint64_t len;
-                memcpy(&len, o->buf + at, sizeof len);
-                at += sizeof len;
-                if (stream == 2) {
-                    fflush(stdout);
-                    fwrite(o->buf + at, 1, (size_t)len, stderr);
-                } else {
-                    fwrite(o->buf + at, 1, (size_t)len, stdout);
-                }
-                at += (size_t)len;
-            }
-        }
+        if (c * j->chunk <= trap_at) dp_out_emit(o);
         free(o->buf);
     }
 }
@@ -851,8 +893,9 @@ static void dp_par_flush(dp_par_job* j, uint64_t parts, uint64_t trap_at) {
 void dp_parallel_for(uint64_t n, dp_par_body body, void* env) {
     if (n == 0) return;
     if (dp_par_workers < 0) dp_par_start();
-    /* Вложенный цикл, пул из одного потока, одна итерация — по очереди. */
-    if (dp_par_cur || dp_par_workers == 0 || n == 1) {
+    /* Вложенный цикл, цикл в задаче (О13, прототип: пул — у main), пул из
+     * одного потока, одна итерация — по очереди. */
+    if (dp_par_cur || dp_task_cur || dp_par_workers == 0 || n == 1) {
         for (uint64_t k = 0; k < n; k++) body(env, k);
         return;
     }
@@ -935,19 +978,26 @@ struct dp_chan {
 static void* dp_dl_m;
 static int dp_dl_live = 1; /* поток main */
 static int dp_dl_blocked;
+static const char* dp_dl_loc; /* место последнего ждущего */
 
-static void* dp_dl_mutex(void) {
-    void* m = __atomic_load_n(&dp_dl_m, __ATOMIC_ACQUIRE);
+/* Мьютекс, созданный при первом обращении (из любого потока). */
+static void* dp_lazy_mutex(void** slot) {
+    void* m = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
     if (m) return m;
     void* fresh = dp_sys_mutex();
-    if (!fresh) dp_trap(NULL, "out of memory");
+    if (!fresh) {
+        fprintf(stderr, "trap: out of memory\n");
+        _Exit(101);
+    }
     void* expected = NULL;
-    if (!__atomic_compare_exchange_n(&dp_dl_m, &expected, fresh, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+    if (!__atomic_compare_exchange_n(slot, &expected, fresh, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
         dp_sys_mutex_free(fresh);
         return expected;
     }
     return fresh;
 }
+
+static void* dp_dl_mutex(void) { return dp_lazy_mutex(&dp_dl_m); }
 
 /* Ловушка без longjmp итерации `parallel for`: взаимная блокировка — у всей
  * программы, захваченные мьютексы не отпускаются. */
@@ -959,13 +1009,31 @@ static _Noreturn void dp_die_now(const char* loc, const char* msg) {
     _Exit(101);
 }
 
-/* Поток засыпает в ожидании канала (канал захвачен). */
+/* Поток засыпает в ожидании канала или задач блока (их мьютекс захвачен). */
 static void dp_dl_block(int* waiting, const char* loc) {
     void* m = dp_dl_mutex();
     dp_sys_lock(m);
     dp_dl_blocked++;
     (*waiting)++;
-    if (dp_dl_blocked >= dp_dl_live) dp_die_now(loc, "deadlock: every thread is waiting on a channel");
+    dp_dl_loc = loc;
+    if (dp_dl_blocked >= dp_dl_live) dp_die_now(loc, "deadlock: every thread is waiting");
+    dp_sys_unlock(m);
+}
+
+/* Поток dpl начинает работу: задача или рабочий пула в задании. */
+static void dp_dl_enter(void) {
+    void* m = dp_dl_mutex();
+    dp_sys_lock(m);
+    dp_dl_live++;
+    dp_sys_unlock(m);
+}
+
+/* Поток кончил работу: если остальные ждут, будить их некому. */
+static void dp_dl_exit(void) {
+    void* m = dp_dl_mutex();
+    dp_sys_lock(m);
+    dp_dl_live--;
+    if (dp_dl_live > 0 && dp_dl_blocked >= dp_dl_live) dp_die_now(dp_dl_loc, "deadlock: every thread is waiting");
     dp_sys_unlock(m);
 }
 
@@ -1067,3 +1135,88 @@ void dp_chan_free(dp_chan* c) {
     free(c);
 }
 
+
+/* --- задачи блока `tasks` (О13, прототип)
+ *
+ * Задача — свой поток ОС; группа — задачи блока по порядку запуска, стек
+ * групп — у потока. Конец блока ждёт задачи (в счёте взаимной блокировки)
+ * и выводит их буферы по порядку запуска — в вывод потока. */
+typedef struct dp_group {
+    struct dp_group* up;
+    dp_task* first;
+    dp_task* last;
+    void* m;
+    void* cv;
+    int pending;
+    int waiting; /* блок ждёт: 1 (снимает со счёта последняя задача) */
+} dp_group;
+
+static _Thread_local dp_group* dp_group_top;
+
+void dp_tasks_begin(void) {
+    dp_group* g = (dp_group*)calloc(1, sizeof(dp_group));
+    if (!g) dp_trap(NULL, "out of memory");
+    g->m = dp_sys_mutex();
+    g->cv = dp_sys_cond();
+    if (!g->m || !g->cv) dp_trap(NULL, "out of memory");
+    g->up = dp_group_top;
+    dp_group_top = g;
+}
+
+static void dp_task_main(void* arg) {
+    dp_task* t = (dp_task*)arg;
+    dp_group* g = t->group;
+    dp_task_cur = t;
+    t->body(t->env);
+    dp_task_cur = NULL;
+    dp_sys_lock(g->m);
+    if (--g->pending == 0) {
+        dp_dl_wake(&g->waiting);
+        dp_sys_broadcast(g->cv);
+    }
+    dp_sys_unlock(g->m);
+    dp_dl_exit();
+}
+
+void dp_spawn(void (*body)(void*), const void* env, size_t size, const char* loc) {
+    dp_group* g = dp_group_top;
+    if (!g) dp_unreachable("spawn outside a block of tasks");
+    dp_task* t = (dp_task*)calloc(1, sizeof(dp_task));
+    void* e = malloc(size ? size : 1);
+    if (!t || !e) dp_trap(loc, "out of memory");
+    memcpy(e, env, size);
+    t->body = body;
+    t->env = e;
+    t->group = g;
+    if (g->last) g->last->next = t;
+    else g->first = t;
+    g->last = t;
+    dp_sys_lock(g->m);
+    g->pending++;
+    dp_sys_unlock(g->m);
+    dp_dl_enter(); /* до запуска: блок не сочтёт себя последним живым */
+    if (dp_sys_thread(dp_task_main, t) != 0) dp_trap(loc, "cannot start a thread for a task");
+}
+
+void dp_tasks_end(const char* loc) {
+    dp_group* g = dp_group_top;
+    if (!g) dp_unreachable("end of a block of tasks without its beginning");
+    dp_sys_lock(g->m);
+    while (g->pending > 0) {
+        if (!g->waiting) dp_dl_block(&g->waiting, loc);
+        dp_sys_wait(g->cv, g->m);
+    }
+    dp_sys_unlock(g->m);
+    dp_group_top = g->up;
+    for (dp_task* t = g->first; t;) {
+        dp_task* next = t->next;
+        dp_out_emit(&t->out);
+        free(t->out.buf);
+        free(t->env);
+        free(t);
+        t = next;
+    }
+    dp_sys_mutex_free(g->m);
+    dp_sys_cond_free(g->cv);
+    free(g);
+}

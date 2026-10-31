@@ -522,6 +522,10 @@ private:
                 }
                 break;
             }
+            case Intrinsic::TasksBegin: case Intrinsic::TasksEnd:
+                args(0);
+                same(rv.type, prim(TK::Void), "result");
+                break;
             case Intrinsic::MutexLock: case Intrinsic::MutexUnlock: {
                 args(0);
                 const Type* m = rv.has_place ? place(rv.place) : nullptr;
@@ -719,10 +723,13 @@ private:
                 }
                 break;
             }
-            case RvKind::Call: {
+            case RvKind::Call: case RvKind::Spawn: {
                 if (rv.fn >= p_.fns.size()) return fail("call of an unknown function");
                 const Function& g = p_.fns[rv.fn];
                 same(t, g.ret, "result");
+                if (rv.kind == RvKind::Spawn && (g.is_extern || g.ret->kind != TK::Void)) {
+                    fail("a task must be a dpl function without a result");
+                }
                 if (rv.args.size() != g.param_count) return fail("wrong number of arguments to " + g.name);
                 for (size_t i = 0; i < rv.args.size(); i++) {
                     const Arg& a = rv.args[i];

@@ -91,6 +91,10 @@ struct Walk {
                 expr(static_cast<const LockStmt*>(s)->mutex);
                 block(static_cast<const LockStmt*>(s)->body);
                 break;
+            case StmtKind::Tasks:
+                visit.tasks(s->span);
+                block(static_cast<const TasksStmt*>(s)->body);
+                break;
             default: break;
         }
     }
@@ -123,6 +127,10 @@ struct Walk {
                 expr(static_cast<const BinaryExpr*>(e)->rhs);
                 break;
             case ExprKind::Try: expr(static_cast<const TryExpr*>(e)->operand); break;
+            case ExprKind::Spawn:
+                visit.tasks(e->span);
+                expr(static_cast<const SpawnExpr*>(e)->operand);
+                break;
             case ExprKind::Paren: expr(static_cast<const ParenExpr*>(e)->inner); break;
             case ExprKind::Ref: expr(static_cast<const RefExpr*>(e)->operand); break;
             case ExprKind::StructLit:
@@ -156,6 +164,11 @@ struct Scan {
             effect.what = w;
         }
         if (c->call == CallKind::Fn && c->fn && !c->fn->is_extern) calls.push_back(c->fn);
+    }
+    void tasks(Span) {
+        if (effect.has) return;
+        effect.has = true;
+        effect.what = "starts tasks";
     }
     template <class W>
     void loop(const ForStmt* f, W& w) {
@@ -217,6 +230,11 @@ public:
         report(c->span, chain(c->fn));
     }
 
+    // Задачи в теле (О13, прототип): поток итерации их не запускает.
+    void tasks(Span span) {
+        if (depth_ > 0) report(span, "this starts tasks");
+    }
+
     template <class W>
     void loop(const ForStmt* f, W& w) {
         if (f->parallel) depth_++;
@@ -252,8 +270,8 @@ private:
 
     void report(Span span, const std::string& why) {
         diags_.error(Code::E0517, span,
-                     why + ": 'parallel for' cannot use files, program arguments or C, also in the functions it "
-                           "calls; read the input before the loop and call C after it");
+                     why + ": 'parallel for' cannot use files, program arguments, C or tasks, also in the functions "
+                           "it calls; read the input before the loop and call C after it");
     }
 };
 

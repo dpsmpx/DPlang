@@ -1390,6 +1390,38 @@ const Type* Checker::try_expr(TryExpr* t) {
     return op->elem;
 }
 
+// `spawn f(…)` (О13, прототип). В блоке `tasks` — задача блока (вариант А);
+// иначе — `Task[T]` (вариант В).
+const Type* Checker::spawn_expr(SpawnExpr* sp) {
+    if (!sp->group) {
+        variant_ok('c', sp->span, "'spawn' outside a 'tasks' block");
+        error(Code::E0519, sp->span, "'spawn' outside a 'tasks' block (variant C) is not implemented yet in the prototype");
+        infer(sp->operand, nullptr);
+        return err();
+    }
+    std::vector<size_t> marks;
+    for (const TasksScope& sc : tasks_) marks.push_back(sc.accesses.size());
+    const Type* t = infer(sp->operand, nullptr);
+    auto* c = as<CallExpr>(sp->operand);
+    if (!c) {
+        if (t->kind != TK::Error) error(Code::E0520, sp->operand->span, "'spawn' needs a call: 'spawn f(...)'");
+        return prim(TK::Void);
+    }
+    if (c->call != CallKind::Fn || !c->fn || c->fn->is_extern) {
+        if (t->kind != TK::Error) {
+            error(Code::E0520, c->span, "a task runs a dpl function: 'spawn f(...)'; call methods, built-in "
+                                        "functions and C from that function");
+        }
+        return prim(TK::Void);
+    }
+    if (t->kind != TK::Void && t->kind != TK::Error) {
+        error(Code::E0520, c->span, "the result of a task in 'tasks' is lost: '" + c->fn->name + "' returns '" +
+                                        tn(t) + "'; write the result through a '&mut' parameter");
+    }
+    task_spawn(sp, c, marks);
+    return prim(TK::Void);
+}
+
 // --- выражение целиком
 
 const Type* Checker::infer(Expr* e, const Type* hint) {
@@ -1424,6 +1456,7 @@ const Type* Checker::infer(Expr* e, const Type* hint) {
         case ExprKind::Unary: t = unary(static_cast<UnaryExpr*>(e), hint); break;
         case ExprKind::Binary: t = binary(static_cast<BinaryExpr*>(e), hint); break;
         case ExprKind::Try: t = try_expr(static_cast<TryExpr*>(e)); break;
+        case ExprKind::Spawn: t = spawn_expr(static_cast<SpawnExpr*>(e)); break;
         case ExprKind::Paren: t = infer(static_cast<ParenExpr*>(e)->inner, hint); break;
         case ExprKind::Ref: {
             auto* r = static_cast<RefExpr*>(e);
