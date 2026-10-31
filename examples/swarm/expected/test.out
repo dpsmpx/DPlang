@@ -1,0 +1,6 @@
+test main.record_replays ... ok
+test main.replay_finds_a_changed_input ... ok
+test main.replay_rejects_a_wrong_hash ... ok
+test main.hash_sees_every_agent ... ok
+
+test result: ok. 4 passed; 0 failed

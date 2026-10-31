@@ -49,6 +49,11 @@
 
 ## Задачи
 
+- `С` **Примеры не идут в проходах windows и android** — проход example
+  (`tests/run.py`, `example_one`) собирает и запускает их только на
+  хосте, поэтому повтор `examples/swarm` на arm64 не сверяется (DoD,
+  раздел E: x86-64 = arm64 у многопоточной программы). Добавить случаи
+  целей с теми же инструментами, что у проходов набора `run`.
 - `С` **`dp_depth` на Android — эмулированный TLS** — счётчик глубины
   вызовов стал `_Thread_local` (Р69, пул `parallel for`;
   `runtime/core/dp_rt.c`). Цель `aarch64-linux-android24` не знает ELF TLS

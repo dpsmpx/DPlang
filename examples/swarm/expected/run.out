@@ -1,0 +1,7 @@
+samples/short.rec: replay ok, 24 ticks, 45 agents, hash 52114690b80d0e68
+--- stderr ---
+samples/edited.rec:15: error: tick 8: recorded hash b8ec3804fd03c043, replay gives a404e9a7c94a804f
+samples/notrec.rec:1: error: not a swarm record: the first line must be 'swarm-record 1'
+samples/missing.rec: error: cannot read the file
+error: main failed with Failure.Mismatch
+[exit 1]
