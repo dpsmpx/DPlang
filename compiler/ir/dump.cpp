@@ -77,6 +77,10 @@ private:
                     s += "[%" + std::to_string(pr.index) + "]";
                     if (t) t = t->elem;
                     break;
+                case ProjKind::MutexValue:
+                    s += ".data";
+                    if (t) t = t->elem;
+                    break;
                 case ProjKind::Payload: {
                     if (!t || t->kind != TK::Enum) {
                         s += ".?";
@@ -178,7 +182,9 @@ private:
             "checked_neg", "map_set", "map_get", "map_contains", "map_remove", "map_clear", "map_keys",
             "map_order", "map_reserve", "pool_add", "pool_remove", "pool_clear", "pool_reserve", "pool_get",
             "pool_contains", "pool_handles", "pool_slots", "pool_live",
-            "c_arena_mark", "c_arena_release", "probe",
+            "c_arena_mark", "c_arena_release", "atomic", "atomic_load", "atomic_store", "atomic_add", "atomic_sub",
+            "atomic_swap", "atomic_cas", "mutex", "mutex_lock", "mutex_unlock", "channel", "channel_send",
+            "channel_recv", "channel_try_recv", "channel_close", "probe",
         };
         return names[static_cast<size_t>(k)];
     }

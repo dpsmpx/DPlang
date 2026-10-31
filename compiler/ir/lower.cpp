@@ -48,6 +48,7 @@ bool has_effect(const Expr* e) {
             auto* c = static_cast<const CallExpr*>(e);
             if (c->call == CallKind::Fn || c->call == CallKind::Ptr) return true;
             if (c->call == CallKind::Method && c->method != Method::Contains && c->method < Method::Trim) return true;
+            if (c->call == CallKind::Method && c->method >= Method::Load) return true;  // Atomic: общий объект
             if (auto* f = as<const FieldExpr>(c->callee); f && has_effect(f->object)) return true;
             return any_effect(c->args);
         }
@@ -201,6 +202,10 @@ void names(const Stmt* s, std::vector<const sema::Local*>& out) {
         case StmtKind::Fail: names(static_cast<const FailStmt*>(s)->value, out); break;
         case StmtKind::Defer: names(static_cast<const DeferStmt*>(s)->body, out); break;
         case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;
+        case StmtKind::Lock:
+            names(static_cast<const LockStmt*>(s)->mutex, out);
+            block(static_cast<const LockStmt*>(s)->body);
+            break;
         default: break;
     }
 }
@@ -300,7 +305,7 @@ public:
         scopes_.emplace_back();
         for (uint32_t i = 0; i < f_.param_count; i++) {
             if (f_.locals[i].kind == LocalKind::Param && needs_drop(f_.locals[i].type)) {
-                scopes_.back().push_back(Cleanup{false, i, nullptr});
+                scopes_.back().push_back(Cleanup{false, i, nullptr, false, false, {}});
             }
         }
         block(node->body);
@@ -355,6 +360,8 @@ private:
         uint32_t local = 0;
         const Stmt* defer = nullptr;
         bool on_error = false;  // errdefer: только на выходе с ошибкой
+        bool unlock = false;    // конец блока `lock` (О13): снять мьютекс place
+        Place place;
     };
     // Вид выхода из областей: errdefer выполняется только на ошибке.
     // Dynamic — `return` значения E!T: ошибка или нет, видно во время
@@ -380,7 +387,7 @@ private:
     // Временное: освобождается в конце текущей области.
     uint32_t temp(const Type* t) {
         uint32_t l = add_local(t, LocalKind::Temp, "");
-        if (needs_drop(t)) scopes_.back().push_back(Cleanup{false, l, nullptr});
+        if (needs_drop(t)) scopes_.back().push_back(Cleanup{false, l, nullptr, false, false, {}});
         return l;
     }
 
@@ -391,7 +398,7 @@ private:
     }
 
     void own(uint32_t l) {
-        if (needs_drop(f_.locals[l].type)) scopes_.back().push_back(Cleanup{false, l, nullptr});
+        if (needs_drop(f_.locals[l].type)) scopes_.back().push_back(Cleanup{false, l, nullptr, false, false, {}});
     }
 
     uint32_t new_block() {
@@ -1341,7 +1348,7 @@ private:
                     Intrinsic::ParseInt, Intrinsic::IsDigit, Intrinsic::IsAlpha, Intrinsic::IsSpace, Intrinsic::IsAlnum,
                     Intrinsic::Len,     Intrinsic::Print,   Intrinsic::Println, Intrinsic::Eprintln,
                     Intrinsic::CheckedAdd, Intrinsic::CheckedSub, Intrinsic::CheckedMul, Intrinsic::CheckedDiv,
-                    Intrinsic::CheckedNeg,
+                    Intrinsic::CheckedNeg,  Intrinsic::AtomicNew, Intrinsic::MutexNew, Intrinsic::ChannelNew,
                     Intrinsic::ArgsLen, Intrinsic::ArgAt,   Intrinsic::ReadFile,
                 };
                 static_assert(sizeof kMap / sizeof kMap[0] == static_cast<size_t>(sema::BuiltinFn::Count));
@@ -1355,7 +1362,8 @@ private:
                 }
                 rv.ops = exprs(args);
                 for (size_t i = 0; i < rv.ops.size(); i++) {
-                    if (!(b == sema::BuiltinFn::Repeat && i == 0)) rv.ops[i] = rd(std::move(rv.ops[i]));
+                    bool stored = (b == sema::BuiltinFn::Repeat || b == sema::BuiltinFn::MutexNew) && i == 0;
+                    if (!stored) rv.ops[i] = rd(std::move(rv.ops[i]));
                 }
                 return true;
             }
@@ -1385,6 +1393,33 @@ private:
                         rv.ops = exprs(all);
                     }
                     for (Operand& o : rv.ops) o = rd(std::move(o));
+                    return true;
+                }
+                if (f->object->type->kind == TK::Atomic) {  // О13, прототип: получатель — место, общий доступ
+                    rv = intrinsic(m == Method::Load    ? Intrinsic::AtomicLoad
+                                   : m == Method::Store ? Intrinsic::AtomicStore
+                                   : m == Method::Add   ? Intrinsic::AtomicAdd
+                                   : m == Method::Sub   ? Intrinsic::AtomicSub
+                                   : m == Method::Swap  ? Intrinsic::AtomicSwap
+                                                        : Intrinsic::AtomicCas,
+                                   c->type);
+                    bool fresh = false;
+                    rv.place = object(f->object, fresh);
+                    rv.has_place = true;
+                    rv.ops = exprs(args);
+                    for (Operand& o : rv.ops) o = rd(std::move(o));
+                    return true;
+                }
+                if (f->object->type->kind == TK::Channel) {  // О13, прототип: получатель — место, общий доступ
+                    rv = intrinsic(m == Method::Send      ? Intrinsic::ChannelSend
+                                   : m == Method::Recv    ? Intrinsic::ChannelRecv
+                                   : m == Method::TryRecv ? Intrinsic::ChannelTryRecv
+                                                          : Intrinsic::ChannelClose,
+                                   c->type);
+                    bool fresh = false;
+                    rv.place = object(f->object, fresh);
+                    rv.has_place = true;
+                    rv.ops = exprs(args);  // send: значение уходит в канал целиком
                     return true;
                 }
                 if (f->object->type->kind == TK::Pool) {  // методы Pool (Р67)
@@ -1480,7 +1515,12 @@ private:
     void cleanup(size_t depth, Span span, Way way = Way::Normal) {
         std::vector<Cleanup> items = scopes_[depth];  // defer может открыть новые области
         for (auto it = items.rbegin(); it != items.rend(); ++it) {
-            if (!it->is_defer) {
+            if (it->unlock) {
+                Rvalue u = intrinsic(Intrinsic::MutexUnlock, prim(TK::Void));
+                u.place = it->place;
+                u.has_place = true;
+                eval(std::move(u), span);
+            } else if (!it->is_defer) {
                 inst(InstKind::Drop, local(it->local), Rvalue{}, span);
             } else if (!it->on_error || way == Way::Error) {
                 stmt(it->defer);
@@ -1555,12 +1595,33 @@ private:
             }
             case StmtKind::Defer: {
                 auto* d = static_cast<const DeferStmt*>(s);
-                scopes_.back().push_back(Cleanup{true, 0, d->body, d->on_error});
+                scopes_.back().push_back(Cleanup{true, 0, d->body, d->on_error, false, {}});
                 break;
             }
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;
+            case StmtKind::Lock: lock_stmt(static_cast<const LockStmt*>(s)); break;
             case StmtKind::Error: break;
         }
+    }
+
+    // `lock m as t { … }` (О13, прототип): захват, t — данные m, снятие —
+    // очисткой области на любом выходе.
+    void lock_stmt(const LockStmt* s) {
+        push_scope();
+        bool fresh = false;
+        Place m = object(s->mutex, fresh);
+        Rvalue lk = intrinsic(Intrinsic::MutexLock, prim(TK::Void));
+        lk.place = m;
+        lk.has_place = true;
+        eval(std::move(lk), s->span);
+        Cleanup c;
+        c.unlock = true;
+        c.place = m;
+        scopes_.back().push_back(std::move(c));
+        if (s->local) aliases_[s->local] = proj(m, ProjKind::MutexValue);
+        block(s->body);
+        Span end{s->body->span.file, s->body->span.end > 0 ? s->body->span.end - 1 : 0, s->body->span.end};
+        pop_scope(end);
     }
 
     // Инструкция-вызов: результат, если он есть, освобождается.

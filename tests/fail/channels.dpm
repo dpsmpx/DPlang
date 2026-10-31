@@ -1,0 +1,24 @@
+// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// Channel[T]: тип элемента — из записи, не копируется (E0518), без
+// линейных значений (E0514), не класс D.
+@linear
+struct Res {
+    id: int
+}
+
+fn give(ch: Channel[int]) {
+}
+
+@det
+fn pure(ch: &Channel[int]) {
+    ch.send(1)
+}
+
+fn main() {
+    let a = channel(4)
+    let b: Channel[int] = channel(4)
+    let c = b
+    let d: Channel[Res] = channel(1)
+    b.push(1)
+    b.send("x")
+}

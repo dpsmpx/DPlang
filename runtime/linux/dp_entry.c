@@ -87,6 +87,11 @@ void dp_sys_lock(void* m) { pthread_mutex_lock((pthread_mutex_t*)m); }
 
 void dp_sys_unlock(void* m) { pthread_mutex_unlock((pthread_mutex_t*)m); }
 
+void dp_sys_mutex_free(void* m) {
+    pthread_mutex_destroy((pthread_mutex_t*)m);
+    free(m);
+}
+
 void* dp_sys_cond(void) {
     pthread_cond_t* c = (pthread_cond_t*)malloc(sizeof *c);
     if (c && pthread_cond_init(c, NULL) != 0) {
@@ -99,6 +104,11 @@ void* dp_sys_cond(void) {
 void dp_sys_wait(void* c, void* m) { pthread_cond_wait((pthread_cond_t*)c, (pthread_mutex_t*)m); }
 
 void dp_sys_broadcast(void* c) { pthread_cond_broadcast((pthread_cond_t*)c); }
+
+void dp_sys_cond_free(void* c) {
+    pthread_cond_destroy((pthread_cond_t*)c);
+    free(c);
+}
 
 int dp_run_test(dp_entry_fn entry) { return dp_run_as(entry, "test"); }
 

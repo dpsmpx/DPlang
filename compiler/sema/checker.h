@@ -79,6 +79,10 @@ private:
     void stmt(ast::Stmt* s);
     void let_stmt(ast::LetStmt* l);
     void destructure(ast::LetStmt* l);
+    void lock_stmt(ast::LockStmt* s);
+    // Мьютексы, захваченные блоками `lock` вокруг (О13): их корни в теле
+    // блока не называют — данные только через переменную блока.
+    std::vector<const Local*> locked_;
     void assign_stmt(ast::AssignStmt* a);
     void expr_stmt(ast::ExprStmt* s);
     void if_stmt(ast::IfStmt* s);
@@ -118,6 +122,8 @@ private:
     const Type* builtin_call(ast::CallExpr* c, uint32_t b, const Type* hint);
     const Type* method_call(ast::CallExpr* c, ast::FieldExpr* f);
     const Type* convert_call(ast::CallExpr* c, const Type* target, bool wrap);
+    const Type* atomic_method(ast::CallExpr* c, ast::FieldExpr* f, const Type* t, ast::Method m, bool known);
+    const Type* channel_method(ast::CallExpr* c, ast::FieldExpr* f, const Type* t, ast::Method m, bool known);
     const Type* variant_value(const EnumDef* en, uint32_t index, ast::VariantForm form, std::vector<ast::Expr*>* args,
                               std::vector<ast::FieldInit>* fields, Span span);
     const Type* struct_lit(ast::StructLitExpr* s);

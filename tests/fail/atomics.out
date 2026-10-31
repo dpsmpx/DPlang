@@ -1,0 +1,44 @@
+--- stderr ---
+atomics.dpm:4:11: error[E0518]: 'Atomic[i64]' cannot be a field: it is shared, not copied; keep it in a variable and pass '&'
+   4 |     hits: Atomic[i64]
+     |           ^~~~~~~~~~~
+atomics.dpm:7:12: error[E0518]: 'Atomic[i64]' cannot be passed by value: it is shared, not copied; keep it in a variable and pass '&'
+   7 | fn take(a: Atomic[i64]) {
+     |            ^~~~~~~~~~~
+atomics.dpm:10:11: error[E0518]: 'Atomic[i64]' cannot be returned: it is shared, not copied; keep it in a variable and pass '&'
+  10 | fn give() Atomic[i64] {
+     |           ^~~~~~~~~~~
+atomics.dpm:14:15: error[E0518]: 'List[Atomic[i32]]' cannot be held in a container: it is shared, not copied; keep it in a variable and pass '&'
+  14 | fn lists(xs: &List[Atomic[i32]]) {
+     |               ^~~~~~~~~~~~~~~~~
+atomics.dpm:19:12: error[E0425]: an 'Atomic' is shared between threads; 'pure' is class D and cannot use it
+  19 |     return a.load()
+     |            ^~~~~~~~
+atomics.dpm:24:13: error[E0518]: 'b' would hold a copy of 'Atomic[i64]'; it is shared, not copied: create it with 'atomic(v)', 'mutex(v)' or 'channel(n)' and pass '&b'
+  24 |     let b = a
+     |             ^
+atomics.dpm:26:5: error[E0518]: cannot assign to 'c': 'Atomic[i64]' is shared, not replaced; use its methods
+  26 |     c = atomic(6)
+     |     ^
+atomics.dpm:27:19: error[E0314]: 'Atomic' holds an integer or a bool, found 'str'
+  27 |     let d: Atomic[str] = atomic("x")
+     |                   ^~~
+atomics.dpm:27:33: error[E0401]: 'atomic' holds an integer or a bool, found 'str'
+  27 |     let d: Atomic[str] = atomic("x")
+     |                                 ^~~
+atomics.dpm:28:20: error[E0401]: 'atomic' holds an integer or a bool, found 'f64'
+  28 |     let f = atomic(1.5)
+     |                    ^~~
+atomics.dpm:30:11: error[E0410]: 'Atomic[bool]' has no method 'add'
+  30 |     _ = g.add(1)
+     |           ^~~
+atomics.dpm:31:19: error[E0422]: values of type 'Atomic[i64]' cannot be compared with '=='
+  31 |     println(str(a == a))
+     |                   ^~
+atomics.dpm:32:19: error[E0314]: 'Atomic' holds an integer or a bool, found 'f64'
+  32 |     let h: Atomic[f64] = atomic(1.0)
+     |                   ^~~
+atomics.dpm:32:33: error[E0401]: 'atomic' holds an integer or a bool, found 'f64'
+  32 |     let h: Atomic[f64] = atomic(1.0)
+     |                                 ^~~
+[exit 1]

@@ -71,6 +71,32 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
                 out = tt.list(type(n->args[0]));
                 break;
             }
+            if (k == TK::Atomic) {  // О13, прототип: целое или bool
+                if (n->args.size() != 1) {
+                    diags_.error(Code::E0314, node->span, "'Atomic' takes exactly one type argument: Atomic[T]");
+                    break;
+                }
+                const sema::Type* elem = type(n->args[0]);
+                if (elem->kind == TK::Error) break;
+                if (!is_integer(elem) && elem->kind != TK::Bool) {
+                    diags_.error(Code::E0314, n->args[0]->span,
+                                 "'Atomic' holds an integer or a bool, found '" + type_name(elem) + "'");
+                    break;
+                }
+                out = tt.atomic(elem);
+                break;
+            }
+            if (k == TK::Mutex || k == TK::Channel) {  // О13, прототип
+                if (n->args.size() != 1) {
+                    diags_.error(Code::E0314, node->span, "'" + n->name + "' takes exactly one type argument: " + n->name +
+                                                              "[T]");
+                    break;
+                }
+                const sema::Type* elem = type(n->args[0]);
+                if (elem->kind == TK::Error) break;
+                out = k == TK::Mutex ? tt.mutex(elem) : tt.channel(elem);
+                break;
+            }
             if (k == TK::Pool || k == TK::PoolHandle) {  // Р67
                 if (n->args.size() != 1) {
                     diags_.error(Code::E0314, node->span, "'" + n->name + "' takes exactly one type argument: " + n->name +

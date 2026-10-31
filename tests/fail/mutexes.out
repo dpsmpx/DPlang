@@ -1,0 +1,20 @@
+--- stderr ---
+mutexes.dpm:5:8: error[E0518]: 'Mutex[i64]' cannot be a field: it is shared, not copied; keep it in a variable and pass '&'
+   5 |     m: Mutex[int]
+     |        ^~~~~~~~~~
+mutexes.dpm:8:12: error[E0518]: 'Mutex[i64]' cannot be passed by value: it is shared, not copied; keep it in a variable and pass '&'
+   8 | fn take(m: Mutex[int]) {
+     |            ^~~~~~~~~~
+mutexes.dpm:13:5: error[E0425]: a 'Mutex' is shared between threads; 'pure' is class D and cannot use it
+  13 |     lock m as v {
+     |     ^
+mutexes.dpm:21:16: error[E0518]: 'copy' would hold a copy of 'Mutex[i64]'; it is shared, not copied: create it with 'atomic(v)', 'mutex(v)' or 'channel(n)' and pass '&copy'
+  21 |     let copy = m
+     |                ^
+mutexes.dpm:24:26: error[E0412]: 'm' is locked by this 'lock' block; use its data through the block's variable
+  24 |         println(str(len([m])))
+     |                          ^
+mutexes.dpm:27:10: error[E0401]: 'lock' needs a Mutex, found 'i64'
+  27 |     lock n as w {
+     |          ^
+[exit 1]

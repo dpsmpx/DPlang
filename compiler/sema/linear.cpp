@@ -378,6 +378,10 @@ private:
                 break;
             }
             case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
+            case StmtKind::Lock:
+                expr(static_cast<LockStmt*>(s)->mutex, Use::Borrow);
+                block(static_cast<LockStmt*>(s)->body);
+                break;
             case StmtKind::Error: break;
         }
     }

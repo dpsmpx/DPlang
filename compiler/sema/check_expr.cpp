@@ -70,7 +70,9 @@ constexpr MethodInfo kMethods[] = {
     {"reserve", Method::Reserve}, {"add", Method::Add}, {"handles", Method::Handles},
     {"contains", Method::Contains}, {"trim", Method::Trim},   {"find", Method::Find},
     {"starts_with", Method::StartsWith}, {"split", Method::Split}, {"get", Method::Get},
-    {"keys", Method::Keys},
+    {"keys", Method::Keys}, {"load", Method::Load}, {"store", Method::Store}, {"sub", Method::Sub},
+    {"swap", Method::Swap}, {"cas", Method::Cas}, {"send", Method::Send}, {"recv", Method::Recv},
+    {"try_recv", Method::TryRecv}, {"close", Method::Close},
 };
 
 }  // namespace
@@ -157,6 +159,7 @@ bool Checker::type_prop(const Type* root, bool ord) {
                 case TK::Error: return 1;
                 // Р54: отображения не сравниваются; указатель C (Р61), массив и ссылка-поле C (Р62) — тоже.
                 case TK::Void: case TK::Result: case TK::Map: case TK::Pool: case TK::CFn: case TK::Array: case TK::Ref:
+                case TK::Atomic: case TK::Mutex: case TK::Channel:
                     return 0;
                 case TK::PoolHandle: return ord ? 0 : 1;  // Р67: хэндлы сравниваются ==, но не упорядочены
                 case TK::Bool: case TK::Str: return 1;
@@ -311,6 +314,10 @@ const Type* Checker::name_expr(NameExpr* n) {
         case ResKind::Local: {
             Local* l = n->res.local;
             note_use(n);
+            if (l && std::find(locked_.begin(), locked_.end(), l) != locked_.end()) {  // О13, прототип
+                error(Code::E0412, n->span, "'" + l->name + "' is locked by this 'lock' block; use its data through "
+                                                "the block's variable");
+            }
             if (fn_ && flow_.live && l->id < flow_.init.size() && !flow_.init[l->id]) {
                 error(Code::E0503, n->span, "'" + l->name + "' is used before it has a value");
                 flow_.init[l->id] = 1;
@@ -826,6 +833,53 @@ const Type* Checker::builtin_call(CallExpr* c, uint32_t b, const Type* hint) {
             }
             return tt_.optional(t);
         }
+        case BuiltinFn::AtomicNew: {  // О13, прототип: тип — из записи переменной или из значения
+            if (fn_ && is_det(*fn_)) {
+                error(Code::E0425, c->span, "'atomic' is shared between threads; '" + fn_->name +
+                                                "' is class D and cannot use it");
+            }
+            const Type* h = unwrap_hint(hint);
+            if (h && h->kind == TK::Atomic) {
+                check(c->args[0], h->elem);
+                return h;
+            }
+            const Type* t = infer(c->args[0], nullptr);
+            if (t->kind == TK::Error) return err();
+            if (!is_integer(t) && t->kind != TK::Bool) {
+                error(Code::E0401, c->args[0]->span, "'atomic' holds an integer or a bool, found '" + tn(t) + "'");
+                return err();
+            }
+            return tt_.atomic(t);
+        }
+        case BuiltinFn::ChannelNew: {  // О13, прототип: тип элемента — только из записи
+            if (fn_ && is_det(*fn_)) {
+                error(Code::E0425, c->span, "'channel' is shared between threads; '" + fn_->name +
+                                                "' is class D and cannot use it");
+            }
+            check(c->args[0], prim(TK::I64));
+            const Type* h = unwrap_hint(hint);
+            if (h && h->kind == TK::Channel) return h;
+            error(Code::E0401, c->span, "write the element type: 'let ch: Channel[T] = channel(n)'");
+            return err();
+        }
+        case BuiltinFn::MutexNew: {  // О13, прототип: данные — копия значения
+            if (fn_ && is_det(*fn_)) {
+                error(Code::E0425, c->span, "'mutex' is shared between threads; '" + fn_->name +
+                                                "' is class D and cannot use it");
+            }
+            const Type* h = unwrap_hint(hint);
+            if (h && h->kind == TK::Mutex) {
+                check(c->args[0], h->elem);
+                return h;
+            }
+            const Type* t = infer(c->args[0], nullptr);
+            if (t->kind == TK::Error) return err();
+            if (t->kind == TK::Void) {
+                error(Code::E0401, c->args[0]->span, "'mutex' needs a value to protect");
+                return err();
+            }
+            return tt_.mutex(t);
+        }
         case BuiltinFn::CheckedNeg: {
             const Type* t = infer(c->args[0], unwrap_hint(hint));
             if (t->kind == TK::Error) return err();
@@ -869,6 +923,8 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
     for (const MethodInfo& m : kMethods) {
         if (f->name == m.name) mi = &m;
     }
+    if (t->kind == TK::Atomic) return atomic_method(c, f, t, mi ? mi->m : Method::Push, mi != nullptr);
+    if (t->kind == TK::Channel) return channel_method(c, f, t, mi ? mi->m : Method::Push, mi != nullptr);
     bool list = t->kind == TK::List, slice = t->kind == TK::Slice, str = t->kind == TK::Str, map = t->kind == TK::Map;
     bool pool = t->kind == TK::Pool;
     bool list_method = mi && mi->m <= Method::Contains && mi->m != Method::Add;
@@ -959,8 +1015,80 @@ const Type* Checker::method_call(CallExpr* c, FieldExpr* f) {
         case Method::StartsWith: check(c->args[0], prim(TK::Str)); return prim(TK::Bool);
         case Method::Split: check(c->args[0], prim(TK::Str)); return tt_.list(prim(TK::Str));
         case Method::Get: case Method::Keys: case Method::Add: case Method::Handles: break;
+        case Method::Load: case Method::Store: case Method::Sub: case Method::Swap: case Method::Cas: break;
+        case Method::Send: case Method::Recv: case Method::TryRecv: case Method::Close: break;
     }
     return err();
+}
+
+// Методы Atomic[T] (О13, прототип): через общий доступ — получатель не
+// меняется для правила доступа (Р66) и может быть `let` и `&`.
+const Type* Checker::atomic_method(CallExpr* c, FieldExpr* f, const Type* t, Method m, bool known) {
+    bool num = is_integer(t->elem);
+    size_t arity = 0;
+    bool ok = known;
+    switch (m) {
+        case Method::Load: arity = 0; break;
+        case Method::Store: case Method::Swap: arity = 1; break;
+        case Method::Add: case Method::Sub: arity = 1; ok = ok && num; break;
+        case Method::Cas: arity = 2; break;
+        default: ok = false; break;
+    }
+    if (!ok) {
+        error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
+        infer_loose(c->args);
+        return err();
+    }
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, c->span, "an 'Atomic' is shared between threads; '" + fn_->name +
+                                        "' is class D and cannot use it");
+    }
+    c->call = CallKind::Method;
+    c->method = m;
+    if (c->args.size() != arity) {
+        error(Code::E0407, c->span, "method '" + f->name + "' takes " + std::to_string(arity) + " argument" +
+                                        (arity == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
+        infer_loose(c->args);
+        return err();
+    }
+    switch (m) {
+        case Method::Load: return t->elem;
+        case Method::Store: check(c->args[0], t->elem); return prim(TK::Void);
+        case Method::Cas:
+            check(c->args[0], t->elem);
+            check(c->args[1], t->elem);
+            return prim(TK::Bool);
+        default: check(c->args[0], t->elem); return t->elem;
+    }
+}
+
+// Методы Channel[T] (О13, прототип): send ждёт места, recv — значения
+// (none — закрыт и пуст), try_recv не ждёт, close.
+const Type* Checker::channel_method(CallExpr* c, FieldExpr* f, const Type* t, Method m, bool known) {
+    bool ok = known && (m == Method::Send || m == Method::Recv || m == Method::TryRecv || m == Method::Close);
+    if (!ok) {
+        error(Code::E0410, f->name_span, "'" + tn(t) + "' has no method '" + f->name + "'");
+        infer_loose(c->args);
+        return err();
+    }
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, c->span, "a 'Channel' is shared between threads; '" + fn_->name +
+                                        "' is class D and cannot use it");
+    }
+    c->call = CallKind::Method;
+    c->method = m;
+    size_t arity = m == Method::Send ? 1 : 0;
+    if (c->args.size() != arity) {
+        error(Code::E0407, c->span, "method '" + f->name + "' takes " + std::to_string(arity) + " argument" +
+                                        (arity == 1 ? "" : "s") + ", found " + std::to_string(c->args.size()));
+        infer_loose(c->args);
+        return err();
+    }
+    switch (m) {
+        case Method::Send: check(c->args[0], t->elem); return prim(TK::Void);
+        case Method::Recv: case Method::TryRecv: return tt_.optional(t->elem);
+        default: return prim(TK::Void);
+    }
 }
 
 const Type* Checker::convert_call(CallExpr* c, const Type* target, bool wrap) {

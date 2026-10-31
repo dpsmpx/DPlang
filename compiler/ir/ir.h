@@ -51,6 +51,7 @@ enum class ProjKind : uint8_t {
     MapKeyAt, MapValueAt,
     PoolValue,  // элемент Pool по хэндлу из переменной index; устаревший — ловушка (Р67)
     PoolSlot,   // элемент живого слота Pool с номером из переменной index (i64) — обход
+    MutexValue,  // данные Mutex[T] (О13, прототип): только в блоке `lock`
 };
 
 struct Proj {
@@ -139,6 +140,21 @@ enum class Intrinsic : uint8_t {
     // Арена C на время вызова (Р62): строки и массивы заимствующих
     // структур. CArenaMark → i64 (отметка), CArenaRelease(отметка) — всё после неё.
     CArenaMark, CArenaRelease,
+    // Atomic[T] (О13, прототип): AtomicNew (ops[0] → Atomic[T]); остальные —
+    // получатель-место, последовательная согласованность: AtomicLoad (→ T),
+    // AtomicStore (v), AtomicAdd и AtomicSub (v → прежнее; переполнение —
+    // ловушка), AtomicSwap (v → прежнее), AtomicCas (ожидаемое, новое → bool).
+    AtomicNew, AtomicLoad, AtomicStore, AtomicAdd, AtomicSub, AtomicSwap, AtomicCas,
+    // Mutex[T] (О13, прототип): MutexNew (ops[0] — данные → Mutex[T]);
+    // MutexLock и MutexUnlock — получатель-место; повторный захват тем же
+    // потоком — ловушка.
+    MutexNew, MutexLock, MutexUnlock,
+    // Channel[T] (О13, прототип): ChannelNew (ops[0] — ёмкость i64 →
+    // Channel[T]; меньше 1 — ловушка); остальные — получатель-место:
+    // ChannelSend (v; ждёт места; закрыт — ловушка), ChannelRecv (→ ?T, ждёт;
+    // none — закрыт и пуст), ChannelTryRecv (→ ?T, не ждёт), ChannelClose
+    // (повторно — ловушка). Все ждут — ловушка deadlock.
+    ChannelNew, ChannelSend, ChannelRecv, ChannelTryRecv, ChannelClose,
     // Probe: место (place) вычисляется со всеми проверками — индексы, ключ
     // Map — и не читается. Ловушка места раньше ловушек правее (expr.order).
     Probe,

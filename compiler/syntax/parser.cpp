@@ -766,10 +766,36 @@ private:
                 break;
             }
             case TokKind::LBrace: s = block_stmt(); break;
+            case TokKind::Ident:
+                // `lock m as t { … }` (О13, прототип): слово контекстное — за
+                // ним имя, а выражение не начинается двумя именами подряд.
+                if (text_of(toks_[idx()]) == "lock" && peek(1) == TokKind::Ident) {
+                    s = lock_stmt();
+                    break;
+                }
+                s = expr_or_assign();
+                break;
             default: s = expr_or_assign(); break;
         }
         s->span = span_from(begin);
         return s;
+    }
+
+    Stmt* lock_stmt() {
+        bump();  // lock
+        auto* l = m_.make<LockStmt>();
+        l->mutex = expr(true);
+        if (failed_) return l;
+        Span as_span;
+        std::string as = expect_ident(as_span);
+        if (failed_) return l;
+        if (as != "as") {
+            expected("'as' after the mutex: 'lock m as t { ... }'");
+            return l;
+        }
+        l->var = expect_ident(l->var_span);
+        if (!failed_) l->body = block();
+        return l;
     }
 
     Stmt* let_stmt() {

@@ -211,7 +211,12 @@ enum class CallKind : uint8_t { None, Fn, Builtin, Method, Convert, Wrap, Varian
 // Порядок важен: до Contains — изменяющие методы (Add — только у Pool),
 // Contains..Split — читающие List и методы str, дальше — читающие Map и Pool.
 enum class Method : uint8_t {
-    Push, Pop, Insert, Remove, Clear, Sort, Reserve, Add, Contains, Trim, Find, StartsWith, Split, Get, Keys, Handles
+    Push, Pop, Insert, Remove, Clear, Sort, Reserve, Add, Contains, Trim, Find, StartsWith, Split, Get, Keys, Handles,
+    // Atomic[T] (О13, прототип): все — через общий доступ, получатель не
+    // «меняется» для правила доступа (Р66); `add` — Add.
+    Load, Store, Sub, Swap, Cas,
+    // Channel[T] (О13, прототип): тоже через общий доступ.
+    Send, Recv, TryRecv, Close
 };
 
 struct CallExpr : Expr {
@@ -390,7 +395,7 @@ struct ErrorPat : Pat {
 // --- инструкции
 
 enum class StmtKind : uint8_t {
-    Let, Assign, Expr, If, While, For, Match, Return, Break, Continue, Defer, Fail, Block, Error
+    Let, Assign, Expr, If, While, For, Match, Return, Break, Continue, Defer, Fail, Block, Lock, Error
 };
 
 struct Stmt : Node {
@@ -512,6 +517,18 @@ struct DeferStmt : Stmt {  // `defer s`; `errdefer s` — только при в
     DeferStmt() : Stmt(Kind) {}
     Stmt* body = nullptr;  // BlockStmt или простая инструкция
     bool on_error = false;  // errdefer
+};
+
+// `lock m as t { … }` (О13, прототип): t — данные мьютекса m до конца
+// блока; снятие — на любом выходе.
+struct LockStmt : Stmt {
+    static constexpr StmtKind Kind = StmtKind::Lock;
+    LockStmt() : Stmt(Kind) {}
+    Expr* mutex = nullptr;
+    std::string var;
+    Span var_span;
+    Block* body = nullptr;
+    sema::Local* local = nullptr;
 };
 
 struct FailStmt : Stmt {  // `fail e`

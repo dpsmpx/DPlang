@@ -612,6 +612,13 @@ private:
                     r.v = &v.items[static_cast<size_t>(i)].items[0];
                     break;
                 }
+                case ProjKind::MutexValue:  // данные Mutex (О13): items[0], tag — захвачен
+                    if (v.k != Value::K::Seq || v.items.empty()) {
+                        internal("data of a non-mutex");
+                        return Ref{};
+                    }
+                    r.v = &v.items[0];
+                    break;
                 case ProjKind::PoolSlot: {  // живой слот из обхода
                     const Value& iv = fr.locals[pr.index];
                     if (v.k != Value::K::Seq || iv.k != Value::K::Int || iv.i >= v.items.size() ||
@@ -1237,6 +1244,44 @@ private:
             }
             case Intrinsic::PoolAdd: case Intrinsic::PoolRemove: case Intrinsic::PoolClear: case Intrinsic::PoolReserve:
                 return pool_method(fr, rv, ops);
+            case Intrinsic::AtomicNew: return arg(0, s0);
+            case Intrinsic::MutexNew: {  // данные — items[0]; tag — захвачен
+                Value m = seq_value(0);
+                m.items.push_back(rv.ops[0].kind == OpKind::Move ? std::move(ops[0]) : arg(0, s0));
+                m.tag = 0;
+                return m;
+            }
+            case Intrinsic::ChannelNew: {  // очередь — items, ёмкость — i, tag — закрыт
+                int64_t cap = static_cast<int64_t>(arg(0, s0).i);
+                if (cap < 1) {
+                    trap("channel capacity " + std::to_string(cap) + " is less than 1");
+                    return Value{};
+                }
+                Value ch = seq_value(0);
+                ch.i = static_cast<uint64_t>(cap);
+                return ch;
+            }
+            case Intrinsic::ChannelSend: case Intrinsic::ChannelRecv: case Intrinsic::ChannelTryRecv:
+            case Intrinsic::ChannelClose:
+                return channel_method(fr, rv, ops);
+            case Intrinsic::MutexLock: case Intrinsic::MutexUnlock: {
+                Ref r = resolve(fr, rv.place);
+                if (stop_) return Value{};
+                if (rv.intrinsic == Intrinsic::MutexUnlock) {
+                    r.v->tag = 0;
+                    return Value{};
+                }
+                // Задач нет: занятый мьютекс захватывает этот же поток.
+                if (r.v->tag == 1) {
+                    trap("mutex is already locked by this thread");
+                    return Value{};
+                }
+                r.v->tag = 1;
+                return Value{};
+            }
+            case Intrinsic::AtomicLoad: case Intrinsic::AtomicStore: case Intrinsic::AtomicAdd: case Intrinsic::AtomicSub:
+            case Intrinsic::AtomicSwap: case Intrinsic::AtomicCas:
+                return atomic_method(fr, rv, ops);
             case Intrinsic::CArenaMark: return int_value(0);  // Р62: арена — только у сборки
             case Intrinsic::CArenaRelease: return Value{};
             case Intrinsic::MapKeys: {
@@ -1434,6 +1479,73 @@ private:
         int64_t k = static_cast<int64_t>(n.i);
         if (k < 0) trap("reserve count " + std::to_string(k) + " is negative");
         else if (n.i > kMaxLen) trap("out of memory");
+    }
+
+    // Atomic[T] (О13, прототип): задачи интерпретатора идут по очереди,
+    // поэтому операция — обычное чтение и запись места.
+    Value atomic_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place);
+        if (stop_) return Value{};
+        Value& v = *r.v;
+        const Type* t = place_type(p_, fn(fr), rv.place)->elem;
+        Value old = v;
+        switch (rv.intrinsic) {
+            case Intrinsic::AtomicLoad: return old;
+            case Intrinsic::AtomicStore: v = ops[0]; return Value{};
+            case Intrinsic::AtomicSwap: v = ops[0]; return old;
+            case Intrinsic::AtomicCas: {
+                bool eq = v.i == ops[0].i;
+                if (eq) v = ops[1];
+                return bool_value(eq);
+            }
+            default: {  // Add, Sub: переполнение — ловушка, как у `+` и `-`
+                uint64_t res = 0;
+                Intrinsic k = rv.intrinsic == Intrinsic::AtomicAdd ? Intrinsic::CheckedAdd : Intrinsic::CheckedSub;
+                if (!checked(k, v.i, ops[0].i, t, res)) {
+                    trap(std::string("integer overflow in '") + (k == Intrinsic::CheckedAdd ? "+" : "-") + "' on '" +
+                         sema::type_name(t) + "'");
+                    return Value{};
+                }
+                v = int_value(res);
+                return old;
+            }
+        }
+    }
+
+    // Channel[T] (О13, прототип): пока задач нет, ждать некого — ожидание
+    // значения или места сразу ловушка deadlock.
+    Value channel_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {
+        Ref r = resolve(fr, rv.place);
+        if (stop_) return Value{};
+        Value& ch = *r.v;
+        bool closed = ch.tag == 1;
+        switch (rv.intrinsic) {
+            case Intrinsic::ChannelSend:
+                if (closed) {
+                    trap("send on a closed channel");
+                } else if (ch.items.size() >= ch.i) {
+                    trap("deadlock: every thread is waiting on a channel");
+                } else {
+                    ch.items.push_back(rv.ops[0].kind == OpKind::Move ? std::move(ops[0]) : ops[0]);
+                }
+                return Value{};
+            case Intrinsic::ChannelClose:
+                if (closed) trap("close of a closed channel");
+                ch.tag = 1;
+                return Value{};
+            default: {  // Recv, TryRecv
+                if (ch.items.empty()) {
+                    if (rv.intrinsic == Intrinsic::ChannelRecv && !closed) {
+                        trap("deadlock: every thread is waiting on a channel");
+                    }
+                    return seq_value(0);
+                }
+                Value out = seq_value(1);
+                out.items.push_back(std::move(ch.items.front()));
+                ch.items.erase(ch.items.begin());
+                return out;
+            }
+        }
     }
 
     Value pool_method(Frame& fr, const Rvalue& rv, std::vector<Value>& ops) {

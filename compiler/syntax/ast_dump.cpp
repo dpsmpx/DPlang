@@ -238,6 +238,13 @@ public:
             }
             case StmtKind::Break: line(d, "Break"); break;
             case StmtKind::Continue: line(d, "Continue"); break;
+            case StmtKind::Lock: {
+                auto* l = static_cast<const LockStmt*>(s);
+                line(d, "Lock " + l->var);
+                expr(l->mutex, d + 1);
+                block(l->body, d + 1);
+                break;
+            }
             case StmtKind::Defer: {
                 auto* df = static_cast<const DeferStmt*>(s);
                 line(d, df->on_error ? "Errdefer" : "Defer");

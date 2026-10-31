@@ -163,6 +163,10 @@ private:
             }
             case StmtKind::Return: expr(static_cast<const ReturnStmt*>(s)->value); break;
             case StmtKind::Defer: stmt(static_cast<const DeferStmt*>(s)->body); break;
+            case StmtKind::Lock:
+                expr(static_cast<const LockStmt*>(s)->mutex);
+                block(static_cast<const LockStmt*>(s)->body);
+                break;
             case StmtKind::Fail: {
                 auto* f = static_cast<const FailStmt*>(s);
                 expr(f->value);

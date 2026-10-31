@@ -1,0 +1,36 @@
+// spec: О13, прототип (docs/research/notes/10_concurrency.md, раздел 6)
+// Channel[T]: отправка из итераций parallel for, приём до закрытия,
+// try_recv; переполнение без читателя — ловушка deadlock.
+struct Job {
+    id: i64
+    name: str
+}
+
+fn drain(ch: &Channel[Job]) List[str] {
+    var got: List[str] = []
+    while true {
+        match ch.recv() {
+            some(j) => got.push(j.name + "#" + str(j.id))
+            none => break
+        }
+    }
+    return got
+}
+
+fn main() {
+    let jobs: Channel[Job] = channel(64)
+    parallel for i in 0..50 {
+        jobs.send(Job { id: i, name: "job" })
+    }
+    jobs.close()
+    var got = drain(&jobs)
+    got.sort()
+    println(str(len(got)) + " " + got[0] + " " + got[49])
+    println(str(jobs.try_recv() == none))
+    let small: Channel[i64] = channel(2)
+    small.send(1)
+    small.send(2)
+    println(str(small.try_recv() ?? -1))
+    small.send(3)
+    small.send(4)
+}

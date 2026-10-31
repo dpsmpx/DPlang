@@ -340,3 +340,9 @@ DP_CODE(E0517, "input, output or C inside parallel for",
         "would depend on the order of iterations (spec: stmt.for, decision R69). `print`, `println` and "
         "`eprintln` are allowed: the output comes out in the order of iterations. Read the input before the "
         "loop and call C after it.")
+DP_CODE(E0518, "concurrent value cannot be copied",
+        "An `Atomic`, a `Mutex` or a `Channel` is shared between threads, so it is never copied (prototype of "
+        "the concurrency model, research note 10): it lives in a variable created with `atomic(v)`, `mutex(v)` or "
+        "`channel(n)` and is passed by reference, `&a`. "
+        "It cannot be copied into another variable, assigned, passed or returned by value, or kept in a field, "
+        "a List, a Map, a Pool or an optional.")

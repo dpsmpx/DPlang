@@ -85,6 +85,9 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
         case TK::Map: return "Map[" + type_name(t->key, from) + ", " + type_name(t->elem, from) + "]";
         case TK::Pool: return "Pool[" + type_name(t->elem, from) + "]";
         case TK::PoolHandle: return "Handle[" + type_name(t->elem, from) + "]";
+        case TK::Atomic: return "Atomic[" + type_name(t->elem, from) + "]";
+        case TK::Mutex: return "Mutex[" + type_name(t->elem, from) + "]";
+        case TK::Channel: return "Channel[" + type_name(t->elem, from) + "]";
         case TK::Slice: return "[]" + type_name(t->elem, from);
         case TK::Optional: return (t->elem->kind == TK::Optional ? "? " : "?") + type_name(t->elem, from);
         case TK::Result: return (t->err ? type_name(t->err, from) : "") + "!" + type_name(t->elem, from);
@@ -127,9 +130,25 @@ bool linear_in_container(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
         case TK::List: case TK::Slice: return linear_type(t->elem) || linear_in_container(t->elem);
-        case TK::Map: case TK::Pool: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Map: case TK::Pool: case TK::Channel: return linear_type(t->elem) || linear_in_container(t->elem);
         case TK::Optional: return linear_in_container(t->elem);
         case TK::Result: return linear_in_container(t->elem) || linear_in_container(t->err);
+        default: return false;
+    }
+}
+
+bool concurrent(const Type* t) {
+    return t && (t->kind == TK::Atomic || t->kind == TK::Mutex || t->kind == TK::Channel);
+}
+
+bool holds_concurrent(const Type* t) {
+    if (!t) return false;
+    if (concurrent(t)) return true;
+    switch (t->kind) {
+        case TK::List: case TK::Slice: case TK::Map: case TK::Pool: case TK::Optional: case TK::Array: case TK::Ref:
+        case TK::Mutex: case TK::Channel:
+            return holds_concurrent(t->elem) || holds_concurrent(t->key);
+        case TK::Result: return holds_concurrent(t->elem);
         default: return false;
     }
 }

@@ -279,6 +279,7 @@ void Checker::stmt(Stmt* s) {
             break;
         }
         case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
+        case StmtKind::Lock: lock_stmt(static_cast<LockStmt*>(s)); break;
         case StmtKind::Error: break;
     }
     views(s);  // Р66: вид левее действия над его местом
@@ -310,6 +311,20 @@ void Checker::let_stmt(LetStmt* l) {
                       "a slice cannot be stored in a variable; pass it to a function directly");
                 t = err();
             }
+        }
+    }
+    // О13, прототип: конкурентное значение — только из atomic(…), не копия.
+    if (t && holds_concurrent(t)) {
+        auto* c = as<CallExpr>(l->value);
+        bool fresh = c && c->call == CallKind::Builtin && concurrent(t) && !holds_concurrent(t->elem) &&
+                     (c->builtin == static_cast<uint32_t>(BuiltinFn::AtomicNew) ||
+                      c->builtin == static_cast<uint32_t>(BuiltinFn::MutexNew) ||
+                      c->builtin == static_cast<uint32_t>(BuiltinFn::ChannelNew));
+        if (!fresh) {
+            error(Code::E0518, l->value ? l->value->span : l->name_span,
+                  "'" + l->name + "' would hold a copy of '" + tn(t) + "'; it is shared, not copied: create it with "
+                  "'atomic(v)', 'mutex(v)' or 'channel(n)' and pass '&" + l->name + "'");
+            t = err();
         }
     }
     if (t && linear_in_container(t)) {
@@ -363,6 +378,29 @@ void Checker::destructure(LetStmt* l) {
     }
 }
 
+// `lock m as t { … }` (О13, прототип): t — данные m (`&mut`) до конца блока.
+void Checker::lock_stmt(LockStmt* s) {
+    const Type* t = infer(s->mutex, nullptr);
+    const Type* elem = err();
+    if (t->kind == TK::Mutex) {
+        elem = t->elem;
+    } else if (t->kind != TK::Error) {
+        error(Code::E0401, s->mutex->span, "'lock' needs a Mutex, found '" + tn(t) + "'");
+    }
+    if (fn_ && is_det(*fn_)) {
+        error(Code::E0425, s->span, "a 'Mutex' is shared between threads; '" + fn_->name +
+                                        "' is class D and cannot use it");
+    }
+    Local* root = root_local(s->mutex);
+    push_scope();
+    s->local = declare(s->var, s->var_span, elem, true, true, true);
+    if (s->local) s->local->alias_of = root;
+    locked_.push_back(root);
+    block(s->body);
+    locked_.pop_back();
+    pop_scope();
+}
+
 void Checker::assign_stmt(AssignStmt* a) {
     auto* n = as<NameExpr>(a->target);
     if (n && n->name == "_" && a->op == AssignOp::Set) {  // `_ = e` — явный отброс (Р10)
@@ -373,6 +411,12 @@ void Checker::assign_stmt(AssignStmt* a) {
     // Простое присваивание переменной инициализирует её; остальное читает цель.
     if (n && a->op == AssignOp::Set) {
         resolve_name(n);
+        if (n->res.kind == ResKind::Local && holds_concurrent(n->res.local->type)) {  // О13, прототип
+            error(Code::E0518, n->span, "cannot assign to '" + n->name + "': '" + tn(n->res.local->type) +
+                                            "' is shared, not replaced; use its methods");
+            infer(a->value, nullptr);
+            return;
+        }
         if (n->res.kind == ResKind::Local) {
             Local* l = n->res.local;
             n->type = l->type;

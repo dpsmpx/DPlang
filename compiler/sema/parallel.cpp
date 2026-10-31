@@ -87,6 +87,10 @@ struct Walk {
             case StmtKind::Fail: expr(static_cast<const FailStmt*>(s)->value); break;
             case StmtKind::Defer: stmt(static_cast<const DeferStmt*>(s)->body); break;
             case StmtKind::Block: block(static_cast<const BlockStmt*>(s)->block); break;
+            case StmtKind::Lock:
+                expr(static_cast<const LockStmt*>(s)->mutex);
+                block(static_cast<const LockStmt*>(s)->body);
+                break;
             default: break;
         }
     }

@@ -887,3 +887,183 @@ void dp_parallel_for(uint64_t n, dp_par_body body, void* env) {
     if (trap_at != UINT64_MAX) dp_die(j.trap_loc, j.trap_msg);
 }
 
+/* --- Mutex[T] (О13, прототип) */
+
+static _Thread_local char dp_thread_id; /* адрес — имя потока */
+
+dp_mtx dp_mtx_new(void) {
+    dp_mtx m;
+    m.sys = dp_sys_mutex();
+    m.owner = NULL;
+    if (!m.sys) dp_trap(NULL, "out of memory");
+    return m;
+}
+
+void dp_mtx_lock(dp_mtx* m, const char* loc) {
+    if (__atomic_load_n(&m->owner, __ATOMIC_RELAXED) == &dp_thread_id) {
+        dp_trap(loc, "mutex is already locked by this thread");
+    }
+    dp_sys_lock(m->sys);
+    __atomic_store_n(&m->owner, (void*)&dp_thread_id, __ATOMIC_RELAXED);
+}
+
+void dp_mtx_unlock(dp_mtx* m) {
+    __atomic_store_n(&m->owner, NULL, __ATOMIC_RELAXED);
+    dp_sys_unlock(m->sys);
+}
+
+void dp_mtx_drop(dp_mtx* m) {
+    if (m->sys) dp_sys_mutex_free(m->sys);
+    m->sys = NULL;
+}
+
+/* --- Channel[T] (О13, прототип) */
+
+struct dp_chan {
+    void* m;
+    void* not_empty;
+    void* not_full;
+    int64_t cap, head, len;
+    bool closed;
+    int recv_waiting, send_waiting; /* ждут сейчас (их снимает со счёта будящий) */
+    uint64_t recv_gen, send_gen;    /* номер побудки: ложная побудка его не меняет */
+};
+
+/* Взаимная блокировка: живые потоки dpl и ждущие канал — под dp_dl_m.
+ * Будящий снимает ждущих со счёта сам, поэтому «все ждут» не бывает
+ * ложным, пока разбуженный ещё не проснулся. */
+static void* dp_dl_m;
+static int dp_dl_live = 1; /* поток main */
+static int dp_dl_blocked;
+
+static void* dp_dl_mutex(void) {
+    void* m = __atomic_load_n(&dp_dl_m, __ATOMIC_ACQUIRE);
+    if (m) return m;
+    void* fresh = dp_sys_mutex();
+    if (!fresh) dp_trap(NULL, "out of memory");
+    void* expected = NULL;
+    if (!__atomic_compare_exchange_n(&dp_dl_m, &expected, fresh, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        dp_sys_mutex_free(fresh);
+        return expected;
+    }
+    return fresh;
+}
+
+/* Ловушка без longjmp итерации `parallel for`: взаимная блокировка — у всей
+ * программы, захваченные мьютексы не отпускаются. */
+static _Noreturn void dp_die_now(const char* loc, const char* msg) {
+    fflush(stdout);
+    if (loc && *loc) fprintf(stderr, "%s: trap: %s\n", loc, msg);
+    else fprintf(stderr, "trap: %s\n", msg);
+    fflush(stderr);
+    _Exit(101);
+}
+
+/* Поток засыпает в ожидании канала (канал захвачен). */
+static void dp_dl_block(int* waiting, const char* loc) {
+    void* m = dp_dl_mutex();
+    dp_sys_lock(m);
+    dp_dl_blocked++;
+    (*waiting)++;
+    if (dp_dl_blocked >= dp_dl_live) dp_die_now(loc, "deadlock: every thread is waiting on a channel");
+    dp_sys_unlock(m);
+}
+
+/* Будит ждущих (канал захвачен): они больше не в счёте. */
+static void dp_dl_wake(int* waiting) {
+    if (*waiting == 0) return;
+    void* m = dp_dl_mutex();
+    dp_sys_lock(m);
+    dp_dl_blocked -= *waiting;
+    dp_sys_unlock(m);
+    *waiting = 0;
+}
+
+dp_chan* dp_chan_new(int64_t cap, const char* loc) {
+    if (cap < 1) dp_trapf(loc, "channel capacity %" PRId64 " is less than 1", cap);
+    dp_chan* c = (dp_chan*)calloc(1, sizeof(dp_chan));
+    if (!c) dp_trap(loc, "out of memory");
+    c->m = dp_sys_mutex();
+    c->not_empty = dp_sys_cond();
+    c->not_full = dp_sys_cond();
+    if (!c->m || !c->not_empty || !c->not_full) dp_trap(loc, "out of memory");
+    c->cap = cap;
+    return c;
+}
+
+int64_t dp_chan_send_begin(dp_chan* c, const char* loc) {
+    dp_sys_lock(c->m);
+    while (c->len == c->cap && !c->closed) {
+        uint64_t gen = c->send_gen;
+        dp_dl_block(&c->send_waiting, loc);
+        do dp_sys_wait(c->not_full, c->m);
+        while (c->send_gen == gen);
+    }
+    if (c->closed) {
+        dp_sys_unlock(c->m);
+        dp_trap(loc, "send on a closed channel");
+    }
+    return (c->head + c->len) % c->cap;
+}
+
+void dp_chan_send_end(dp_chan* c) {
+    c->len++;
+    c->recv_gen++;
+    dp_dl_wake(&c->recv_waiting);
+    dp_sys_broadcast(c->not_empty);
+    dp_sys_unlock(c->m);
+}
+
+bool dp_chan_recv_begin(dp_chan* c, bool wait, int64_t* slot, const char* loc) {
+    dp_sys_lock(c->m);
+    while (wait && c->len == 0 && !c->closed) {
+        uint64_t gen = c->recv_gen;
+        dp_dl_block(&c->recv_waiting, loc);
+        do dp_sys_wait(c->not_empty, c->m);
+        while (c->recv_gen == gen);
+    }
+    if (c->len == 0) {
+        dp_sys_unlock(c->m);
+        return false;
+    }
+    *slot = c->head;
+    return true;
+}
+
+void dp_chan_recv_end(dp_chan* c) {
+    c->head = (c->head + 1) % c->cap;
+    c->len--;
+    c->send_gen++;
+    dp_dl_wake(&c->send_waiting);
+    dp_sys_broadcast(c->not_full);
+    dp_sys_unlock(c->m);
+}
+
+void dp_chan_close(dp_chan* c, const char* loc) {
+    dp_sys_lock(c->m);
+    if (c->closed) {
+        dp_sys_unlock(c->m);
+        dp_trap(loc, "close of a closed channel");
+    }
+    c->closed = true;
+    c->recv_gen++;
+    c->send_gen++;
+    dp_dl_wake(&c->recv_waiting);
+    dp_dl_wake(&c->send_waiting);
+    dp_sys_broadcast(c->not_empty);
+    dp_sys_broadcast(c->not_full);
+    dp_sys_unlock(c->m);
+}
+
+int64_t dp_chan_cap(const dp_chan* c) { return c->cap; }
+int64_t dp_chan_head(const dp_chan* c) { return c->head; }
+int64_t dp_chan_len(const dp_chan* c) { return c->len; }
+
+void dp_chan_free(dp_chan* c) {
+    if (!c) return;
+    dp_sys_mutex_free(c->m);
+    dp_sys_cond_free(c->not_empty);
+    dp_sys_cond_free(c->not_full);
+    free(c);
+}
+

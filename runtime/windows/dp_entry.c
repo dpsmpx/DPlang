@@ -125,6 +125,8 @@ void dp_sys_lock(void* m) { AcquireSRWLockExclusive((SRWLOCK*)m); }
 
 void dp_sys_unlock(void* m) { ReleaseSRWLockExclusive((SRWLOCK*)m); }
 
+void dp_sys_mutex_free(void* m) { free(m); }
+
 void* dp_sys_cond(void) {
     CONDITION_VARIABLE* c = (CONDITION_VARIABLE*)malloc(sizeof *c);
     if (c) InitializeConditionVariable(c);
@@ -134,6 +136,8 @@ void* dp_sys_cond(void) {
 void dp_sys_wait(void* c, void* m) { SleepConditionVariableSRW((CONDITION_VARIABLE*)c, (SRWLOCK*)m, INFINITE, 0); }
 
 void dp_sys_broadcast(void* c) { WakeAllConditionVariable((CONDITION_VARIABLE*)c); }
+
+void dp_sys_cond_free(void* c) { free(c); }
 
 FILE* dp_os_open_read(const char* path) {
     int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);

@@ -423,6 +423,35 @@ int dp_run_test(dp_entry_fn entry);
  * неё. Вложенный цикл и пул из одного потока (DPL_THREADS=1) — по
  * очереди в своём потоке. */
 typedef void (*dp_par_body)(void* env, uint64_t k);
+
+/* Mutex[T] (О13, прототип): мьютекс платформы и поток-владелец; повторный
+ * захват тем же потоком — ловушка. */
+typedef struct dp_mtx {
+    void* sys;
+    void* owner;
+} dp_mtx;
+dp_mtx dp_mtx_new(void);
+void dp_mtx_lock(dp_mtx* m, const char* loc);
+void dp_mtx_unlock(dp_mtx* m);
+void dp_mtx_drop(dp_mtx* m);
+
+/* Channel[T] (О13, прототип): синхронизация и кольцо номеров; значения —
+ * в массиве типа T у сгенерированного кода. send_begin ждёт места и
+ * отдаёт номер ячейки, recv_begin — значения (false — его нет: канал пуст
+ * и закрыт или wait = false); между begin и end канал захвачен. Все потоки
+ * ждут каналы — ловушка deadlock. */
+typedef struct dp_chan dp_chan;
+dp_chan* dp_chan_new(int64_t cap, const char* loc);
+int64_t dp_chan_send_begin(dp_chan* c, const char* loc);
+void dp_chan_send_end(dp_chan* c);
+bool dp_chan_recv_begin(dp_chan* c, bool wait, int64_t* slot, const char* loc);
+void dp_chan_recv_end(dp_chan* c);
+void dp_chan_close(dp_chan* c, const char* loc);
+/* Для освобождения (каналом больше никто не пользуется). */
+int64_t dp_chan_cap(const dp_chan* c);
+int64_t dp_chan_head(const dp_chan* c);
+int64_t dp_chan_len(const dp_chan* c);
+void dp_chan_free(dp_chan* c);
 void dp_parallel_for(uint64_t n, dp_par_body body, void* env);
 
 /* Потоки платформы для пула (runtime/linux, runtime/windows). */
@@ -432,6 +461,8 @@ int dp_sys_thread(void (*fn)(void*), void* arg);
 void* dp_sys_mutex(void);
 void dp_sys_lock(void* m);
 void dp_sys_unlock(void* m);
+void dp_sys_mutex_free(void* m);
+void dp_sys_cond_free(void* c);
 void* dp_sys_cond(void);
 void dp_sys_wait(void* c, void* m);
 void dp_sys_broadcast(void* c);

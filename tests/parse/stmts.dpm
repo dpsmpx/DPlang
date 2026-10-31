@@ -59,6 +59,9 @@ fn all(xs: &mut List[i32], n: int) !i32 {
         b = 0
     }
     errdefer xs.clear()
+    lock cache.rows as rows {
+        rows.push(b)
+    }
     let Pair { left, right: r, tag: _ } = make()
     var Pair {
         left,
