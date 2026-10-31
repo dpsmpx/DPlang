@@ -174,6 +174,7 @@ struct NameExpr : Expr {
     NameExpr() : Expr(Kind) {}
     std::string name;
     Res res;
+    bool disarm = false;  // поглощение снимает errdefer ресурса (Р60): ставит проверка линейности
 };
 
 struct FieldExpr : Expr {  // `a.b`
@@ -526,6 +527,9 @@ struct DeferStmt : Stmt {  // `defer s`; `errdefer s` — только при в
     DeferStmt() : Stmt(Kind) {}
     Stmt* body = nullptr;  // BlockStmt или простая инструкция
     bool on_error = false;  // errdefer
+    // errdefer: линейные переменные, которые закрывает тело (ставит проверка
+    // линейности). Ровно одна — errdefer снимается, когда она поглощена (Р60).
+    std::vector<const sema::Local*> closes;
 };
 
 // `lock m as t { … }` (Р70): t — данные мьютекса m до конца

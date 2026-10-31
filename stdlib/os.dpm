@@ -94,25 +94,9 @@ pub fn close(f: File) IoError!void {
 // Файл целиком байтами.
 pub fn read_bytes(path: str) IoError!List[u8] {
     var f = try open(path)
+    errdefer _ = close(f)
     var out: List[u8] = []
-    var failed: ?IoError = none
-    while true {
-        match read(&mut f, &mut out, 65536) {
-            ok(n) => {
-                if n == 0 {
-                    break
-                }
-            }
-            err(e) => {
-                failed = e
-                break
-            }
-        }
-    }
-    if let e = failed {
-        _ = close(f)
-        fail e
-    }
+    while try read(&mut f, &mut out, 65536) > 0 {}
     try close(f)
     return out
 }
@@ -120,13 +104,8 @@ pub fn read_bytes(path: str) IoError!List[u8] {
 // Записать файл целиком: новый или усечённый.
 pub fn write_bytes(path: str, data: []u8) IoError!void {
     var f = try create(path)
-    match write(&mut f, data) {
-        ok(_) => {}
-        err(e) => {
-            _ = close(f)
-            fail e
-        }
-    }
+    errdefer _ = close(f)
+    try write(&mut f, data)
     try close(f)
 }
 

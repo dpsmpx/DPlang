@@ -83,29 +83,17 @@
 - в задачу (Р70) `File` передаётся переносом, как любое значение, и
   закрывается там.
 
-Пример — запись частями. Файл, открытый до цикла, в цикле не закрыть
-(E0513), а `errdefer` с `try os.close(f)` в конце — E0512 (`errdefer`
-закрыл бы его второй раз). Поэтому ошибка запоминается, цикл кончается, и
-файл закрывается после него на обоих путях:
+Пример — запись частями. `errdefer` закрывает файл на любой ошибке, пока
+файл открыт; `try os.close(f)` в конце его снимает (Р60, ffi.linear):
 
 ```
 import os
 
 fn save(path: str, chunks: &List[List[u8]]) os.IoError!void {
     var f = try os.create(path)
-    var failed: ?os.IoError = none
+    errdefer _ = os.close(f)
     for c in &chunks {
-        match os.write(&mut f, c) {
-            ok(_) => {}
-            err(e) => {
-                failed = e
-                break
-            }
-        }
-    }
-    if let e = failed {
-        _ = os.close(f)
-        fail e
+        try os.write(&mut f, c)
     }
     try os.close(f)
 }

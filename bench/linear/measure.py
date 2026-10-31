@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
-"""Замер правил линейных типов в циклах (заметка
-docs/research/notes/12_linear_loops.md; только для замера).
+"""Корпус правил линейных типов в циклах и errdefer (заметка
+docs/research/notes/12_linear_loops.md; Р60).
 
     python3 bench/linear/measure.py [--save NAME]
 
-Режимы проверки — переменная DPL_LINEAR прототипа (compiler/sema/linear.cpp):
-- base — правила Р60: поглотить внешний ресурс в цикле нельзя (E0513),
-  errdefer и поглощение ресурса дальше на пути ошибки — E0512;
-- a — поглощение внешнего ресурса в цикле, если путь из цикла выходит;
-- b — errdefer снимается, когда ресурс поглощён;
-- ab — оба.
-
-Корпус bench/linear/corpus/:
-- задачи tN_<форма>.dpm: форма base принимается во всех режимах, форма a —
-  в режимах с a, форма b — в режимах с b; у форм — токены (dpl debug lex,
-  без комментариев и переводов строк) и строки кода;
+Замер вариантов (31 октября 2026, bench/results/linear-2026-10-31/) шёл на
+прототипе режимов DPL_LINEAR; автор выбрал Б — errdefer снимается, когда
+ресурс поглощён, — прототип снят. Теперь корпус сверяется с принятым
+правилом:
+- задачи tN_<форма>.dpm (bench/linear/corpus/): форма base (обходной
+  приём) и b (errdefer и try close) принимаются, a (закрыть внешний
+  ресурс в цикле с выходом из него) — нет (E0513); у форм — токены
+  (dpl debug lex, без комментариев и переводов строк) и строки кода;
 - attacks.dpm: функции, разрезанные по строкам «// expect: …»: reject —
-  отвергается во всех режимах, reject-base-a — безопасно, принимается в
-  режимах с b.
+  отвергается, reject-base-a — безопасно и принимается.
 
-Код возврата 1 — режим принял атаку или отверг программу, которую должен
-принять.
+Код возврата 1 — расхождение с ожиданием.
 """
 import argparse
 import json
@@ -33,21 +28,12 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DPL = os.path.join(ROOT, 'build', 'compiler', 'dpl')
 CORPUS = os.path.join(ROOT, 'bench', 'linear', 'corpus')
-MODES = ('base', 'a', 'b', 'ab')
+ACCEPT_FORM = {'base': True, 'a': False, 'b': True}
 
 
-def rules(mode):
-    """Правки режима: у base — никаких."""
-    return '' if mode == 'base' else mode
-
-
-def check(path, mode):
-    env = dict(os.environ)
-    env.pop('DPL_LINEAR', None)
-    if mode != 'base':
-        env['DPL_LINEAR'] = mode
+def check(path):
     r = subprocess.run([DPL, 'check', os.path.basename(path)], capture_output=True, text=True,
-                       cwd=os.path.dirname(path), env=env)
+                       cwd=os.path.dirname(path))
     codes = sorted(set(re.findall(r'error\[(E\d+)\]', r.stderr)))
     return r.returncode == 0, codes
 
@@ -87,32 +73,23 @@ def main():
     if not os.path.exists(DPL):
         sys.exit(f'нет {DPL}: соберите компилятор (python3 tests/run.py)')
     data = {'tasks': {}, 'attacks': {}, 'wrong': []}
-    tasks = sorted({f.split('_')[0] for f in os.listdir(CORPUS) if re.match(r't\d+_', f)})
-    for t in tasks:
-        for form in ('base', 'a', 'b'):
-            path = os.path.join(CORPUS, f'{t}_{form}.dpm')
-            if not os.path.exists(path):
-                continue
-            n, lines = tokens(path)
-            cell = {'tokens': n, 'lines': lines, 'modes': {}}
-            for mode in MODES:
-                ok, codes = check(path, mode)
-                want = form == 'base' or form in rules(mode)
-                cell['modes'][mode] = 'ok' if ok else ' '.join(codes)
-                if ok != want:
-                    data['wrong'].append(f'{t}_{form} в режиме {mode}: {"принята" if ok else "отвергнута"}')
-            data['tasks'][f'{t}_{form}'] = cell
+    for f in sorted(os.listdir(CORPUS)):
+        m = re.match(r'(t\d+)_(\w+)\.dpm$', f)
+        if not m or m.group(2) not in ACCEPT_FORM:
+            continue
+        path = os.path.join(CORPUS, f)
+        n, lines = tokens(path)
+        ok, codes = check(path)
+        if ok != ACCEPT_FORM[m.group(2)]:
+            data['wrong'].append(f'{f[:-4]}: {"принята" if ok else "отвергнута"}')
+        data['tasks'][f[:-4]] = {'tokens': n, 'lines': lines, 'result': 'ok' if ok else ' '.join(codes)}
     with tempfile.TemporaryDirectory() as tmp:
         for name, what, expect, path in attacks(tmp):
-            cell = {'what': what, 'expect': expect, 'modes': {}}
-            for mode in MODES:
-                ok, codes = check(path, mode)
-                want = expect == 'reject-base-a' and 'b' in rules(mode)
-                cell['modes'][mode] = 'ok' if ok else ' '.join(codes)
-                if ok != want:
-                    data['wrong'].append(f'{name} в режиме {mode}: {"принята" if ok else "отвергнута"}')
-            data['attacks'][name] = cell
-    report = summary(data, tasks)
+            ok, codes = check(path)
+            if ok != (expect == 'reject-base-a'):
+                data['wrong'].append(f'{name}: {"принята" if ok else "отвергнута"}')
+            data['attacks'][name] = {'what': what, 'expect': expect, 'result': 'ok' if ok else ' '.join(codes)}
+    report = summary(data)
     if args.save:
         d = os.path.join(ROOT, 'bench', 'results', args.save)
         os.makedirs(d, exist_ok=True)
@@ -124,29 +101,16 @@ def main():
     sys.exit(1 if data['wrong'] else 0)
 
 
-def summary(data, tasks):
-    lines = ['# Линейные типы в циклах: режимы проверки', '',
-             'Режимы: base — Р60; a — поглощение в цикле с выходом из него; b — errdefer снимается при '
-             'поглощении; ab — оба.', '',
-             '## Задачи: формы, токены, приём', '',
-             '| задача | форма | токенов | строк | base | a | b | ab |', '|---|---|---|---|---|---|---|---|']
+def summary(data):
+    lines = ['# Линейные типы: корпус против принятого правила (Р60)', '',
+             '| задача | форма | токенов | строк | проверка |', '|---|---|---|---|---|']
     for name, c in data['tasks'].items():
         t, form = name.split('_', 1)
-        m = c['modes']
-        lines.append(f'| {t} | {form} | {c["tokens"]} | {c["lines"]} | {m["base"]} | {m["a"]} | {m["b"]} | {m["ab"]} |')
-    lines += ['', '| задача | base → a | base → b |', '|---|---|---|']
-    for t in tasks:
-        b = data['tasks'].get(f'{t}_base')
-        a = data['tasks'].get(f'{t}_a')
-        bb = data['tasks'].get(f'{t}_b')
-        if b and a and bb:
-            lines.append(f'| {t} | {a["tokens"] - b["tokens"]:+d} токенов ({(a["tokens"] / b["tokens"] - 1) * 100:+.0f}%) | '
-                         f'{bb["tokens"] - b["tokens"]:+d} токенов ({(bb["tokens"] / b["tokens"] - 1) * 100:+.0f}%) |')
-    lines += ['', '## Атаки', '', '| случай | что | ждём | base | a | b | ab |', '|---|---|---|---|---|---|---|']
+        lines.append(f'| {t} | {form} | {c["tokens"]} | {c["lines"]} | {c["result"]} |')
+    lines += ['', '| случай | что | ждём | проверка |', '|---|---|---|---|']
     for name, c in data['attacks'].items():
-        m = c['modes']
-        want = 'отвергнуть' if c['expect'] == 'reject' else 'принять в b, ab'
-        lines.append(f'| {name} | {c["what"]} | {want} | {m["base"]} | {m["a"]} | {m["b"]} | {m["ab"]} |')
+        want = 'отвергнуть' if c['expect'] == 'reject' else 'принять'
+        lines.append(f'| {name} | {c["what"]} | {want} | {c["result"]} |')
     lines += ['', 'Расхождения с ожиданием: ' + ('нет' if not data['wrong'] else '; '.join(data['wrong'])) + '.']
     return '\n'.join(lines) + '\n'
 

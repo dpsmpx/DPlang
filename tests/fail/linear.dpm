@@ -125,19 +125,20 @@ fn errdefer_only() E!void {
     return
 }
 
-fn closed_then_fail(flag: bool) E!void {
+// errdefer снят, когда r перенесён (Р60), но выход с ошибкой в том же
+// вызове до его конца потерял бы r. Закрыт, потом ошибка, и перенос в
+// результат — допустимы (run/errdefer_disarm).
+fn lost_in_call() E!void {
     let r = open(16)
     errdefer close(r)
-    close(r)
-    if flag {
-        fail .Bad
-    }
+    let s = pair(r, try may(17))
+    let Pair { a, b } = s
+    close(a)
+    close(b)
 }
 
-fn moved_into_result() E!Res {
-    let r = open(17)
-    errdefer close(r)
-    return wrap(r)
+fn pair(a: Res, b: Res) Pair {
+    return Pair { a, b }
 }
 
 fn through_ref(r: &Res) {
@@ -148,8 +149,7 @@ fn replace_ref(r: &mut Res) {
     r = open(18)
 }
 
-fn main() {
-}
+fn main() {}
 
 fn peek(r: &Res, n: int) int {
     return n
@@ -217,8 +217,11 @@ struct OptView {
 }
 
 extern fn see(v: &View) u32
+
 extern fn see_one(v: View, n: u32) u32
+
 extern fn see_all(vs: []View, n: u32) u32
+
 extern fn see_opts(vs: []OptView, n: u32) u32
 
 fn c_give(r: CRes) u32 {

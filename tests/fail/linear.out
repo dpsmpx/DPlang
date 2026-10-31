@@ -44,17 +44,14 @@ linear.dpm:117:13: error[E0511]: 'r' is not closed when the function returns an 
 linear.dpm:125:5: error[E0511]: 'r' is not closed when the function returns here: 'errdefer' closes it only on errors
  125 |     return
      |     ^~~~~~
-linear.dpm:133:9: error[E0512]: 'r' is already closed or moved, but 'errdefer' would close it again if the function returns an error here
- 133 |         fail .Bad
-     |         ^~~~~~~~~
-linear.dpm:140:5: error[E0512]: 'r' is already closed or moved, but 'errdefer' would close it again if the function returns an error here
- 140 |     return wrap(r)
-     |     ^~~~~~~~~~~~~~
-linear.dpm:144:11: error[E0513]: 'r' is a reference: its resource belongs to the caller and cannot be closed or moved here
- 144 |     close(r)
+linear.dpm:134:21: error[E0512]: 'r' is moved, but the call or value it goes into is not finished when the function returns an error here: the resource would be lost; compute the fallible part first
+ 134 |     let s = pair(r, try may(17))
+     |                     ^~~~~~~~~~~
+linear.dpm:145:11: error[E0513]: 'r' is a reference: its resource belongs to the caller and cannot be closed or moved here
+ 145 |     close(r)
      |           ^
-linear.dpm:148:5: error[E0513]: 'r' is a reference: the caller's resource cannot be replaced
- 148 |     r = open(18)
+linear.dpm:149:5: error[E0513]: 'r' is a reference: the caller's resource cannot be replaced
+ 149 |     r = open(18)
      |     ^
 linear.dpm:167:23: error[E0513]: 'r' is held by a reference in this call and cannot be closed or moved before the call returns
  167 |     _ = peek(&r, give(r))
@@ -68,19 +65,19 @@ linear.dpm:191:27: error[E0513]: 'c' is assigned into here and cannot be closed 
 linear.dpm:193:22: error[E0513]: 'd' is indexed here and cannot be closed or moved in its own index
  193 |     d.items[drop_bag(d) - 1] = 5
      |                      ^
-linear.dpm:230:48: error[E0513]: 'a' is held by a reference in this call and cannot be closed or moved before the call returns
- 230 |     _ = see_all([View { p: &a, n: 1 }], c_give(a))
+linear.dpm:233:48: error[E0513]: 'a' is held by a reference in this call and cannot be closed or moved before the call returns
+ 233 |     _ = see_all([View { p: &a, n: 1 }], c_give(a))
      |                                                ^
-linear.dpm:231:46: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
- 231 |     _ = see_opts([OptView { p: &b }], c_give(b))
+linear.dpm:234:46: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
+ 234 |     _ = see_opts([OptView { p: &b }], c_give(b))
      |                                              ^
-linear.dpm:232:38: error[E0513]: 'c' is held by a reference in this call and cannot be closed or moved before the call returns
- 232 |     _ = see(&View { p: &c, n: c_give(c) })
+linear.dpm:235:38: error[E0513]: 'c' is held by a reference in this call and cannot be closed or moved before the call returns
+ 235 |     _ = see(&View { p: &c, n: c_give(c) })
      |                                      ^
-linear.dpm:236:76: error[E0513]: 'a' is held by a reference in this call and cannot be closed or moved before the call returns
- 236 |     _ = see_all([View { p: &a, n: 1 }, View { p: &a, n: 2 }][0..1], c_give(a))
+linear.dpm:239:76: error[E0513]: 'a' is held by a reference in this call and cannot be closed or moved before the call returns
+ 239 |     _ = see_all([View { p: &a, n: 1 }, View { p: &a, n: 2 }][0..1], c_give(a))
      |                                                                            ^
-linear.dpm:237:51: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
- 237 |     _ = see_one([View { p: &b, n: 1 }][0], c_give(b))
+linear.dpm:240:51: error[E0513]: 'b' is held by a reference in this call and cannot be closed or moved before the call returns
+ 240 |     _ = see_one([View { p: &b, n: 1 }][0], c_give(b))
      |                                                   ^
 [exit 1]

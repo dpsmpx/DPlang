@@ -1,0 +1,16 @@
+open a
+close a
+fail_before: error
+open b
+close b
+fail_after: error
+open bad
+close bad
+close_fails: error
+open c
+finish c
+close c
+handed: error
+open d
+close d
+looped: error

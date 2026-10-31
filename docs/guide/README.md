@@ -454,6 +454,9 @@ defer release(b)                      // закроется при выходе 
 - Значение `@linear` забирают ровно один раз на каждом пути: передачей
   по значению, `return`, `let c = b`. Забыли — E0511, забрали дважды
   или читаете после — E0512.
+- `errdefer close(r)` действует, пока `r` у переменной: закрыли или
+  отдали `r` — снят, ошибка дальше его не выполняет. Не теряйте ресурс в
+  середине вызова: `g(r, try h())` — E0512, вычислите `try h()` раньше.
 - В цикле нельзя закрыть ресурс, открытый до цикла (E0513): закройте
   после цикла или откройте внутри.
 - Поле `@linear` не забирают отдельно и не заменяют (E0513) — только
@@ -473,19 +476,9 @@ fn copy_file(from: str, to: str) os.IoError!void {
 
 fn save(path: str, parts: &List[List[u8]]) os.IoError!void {
     var f = try os.create(path)               // os.File — @linear
-    var failed: ?os.IoError = none
+    errdefer _ = os.close(f)                  // на ошибке, пока f открыт
     for p in &parts {
-        match os.write(&mut f, p) {           // по ссылке файл не забирается
-            ok(_) => {}
-            err(e) => {
-                failed = e
-                break
-            }
-        }
-    }
-    if let e = failed {
-        _ = os.close(f)
-        fail e
+        try os.write(&mut f, p)               // по ссылке файл не забирается
     }
     try os.close(f)                           // ошибка записи на диск — здесь
 }
@@ -495,9 +488,9 @@ fn save(path: str, parts: &List[List[u8]]) os.IoError!void {
   `os.read_bytes`, `os.write_bytes`, `os.write_file`. Большие — частями
   через `os.File`: `create` или `open`, `write`, `read(&mut f, &mut buf,
   n)` (дописывает до `n` байтов, 0 — конец), `close`.
-- `File` закрывают ровно один раз (E0511, E0512); в цикле, открытый до
-  него, — нельзя (E0513): ошибку запомните, выйдите из цикла и закройте
-  после.
+- `File` закрывают ровно один раз (E0511, E0512): `errdefer` на ошибки,
+  `try os.close(f)` в конце. В цикле файл, открытый до него, не
+  закрывают (E0513).
 - Ошибки — `os.IoError`: `NotFound`, `PermissionDenied`, `InvalidUtf8`,
   `NoSpace`, `Other`. Из `@det` и тела `parallel for` файлов нет (E0425,
   E0517): прочтите до, запишите после.
