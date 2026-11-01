@@ -1239,7 +1239,7 @@ pub extern type SDL_EGLConfig
 pub extern type SDL_EGLSurface
 pub extern type SDL_Cursor
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_DisplayMode {
     display_id: u32
     format: i32
@@ -1252,14 +1252,14 @@ pub struct SDL_DisplayMode {
     internal: ?SDL_DisplayModeData
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_CommonEvent {
     type: u32
     reserved: u32
     timestamp: u64
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_DisplayEvent {
     type: i32
     reserved: u32
@@ -1269,7 +1269,7 @@ pub struct SDL_DisplayEvent {
     data2: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_WindowEvent {
     type: i32
     reserved: u32
@@ -1279,7 +1279,7 @@ pub struct SDL_WindowEvent {
     data2: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_KeyboardDeviceEvent {
     type: i32
     reserved: u32
@@ -1287,7 +1287,7 @@ pub struct SDL_KeyboardDeviceEvent {
     which: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_KeyboardEvent {
     type: i32
     reserved: u32
@@ -1302,7 +1302,7 @@ pub struct SDL_KeyboardEvent {
     repeat: bool
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_TextEditingEvent {
     type: i32
     reserved: u32
@@ -1313,7 +1313,7 @@ pub struct SDL_TextEditingEvent {
     length: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_TextEditingCandidatesEvent {
     type: i32
     reserved: u32
@@ -1328,7 +1328,7 @@ pub struct SDL_TextEditingCandidatesEvent {
     padding3: u8
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_TextInputEvent {
     type: i32
     reserved: u32
@@ -1337,7 +1337,7 @@ pub struct SDL_TextInputEvent {
     text: ?SDL_Void
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MouseDeviceEvent {
     type: i32
     reserved: u32
@@ -1345,7 +1345,7 @@ pub struct SDL_MouseDeviceEvent {
     which: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MouseMotionEvent {
     type: i32
     reserved: u32
@@ -1359,7 +1359,7 @@ pub struct SDL_MouseMotionEvent {
     yrel: f32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MouseButtonEvent {
     type: i32
     reserved: u32
@@ -1374,7 +1374,7 @@ pub struct SDL_MouseButtonEvent {
     y: f32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MouseWheelEvent {
     type: i32
     reserved: u32
@@ -1390,7 +1390,7 @@ pub struct SDL_MouseWheelEvent {
     integer_y: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_JoyAxisEvent {
     type: i32
     reserved: u32
@@ -1404,7 +1404,7 @@ pub struct SDL_JoyAxisEvent {
     padding4: u16
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_JoyBallEvent {
     type: i32
     reserved: u32
@@ -1418,7 +1418,7 @@ pub struct SDL_JoyBallEvent {
     yrel: i16
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_JoyHatEvent {
     type: i32
     reserved: u32
@@ -1430,7 +1430,7 @@ pub struct SDL_JoyHatEvent {
     padding2: u8
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_JoyButtonEvent {
     type: i32
     reserved: u32
@@ -1442,7 +1442,7 @@ pub struct SDL_JoyButtonEvent {
     padding2: u8
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_JoyDeviceEvent {
     type: i32
     reserved: u32
@@ -1450,7 +1450,7 @@ pub struct SDL_JoyDeviceEvent {
     which: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_JoyBatteryEvent {
     type: i32
     reserved: u32
@@ -1460,7 +1460,7 @@ pub struct SDL_JoyBatteryEvent {
     percent: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_GamepadAxisEvent {
     type: i32
     reserved: u32
@@ -1474,7 +1474,7 @@ pub struct SDL_GamepadAxisEvent {
     padding4: u16
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_GamepadButtonEvent {
     type: i32
     reserved: u32
@@ -1486,7 +1486,7 @@ pub struct SDL_GamepadButtonEvent {
     padding2: u8
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_GamepadDeviceEvent {
     type: i32
     reserved: u32
@@ -1494,7 +1494,7 @@ pub struct SDL_GamepadDeviceEvent {
     which: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_GamepadTouchpadEvent {
     type: i32
     reserved: u32
@@ -1507,7 +1507,7 @@ pub struct SDL_GamepadTouchpadEvent {
     pressure: f32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_GamepadSensorEvent {
     type: i32
     reserved: u32
@@ -1518,7 +1518,7 @@ pub struct SDL_GamepadSensorEvent {
     sensor_timestamp: u64
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_AudioDeviceEvent {
     type: i32
     reserved: u32
@@ -1530,7 +1530,7 @@ pub struct SDL_AudioDeviceEvent {
     padding3: u8
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_CameraDeviceEvent {
     type: i32
     reserved: u32
@@ -1538,7 +1538,7 @@ pub struct SDL_CameraDeviceEvent {
     which: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_RenderEvent {
     type: i32
     reserved: u32
@@ -1546,7 +1546,7 @@ pub struct SDL_RenderEvent {
     window_id: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_TouchFingerEvent {
     type: i32
     reserved: u32
@@ -1561,7 +1561,7 @@ pub struct SDL_TouchFingerEvent {
     window_id: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_PinchFingerEvent {
     type: i32
     reserved: u32
@@ -1570,7 +1570,7 @@ pub struct SDL_PinchFingerEvent {
     window_id: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_PenProximityEvent {
     type: i32
     reserved: u32
@@ -1581,7 +1581,7 @@ pub struct SDL_PenProximityEvent {
     device_type: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_PenMotionEvent {
     type: i32
     reserved: u32
@@ -1594,7 +1594,7 @@ pub struct SDL_PenMotionEvent {
     device_type: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_PenTouchEvent {
     type: i32
     reserved: u32
@@ -1609,7 +1609,7 @@ pub struct SDL_PenTouchEvent {
     device_type: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_PenButtonEvent {
     type: i32
     reserved: u32
@@ -1624,7 +1624,7 @@ pub struct SDL_PenButtonEvent {
     device_type: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_PenAxisEvent {
     type: i32
     reserved: u32
@@ -1639,7 +1639,7 @@ pub struct SDL_PenAxisEvent {
     device_type: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_DropEvent {
     type: i32
     reserved: u32
@@ -1651,7 +1651,7 @@ pub struct SDL_DropEvent {
     data: ?SDL_Void
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_ClipboardEvent {
     type: i32
     reserved: u32
@@ -1661,7 +1661,7 @@ pub struct SDL_ClipboardEvent {
     mime_types: ?SDL_Void
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_SensorEvent {
     type: i32
     reserved: u32
@@ -1671,14 +1671,14 @@ pub struct SDL_SensorEvent {
     sensor_timestamp: u64
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_QuitEvent {
     type: i32
     reserved: u32
     timestamp: u64
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_UserEvent {
     type: u32
     reserved: u32
@@ -1689,7 +1689,7 @@ pub struct SDL_UserEvent {
     data2: ?SDL_Void
 }
 
-@union
+@union("SDL3/SDL.h")
 pub struct SDL_Event {
     type: u32
     common: SDL_CommonEvent
@@ -1733,25 +1733,25 @@ pub struct SDL_Event {
     padding: [128]u8
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_CursorFrameInfo {
     surface: ?SDL_Void
     duration: u32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_Point {
     x: i32
     y: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_FPoint {
     x: f32
     y: f32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_Rect {
     x: i32
     y: i32
@@ -1759,7 +1759,7 @@ pub struct SDL_Rect {
     h: i32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_FRect {
     x: f32
     y: f32
@@ -1767,26 +1767,26 @@ pub struct SDL_FRect {
     h: f32
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MessageBoxButtonData {
     flags: u32
     button_id: i32
     text: ?SDL_Void
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MessageBoxColor {
     r: u8
     g: u8
     b: u8
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MessageBoxColorScheme {
     colors: [5]SDL_MessageBoxColor
 }
 
-@c
+@c("SDL3/SDL.h")
 pub struct SDL_MessageBoxData {
     flags: u32
     window: ?SDL_Window

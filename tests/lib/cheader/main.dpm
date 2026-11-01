@@ -1,0 +1,18 @@
+// spec: ffi.struct ffi.export (Р76)
+// Структура C из заголовка: заголовок --lib включает point.h и не
+// определяет Point второй раз.
+@c("point.h")
+pub struct Point {
+    x: i32
+    y: i32
+}
+
+@export
+pub fn point_sum(p: Point) i32 {
+    return p.x + p.y
+}
+
+@export
+pub fn point_swap(p: Point) Point {
+    return Point { x: p.y, y: p.x }
+}

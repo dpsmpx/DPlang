@@ -89,6 +89,7 @@ public:
     const Type* cfn(const CFnSig& sig);
     const Type* array(const Type* elem, uint64_t len);
     const Type* ref(const Type* elem) { return make(TK::Ref, elem, nullptr, nullptr, nullptr); }
+    const Type* ref_mut(const Type* elem);  // `&mut T` (Р77): TK::Ref, len = 1
 
 private:
     const Type* make(TK k, const Type* elem, const Type* err, const StructDef* s, const EnumDef* e,
@@ -99,6 +100,7 @@ private:
         interned_;
     std::deque<CFnSig> sigs_;
     std::map<std::pair<const Type*, uint64_t>, const Type*> arrays_;
+    std::map<std::pair<const Type*, uint64_t>, const Type*> refs_mut_;
     std::map<std::pair<std::vector<std::pair<int, const Type*>>, const Type*>, const Type*> cfns_;
 };
 
@@ -116,6 +118,10 @@ bool contains_slice(const Type* t);
 // (или с полем-заимствующей структурой): живёт только в аргументе вызова.
 bool c_borrow_field(const Type* t);
 bool c_borrowing(const Type* t);
+bool chain_field(const Type* t);  // `?&mut S` — поле цепочки вывода (Р77)
+// Данные C или структура `@c` из данных и полей цепочки вывода (Р77):
+// `&` и `&mut` параметр функции C, поле `@c`.
+bool c_out_type(const Type* t);
 // Значение хранит вид до вызова, который его поглотит: срез, `&T`,
 // заимствующая структура `@c` (Р62) или список таких (массив для C).
 bool holds_view(const Type* t);

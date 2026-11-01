@@ -101,6 +101,7 @@ struct RefType : Type {
     static constexpr TypeKind Kind = TypeKind::Ref;
     RefType() : Type(Kind) {}
     Type* inner = nullptr;
+    bool mut = false;  // `?&mut T` — поле цепочки вывода `@c` (Р77)
 };
 
 // `extern fn(&i32, T) R` — указатель на функцию C (Р61): имён параметров нет.

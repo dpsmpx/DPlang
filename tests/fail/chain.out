@@ -1,0 +1,50 @@
+--- stderr ---
+chain.dpm:29:13: error[E0328]: field 'always' of '@c' struct 'Bad' has type '&mut OutBase'; '&mut' is only an output chain '?&mut S' to a '@c' struct S (spec: ffi.struct)
+  29 |     always: &mut OutBase
+     |             ^~~~~~~~~~~~
+chain.dpm:30:13: error[E0328]: field 'number' of '@c' struct 'Bad' has type '?&mut i32'; '&mut' is only an output chain '?&mut S' to a '@c' struct S (spec: ffi.struct)
+  30 |     number: ?&mut i32
+     |             ^~~~~~~~~
+chain.dpm:34:11: error[E0328]: '?&mut OutBase' cannot be a field of a plain struct: '[N]T' and '&T' are fields of a '@c' struct (spec: ffi.struct)
+  34 |     next: ?&mut OutBase
+     |           ^~~~~~~~~~~~~
+chain.dpm:52:23: error[E0328]: '?&mut Props' cannot be a parameter: '[N]T' and '&T' are fields of a '@c' struct (spec: ffi.struct)
+  52 | extern fn host_opt(p: ?&mut Props)
+     |                       ^~~~~~~~~~~
+chain.dpm:66:30: error[E0328]: '&mut' goes into an output chain field only in a literal written in a call of a C function (spec: ffi.struct)
+  66 |     let held = Props { next: &mut l, count: 0 }
+     |                              ^~~~~~
+chain.dpm:67:28: error[E0501]: a reference needs a variable, a field, an element or a struct literal
+  67 |     println(str(host_read(&id(Props { next: &mut l, count: 0 }))))
+     |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+chain.dpm:67:45: error[E0328]: '&mut' goes into an output chain field only in a literal written in a call of a C function (spec: ffi.struct)
+  67 |     println(str(host_read(&id(Props { next: &mut l, count: 0 }))))
+     |                                             ^~~~~~
+chain.dpm:68:39: error[E0412]: cannot mutate 'fixed': it is not declared with 'var'
+  68 |     host_fill(&mut Props { next: &mut fixed, count: 0 })
+     |                                       ^~~~~
+chain.dpm:70:19: error[E0501]: a reference needs a variable, a field or an element
+  70 |     dpl_fill(&mut Props { next: none, count: 0 })
+     |                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+chain.dpm:71:34: error[E0401]: expected '?&mut OutBase', found '&mut InExtra'
+  71 |     host_fill(&mut Props { next: &mut InExtra { next: none, bonus: 1 }, count: 0 })
+     |                                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+chain.dpm:73:41: error[E0502]: 'q' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  73 |     host_two(&mut q, &mut Props { next: &mut q, count: 0 })
+     |                                         ^~~~~~
+chain.dpm:75:7: error[E0328]: field 'next' of 'Props' is an output chain for C: in dpl it is always none, a link goes in a literal in the call
+  75 |     p.next = &mut l
+     |       ^~~~
+chain.dpm:75:14: error[E0501]: '&' marks only call arguments for '&' and '&mut' parameters, and 'for ... in'
+  75 |     p.next = &mut l
+     |              ^~~~~~
+chain.dpm:76:15: error[E0328]: field 'next' of 'Props' is an output chain for C: in dpl it is always none, a link goes in a literal in the call
+  76 |     let n = p.next
+     |               ^~~~
+chain.dpm:77:9: error[E0328]: 'r' cannot hold '&mut i32': '[N]T' and '&T' are fields of a '@c' struct; index or pass them where they are
+  77 |     let r: &mut i32 = 0
+     |         ^
+chain.dpm:77:23: error[E0401]: expected '&mut i32', found 'i64'
+  77 |     let r: &mut i32 = 0
+     |                       ^
+[exit 1]

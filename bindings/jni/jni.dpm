@@ -36,7 +36,7 @@ pub const JNILocalRefType: i32 = 1
 pub const JNIGlobalRefType: i32 = 2
 pub const JNIWeakGlobalRefType: i32 = 3
 
-@union
+@union("jni.h")
 pub struct jvalue {
     z: u8
     b: i8
@@ -49,20 +49,20 @@ pub struct jvalue {
     l: ?jobject
 }
 
-@c
+@c("jni.h")
 pub struct JavaVMAttachArgs {
     version: i32
     name: str
     group: ?jobject
 }
 
-@c
+@c("jni.h")
 pub struct JavaVMOption {
     option_string: str
     extra_info: ?JniVoid
 }
 
-@c
+@c("jni.h")
 pub struct JavaVMInitArgs {
     version: i32
     n_options: i32

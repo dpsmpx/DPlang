@@ -500,7 +500,7 @@ def lib_one(arg, bless=False):
         return 'в заголовке нет строки компоновки'
     libs = link.split(':', 1)[1].split()[1:]  # первое — имя библиотеки
     exe = os.path.join(out, 'host' + suffix)
-    cc = LIB_CC[where]() + ['-std=c11', '-Wall', '-Wextra', '-Werror', '-I', out, os.path.join(case, 'host.c'), lib] + libs
+    cc = LIB_CC[where]() + ['-std=c11', '-Wall', '-Wextra', '-Werror', '-I', out, '-I', case, os.path.join(case, 'host.c'), lib] + libs
     r = subprocess.run(cc + ['-o', exe], capture_output=True, text=True, timeout=TIMEOUT)
     if r.returncode != 0:
         return 'хост не собирается: ' + '\n'.join(r.stderr.splitlines()[:8])

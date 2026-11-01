@@ -2218,6 +2218,7 @@ std::string Emitter::header() {
     auto c_word = [](const std::string& s) { return is_c_keyword(s) ? s + "_" : s; };
     auto struct_name = [&](const Type* t) {
         const sema::StructDef* d = t->sdef;
+        if (!d->c_header.empty()) return d->name;  // имя C из заголовка (Р76)
         return c_word(name_count[d->name] > 1 ? d->module->name + "_" + d->name : d->name);
     };
     hct = [&](const Type* t) -> std::string {
@@ -2237,7 +2238,15 @@ std::string Emitter::header() {
     for (char c : lib_name_) guard += (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) ? c : '_';
     guard += "_H";
     std::string out = "// Сгенерировано dpl (dpl build --lib) — не править.\n";
-    out += "#ifndef " + guard + "\n#define " + guard + "\n\n#include <stdbool.h>\n#include <stdint.h>\n\n";
+    out += "#ifndef " + guard + "\n#define " + guard + "\n\n#include <stdbool.h>\n#include <stdint.h>\n";
+    // Структуры C из заголовков (Р76): заголовок включается, структура не
+    // определяется второй раз, если хост включает и его.
+    std::set<std::string> headers;
+    for (const Type* t : structs) {
+        if (!t->sdef->c_header.empty()) headers.insert(t->sdef->c_header);
+    }
+    for (const std::string& h : headers) out += "#include <" + h + ">\n";
+    out += "\n";
     out += "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n";
     // Сначала имена структур: их видят типы указателей на функции, затем
     // эти типы: их видят поля структур.
@@ -2245,6 +2254,7 @@ std::string Emitter::header() {
     if (!structs.empty()) out += "\n";
     if (!fn_defs.empty()) out += fn_defs + "\n";
     for (const Type* t : structs) {
+        if (!t->sdef->c_header.empty()) continue;  // определена в своём заголовке
         out += hct(t) + " {\n";
         for (const sema::FieldDef& fd : t->sdef->fields) {
             const Type* ft = fd.type;

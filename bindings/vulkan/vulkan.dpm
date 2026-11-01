@@ -1509,45 +1509,45 @@ pub extern type VkPrivateDataSlot
 pub extern type VkSurfaceKHR
 pub extern type VkSwapchainKHR
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBaseOutStructure {
     s_type: i32  // VkStructureType
-    p_next: ?&VkBaseOutStructure
+    p_next: ?&mut VkBaseOutStructure
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBaseInStructure {
     s_type: i32  // VkStructureType
     p_next: ?&VkBaseInStructure
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkOffset2D {
     x: i32
     y: i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkOffset3D {
     x: i32
     y: i32
     z: i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExtent2D {
     width: u32
     height: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExtent3D {
     width: u32
     height: u32
     depth: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkViewport {
     x: f32
     y: f32
@@ -1557,20 +1557,20 @@ pub struct VkViewport {
     max_depth: f32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRect2D {
     offset: VkOffset2D
     extent: VkExtent2D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkClearRect {
     rect: VkRect2D
     base_array_layer: u32
     layer_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkComponentMapping {
     r: i32  // VkComponentSwizzle
     g: i32  // VkComponentSwizzle
@@ -1578,7 +1578,7 @@ pub struct VkComponentMapping {
     a: i32  // VkComponentSwizzle
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceProperties {
     api_version: u32
     driver_version: u32
@@ -1591,13 +1591,13 @@ pub struct VkPhysicalDeviceProperties {
     sparse_properties: VkPhysicalDeviceSparseProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExtensionProperties {
     extension_name: [256]u8
     spec_version: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkLayerProperties {
     layer_name: [256]u8
     spec_version: u32
@@ -1605,7 +1605,7 @@ pub struct VkLayerProperties {
     description: [256]u8
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkApplicationInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_APPLICATION_INFO
     p_next: ?&VkBaseInStructure
@@ -1616,7 +1616,7 @@ pub struct VkApplicationInfo {
     api_version: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAllocationCallbacks {
     p_user_data: ?VkVoid
     pfn_allocation: extern fn(?VkVoid, u64, u64, i32) ?VkVoid
@@ -1626,7 +1626,7 @@ pub struct VkAllocationCallbacks {
     pfn_internal_free: ?extern fn(?VkVoid, u64, i32, i32)
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceQueueCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1636,7 +1636,7 @@ pub struct VkDeviceQueueCreateInfo {
     @count(queue_count) p_queue_priorities: []f32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1650,7 +1650,7 @@ pub struct VkDeviceCreateInfo {
     p_enabled_features: ?&VkPhysicalDeviceFeatures
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkInstanceCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1662,7 +1662,7 @@ pub struct VkInstanceCreateInfo {
     @count(enabled_extension_count) pp_enabled_extension_names: []str
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkQueueFamilyProperties {
     queue_flags: u32  // VkQueueFlags
     queue_count: u32
@@ -1670,7 +1670,7 @@ pub struct VkQueueFamilyProperties {
     min_image_transfer_granularity: VkExtent3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceMemoryProperties {
     memory_type_count: u32
     memory_types: [32]VkMemoryType
@@ -1678,7 +1678,7 @@ pub struct VkPhysicalDeviceMemoryProperties {
     memory_heaps: [16]VkMemoryHeap
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryAllocateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1686,21 +1686,21 @@ pub struct VkMemoryAllocateInfo {
     memory_type_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryRequirements {
     size: u64
     alignment: u64
     memory_type_bits: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseImageFormatProperties {
     aspect_mask: u32  // VkImageAspectFlags
     image_granularity: VkExtent3D
     flags: u32  // VkSparseImageFormatFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseImageMemoryRequirements {
     format_properties: VkSparseImageFormatProperties
     image_mip_tail_first_lod: u32
@@ -1709,19 +1709,19 @@ pub struct VkSparseImageMemoryRequirements {
     image_mip_tail_stride: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryType {
     property_flags: u32  // VkMemoryPropertyFlags
     heap_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryHeap {
     size: u64
     flags: u32  // VkMemoryHeapFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMappedMemoryRange {
     s_type: i32 = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE
     p_next: ?&VkBaseInStructure
@@ -1730,14 +1730,14 @@ pub struct VkMappedMemoryRange {
     size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkFormatProperties {
     linear_tiling_features: u32  // VkFormatFeatureFlags
     optimal_tiling_features: u32  // VkFormatFeatureFlags
     buffer_features: u32  // VkFormatFeatureFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageFormatProperties {
     max_extent: VkExtent3D
     max_mip_levels: u32
@@ -1746,21 +1746,21 @@ pub struct VkImageFormatProperties {
     max_resource_size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorBufferInfo {
     buffer: ?VkBuffer
     offset: u64
     range: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorImageInfo {
     sampler: VkSampler
     image_view: VkImageView
     image_layout: i32  // VkImageLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkWriteDescriptorSet {
     s_type: i32 = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET
     p_next: ?&VkBaseInStructure
@@ -1774,7 +1774,7 @@ pub struct VkWriteDescriptorSet {
     p_texel_buffer_view: []VkBufferView
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCopyDescriptorSet {
     s_type: i32 = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET
     p_next: ?&VkBaseInStructure
@@ -1787,7 +1787,7 @@ pub struct VkCopyDescriptorSet {
     descriptor_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1799,7 +1799,7 @@ pub struct VkBufferCreateInfo {
     p_queue_family_indices: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferViewCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1810,14 +1810,14 @@ pub struct VkBufferViewCreateInfo {
     range: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageSubresource {
     aspect_mask: u32  // VkImageAspectFlags
     mip_level: u32
     array_layer: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageSubresourceLayers {
     aspect_mask: u32  // VkImageAspectFlags
     mip_level: u32
@@ -1825,7 +1825,7 @@ pub struct VkImageSubresourceLayers {
     layer_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageSubresourceRange {
     aspect_mask: u32  // VkImageAspectFlags
     base_mip_level: u32
@@ -1834,7 +1834,7 @@ pub struct VkImageSubresourceRange {
     layer_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryBarrier {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_BARRIER
     p_next: ?&VkBaseInStructure
@@ -1842,7 +1842,7 @@ pub struct VkMemoryBarrier {
     dst_access_mask: u32  // VkAccessFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferMemoryBarrier {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER
     p_next: ?&VkBaseInStructure
@@ -1855,7 +1855,7 @@ pub struct VkBufferMemoryBarrier {
     size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageMemoryBarrier {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
     p_next: ?&VkBaseInStructure
@@ -1869,7 +1869,7 @@ pub struct VkImageMemoryBarrier {
     subresource_range: VkImageSubresourceRange
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1888,7 +1888,7 @@ pub struct VkImageCreateInfo {
     initial_layout: i32  // VkImageLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubresourceLayout {
     offset: u64
     size: u64
@@ -1897,7 +1897,7 @@ pub struct VkSubresourceLayout {
     depth_pitch: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageViewCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -1909,14 +1909,14 @@ pub struct VkImageViewCreateInfo {
     subresource_range: VkImageSubresourceRange
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferCopy {
     src_offset: u64
     dst_offset: u64
     size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseMemoryBind {
     resource_offset: u64
     size: u64
@@ -1925,7 +1925,7 @@ pub struct VkSparseMemoryBind {
     flags: u32  // VkSparseMemoryBindFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseImageMemoryBind {
     subresource: VkImageSubresource
     offset: VkOffset3D
@@ -1935,28 +1935,28 @@ pub struct VkSparseImageMemoryBind {
     flags: u32  // VkSparseMemoryBindFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseBufferMemoryBindInfo {
     buffer: VkBuffer
     bind_count: u32
     @count(bind_count) p_binds: []VkSparseMemoryBind
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseImageOpaqueMemoryBindInfo {
     image: VkImage
     bind_count: u32
     @count(bind_count) p_binds: []VkSparseMemoryBind
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseImageMemoryBindInfo {
     image: VkImage
     bind_count: u32
     @count(bind_count) p_binds: []VkSparseImageMemoryBind
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBindSparseInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO
     p_next: ?&VkBaseInStructure
@@ -1972,7 +1972,7 @@ pub struct VkBindSparseInfo {
     @count(signal_semaphore_count) p_signal_semaphores: []VkSemaphore
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageCopy {
     src_subresource: VkImageSubresourceLayers
     src_offset: VkOffset3D
@@ -1981,7 +1981,7 @@ pub struct VkImageCopy {
     extent: VkExtent3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageBlit {
     src_subresource: VkImageSubresourceLayers
     src_offsets: [2]VkOffset3D
@@ -1989,7 +1989,7 @@ pub struct VkImageBlit {
     dst_offsets: [2]VkOffset3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferImageCopy {
     buffer_offset: u64
     buffer_row_length: u32
@@ -1999,7 +1999,7 @@ pub struct VkBufferImageCopy {
     image_extent: VkExtent3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageResolve {
     src_subresource: VkImageSubresourceLayers
     src_offset: VkOffset3D
@@ -2008,7 +2008,7 @@ pub struct VkImageResolve {
     extent: VkExtent3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkShaderModuleCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2017,7 +2017,7 @@ pub struct VkShaderModuleCreateInfo {
     @count(code_size) p_code: []u8  // SPIR-V байтами: code_size — длина в байтах
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorSetLayoutBinding {
     binding: u32
     descriptor_type: i32  // VkDescriptorType
@@ -2026,7 +2026,7 @@ pub struct VkDescriptorSetLayoutBinding {
     p_immutable_samplers: []VkSampler
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorSetLayoutCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2035,13 +2035,13 @@ pub struct VkDescriptorSetLayoutCreateInfo {
     @count(binding_count) p_bindings: []VkDescriptorSetLayoutBinding
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorPoolSize {
     type: i32  // VkDescriptorType
     descriptor_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorPoolCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2051,7 +2051,7 @@ pub struct VkDescriptorPoolCreateInfo {
     @count(pool_size_count) p_pool_sizes: []VkDescriptorPoolSize
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorSetAllocateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2060,14 +2060,14 @@ pub struct VkDescriptorSetAllocateInfo {
     @count(descriptor_set_count) p_set_layouts: []VkDescriptorSetLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSpecializationMapEntry {
     constant_id: u32
     offset: u32
     size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSpecializationInfo {
     map_entry_count: u32
     @count(map_entry_count) p_map_entries: []VkSpecializationMapEntry
@@ -2075,7 +2075,7 @@ pub struct VkSpecializationInfo {
     @count(data_size) p_data: []u8
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineShaderStageCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2086,7 +2086,7 @@ pub struct VkPipelineShaderStageCreateInfo {
     p_specialization_info: ?&VkSpecializationInfo
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkComputePipelineCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2097,14 +2097,14 @@ pub struct VkComputePipelineCreateInfo {
     base_pipeline_index: i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkVertexInputBindingDescription {
     binding: u32
     stride: u32
     input_rate: i32  // VkVertexInputRate
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkVertexInputAttributeDescription {
     location: u32
     binding: u32
@@ -2112,7 +2112,7 @@ pub struct VkVertexInputAttributeDescription {
     offset: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineVertexInputStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2123,7 +2123,7 @@ pub struct VkPipelineVertexInputStateCreateInfo {
     @count(vertex_attribute_description_count) p_vertex_attribute_descriptions: []VkVertexInputAttributeDescription
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineInputAssemblyStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2132,7 +2132,7 @@ pub struct VkPipelineInputAssemblyStateCreateInfo {
     primitive_restart_enable: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineTessellationStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2140,7 +2140,7 @@ pub struct VkPipelineTessellationStateCreateInfo {
     patch_control_points: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineViewportStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2151,7 +2151,7 @@ pub struct VkPipelineViewportStateCreateInfo {
     p_scissors: []VkRect2D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineRasterizationStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2168,7 +2168,7 @@ pub struct VkPipelineRasterizationStateCreateInfo {
     line_width: f32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineMultisampleStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2181,7 +2181,7 @@ pub struct VkPipelineMultisampleStateCreateInfo {
     alpha_to_one_enable: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineColorBlendAttachmentState {
     blend_enable: u32
     src_color_blend_factor: i32  // VkBlendFactor
@@ -2193,7 +2193,7 @@ pub struct VkPipelineColorBlendAttachmentState {
     color_write_mask: u32  // VkColorComponentFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineColorBlendStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2205,7 +2205,7 @@ pub struct VkPipelineColorBlendStateCreateInfo {
     blend_constants: [4]f32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineDynamicStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2214,7 +2214,7 @@ pub struct VkPipelineDynamicStateCreateInfo {
     @count(dynamic_state_count) p_dynamic_states: []i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkStencilOpState {
     fail_op: i32  // VkStencilOp
     pass_op: i32  // VkStencilOp
@@ -2225,7 +2225,7 @@ pub struct VkStencilOpState {
     reference: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineDepthStencilStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2241,7 +2241,7 @@ pub struct VkPipelineDepthStencilStateCreateInfo {
     max_depth_bounds: f32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkGraphicsPipelineCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2264,7 +2264,7 @@ pub struct VkGraphicsPipelineCreateInfo {
     base_pipeline_index: i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineCacheCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2273,7 +2273,7 @@ pub struct VkPipelineCacheCreateInfo {
     @count(initial_data_size) p_initial_data: []u8
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineCacheHeaderVersionOne {
     header_size: u32
     header_version: i32  // VkPipelineCacheHeaderVersion
@@ -2282,14 +2282,14 @@ pub struct VkPipelineCacheHeaderVersionOne {
     pipeline_cache_uuid: [16]u8
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPushConstantRange {
     stage_flags: u32  // VkShaderStageFlags
     offset: u32
     size: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineLayoutCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2300,7 +2300,7 @@ pub struct VkPipelineLayoutCreateInfo {
     @count(push_constant_range_count) p_push_constant_ranges: []VkPushConstantRange
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSamplerCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2322,7 +2322,7 @@ pub struct VkSamplerCreateInfo {
     unnormalized_coordinates: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCommandPoolCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2330,7 +2330,7 @@ pub struct VkCommandPoolCreateInfo {
     queue_family_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCommandBufferAllocateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2339,7 +2339,7 @@ pub struct VkCommandBufferAllocateInfo {
     command_buffer_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCommandBufferInheritanceInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO
     p_next: ?&VkBaseInStructure
@@ -2351,7 +2351,7 @@ pub struct VkCommandBufferInheritanceInfo {
     pipeline_statistics: u32  // VkQueryPipelineStatisticFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCommandBufferBeginInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
     p_next: ?&VkBaseInStructure
@@ -2359,7 +2359,7 @@ pub struct VkCommandBufferBeginInfo {
     p_inheritance_info: ?&VkCommandBufferInheritanceInfo
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderPassBeginInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO
     p_next: ?&VkBaseInStructure
@@ -2370,33 +2370,33 @@ pub struct VkRenderPassBeginInfo {
     p_clear_values: []VkClearValue
 }
 
-@union
+@union("vulkan/vulkan.h")
 pub struct VkClearColorValue {
     float32: [4]f32
     int32: [4]i32
     uint32: [4]u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkClearDepthStencilValue {
     depth: f32
     stencil: u32
 }
 
-@union
+@union("vulkan/vulkan.h")
 pub struct VkClearValue {
     color: VkClearColorValue
     depth_stencil: VkClearDepthStencilValue
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkClearAttachment {
     aspect_mask: u32  // VkImageAspectFlags
     color_attachment: u32
     clear_value: VkClearValue
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAttachmentDescription {
     flags: u32  // VkAttachmentDescriptionFlags
     format: i32  // VkFormat
@@ -2409,13 +2409,13 @@ pub struct VkAttachmentDescription {
     final_layout: i32  // VkImageLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAttachmentReference {
     attachment: u32
     layout: i32  // VkImageLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubpassDescription {
     flags: u32  // VkSubpassDescriptionFlags
     pipeline_bind_point: i32  // VkPipelineBindPoint
@@ -2429,7 +2429,7 @@ pub struct VkSubpassDescription {
     @count(preserve_attachment_count) p_preserve_attachments: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubpassDependency {
     src_subpass: u32
     dst_subpass: u32
@@ -2440,7 +2440,7 @@ pub struct VkSubpassDependency {
     dependency_flags: u32  // VkDependencyFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderPassCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2453,21 +2453,21 @@ pub struct VkRenderPassCreateInfo {
     @count(dependency_count) p_dependencies: []VkSubpassDependency
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkEventCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO
     p_next: ?&VkBaseInStructure
     flags: u32  // VkEventCreateFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkFenceCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     flags: u32  // VkFenceCreateFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceFeatures {
     robust_buffer_access: u32
     full_draw_index_uint32: u32
@@ -2526,7 +2526,7 @@ pub struct VkPhysicalDeviceFeatures {
     inherited_queries: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSparseProperties {
     residency_standard2d_block_shape: u32
     residency_standard2d_multisample_block_shape: u32
@@ -2535,7 +2535,7 @@ pub struct VkPhysicalDeviceSparseProperties {
     residency_non_resident_strict: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceLimits {
     max_image_dimension1d: u32
     max_image_dimension2d: u32
@@ -2645,14 +2645,14 @@ pub struct VkPhysicalDeviceLimits {
     non_coherent_atom_size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSemaphoreCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     flags: u32  // VkSemaphoreCreateFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkQueryPoolCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2662,7 +2662,7 @@ pub struct VkQueryPoolCreateInfo {
     pipeline_statistics: u32  // VkQueryPipelineStatisticFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkFramebufferCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -2675,7 +2675,7 @@ pub struct VkFramebufferCreateInfo {
     layers: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDrawIndirectCommand {
     vertex_count: u32
     instance_count: u32
@@ -2683,7 +2683,7 @@ pub struct VkDrawIndirectCommand {
     first_instance: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDrawIndexedIndirectCommand {
     index_count: u32
     instance_count: u32
@@ -2692,14 +2692,14 @@ pub struct VkDrawIndexedIndirectCommand {
     first_instance: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDispatchIndirectCommand {
     x: u32
     y: u32
     z: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubmitInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SUBMIT_INFO
     p_next: ?&VkBaseInStructure
@@ -2712,7 +2712,7 @@ pub struct VkSubmitInfo {
     @count(signal_semaphore_count) p_signal_semaphores: []VkSemaphore
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSurfaceCapabilitiesKHR {
     min_image_count: u32
     max_image_count: u32
@@ -2726,13 +2726,13 @@ pub struct VkSurfaceCapabilitiesKHR {
     supported_usage_flags: u32  // VkImageUsageFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSurfaceFormatKHR {
     format: i32  // VkFormat
     color_space: i32  // VkColorSpaceKHR
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSwapchainCreateInfoKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR
     p_next: ?&VkBaseInStructure
@@ -2754,7 +2754,7 @@ pub struct VkSwapchainCreateInfoKHR {
     old_swapchain: ?VkSwapchainKHR
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPresentInfoKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR
     p_next: ?&VkBaseInStructure
@@ -2766,56 +2766,56 @@ pub struct VkPresentInfoKHR {
     p_results: ?VkVoid  // вывод C — только none
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDevicePrivateDataCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO
     p_next: ?&VkBaseInStructure
     private_data_slot_request_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPrivateDataSlotCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PRIVATE_DATA_SLOT_CREATE_INFO
     p_next: ?&VkBaseInStructure
     flags: u32  // VkPrivateDataSlotCreateFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDevicePrivateDataFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     private_data: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceFeatures2 {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     features: VkPhysicalDeviceFeatures
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceProperties2 {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     properties: VkPhysicalDeviceProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkFormatProperties2 {
     s_type: i32 = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     format_properties: VkFormatProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageFormatProperties2 {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     image_format_properties: VkImageFormatProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceImageFormatInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2
     p_next: ?&VkBaseInStructure
@@ -2826,28 +2826,28 @@ pub struct VkPhysicalDeviceImageFormatInfo2 {
     flags: u32  // VkImageCreateFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkQueueFamilyProperties2 {
     s_type: i32 = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     queue_family_properties: VkQueueFamilyProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceMemoryProperties2 {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     memory_properties: VkPhysicalDeviceMemoryProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseImageFormatProperties2 {
     s_type: i32 = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     properties: VkSparseImageFormatProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSparseImageFormatInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2
     p_next: ?&VkBaseInStructure
@@ -2858,7 +2858,7 @@ pub struct VkPhysicalDeviceSparseImageFormatInfo2 {
     tiling: i32  // VkImageTiling
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkConformanceVersion {
     major: u8
     minor: u8
@@ -2866,46 +2866,46 @@ pub struct VkConformanceVersion {
     patch: u8
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceDriverProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     driver_id: i32  // VkDriverId
     driver_name: [256]u8
     driver_info: [256]u8
     conformance_version: VkConformanceVersion
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVariablePointersFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     variable_pointers_storage_buffer: u32
     variable_pointers: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExternalMemoryProperties {
     external_memory_features: u32  // VkExternalMemoryFeatureFlags
     export_from_imported_handle_types: u32  // VkExternalMemoryHandleTypeFlags
     compatible_handle_types: u32  // VkExternalMemoryHandleTypeFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceExternalImageFormatInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO
     p_next: ?&VkBaseInStructure
     handle_type: u32  // VkExternalMemoryHandleTypeFlagBits
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExternalImageFormatProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     external_memory_properties: VkExternalMemoryProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceExternalBufferInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO
     p_next: ?&VkBaseInStructure
@@ -2914,17 +2914,17 @@ pub struct VkPhysicalDeviceExternalBufferInfo {
     handle_type: u32  // VkExternalMemoryHandleTypeFlagBits
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExternalBufferProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     external_memory_properties: VkExternalMemoryProperties
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceIDProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     device_uuid: [16]u8
     driver_uuid: [16]u8
     device_luid: [8]u8
@@ -2932,91 +2932,91 @@ pub struct VkPhysicalDeviceIDProperties {
     device_luid_valid: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExternalMemoryImageCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     handle_types: u32  // VkExternalMemoryHandleTypeFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExternalMemoryBufferCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO
     p_next: ?&VkBaseInStructure
     handle_types: u32  // VkExternalMemoryHandleTypeFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExportMemoryAllocateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO
     p_next: ?&VkBaseInStructure
     handle_types: u32  // VkExternalMemoryHandleTypeFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceExternalSemaphoreInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO
     p_next: ?&VkBaseInStructure
     handle_type: u32  // VkExternalSemaphoreHandleTypeFlagBits
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExternalSemaphoreProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     export_from_imported_handle_types: u32  // VkExternalSemaphoreHandleTypeFlags
     compatible_handle_types: u32  // VkExternalSemaphoreHandleTypeFlags
     external_semaphore_features: u32  // VkExternalSemaphoreFeatureFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExportSemaphoreCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     handle_types: u32  // VkExternalSemaphoreHandleTypeFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceExternalFenceInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FENCE_INFO
     p_next: ?&VkBaseInStructure
     handle_type: u32  // VkExternalFenceHandleTypeFlagBits
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExternalFenceProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_EXTERNAL_FENCE_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     export_from_imported_handle_types: u32  // VkExternalFenceHandleTypeFlags
     compatible_handle_types: u32  // VkExternalFenceHandleTypeFlags
     external_fence_features: u32  // VkExternalFenceFeatureFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkExportFenceCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     handle_types: u32  // VkExternalFenceHandleTypeFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceMultiviewFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     multiview: u32
     multiview_geometry_shader: u32
     multiview_tessellation_shader: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceMultiviewProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     max_multiview_view_count: u32
     max_multiview_instance_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderPassMultiviewCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3028,16 +3028,16 @@ pub struct VkRenderPassMultiviewCreateInfo {
     @count(correlation_mask_count) p_correlation_masks: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceGroupProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     physical_device_count: u32
     physical_devices: [32]?VkPhysicalDevice
     subset_allocation: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryAllocateFlagsInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO
     p_next: ?&VkBaseInStructure
@@ -3045,7 +3045,7 @@ pub struct VkMemoryAllocateFlagsInfo {
     device_mask: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBindBufferMemoryInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO
     p_next: ?&VkBaseInStructure
@@ -3054,7 +3054,7 @@ pub struct VkBindBufferMemoryInfo {
     memory_offset: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBindBufferMemoryDeviceGroupInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO
     p_next: ?&VkBaseInStructure
@@ -3062,7 +3062,7 @@ pub struct VkBindBufferMemoryDeviceGroupInfo {
     @count(device_index_count) p_device_indices: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBindImageMemoryInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO
     p_next: ?&VkBaseInStructure
@@ -3071,7 +3071,7 @@ pub struct VkBindImageMemoryInfo {
     memory_offset: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBindImageMemoryDeviceGroupInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO
     p_next: ?&VkBaseInStructure
@@ -3081,7 +3081,7 @@ pub struct VkBindImageMemoryDeviceGroupInfo {
     @count(split_instance_bind_region_count) p_split_instance_bind_regions: []VkRect2D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupRenderPassBeginInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO
     p_next: ?&VkBaseInStructure
@@ -3090,14 +3090,14 @@ pub struct VkDeviceGroupRenderPassBeginInfo {
     @count(device_render_area_count) p_device_render_areas: []VkRect2D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupCommandBufferBeginInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO
     p_next: ?&VkBaseInStructure
     device_mask: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupSubmitInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO
     p_next: ?&VkBaseInStructure
@@ -3109,7 +3109,7 @@ pub struct VkDeviceGroupSubmitInfo {
     @count(signal_semaphore_count) p_signal_semaphore_device_indices: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupBindSparseInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO
     p_next: ?&VkBaseInStructure
@@ -3117,22 +3117,22 @@ pub struct VkDeviceGroupBindSparseInfo {
     memory_device_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupPresentCapabilitiesKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     present_mask: [32]u32
     modes: u32  // VkDeviceGroupPresentModeFlagsKHR
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageSwapchainCreateInfoKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR
     p_next: ?&VkBaseInStructure
     swapchain: ?VkSwapchainKHR
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBindImageMemorySwapchainInfoKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR
     p_next: ?&VkBaseInStructure
@@ -3140,7 +3140,7 @@ pub struct VkBindImageMemorySwapchainInfoKHR {
     image_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAcquireNextImageInfoKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR
     p_next: ?&VkBaseInStructure
@@ -3151,7 +3151,7 @@ pub struct VkAcquireNextImageInfoKHR {
     device_mask: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupPresentInfoKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR
     p_next: ?&VkBaseInStructure
@@ -3160,7 +3160,7 @@ pub struct VkDeviceGroupPresentInfoKHR {
     mode: u32  // VkDeviceGroupPresentModeFlagBitsKHR
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupDeviceCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3168,14 +3168,14 @@ pub struct VkDeviceGroupDeviceCreateInfo {
     @count(physical_device_count) p_physical_devices: []VkPhysicalDevice
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceGroupSwapchainCreateInfoKHR {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_GROUP_SWAPCHAIN_CREATE_INFO_KHR
     p_next: ?&VkBaseInStructure
     modes: u32  // VkDeviceGroupPresentModeFlagsKHR
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorUpdateTemplateEntry {
     dst_binding: u32
     dst_array_element: u32
@@ -3185,7 +3185,7 @@ pub struct VkDescriptorUpdateTemplateEntry {
     stride: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorUpdateTemplateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3199,14 +3199,14 @@ pub struct VkDescriptorUpdateTemplateCreateInfo {
     set: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkInputAttachmentAspectReference {
     subpass: u32
     input_attachment_index: u32
     aspect_mask: u32  // VkImageAspectFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderPassInputAttachmentAspectCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3214,62 +3214,62 @@ pub struct VkRenderPassInputAttachmentAspectCreateInfo {
     @count(aspect_reference_count) p_aspect_references: []VkInputAttachmentAspectReference
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDevice16BitStorageFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     storage_buffer16bit_access: u32
     uniform_and_storage_buffer16bit_access: u32
     storage_push_constant16: u32
     storage_input_output16: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSubgroupProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     subgroup_size: u32
     supported_stages: u32  // VkShaderStageFlags
     supported_operations: u32  // VkSubgroupFeatureFlags
     quad_operations_in_all_stages: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_subgroup_extended_types: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferMemoryRequirementsInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2
     p_next: ?&VkBaseInStructure
     buffer: VkBuffer
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceBufferMemoryRequirements {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS
     p_next: ?&VkBaseInStructure
     p_create_info: &VkBufferCreateInfo
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageMemoryRequirementsInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2
     p_next: ?&VkBaseInStructure
     image: VkImage
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageSparseMemoryRequirementsInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_SPARSE_MEMORY_REQUIREMENTS_INFO_2
     p_next: ?&VkBaseInStructure
     image: VkImage
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceImageMemoryRequirements {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS
     p_next: ?&VkBaseInStructure
@@ -3277,36 +3277,36 @@ pub struct VkDeviceImageMemoryRequirements {
     plane_aspect: u32  // VkImageAspectFlagBits
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryRequirements2 {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     memory_requirements: VkMemoryRequirements
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSparseImageMemoryRequirements2 {
     s_type: i32 = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     memory_requirements: VkSparseImageMemoryRequirements
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDevicePointClippingProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     point_clipping_behavior: i32  // VkPointClippingBehavior
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryDedicatedRequirements {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     prefers_dedicated_allocation: u32
     requires_dedicated_allocation: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryDedicatedAllocateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3314,28 +3314,28 @@ pub struct VkMemoryDedicatedAllocateInfo {
     buffer: ?VkBuffer
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageViewUsageCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     usage: u32  // VkImageUsageFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineTessellationDomainOriginStateCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     domain_origin: i32  // VkTessellationDomainOrigin
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSamplerYcbcrConversionInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO
     p_next: ?&VkBaseInStructure
     conversion: VkSamplerYcbcrConversion
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSamplerYcbcrConversionCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3349,56 +3349,56 @@ pub struct VkSamplerYcbcrConversionCreateInfo {
     force_explicit_reconstruction: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBindImagePlaneMemoryInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO
     p_next: ?&VkBaseInStructure
     plane_aspect: u32  // VkImageAspectFlagBits
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImagePlaneMemoryRequirementsInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO
     p_next: ?&VkBaseInStructure
     plane_aspect: u32  // VkImageAspectFlagBits
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSamplerYcbcrConversionFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     sampler_ycbcr_conversion: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSamplerYcbcrConversionImageFormatProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     combined_image_sampler_descriptor_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkProtectedSubmitInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO
     p_next: ?&VkBaseInStructure
     protected_submit: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceProtectedMemoryFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     protected_memory: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceProtectedMemoryProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     protected_no_fault: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceQueueInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2
     p_next: ?&VkBaseInStructure
@@ -3407,33 +3407,33 @@ pub struct VkDeviceQueueInfo2 {
     queue_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSamplerFilterMinmaxProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     filter_minmax_single_component_formats: u32
     filter_minmax_image_component_mapping: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSamplerReductionModeCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     reduction_mode: i32  // VkSamplerReductionMode
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceInlineUniformBlockFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     inline_uniform_block: u32
     descriptor_binding_inline_uniform_block_update_after_bind: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceInlineUniformBlockProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     max_inline_uniform_block_size: u32
     max_per_stage_descriptor_inline_uniform_blocks: u32
     max_per_stage_descriptor_update_after_bind_inline_uniform_blocks: u32
@@ -3441,7 +3441,7 @@ pub struct VkPhysicalDeviceInlineUniformBlockProperties {
     max_descriptor_set_update_after_bind_inline_uniform_blocks: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkWriteDescriptorSetInlineUniformBlock {
     s_type: i32 = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK
     p_next: ?&VkBaseInStructure
@@ -3449,14 +3449,14 @@ pub struct VkWriteDescriptorSetInlineUniformBlock {
     @count(data_size) p_data: []u8
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorPoolInlineUniformBlockCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO
     p_next: ?&VkBaseInStructure
     max_inline_uniform_block_bindings: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageFormatListCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3464,54 +3464,54 @@ pub struct VkImageFormatListCreateInfo {
     @count(view_format_count) p_view_formats: []i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceMaintenance3Properties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     max_per_set_descriptors: u32
     max_memory_allocation_size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceMaintenance4Features {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     maintenance4: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceMaintenance4Properties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     max_buffer_size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorSetLayoutSupport {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     supported: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderDrawParametersFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_draw_parameters: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderFloat16Int8Features {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_float16: u32
     shader_int8: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceFloatControlsProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     denorm_behavior_independence: i32  // VkShaderFloatControlsIndependence
     rounding_mode_independence: i32  // VkShaderFloatControlsIndependence
     shader_signed_zero_inf_nan_preserve_float16: u32
@@ -3531,17 +3531,17 @@ pub struct VkPhysicalDeviceFloatControlsProperties {
     shader_rounding_mode_rtz_float64: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceHostQueryResetFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     host_query_reset: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceDescriptorIndexingFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_input_attachment_array_dynamic_indexing: u32
     shader_uniform_texel_buffer_array_dynamic_indexing: u32
     shader_storage_texel_buffer_array_dynamic_indexing: u32
@@ -3564,10 +3564,10 @@ pub struct VkPhysicalDeviceDescriptorIndexingFeatures {
     runtime_descriptor_array: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceDescriptorIndexingProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     max_update_after_bind_descriptors_in_all_pools: u32
     shader_uniform_buffer_array_non_uniform_indexing_native: u32
     shader_sampled_image_array_non_uniform_indexing_native: u32
@@ -3593,7 +3593,7 @@ pub struct VkPhysicalDeviceDescriptorIndexingProperties {
     max_descriptor_set_update_after_bind_input_attachments: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorSetLayoutBindingFlagsCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3601,7 +3601,7 @@ pub struct VkDescriptorSetLayoutBindingFlagsCreateInfo {
     @count(binding_count) p_binding_flags: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorSetVariableDescriptorCountAllocateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3609,14 +3609,14 @@ pub struct VkDescriptorSetVariableDescriptorCountAllocateInfo {
     @count(descriptor_set_count) p_descriptor_counts: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDescriptorSetVariableDescriptorCountLayoutSupport {
     s_type: i32 = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     max_variable_descriptor_count: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAttachmentDescription2 {
     s_type: i32 = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2
     p_next: ?&VkBaseInStructure
@@ -3631,7 +3631,7 @@ pub struct VkAttachmentDescription2 {
     final_layout: i32  // VkImageLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAttachmentReference2 {
     s_type: i32 = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2
     p_next: ?&VkBaseInStructure
@@ -3640,7 +3640,7 @@ pub struct VkAttachmentReference2 {
     aspect_mask: u32  // VkImageAspectFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubpassDescription2 {
     s_type: i32 = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2
     p_next: ?&VkBaseInStructure
@@ -3657,7 +3657,7 @@ pub struct VkSubpassDescription2 {
     @count(preserve_attachment_count) p_preserve_attachments: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubpassDependency2 {
     s_type: i32 = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2
     p_next: ?&VkBaseInStructure
@@ -3671,7 +3671,7 @@ pub struct VkSubpassDependency2 {
     view_offset: i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderPassCreateInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2
     p_next: ?&VkBaseInStructure
@@ -3686,34 +3686,34 @@ pub struct VkRenderPassCreateInfo2 {
     @count(correlated_view_mask_count) p_correlated_view_masks: []u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubpassBeginInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO
     p_next: ?&VkBaseInStructure
     contents: i32  // VkSubpassContents
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubpassEndInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SUBPASS_END_INFO
     p_next: ?&VkBaseInStructure
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceTimelineSemaphoreFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     timeline_semaphore: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceTimelineSemaphoreProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     max_timeline_semaphore_value_difference: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSemaphoreTypeCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3721,7 +3721,7 @@ pub struct VkSemaphoreTypeCreateInfo {
     initial_value: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkTimelineSemaphoreSubmitInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO
     p_next: ?&VkBaseInStructure
@@ -3731,7 +3731,7 @@ pub struct VkTimelineSemaphoreSubmitInfo {
     p_signal_semaphore_values: []u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSemaphoreWaitInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO
     p_next: ?&VkBaseInStructure
@@ -3741,7 +3741,7 @@ pub struct VkSemaphoreWaitInfo {
     @count(semaphore_count) p_values: []u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSemaphoreSignalInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO
     p_next: ?&VkBaseInStructure
@@ -3749,43 +3749,43 @@ pub struct VkSemaphoreSignalInfo {
     value: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDevice8BitStorageFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     storage_buffer8bit_access: u32
     uniform_and_storage_buffer8bit_access: u32
     storage_push_constant8: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVulkanMemoryModelFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     vulkan_memory_model: u32
     vulkan_memory_model_device_scope: u32
     vulkan_memory_model_availability_visibility_chains: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderAtomicInt64Features {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_buffer_int64atomics: u32
     shader_shared_int64atomics: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceDepthStencilResolveProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     supported_depth_resolve_modes: u32  // VkResolveModeFlags
     supported_stencil_resolve_modes: u32  // VkResolveModeFlags
     independent_resolve_none: u32
     independent_resolve: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubpassDescriptionDepthStencilResolve {
     s_type: i32 = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE
     p_next: ?&VkBaseInStructure
@@ -3794,58 +3794,58 @@ pub struct VkSubpassDescriptionDepthStencilResolve {
     p_depth_stencil_resolve_attachment: ?&VkAttachmentReference2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageStencilUsageCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO
     p_next: ?&VkBaseInStructure
     stencil_usage: u32  // VkImageUsageFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceScalarBlockLayoutFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     scalar_block_layout: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceUniformBufferStandardLayoutFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     uniform_buffer_standard_layout: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceBufferDeviceAddressFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     buffer_device_address: u32
     buffer_device_address_capture_replay: u32
     buffer_device_address_multi_device: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferDeviceAddressInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO
     p_next: ?&VkBaseInStructure
     buffer: VkBuffer
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferOpaqueCaptureAddressCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO
     p_next: ?&VkBaseInStructure
     opaque_capture_address: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceImagelessFramebufferFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     imageless_framebuffer: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkFramebufferAttachmentsCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3853,7 +3853,7 @@ pub struct VkFramebufferAttachmentsCreateInfo {
     @count(attachment_image_info_count) p_attachment_image_infos: []VkFramebufferAttachmentImageInfo
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkFramebufferAttachmentImageInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO
     p_next: ?&VkBaseInStructure
@@ -3866,7 +3866,7 @@ pub struct VkFramebufferAttachmentImageInfo {
     @count(view_format_count) p_view_formats: []i32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderPassAttachmentBeginInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO
     p_next: ?&VkBaseInStructure
@@ -3874,20 +3874,20 @@ pub struct VkRenderPassAttachmentBeginInfo {
     @count(attachment_count) p_attachments: []VkImageView
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceTextureCompressionASTCHDRFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     texture_compression_astc_hdr: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineCreationFeedback {
     flags: u32  // VkPipelineCreationFeedbackFlags
     duration: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineCreationFeedbackCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -3896,21 +3896,21 @@ pub struct VkPipelineCreationFeedbackCreateInfo {
     p_pipeline_stage_creation_feedbacks: ?VkVoid  // вывод C — только none
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     separate_depth_stencil_layouts: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAttachmentReferenceStencilLayout {
     s_type: i32 = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT
     p_next: ?&VkBaseInStructure
     stencil_layout: i32  // VkImageLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkAttachmentDescriptionStencilLayout {
     s_type: i32 = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT
     p_next: ?&VkBaseInStructure
@@ -3918,73 +3918,73 @@ pub struct VkAttachmentDescriptionStencilLayout {
     stencil_final_layout: i32  // VkImageLayout
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_demote_to_helper_invocation: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceTexelBufferAlignmentProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     storage_texel_buffer_offset_alignment_bytes: u64
     storage_texel_buffer_offset_single_texel_alignment: u32
     uniform_texel_buffer_offset_alignment_bytes: u64
     uniform_texel_buffer_offset_single_texel_alignment: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSubgroupSizeControlFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     subgroup_size_control: u32
     compute_full_subgroups: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSubgroupSizeControlProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     min_subgroup_size: u32
     max_subgroup_size: u32
     max_compute_workgroup_subgroups: u32
     required_subgroup_size_stages: u32  // VkShaderStageFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineShaderStageRequiredSubgroupSizeCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     required_subgroup_size: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryOpaqueCaptureAddressAllocateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO
     p_next: ?&VkBaseInStructure
     opaque_capture_address: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDeviceMemoryOpaqueCaptureAddressInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEVICE_MEMORY_OPAQUE_CAPTURE_ADDRESS_INFO
     p_next: ?&VkBaseInStructure
     memory: VkDeviceMemory
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDevicePipelineCreationCacheControlFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     pipeline_creation_cache_control: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVulkan11Features {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     storage_buffer16bit_access: u32
     uniform_and_storage_buffer16bit_access: u32
     storage_push_constant16: u32
@@ -3999,10 +3999,10 @@ pub struct VkPhysicalDeviceVulkan11Features {
     shader_draw_parameters: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVulkan11Properties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     device_uuid: [16]u8
     driver_uuid: [16]u8
     device_luid: [8]u8
@@ -4020,10 +4020,10 @@ pub struct VkPhysicalDeviceVulkan11Properties {
     max_memory_allocation_size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVulkan12Features {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     sampler_mirror_clamp_to_edge: u32
     draw_indirect_count: u32
     storage_buffer8bit_access: u32
@@ -4073,10 +4073,10 @@ pub struct VkPhysicalDeviceVulkan12Features {
     subgroup_broadcast_dynamic_id: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVulkan12Properties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     driver_id: i32  // VkDriverId
     driver_name: [256]u8
     driver_info: [256]u8
@@ -4131,10 +4131,10 @@ pub struct VkPhysicalDeviceVulkan12Properties {
     framebuffer_integer_color_sample_counts: u32  // VkSampleCountFlags
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVulkan13Features {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     robust_image_access: u32
     inline_uniform_block: u32
     descriptor_binding_inline_uniform_block_update_after_bind: u32
@@ -4152,10 +4152,10 @@ pub struct VkPhysicalDeviceVulkan13Features {
     maintenance4: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceVulkan13Properties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     min_subgroup_size: u32
     max_subgroup_size: u32
     max_compute_workgroup_subgroups: u32
@@ -4203,10 +4203,10 @@ pub struct VkPhysicalDeviceVulkan13Properties {
     max_buffer_size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceToolProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     name: [256]u8
     version: [256]u8
     purposes: u32  // VkToolPurposeFlags
@@ -4214,21 +4214,21 @@ pub struct VkPhysicalDeviceToolProperties {
     layer: [256]u8
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_zero_initialize_workgroup_memory: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceImageRobustnessFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     robust_image_access: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferCopy2 {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_COPY_2
     p_next: ?&VkBaseInStructure
@@ -4237,7 +4237,7 @@ pub struct VkBufferCopy2 {
     size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageCopy2 {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_COPY_2
     p_next: ?&VkBaseInStructure
@@ -4248,7 +4248,7 @@ pub struct VkImageCopy2 {
     extent: VkExtent3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageBlit2 {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_BLIT_2
     p_next: ?&VkBaseInStructure
@@ -4258,7 +4258,7 @@ pub struct VkImageBlit2 {
     dst_offsets: [2]VkOffset3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferImageCopy2 {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2
     p_next: ?&VkBaseInStructure
@@ -4270,7 +4270,7 @@ pub struct VkBufferImageCopy2 {
     image_extent: VkExtent3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageResolve2 {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2
     p_next: ?&VkBaseInStructure
@@ -4281,7 +4281,7 @@ pub struct VkImageResolve2 {
     extent: VkExtent3D
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCopyBufferInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2
     p_next: ?&VkBaseInStructure
@@ -4291,7 +4291,7 @@ pub struct VkCopyBufferInfo2 {
     @count(region_count) p_regions: []VkBufferCopy2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCopyImageInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2
     p_next: ?&VkBaseInStructure
@@ -4303,7 +4303,7 @@ pub struct VkCopyImageInfo2 {
     @count(region_count) p_regions: []VkImageCopy2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBlitImageInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2
     p_next: ?&VkBaseInStructure
@@ -4316,7 +4316,7 @@ pub struct VkBlitImageInfo2 {
     filter: i32  // VkFilter
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCopyBufferToImageInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2
     p_next: ?&VkBaseInStructure
@@ -4327,7 +4327,7 @@ pub struct VkCopyBufferToImageInfo2 {
     @count(region_count) p_regions: []VkBufferImageCopy2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCopyImageToBufferInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2
     p_next: ?&VkBaseInStructure
@@ -4338,7 +4338,7 @@ pub struct VkCopyImageToBufferInfo2 {
     @count(region_count) p_regions: []VkBufferImageCopy2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkResolveImageInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_RESOLVE_IMAGE_INFO_2
     p_next: ?&VkBaseInStructure
@@ -4350,14 +4350,14 @@ pub struct VkResolveImageInfo2 {
     @count(region_count) p_regions: []VkImageResolve2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderTerminateInvocationFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_terminate_invocation: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkMemoryBarrier2 {
     s_type: i32 = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2
     p_next: ?&VkBaseInStructure
@@ -4367,7 +4367,7 @@ pub struct VkMemoryBarrier2 {
     dst_access_mask: u64  // VkAccessFlags2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkImageMemoryBarrier2 {
     s_type: i32 = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2
     p_next: ?&VkBaseInStructure
@@ -4383,7 +4383,7 @@ pub struct VkImageMemoryBarrier2 {
     subresource_range: VkImageSubresourceRange
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkBufferMemoryBarrier2 {
     s_type: i32 = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2
     p_next: ?&VkBaseInStructure
@@ -4398,7 +4398,7 @@ pub struct VkBufferMemoryBarrier2 {
     size: u64
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkDependencyInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_DEPENDENCY_INFO
     p_next: ?&VkBaseInStructure
@@ -4411,7 +4411,7 @@ pub struct VkDependencyInfo {
     @count(image_memory_barrier_count) p_image_memory_barriers: []VkImageMemoryBarrier2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSemaphoreSubmitInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO
     p_next: ?&VkBaseInStructure
@@ -4421,7 +4421,7 @@ pub struct VkSemaphoreSubmitInfo {
     device_index: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCommandBufferSubmitInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO
     p_next: ?&VkBaseInStructure
@@ -4429,7 +4429,7 @@ pub struct VkCommandBufferSubmitInfo {
     device_mask: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkSubmitInfo2 {
     s_type: i32 = VK_STRUCTURE_TYPE_SUBMIT_INFO_2
     p_next: ?&VkBaseInStructure
@@ -4442,24 +4442,24 @@ pub struct VkSubmitInfo2 {
     @count(signal_semaphore_info_count) p_signal_semaphore_infos: []VkSemaphoreSubmitInfo
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceSynchronization2Features {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     synchronization2: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderIntegerDotProductFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     shader_integer_dot_product: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceShaderIntegerDotProductProperties {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     integer_dot_product8bit_unsigned_accelerated: u32
     integer_dot_product8bit_signed_accelerated: u32
     integer_dot_product8bit_mixed_signedness_accelerated: u32
@@ -4492,16 +4492,16 @@ pub struct VkPhysicalDeviceShaderIntegerDotProductProperties {
     integer_dot_product_accumulating_saturating64bit_mixed_signedness_accelerated: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkFormatProperties3 {
     s_type: i32 = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3
-    p_next: ?VkVoid  // цепочка вывода — только none
+    p_next: ?&mut VkBaseOutStructure
     linear_tiling_features: u64  // VkFormatFeatureFlags2
     optimal_tiling_features: u64  // VkFormatFeatureFlags2
     buffer_features: u64  // VkFormatFeatureFlags2
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPipelineRenderingCreateInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO
     p_next: ?&VkBaseInStructure
@@ -4512,7 +4512,7 @@ pub struct VkPipelineRenderingCreateInfo {
     stencil_attachment_format: i32  // VkFormat
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderingInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDERING_INFO
     p_next: ?&VkBaseInStructure
@@ -4526,7 +4526,7 @@ pub struct VkRenderingInfo {
     p_stencil_attachment: ?&VkRenderingAttachmentInfo
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkRenderingAttachmentInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO
     p_next: ?&VkBaseInStructure
@@ -4540,14 +4540,14 @@ pub struct VkRenderingAttachmentInfo {
     clear_value: VkClearValue
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkPhysicalDeviceDynamicRenderingFeatures {
     s_type: i32 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES
-    p_next: ?&VkBaseInStructure
+    p_next: ?&mut VkBaseOutStructure
     dynamic_rendering: u32
 }
 
-@c
+@c("vulkan/vulkan.h")
 pub struct VkCommandBufferInheritanceRenderingInfo {
     s_type: i32 = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO
     p_next: ?&VkBaseInStructure
@@ -4851,6 +4851,8 @@ pub extern fn vkGetBufferMemoryRequirements2(device: VkDevice, p_info: &VkBuffer
 @link("vulkan")
 pub extern fn vkGetImageSparseMemoryRequirements2(device: VkDevice, p_info: &VkImageSparseMemoryRequirementsInfo2, p_sparse_memory_requirement_count: &mut u32, p_sparse_memory_requirements: &mut List[VkSparseImageMemoryRequirements2])
 @link("vulkan")
+pub extern fn vkGetPhysicalDeviceFeatures2(physical_device: VkPhysicalDevice, p_features: &mut VkPhysicalDeviceFeatures2)
+@link("vulkan")
 pub extern fn vkGetPhysicalDeviceProperties2(physical_device: VkPhysicalDevice, p_properties: &mut VkPhysicalDeviceProperties2)
 @link("vulkan")
 pub extern fn vkGetPhysicalDeviceFormatProperties2(physical_device: VkPhysicalDevice, format: i32, p_format_properties: &mut VkFormatProperties2)
@@ -5016,4 +5018,3 @@ pub extern fn vkAcquireNextImage2KHR(device: VkDevice, p_acquire_info: &VkAcquir
 // Пропущено — не выражается в dpl v0.2:
 // - vkGetInstanceProcAddr: результат — указатель на функцию: адрес берут через загрузчик
 // - vkGetDeviceProcAddr: результат — указатель на функцию: адрес берут через загрузчик
-// - vkGetPhysicalDeviceFeatures2: вывод в заимствующую структуру VkPhysicalDeviceFeatures2 (Р62: её нельзя &mut)

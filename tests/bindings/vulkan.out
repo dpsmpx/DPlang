@@ -3,6 +3,7 @@ instance extensions: true
 vkCreateInstance: 0
 physical devices: true
 llvmpipe: true, cpu: true, 1.3: true, 2D images to 4096: true
+synchronization2: true, dynamic rendering: true, full uint32 index: true
 graphics queue family: true
 host-visible memory: true
 vkCreateDevice: 0

@@ -1,0 +1,12 @@
+fill kind=1 next=set
+  link kind=2
+fill kind=1 next=null
+all 0 kind=1 next=null
+all 1 kind=1 next=null
+pair weight=0.50
+fill kind=1 next=set
+  link kind=2
+create kind=5 flags=1
+  in kind=1
+  in kind=2
+64406

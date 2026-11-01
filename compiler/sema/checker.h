@@ -58,6 +58,7 @@ private:
     std::vector<Loop> loops_;
     int defer_depth_ = 0;
     int parallel_depth_ = 0;  // тела `parallel for` вокруг: из них не выходят (Р69)
+    int c_arg_ = 0;  // 1 — выражение — аргумент вызова функции C: поле цепочки берёт `&mut v` (Р77)
 
     // --- общие
     const Type* err() { return tt_.error(); }

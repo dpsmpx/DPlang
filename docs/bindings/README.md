@@ -46,9 +46,9 @@ bindings/jni/jni.dpm           модуль `jni` — не править
     закреплёнными заголовками SDL3 и JNI; у JNI ещё номер каждой записи
     `@slot` — место поля в таблице;
   - `vulkan/run` — программа `tests/bindings/vulkan/` на программном
-    драйвере lavapipe (`mesa-vulkan-drivers`): экземпляр, устройство с
-    цепочкой `pNext`, буфер, заливка командой в очереди, чтение через
-    `vkMapMemory`;
+    драйвере lavapipe (`mesa-vulkan-drivers`): экземпляр, возможности
+    через цепочку вывода `pNext`, устройство с цепочкой ввода, буфер,
+    заливка командой в очереди, чтение через `vkMapMemory`;
   - `sdl3/run` — программа `tests/bindings/sdl3/`: видео offscreen,
     окно Vulkan, событие пользователя через очередь, поверхность Vulkan
     окна на lavapipe (`VK_EXT_headless_surface`);
@@ -77,10 +77,10 @@ bindings/jni/jni.dpm           модуль `jni` — не править
 | маска `VkXFlags`, биты `VkXFlagBits` | `u32` (`u64` у 64-битных) и константы битов |
 | дескриптор `VkInstance` | `pub extern type VkInstance`; в полях и параметрах `optional` и в выводе C — `?VkInstance` |
 | `PFN_vk…` в поле | `extern fn(...)`, необязательный — `?extern fn(...)` |
-| структура, объединение | `@c pub struct`, `@union pub struct` |
+| структура, объединение | `@c("vulkan/vulkan.h") pub struct`, `@union("vulkan/vulkan.h") pub struct` (заголовок C — Р76) |
 | `sType` с `values` | `s_type: i32 = VK_STRUCTURE_TYPE_…` — значение по умолчанию |
 | `const void* pNext` | `?&VkBaseInStructure`: цепочка ввода, `p_next: &features` (общее начало) |
-| `pNext` структуры `returnedonly` | `?VkVoid` — цепочки вывода нет, только `none` |
+| `pNext` структуры вывода | `?&mut VkBaseOutStructure`: цепочка вывода (Р77), `p_next: &mut v13`; структура — переменная |
 | `const char*` (null-terminated) | `str`; параметр `optional` — `?str` |
 | `const char* const*` с длиной | `[]str` |
 | `const T*` с длиной | `[]T`; поле-счётчик — `@count(n)`, если указатель не `optional` и без `noautovalidity` |
@@ -91,6 +91,26 @@ bindings/jni/jni.dpm           модуль `jni` — не править
 | параметр `T*` (вывод) | `&mut T`; дескриптор — `&mut ?H`; с длиной — `&mut List[T]` (`List[?H]`) |
 | параметр `void**` (`ppData`) | `&mut ?VkVoid` |
 | `VkResult` | `i32` |
+
+Структура вывода — `returnedonly`, цель параметра `T*` функции или
+расширяющая такую (`structextends`): `VkPhysicalDeviceFeatures2`,
+`VkPhysicalDeviceVulkan13Features`, `VkMemoryRequirements2`. Её `pNext`
+не заимствующий: структура бывает переменной, а в цепочке ввода
+(`VkDeviceCreateInfo.p_next: &VkPhysicalDeviceVulkan13Features { ... }`)
+сходится с `VkBaseInStructure` по общему началу.
+
+```
+var v13 = vulkan.VkPhysicalDeviceVulkan13Features {}
+vulkan.vkGetPhysicalDeviceFeatures2(pd, &mut vulkan.VkPhysicalDeviceFeatures2 { p_next: &mut v13 })
+var f2 = vulkan.VkPhysicalDeviceFeatures2 {}
+vulkan.vkGetPhysicalDeviceFeatures2(pd, &mut f2)  // возможности ядра — в f2.features
+```
+
+Звено `&mut v` — только в литерале прямо в вызове функции C (ffi.struct):
+вывод заголовка-литерала пропадает с ним, поэтому возможности ядра
+берут вторым вызовом с заголовком-переменной (у неё `p_next` — `none`).
+В звено идёт одна переменная: у неё самой `p_next` — `none`, следующее
+расширение — следующим вызовом.
 
 Исключение: `VkShaderModuleCreateInfo.pCode` — `@count(code_size)
 p_code: []u8`, SPIR-V байтами из файла (указатель в C тот же).
@@ -104,14 +124,9 @@ p_code: []u8`, SPIR-V байтами из файла (указатель в C т
 Пропущенное перечислено в конце `vulkan.dpm`:
 
 - `vkGetInstanceProcAddr`, `vkGetDeviceProcAddr` — результат —
-  указатель на функцию без сигнатуры;
-- функции, которым нужен `&mut` заимствующей структуры
-  (`vkGetPhysicalDeviceFeatures2`): заимствующая структура бывает только
-  аргументом (Р62); вместо них — функции ядра 1.0
-  (`vkGetPhysicalDeviceFeatures`).
+  указатель на функцию без сигнатуры.
 
-Цепочки вывода `pNext` (свойства и возможности расширений через `…2`)
-не выражаются: `&mut` в поле в языке нет. Компоновка на Windows
+Компоновка на Windows
 (`vulkan-1`) и Android (динамический `libvulkan.so`) — шаг 7 v0.2.
 
 ## 4. SDL3: перевод типов
@@ -130,7 +145,7 @@ p_code: []u8`, SPIR-V байтами из файла (указатель в C т
 | `#define` с числом | константа: типа предшествующего `typedef` целого (`SDL_InitFlags` → `SDL_INIT_*: u32`), иначе по суффиксу (`u` — `u32`, `SDL_UINT64_C` — `u64`, без суффикса — `i32`) |
 | `#define` со строкой | `pub const SDL_HINT_…: str` |
 | скрытая структура (`SDL_Window`), `typedef struct X *H`, `typedef void *H` | `pub extern type`; результат — `?H` (NULL при ошибке) |
-| структура, объединение | `@c pub struct`, `@union pub struct`; поля — `snake_case` |
+| структура, объединение | `@c("SDL3/SDL.h") pub struct`, `@union("SDL3/SDL.h") pub struct` (Р76); поля — `snake_case` |
 | указатель в поле | на скрытую структуру — `?H`; иначе `?SDL_Void` — указатель без операций (строки и буферы событий в dpl не читаются) |
 | параметр `const char*` | `str`; в описании есть NULL — `?str` |
 | параметр `const T*` | `&T`, NULL в описании — `?&T`; «array» в описании — `[]T` |
