@@ -49,14 +49,6 @@
 
 ## Задачи
 
-- `С` **`dp_depth` на Android — эмулированный TLS** — счётчик глубины
-  вызовов стал `_Thread_local` (Р69, пул `parallel for`;
-  `runtime/core/dp_rt.c`). Цель `aarch64-linux-android24` не знает ELF TLS
-  (он есть с API 29), clang ставит эмулированный: обращение — вызов
-  `__emutls_get_address`, а `dp_depth` меняется в каждой функции. Замерить
-  на `bench/det/measure.py` и М2 под qemu или на устройстве; если дорого —
-  `-fno-emulated-tls` с API 29 (решение автора о минимальной версии) или
-  проверка глубины по указателю стека.
 - `С` **Цепочки вывода `pNext` Vulkan не выражаются** — структуры
   `returnedonly` получают `p_next: ?VkVoid` (только `none`), а функции с
   `&mut` заимствующей структуры пропущены (`vkGetPhysicalDeviceFeatures2`;
