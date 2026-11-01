@@ -53,7 +53,10 @@ fn add_item(c: &mut catalog.Catalog, code: str, p: str) {
 
 fn find(c: &catalog.Catalog, code: str) {
     if let id = catalog.catalog_find(&c, code) {
-        println("find " + code + ": " + catalog.catalog_code(&c, id) + " at " + money.fmt_money(catalog.catalog_price(&c, id)))
+        println(
+            "find " + code + ": " + catalog.catalog_code(&c, id) + " at " +
+                money.fmt_money(catalog.catalog_price(&c, id))
+        )
     } else {
         println("find " + code + ": none")
     }
@@ -71,11 +74,26 @@ fn remove(k: &mut cart.Cart, c: &catalog.Catalog, code: str, qty: i32) {
 
 fn discount(k: &mut cart.Cart, c: &catalog.Catalog, percent: i32) {
     let r = result_text(cart.cart_discount(&mut k, percent))
-    println("discount " + str(percent) + ": " + r + " | total " + money.fmt_money(receipt.receipt_total(&k, &c)))
+    println(
+        "discount " + str(percent) + ": " + r + " | total " +
+            money.fmt_money(receipt.receipt_total(&k, &c))
+    )
 }
 
 fn main() {
-    let prices: List[str] = ["0.45", "12.00", "007.10", "3.5", "1.234", "-1.00", ".99", "1234567890123.00", "123456789012.99", "1,00", ""]
+    let prices: List[str] = [
+        "0.45",
+        "12.00",
+        "007.10",
+        "3.5",
+        "1.234",
+        "-1.00",
+        ".99",
+        "1234567890123.00",
+        "123456789012.99",
+        "1,00",
+        ""
+    ]
     for s in &prices {
         price(s)
     }

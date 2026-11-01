@@ -2,7 +2,27 @@
 import sol
 
 fn main() {
-    let events: List[sol.Event] = [.Tick, .Tick, .Tick, .Tick, .Tick, .SeeEnemy { id: 7 }, .Tick, .SeeEnemy { id: 9 }, .LoseEnemy, .LoseEnemy, .LowHealth, .SeeEnemy { id: 3 }, .Tick, .Tick, .Tick, .Tick, .LowHealth, .LowHealth, .Tick]
+    let events: List[sol.Event] = [
+        .Tick,
+        .Tick,
+        .Tick,
+        .Tick,
+        .Tick,
+        .SeeEnemy { id: 7 },
+        .Tick,
+        .SeeEnemy { id: 9 },
+        .LoseEnemy,
+        .LoseEnemy,
+        .LowHealth,
+        .SeeEnemy { id: 3 },
+        .Tick,
+        .Tick,
+        .Tick,
+        .Tick,
+        .LowHealth,
+        .LowHealth,
+        .Tick
+    ]
     var s: sol.State = .Idle
     println(sol.describe(s))
     for e in &events {

@@ -106,7 +106,10 @@ fn replay(text: str) Outcome {
             ticks = t
             let got = swarm.hex(swarm.hash(&w))
             if got != f[2] {
-                return failed(n, "tick " + str(t) + ": recorded hash " + f[2] + ", replay gives " + got)
+                return failed(
+                    n,
+                    "tick " + str(t) + ": recorded hash " + f[2] + ", replay gives " + got
+                )
             }
             continue
         }
@@ -124,7 +127,13 @@ fn replay(text: str) Outcome {
     if len(cmds) > 0 {
         return failed(len(lines), "commands of tick " + str(ticks + 1) + " have no hash line")
     }
-    return Outcome { line: 0, error: "", ticks, agents: len(w.agents), hash: swarm.hex(swarm.hash(&w)) }
+    return Outcome {
+        line: 0,
+        error: "",
+        ticks,
+        agents: len(w.agents),
+        hash: swarm.hex(swarm.hash(&w))
+    }
 }
 
 fn replay_file(path: str) bool {
@@ -139,7 +148,10 @@ fn replay_file(path: str) bool {
                 eprintln(path + ":" + str(r.line) + ": error: " + r.error)
                 return false
             }
-            println(path + ": replay ok, " + str(r.ticks) + " ticks, " + str(r.agents) + " agents, hash " + r.hash)
+            println(
+                path + ": replay ok, " + str(r.ticks) + " ticks, " + str(r.agents) +
+                    " agents, hash " + r.hash
+            )
             return true
         }
     }

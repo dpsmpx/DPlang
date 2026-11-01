@@ -43,15 +43,26 @@ fn events() {
 
 fn surface(w: sdl3.SDL_Window) {
     var inst: ?vulkan.VkInstance = none
-    let rc = vulkan.vkCreateInstance(&vulkan.VkInstanceCreateInfo {
-        p_application_info: &vulkan.VkApplicationInfo { api_version: vulkan.VK_API_VERSION_1_3 },
-        pp_enabled_layer_names: [],
-        pp_enabled_extension_names: [vulkan.VK_KHR_SURFACE_EXTENSION_NAME, "VK_EXT_headless_surface"],
-    }, none, &mut inst)
+    let rc = vulkan.vkCreateInstance(
+        &vulkan.VkInstanceCreateInfo {
+            p_application_info: &vulkan.VkApplicationInfo {
+                api_version: vulkan.VK_API_VERSION_1_3
+            },
+            pp_enabled_layer_names: [],
+            pp_enabled_extension_names: [
+                vulkan.VK_KHR_SURFACE_EXTENSION_NAME,
+                "VK_EXT_headless_surface"
+            ]
+        },
+        none,
+        &mut inst
+    )
     println("vkCreateInstance: " + str(rc))
     if let i = inst {
         var surf: ?vulkan.VkSurfaceKHR = none
-        println("SDL_Vulkan_CreateSurface: " + str(sdl3.SDL_Vulkan_CreateSurface(w, i, none, &mut surf)))
+        println(
+            "SDL_Vulkan_CreateSurface: " + str(sdl3.SDL_Vulkan_CreateSurface(w, i, none, &mut surf))
+        )
         if let s = surf {
             var n: u32 = 1
             var devs: List[?vulkan.VkPhysicalDevice] = [none]
@@ -61,9 +72,13 @@ fn surface(w: sdl3.SDL_Window) {
                 _ = vulkan.vkGetPhysicalDeviceSurfaceSupportKHR(pd, 0, s, &mut ok)
                 var caps = vulkan.VkSurfaceCapabilitiesKHR {}
                 let crc = vulkan.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, s, &mut caps)
-                println("present support: " + str(ok == vulkan.VK_TRUE) + ", capabilities: " + str(crc) +
-                        ", min images >= 1: " + str(caps.min_image_count >= 1))
-                println("Vulkan presentation: " + str(sdl3.SDL_Vulkan_GetPresentationSupport(i, pd, 0)))
+                println(
+                    "present support: " + str(ok == vulkan.VK_TRUE) + ", capabilities: " +
+                        str(crc) + ", min images >= 1: " + str(caps.min_image_count >= 1)
+                )
+                println(
+                    "Vulkan presentation: " + str(sdl3.SDL_Vulkan_GetPresentationSupport(i, pd, 0))
+                )
             }
             sdl3.SDL_Vulkan_DestroySurface(i, s, none)
         }

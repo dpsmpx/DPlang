@@ -155,10 +155,15 @@ fn blank_and_comments() !void {
 
 @test
 fn pairs() !void {
-    assert(try parse_line("name = \"tomlcheck\"") == .Pair { key: "name", value: .Str("tomlcheck") })
+    assert(
+        try parse_line("name = \"tomlcheck\"") == .Pair { key: "name", value: .Str("tomlcheck") }
+    )
     assert(try parse_line("max_len=-42 # comment") == .Pair { key: "max_len", value: .Int(-42) })
     assert(try parse_line("\tdebug = true") == .Pair { key: "debug", value: .Bool(true) })
-    assert(try parse_line("big = +9223372036854775807") == .Pair { key: "big", value: .Int(9223372036854775807) })
+    assert(
+        try parse_line("big = +9223372036854775807") ==
+            .Pair { key: "big", value: .Int(9223372036854775807) }
+    )
     assert(try parse_line("empty = \"\"") == .Pair { key: "empty", value: .Str("") })
 }
 

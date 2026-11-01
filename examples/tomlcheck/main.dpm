@@ -62,7 +62,9 @@ fn check_text(path: str, text: str) Report {
                     .Blank => {}
                     .Table(name) => {
                         if tables.contains(name) {
-                            r.errors.push(path + ":" + n + ": error: table [" + name + "] is defined twice")
+                            r.errors.push(
+                                path + ":" + n + ": error: table [" + name + "] is defined twice"
+                            )
                         }
                         tables.push(name)
                         keys.clear()
@@ -70,7 +72,9 @@ fn check_text(path: str, text: str) Report {
                     }
                     .Pair { key } => {
                         if keys.contains(key) {
-                            r.errors.push(path + ":" + n + ": error: key '" + key + "' is defined twice")
+                            r.errors.push(
+                                path + ":" + n + ": error: key '" + key + "' is defined twice"
+                            )
                         }
                         keys.push(key)
                         r.keys += 1
@@ -102,7 +106,9 @@ fn check_file(path: str) bool {
                 eprintln(e)
             }
             if len(r.errors) == 0 {
-                println(path + ": ok, " + plural(r.keys, "key") + " in " + plural(r.tables, "table"))
+                println(
+                    path + ": ok, " + plural(r.keys, "key") + " in " + plural(r.tables, "table")
+                )
             }
             return len(r.errors) == 0
         }
@@ -126,7 +132,10 @@ fn main() Failure!void {
 
 @test
 fn reports_counts() {
-    let r = check_text("t.toml", "# config\n[server]\nport = 8080\nhost = \"localhost\"\n\n[db]\nport = 5432\n")
+    let r = check_text(
+        "t.toml",
+        "# config\n[server]\nport = 8080\nhost = \"localhost\"\n\n[db]\nport = 5432\n"
+    )
     assert(len(r.errors) == 0 && r.keys == 3 && r.tables == 2)
 }
 
@@ -142,5 +151,7 @@ fn reports_duplicates() {
 fn reports_line_numbers_and_crlf() {
     let r = check_text("w.toml", "ok = true\r\nbad = \r\nalso_ok = 1\r\n")
     assert(len(r.errors) == 1)
-    assert(r.errors[0] == "w.toml:2: error: value must be an i64 integer, true, false or a \"string\"")
+    assert(
+        r.errors[0] == "w.toml:2: error: value must be an i64 integer, true, false or a \"string\""
+    )
 }

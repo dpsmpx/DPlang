@@ -28,7 +28,10 @@ fn find(c: &catalog.Catalog, code: str) {
     if item < 0 {
         println("find " + code + ": none")
     } else {
-        println("find " + code + ": " + catalog.catalog_code(&c, item) + " at " + money.fmt_money(catalog.catalog_price(&c, item)))
+        println(
+            "find " + code + ": " + catalog.catalog_code(&c, item) + " at " +
+                money.fmt_money(catalog.catalog_price(&c, item))
+        )
     }
 }
 
@@ -44,12 +47,18 @@ fn code_text(r: i32, minus1: str) str {
 
 fn add(k: &mut cart.Cart, c: &catalog.Catalog, code: str, qty: i32) {
     let r = cart.cart_add(&mut k, &c, code, qty)
-    println("add " + code + " " + str(qty) + ": " + code_text(r, "unknown item") + " | " + receipt.receipt(&k, &c))
+    println(
+        "add " + code + " " + str(qty) + ": " + code_text(r, "unknown item") + " | " +
+            receipt.receipt(&k, &c)
+    )
 }
 
 fn remove(k: &mut cart.Cart, c: &catalog.Catalog, code: str, qty: i32) {
     let r = cart.cart_remove(&mut k, &c, code, qty)
-    println("remove " + code + " " + str(qty) + ": " + code_text(r, "not in cart") + " | " + receipt.receipt(&k, &c))
+    println(
+        "remove " + code + " " + str(qty) + ": " + code_text(r, "not in cart") + " | " +
+            receipt.receipt(&k, &c)
+    )
 }
 
 fn discount(k: &mut cart.Cart, c: &catalog.Catalog, percent: i32) {
@@ -57,11 +66,26 @@ fn discount(k: &mut cart.Cart, c: &catalog.Catalog, percent: i32) {
     if cart.cart_discount(&mut k, percent) {
         what = "ok"
     }
-    println("discount " + str(percent) + ": " + what + " | total " + money.fmt_money(cart.cart_total(&k, &c)))
+    println(
+        "discount " + str(percent) + ": " + what + " | total " +
+            money.fmt_money(cart.cart_total(&k, &c))
+    )
 }
 
 fn main() {
-    let prices: List[str] = ["0.45", "12.00", "007.10", "3.5", "1.234", "-1.00", ".99", "1234567890123.00", "123456789012.99", "1,00", ""]
+    let prices: List[str] = [
+        "0.45",
+        "12.00",
+        "007.10",
+        "3.5",
+        "1.234",
+        "-1.00",
+        ".99",
+        "1234567890123.00",
+        "123456789012.99",
+        "1,00",
+        ""
+    ]
     for s in &prices {
         price(s)
     }

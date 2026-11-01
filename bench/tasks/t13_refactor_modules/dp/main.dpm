@@ -24,7 +24,8 @@ fn do_hit(w: &mut world.World, id: world.UnitId, dmg: i32) {
 
 fn do_blast(w: &mut world.World, cx: i32, cy: i32, r: i32, dmg: i32) {
     let hits = combat.blast(&mut w, cx, cy, r, dmg)
-    var line = "blast (" + str(cx) + "," + str(cy) + ") r" + str(r) + " " + str(dmg) + ": " + str(len(hits)) + " hit:"
+    var line = "blast (" + str(cx) + "," + str(cy) + ") r" + str(r) + " " + str(dmg) + ": " +
+        str(len(hits)) + " hit:"
     for id in &hits {
         line += " " + str(id.index)
     }
@@ -49,5 +50,8 @@ fn main() {
     do_hit(&mut w, b, 1)
     let far = world.UnitId { index: 9 }
     let neg = world.UnitId { index: -1 }
-    println("hp " + str(hp_or_minus1(&w, a)) + " " + str(hp_or_minus1(&w, far)) + " " + str(hp_or_minus1(&w, neg)))
+    println(
+        "hp " + str(hp_or_minus1(&w, a)) + " " + str(hp_or_minus1(&w, far)) + " " +
+            str(hp_or_minus1(&w, neg))
+    )
 }

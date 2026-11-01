@@ -34,7 +34,14 @@ fn main() {
     for s in &lines {
         println(s)
     }
-    let small = [cmd(0, 5, 1), cmd(0, 5, 2), cmd(1, 0, 0), cmd(0, -3, 9), cmd(2, 0, 0), cmd(2, 0, 0)]
+    let small = [
+        cmd(0, 5, 1),
+        cmd(0, 5, 2),
+        cmd(1, 0, 0),
+        cmd(0, -3, 9),
+        cmd(2, 0, 0),
+        cmd(2, 0, 0)
+    ]
     let ls = sol.run(&small, 1)
     for s in &ls {
         println("small " + s)

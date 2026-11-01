@@ -1,0 +1,30 @@
+// Перенос строк длиннее 100 символов: списки — по элементу на строку,
+// цепочка одного оператора — сколько влезает, заголовок функции — по
+// параметру на строку.
+enum Shape {
+    Dot
+    Line(i64, i64, i64, i64)
+}
+
+struct Body {
+    x: i64
+    y: i64
+    vx: i64
+    vy: i64
+    name: str
+}
+
+fn make(seed: u64, offset_x: i64, offset_y: i64, speed_x: i64, speed_y: i64, label: str) Body {
+    return Body{x: i64(seed % 1000000) + offset_x, y: i64((seed >> 20) % 1000000) + offset_y, vx: speed_x, vy: speed_y, name: label}
+}
+
+fn main() {
+    let names: List[str] = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa"]
+    let b = make(7, 1, 2, 3, 4, "first body of the many bodies in this rather long example program text")
+    let s: Shape = .Line(b.x + 1000000000, b.y + 2000000000, b.vx * 3000000000, b.vy * 4000000000 - 5000000000)
+    println(str(b.x) + " " + str(b.y) + " " + str(b.vx) + " " + str(b.vy) + " " + b.name + " " + names[0] + " " + names[9])
+    if b.x > 10 && b.y > 10 && b.vx > -1000 && b.vy > -1000 && len(names) == 10 && names[0] == "alpha" {
+        println("ok")
+    }
+    let short = [1, 2, 3]
+}
