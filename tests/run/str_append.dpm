@@ -1,0 +1,30 @@
+// spec: expr.order builtin.functions
+// Сборка строки дописыванием: `s += e`, `s = s + e`, строка в поле
+// элемента, строка к самой себе; длинный цикл — без квадратичного роста.
+struct P {
+    name: str
+}
+
+fn main() {
+    var s = ""
+    for i in 0..200000 {
+        s += "x"
+    }
+    var t = ""
+    for i in 0..12 {
+        t += str(i)
+        t = t + ","
+    }
+    var ps: List[P] = [P { name: "a" }, P { name: "z" }]
+    for i in 0..5 {
+        ps[1].name += str(i)
+        ps[0].name = ps[0].name + "b"
+    }
+    var u = "ab"
+    u += u
+    u = u + u
+    var v = "é"
+    v += "ж" + v
+    println(str(len(s)) + " " + t)
+    println(ps[0].name + " " + ps[1].name + " " + u + " " + v)
+}

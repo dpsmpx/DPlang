@@ -280,6 +280,10 @@ static inline void dp_str_drop(dp_str* s) {
     s->len = 0;
 }
 dp_str dp_str_concat(dp_str a, dp_str b, const char* loc);
+/* `s += b` (и `s = s + b`): дописать b в буфер s. Ёмкость — у аллокатора
+ * (dp_sys_alloc_size), рост — вдвое: сборка строки в цикле линейна. b
+ * может быть самой s. */
+void dp_str_append(dp_str* s, dp_str b, const char* loc);
 bool dp_str_eq(dp_str a, dp_str b);
 bool dp_str_lt(dp_str a, dp_str b); /* по байтам без знака */
 
@@ -496,5 +500,7 @@ void* dp_sys_cond(void);
 void dp_sys_wait(void* c, void* m);
 void dp_sys_broadcast(void* c);
 void dp_sys_signal(void* c);
+/* Ёмкость блока malloc в байтах (не меньше запрошенного). */
+size_t dp_sys_alloc_size(void* p);
 
 #endif

@@ -1812,7 +1812,16 @@ private:
         bool fresh = false;
         Place p = lvalue(a->target, fresh);
         const Type* t = place_type(out_, f_, p);
-        if (a->op == AssignOp::Set) {
+        AssignOp op = a->op;
+        const Expr* value = a->value;
+        // `s = s + e` у строк — как `s += e`: тот же порядок (место, чтение s,
+        // затем e), а C-бэкенд дописывает в буфер s, без новой строки.
+        if (auto* b = as<const BinaryExpr>(strip_parens(value));
+            op == AssignOp::Set && t->kind == TK::Str && b && b->op == BinOp::Add && same_expr(b->lhs, a->target)) {
+            op = AssignOp::Add;
+            value = b->rhs;
+        }
+        if (op == AssignOp::Set) {
             // Место — до значения, и его проверка тоже, даже если значение
             // меняет корень места (expr.order). Пробы нет, если значение
             // первым читает то же место: `p.vy = p.vy + 3` проверит его само.
@@ -1825,11 +1834,11 @@ private:
         }
         // `x op= e` — `x = x op e`; x читается до e.
         Operand cur = copy(p);
-        if (hits(changed(a->value), p)) cur = stabilize(std::move(cur), a->target->span);
-        if (may_trap(a->value)) cur = force(std::move(cur), a->target->span);
-        Operand rhs = expr(a->value);
+        if (hits(changed(value), p)) cur = stabilize(std::move(cur), a->target->span);
+        if (may_trap(value)) cur = force(std::move(cur), a->target->span);
+        Operand rhs = expr(value);
         BinKind k = BinKind::Add;
-        switch (a->op) {
+        switch (op) {
             case AssignOp::Add: k = t->kind == TK::Str ? BinKind::Concat : BinKind::Add; break;
             case AssignOp::Sub: k = BinKind::Sub; break;
             case AssignOp::Mul: k = BinKind::Mul; break;

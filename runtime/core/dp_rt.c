@@ -452,6 +452,22 @@ dp_str dp_str_concat(dp_str a, dp_str b, const char* loc) {
     return s;
 }
 
+void dp_str_append(dp_str* s, dp_str b, const char* loc) {
+    if (b.len == 0) return;
+    if (b.len > DP_MAX_BYTES - s->len) dp_trap(loc, "out of memory");
+    int64_t need = s->len + b.len;
+    if (!s->ptr || (int64_t)dp_sys_alloc_size(s->ptr) < need) {
+        int64_t cap = s->len < DP_MAX_BYTES / 2 ? s->len * 2 : DP_MAX_BYTES;
+        if (cap < need) cap = need;
+        if (cap < 16) cap = 16;
+        bool self = b.ptr == s->ptr;
+        s->ptr = (uint8_t*)dp_realloc(s->ptr, cap, 1, loc);
+        if (self) b.ptr = s->ptr;
+    }
+    memcpy(s->ptr + s->len, b.ptr, (size_t)b.len);
+    s->len = need;
+}
+
 bool dp_str_eq(dp_str a, dp_str b) { return a.len == b.len && (a.len == 0 || memcmp(a.ptr, b.ptr, (size_t)a.len) == 0); }
 
 bool dp_str_lt(dp_str a, dp_str b) {

@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <io.h>
+#include <malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -80,6 +81,8 @@ int dp_run(dp_entry_fn entry) {
 }
 
 int dp_run_test(dp_entry_fn entry) { return dp_run_as(entry, "test"); }
+
+size_t dp_sys_alloc_size(void* p) { return _msize(p); }
 
 /* --- потоки пула `parallel for` (Р69) */
 
