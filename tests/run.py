@@ -411,6 +411,22 @@ def prepare_cross():
     return None
 
 
+def run_program(argv, cwd, env=None):
+    """Запуск программы с выводом во временные файлы, а не в каналы; как
+    subprocess.run(capture_output=True, text=True, timeout=TIMEOUT).
+    Первый процесс Wine в остывшем сеансе запускает wineserver и services.exe:
+    они наследуют stdout и stderr и живут, пока идут другие тесты прохода, —
+    чтение каналов ждало бы их, а не программу (таймаут access.dpm в
+    проходе windows, 1 ноября 2026)."""
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        r = subprocess.run(argv, stdout=out, stderr=err, timeout=TIMEOUT, cwd=cwd, env=env)
+
+        def text(f):  # как text=True: перевод строк \r\n и \r в \n
+            f.seek(0)
+            return f.read().decode('utf-8', errors='backslashreplace').replace('\r\n', '\n').replace('\r', '\n')
+        return subprocess.CompletedProcess(argv, r.returncode, text(out), text(err))
+
+
 def build_pass_one(arg, cross=None, bless=False):
     """Проход build: `dpl build` (профиль debug или --release), запуск,
     вывод — как у интерпретатора (docs/compiler/cli.md, «build»). С
@@ -434,8 +450,7 @@ def build_pass_one(arg, cross=None, bless=False):
     if r.returncode != 0:  # у набора ffi диагностику никто не сверяет: отказ — сбой
         return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
     try:
-        p = subprocess.run(runner + [exe] + program_args(path), capture_output=True, text=True,
-                           errors='backslashreplace', timeout=TIMEOUT, cwd=cwd, env=dict(os.environ, WINEDEBUG='-all'))
+        p = run_program(runner + [exe] + program_args(path), cwd, dict(os.environ, WINEDEBUG='-all'))
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout
@@ -486,8 +501,7 @@ def lib_one(arg, bless=False):
     if r.returncode != 0:
         return 'хост не собирается: ' + '\n'.join(r.stderr.splitlines()[:8])
     try:
-        p = subprocess.run(runner + [exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
-                           cwd=case, env=dict(os.environ, WINEDEBUG='-all'))
+        p = run_program(runner + [exe], case, dict(os.environ, WINEDEBUG='-all'))
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout + ('--- stderr ---\n' + p.stderr if p.stderr else '') + (f'[exit {p.returncode}]\n' if p.returncode else '')
@@ -509,8 +523,7 @@ def lib_one(arg, bless=False):
 def capture(argv, cwd, env=None):
     """Вывод команды в формате ожидаемого: stdout, stderr, код."""
     try:
-        r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd,
-                           env=env)
+        r = run_program(argv, cwd, env)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout
