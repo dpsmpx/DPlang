@@ -235,7 +235,8 @@ def discover(pattern):
     if os.path.isdir(EXAMPLES):
         for ex in sorted(os.listdir(EXAMPLES)):
             if os.path.isdir(os.path.join(EXAMPLES, ex, 'expected')):
-                deep += [('example', f'{ex}/{c}') for c in EXAMPLE_CASES if pattern in f'example/{ex}/{c}']
+                cases = EXAMPLE_CASES + tuple(c for c in CROSS if cross_tools(c) is None)
+                deep += [('example', f'{ex}/{c}') for c in cases if pattern in f'example/{ex}/{c}']
     if os.path.isdir(BENCH_TASKS):
         for t in sorted(os.listdir(BENCH_TASKS)):
             if os.path.isdir(os.path.join(BENCH_TASKS, t, 'dp')):
@@ -410,6 +411,22 @@ def prepare_cross():
     return None
 
 
+def run_program(argv, cwd, env=None):
+    """Запуск программы с выводом во временные файлы, а не в каналы; как
+    subprocess.run(capture_output=True, text=True, timeout=TIMEOUT).
+    Первый процесс Wine в остывшем сеансе запускает wineserver и services.exe:
+    они наследуют stdout и stderr и живут, пока идут другие тесты прохода, —
+    чтение каналов ждало бы их, а не программу (таймаут access.dpm в
+    проходе windows, 1 ноября 2026)."""
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        r = subprocess.run(argv, stdout=out, stderr=err, timeout=TIMEOUT, cwd=cwd, env=env)
+
+        def text(f):  # как text=True: перевод строк \r\n и \r в \n
+            f.seek(0)
+            return f.read().decode('utf-8', errors='backslashreplace').replace('\r\n', '\n').replace('\r', '\n')
+        return subprocess.CompletedProcess(argv, r.returncode, text(out), text(err))
+
+
 def build_pass_one(arg, cross=None, bless=False):
     """Проход build: `dpl build` (профиль debug или --release), запуск,
     вывод — как у интерпретатора (docs/compiler/cli.md, «build»). С
@@ -433,8 +450,7 @@ def build_pass_one(arg, cross=None, bless=False):
     if r.returncode != 0:  # у набора ffi диагностику никто не сверяет: отказ — сбой
         return f'build: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
     try:
-        p = subprocess.run(runner + [exe] + program_args(path), capture_output=True, text=True,
-                           errors='backslashreplace', timeout=TIMEOUT, cwd=cwd, env=dict(os.environ, WINEDEBUG='-all'))
+        p = run_program(runner + [exe] + program_args(path), cwd, dict(os.environ, WINEDEBUG='-all'))
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout
@@ -485,8 +501,7 @@ def lib_one(arg, bless=False):
     if r.returncode != 0:
         return 'хост не собирается: ' + '\n'.join(r.stderr.splitlines()[:8])
     try:
-        p = subprocess.run(runner + [exe], capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT,
-                           cwd=case, env=dict(os.environ, WINEDEBUG='-all'))
+        p = run_program(runner + [exe], case, dict(os.environ, WINEDEBUG='-all'))
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]'
     got = p.stdout + ('--- stderr ---\n' + p.stderr if p.stderr else '') + (f'[exit {p.returncode}]\n' if p.returncode else '')
@@ -508,8 +523,7 @@ def lib_one(arg, bless=False):
 def capture(argv, cwd, env=None):
     """Вывод команды в формате ожидаемого: stdout, stderr, код."""
     try:
-        r = subprocess.run(argv, capture_output=True, text=True, errors='backslashreplace', timeout=TIMEOUT, cwd=cwd,
-                           env=env)
+        r = run_program(argv, cwd, env)
     except subprocess.TimeoutExpired:
         return f'[timeout {TIMEOUT} s]\n'
     out = r.stdout
@@ -525,7 +539,9 @@ def example_one(case, bless):
     (expected/test.out); run — интерпретатор с аргументами expected/run.args
     (expected/run.out); build — `dpl build --release` и запуск, вывод тот
     же (у программы с параллелизмом — и при DPL_THREADS из THREAD_COUNTS);
-    fmt — исходники в каноническом виде."""
+    fmt — исходники в каноническом виде; windows и android — сборка
+    `--release` для цели (CROSS) и запуск её runner-ом, вывод тот же, что у
+    run (если инструменты цели есть)."""
     ex, kind = case.split('/')
     cwd = os.path.join(EXAMPLES, ex)
     exp = os.path.join(cwd, 'expected')
@@ -538,6 +554,16 @@ def example_one(case, bless):
         got, want_path = capture([DPL, 'test', 'main.dpm'], cwd), os.path.join(exp, 'test.out')
     elif kind == 'run':
         got, want_path = capture([DPL, 'debug', 'run', 'main.dpm'] + args, cwd), os.path.join(exp, 'run.out')
+    elif kind in CROSS:
+        target, runner, suffix = CROSS[kind]
+        exe = os.path.join(NATIVE, f'example_{ex}_{kind}{suffix}')
+        r = subprocess.run([DPL, 'build', '--release', '--target', target, '-o', exe, 'main.dpm'], capture_output=True,
+                           text=True, timeout=TIMEOUT, cwd=cwd)
+        if r.returncode != 0:
+            return f'build {target}: код {r.returncode}: ' + '\n'.join(r.stderr.splitlines()[:5])
+        got = capture(runner + [exe] + args, cwd, dict(os.environ, WINEDEBUG='-all'))
+        want_path = os.path.join(exp, 'run.out')
+        bless = False  # ожидаемое пишет случай run
     else:
         exe = os.path.join(NATIVE, 'example_' + ex)
         r = subprocess.run([DPL, 'build', '--release', '-o', exe, 'main.dpm'], capture_output=True, text=True,
@@ -823,7 +849,8 @@ def main():
             print('компилятор: runtime не собирается')
             print(err)
             return 1
-    if any(suite == 'windows' or (suite == 'lib' and path.endswith(' windows')) for suite, path in tests):
+    if any(suite == 'windows' or (suite == 'lib' and path.endswith(' windows')) or
+           (suite == 'example' and path.endswith('/windows')) for suite, path in tests):
         err = prepare_cross()
         if err:
             print('компилятор: Wine не готовится')

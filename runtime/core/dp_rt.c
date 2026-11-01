@@ -895,8 +895,10 @@ void dp_check_reserve(int64_t n, const char* loc) {
 
 /* --- пул `parallel for` (Р69)
  *
- * Рабочие потоки запускаются при первом цикле и живут до конца программы.
- * Задание публикуется под мьютексом (dp_par_pending и номер поколения);
+ * Рабочие потоки запускаются при первом цикле и живут до конца программы;
+ * первый цикл ждёт, пока все они дойдут до ожидания заданий: выход из
+ * программы не застаёт поток на старте (Wine в этом случае пишет в stderr
+ * «wine client error», 1 ноября 2026). Задание публикуется под мьютексом (dp_par_pending и номер поколения);
  * вызывающий поток работает наравне с рабочими, затем ждёт, пока все, кто
  * взял задание, выйдут из него. */
 static void* dp_par_work_cv;
@@ -906,6 +908,7 @@ static dp_par_job* dp_par_pending;
 static uint64_t dp_par_gen;
 static int dp_par_active;
 static int dp_par_waiting; /* поток ждёт рабочих: 1 (снимает со счёта последний рабочий) */
+static int dp_par_ready; /* рабочих, дошедших до ожидания заданий (под dp_par_m) */
 
 /* Части задания, пока они есть и не дальше ловушки. */
 static void dp_par_run(dp_par_job* j) {
@@ -938,6 +941,8 @@ static void dp_par_worker(void* arg) {
     (void)arg;
     uint64_t seen = 0;
     dp_sys_lock(dp_par_m);
+    dp_par_ready++;
+    dp_sys_broadcast(dp_par_done_cv);
     for (;;) {
         while (!dp_par_pending || dp_par_gen == seen) dp_sys_wait(dp_par_work_cv, dp_par_m);
         seen = dp_par_gen;
@@ -973,6 +978,9 @@ static void dp_par_start(void) {
         if (dp_sys_thread(dp_par_worker, NULL) != 0) break;
         dp_par_workers++;
     }
+    dp_sys_lock(dp_par_m);
+    while (dp_par_ready < dp_par_workers) dp_sys_wait(dp_par_done_cv, dp_par_m);
+    dp_sys_unlock(dp_par_m);
 }
 
 /* Записи буфера — в вывод потока: у задачи — в её буфер, иначе в stdout и
