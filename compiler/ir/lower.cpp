@@ -778,6 +778,49 @@ private:
         return true;
     }
 
+    // Одно и то же место, записанное одинаково: имена — те же переменные,
+    // поля — те же, индексы — та же переменная или то же число.
+    static bool same_expr(const Expr* a, const Expr* b) {
+        a = strip_parens(a);
+        b = strip_parens(b);
+        if (a->kind != b->kind) return false;
+        switch (a->kind) {
+            case ExprKind::Name: {
+                auto *x = static_cast<const NameExpr*>(a), *y = static_cast<const NameExpr*>(b);
+                return x->res.kind == ResKind::Local && y->res.kind == ResKind::Local && x->res.local == y->res.local;
+            }
+            case ExprKind::Field: {
+                auto *x = static_cast<const FieldExpr*>(a), *y = static_cast<const FieldExpr*>(b);
+                return x->field >= 0 && x->field == y->field && x->name == y->name && same_expr(x->object, y->object);
+            }
+            case ExprKind::Index: {
+                auto *x = static_cast<const IndexExpr*>(a), *y = static_cast<const IndexExpr*>(b);
+                if (!same_expr(x->object, y->object)) return false;
+                const Expr *i = strip_parens(x->index), *j = strip_parens(y->index);
+                if (i->kind == ExprKind::Int && j->kind == ExprKind::Int) {
+                    return static_cast<const IntExpr*>(i)->value == static_cast<const IntExpr*>(j)->value;
+                }
+                return i->kind == ExprKind::Name && same_expr(i, j);
+            }
+            default: return false;
+        }
+    }
+
+    // Значение первым читает место target: самый левый операнд — оно же.
+    static bool reads_first(const Expr* value, const Expr* target) {
+        const Expr* e = strip_parens(value);
+        for (;;) {
+            if (auto* b = as<const BinaryExpr>(e)) {
+                e = strip_parens(b->lhs);
+            } else if (auto* u = as<const UnaryExpr>(e)) {
+                e = strip_parens(u->operand);
+            } else {
+                break;
+            }
+        }
+        return e->kind != ExprKind::Name && same_expr(e, target);
+    }
+
     static bool hits(const Roots& r, const Place& p) {
         for (uint32_t x : r) {
             if (x == p.local) return true;
@@ -913,10 +956,10 @@ private:
         }
         auto* i = static_cast<const IndexExpr*>(e);
         // Объект-вид (`xs[a..b][i]`) не повисает, если индекс меняет xs.
+        // Основа проверяется до индекса, даже если индекс меняет её корень
+        // (expr.order): `xs[9][1 / z]` — сперва xs[9].
         Place base = object(i->object, fresh);
-        if ((may_trap(i->index) || has_effect(i->index)) && !hits(changed(i->index), base)) {
-            probe(base, i->object->span);  // `xs[9][1 / z]`: сперва xs[9]
-        }
+        if (may_trap(i->index) || has_effect(i->index)) probe(base, i->object->span);
         if (i->object->type->kind == TK::Map) {  // m[k]: ключ во временном (Р54)
             if (auto* n = as<const NameExpr>(strip_parens(i->index)); n && n->res.kind == ResKind::Local) {
                 for (auto l = map_loops_.rbegin(); l != map_loops_.rend(); ++l) {
@@ -1154,8 +1197,8 @@ private:
         // снимок нужен только при действии в границах.
         rv.place = object(s->object, fresh);
         rv.has_place = true;
-        if ((may_trap(s->lo) || may_trap(s->hi) || has_effect(s->lo) || has_effect(s->hi)) && !hits(bounds, rv.place)) {
-            probe(rv.place, s->object->span);
+        if (may_trap(s->lo) || may_trap(s->hi) || has_effect(s->lo) || has_effect(s->hi)) {
+            probe(rv.place, s->object->span);  // основа — до границ (expr.order)
         }
         if (s->lo) {
             Operand lo = rd(expr(s->lo));
@@ -1410,9 +1453,7 @@ private:
                         bool fresh = false;
                         rv.place = lvalue(f->object, fresh);
                         rv.has_place = true;
-                            if ((any_trap(args) || any_effect(args)) && !hits(changed_all(args), rv.place)) {
-                            probe(rv.place, f->object->span);
-                        }
+                        if (any_trap(args) || any_effect(args)) probe(rv.place, f->object->span);
                         rv.ops = exprs(args);
                     } else {
                         std::vector<const Expr*> all{f->object};
@@ -1463,9 +1504,7 @@ private:
                         bool fresh = false;
                         rv.place = lvalue(f->object, fresh);
                         rv.has_place = true;
-                        if ((any_trap(args) || any_effect(args)) && !hits(changed_all(args), rv.place)) {
-                            probe(rv.place, f->object->span);
-                        }
+                        if (any_trap(args) || any_effect(args)) probe(rv.place, f->object->span);
                         rv.ops = exprs(args);
                     } else {
                         std::vector<const Expr*> all{f->object};
@@ -1492,8 +1531,8 @@ private:
                     bool fresh = false;
                     rv.place = lvalue(f->object, fresh);
                     rv.has_place = true;
-                    if ((any_trap(args) || any_effect(args)) && !hits(changed_all(args), rv.place)) {
-                        probe(rv.place, f->object->span);  // получатель — до аргументов
+                    if (any_trap(args) || any_effect(args)) {
+                        probe(rv.place, f->object->span);  // получатель — до аргументов (expr.order)
                     }
                     rv.ops = exprs(args);
                     // Значения, которые список сохраняет (push, insert), отдаются целиком.
@@ -1755,10 +1794,7 @@ private:
             // отображения и ключ — до значения (expr.order).
             bool mfresh = false;
             Place m = object(mi->object, mfresh);
-            Roots mr = changed(mi->index);
-            changed(a->value, mr);
-            if ((may_trap(mi->index) || may_trap(a->value) || has_effect(mi->index) || has_effect(a->value)) &&
-                !hits(mr, m)) {
+            if (may_trap(mi->index) || may_trap(a->value) || has_effect(mi->index) || has_effect(a->value)) {
                 probe(m, mi->object->span);
             }
             const Type* kt = mi->object->type->key;
@@ -1777,9 +1813,12 @@ private:
         Place p = lvalue(a->target, fresh);
         const Type* t = place_type(out_, f_, p);
         if (a->op == AssignOp::Set) {
-            // Место — до значения. Если значение меняет корень места, проверка
-            // остаётся при записи (TODO.md: решить, входит ли она в вычисление места).
-            if ((may_trap(a->value) || has_effect(a->value)) && !hits(changed(a->value), p)) probe(p, a->target->span);
+            // Место — до значения, и его проверка тоже, даже если значение
+            // меняет корень места (expr.order). Пробы нет, если значение
+            // первым читает то же место: `p.vy = p.vy + 3` проверит его само.
+            if ((may_trap(a->value) || has_effect(a->value)) && !reads_first(a->value, a->target)) {
+                probe(p, a->target->span);
+            }
             assign(p, use(expr(a->value), t), a->span);
             pop_scope(a->span);
             return;

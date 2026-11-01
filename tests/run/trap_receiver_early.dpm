@@ -1,0 +1,14 @@
+// spec: expr.order trap.index (Р72)
+// Получатель изменяющего метода проверяется до аргументов, даже если они
+// меняют его корень.
+fn grow(ls: &mut List[List[i64]]) i64 {
+    ls.push([])
+    println("grow")
+    return 7
+}
+
+fn main() {
+    var ls: List[List[i64]] = [[1]]
+    ls[1].push(grow(&mut ls))
+    println("never")
+}

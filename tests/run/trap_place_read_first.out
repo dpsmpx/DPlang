@@ -1,0 +1,4 @@
+4
+--- stderr ---
+trap_place_read_first.dpm:13:25: trap: index 4 is out of bounds for length 1
+[exit 101]
