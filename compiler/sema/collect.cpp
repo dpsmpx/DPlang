@@ -391,8 +391,13 @@ private:
                              "unknown attribute '@" + a.name + "' for a struct; use '@c', '@union' or '@linear'");
             } else if (*flag) {
                 diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' is given twice");
+            } else if (a.has_arg && (a.name == "linear" || a.arg_ident || a.arg_int || a.arg.empty())) {
+                diags_.error(Code::E0319, a.span,
+                             a.name == "linear" ? "attribute '@linear' takes no argument"
+                                                : "the argument of '@" + a.name + "' is the C header that defines the "
+                                                  "struct: '@" + a.name + "(\"SDL3/SDL.h\")'");
             } else if (a.has_arg) {
-                diags_.error(Code::E0319, a.span, "attribute '@" + a.name + "' takes no argument");
+                d.c_header = a.arg;  // Р76: заголовок --lib включает его, а не определяет структуру
             }
             if (flag) *flag = true;
         }

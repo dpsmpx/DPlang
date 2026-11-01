@@ -200,7 +200,7 @@ class Gen:
                     n, v = [x.strip() for x in part.split('=')]
                     lines.append(f'pub const {n}: i32 = {int(v, 0)}')
         lines += ['',
-                  '@union',
+                  '@union("jni.h")',
                   'pub struct jvalue {',
                   '    z: u8',
                   '    b: i8',
@@ -216,7 +216,7 @@ class Gen:
         self.structs = {}
         for name, fields in self.struct_defs():
             self.structs[name] = fields
-            lines.append('@c')
+            lines.append('@c("jni.h")')  # Р76: структура C из заголовка
             lines.append(f'pub struct {name} {{')
             for dn, ty, count, _ in fields:
                 lines.append(f'    {count}{dn}: {ty}')

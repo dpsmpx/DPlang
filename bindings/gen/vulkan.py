@@ -586,7 +586,8 @@ class Gen:
                 continue
             t = reg.types[n]
             union = t.get('category') == 'union'
-            self.emit('@union' if union else '@c')
+            # Р76: структура C из заголовка — заголовок --lib включает его.
+            self.emit(('@union' if union else '@c') + '("vulkan/vulkan.h")')
             self.emit(f'pub struct {n} {{')
             for name, ty, count, default, comment in done[n]:
                 line = f'    {count}{name}: {ty}' + (f' = {default}' if default else '')

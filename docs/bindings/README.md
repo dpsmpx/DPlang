@@ -77,7 +77,7 @@ bindings/jni/jni.dpm           модуль `jni` — не править
 | маска `VkXFlags`, биты `VkXFlagBits` | `u32` (`u64` у 64-битных) и константы битов |
 | дескриптор `VkInstance` | `pub extern type VkInstance`; в полях и параметрах `optional` и в выводе C — `?VkInstance` |
 | `PFN_vk…` в поле | `extern fn(...)`, необязательный — `?extern fn(...)` |
-| структура, объединение | `@c pub struct`, `@union pub struct` |
+| структура, объединение | `@c("vulkan/vulkan.h") pub struct`, `@union("vulkan/vulkan.h") pub struct` (заголовок C — Р76) |
 | `sType` с `values` | `s_type: i32 = VK_STRUCTURE_TYPE_…` — значение по умолчанию |
 | `const void* pNext` | `?&VkBaseInStructure`: цепочка ввода, `p_next: &features` (общее начало) |
 | `pNext` структуры `returnedonly` | `?VkVoid` — цепочки вывода нет, только `none` |
@@ -130,7 +130,7 @@ p_code: []u8`, SPIR-V байтами из файла (указатель в C т
 | `#define` с числом | константа: типа предшествующего `typedef` целого (`SDL_InitFlags` → `SDL_INIT_*: u32`), иначе по суффиксу (`u` — `u32`, `SDL_UINT64_C` — `u64`, без суффикса — `i32`) |
 | `#define` со строкой | `pub const SDL_HINT_…: str` |
 | скрытая структура (`SDL_Window`), `typedef struct X *H`, `typedef void *H` | `pub extern type`; результат — `?H` (NULL при ошибке) |
-| структура, объединение | `@c pub struct`, `@union pub struct`; поля — `snake_case` |
+| структура, объединение | `@c("SDL3/SDL.h") pub struct`, `@union("SDL3/SDL.h") pub struct` (Р76); поля — `snake_case` |
 | указатель в поле | на скрытую структуру — `?H`; иначе `?SDL_Void` — указатель без операций (строки и буферы событий в dpl не читаются) |
 | параметр `const char*` | `str`; в описании есть NULL — `?str` |
 | параметр `const T*` | `&T`, NULL в описании — `?&T`; «array» в описании — `[]T` |

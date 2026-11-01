@@ -36,6 +36,7 @@ struct StructDef {
     bool c = false;       // `@c`: раскладка C (Р59)
     bool linear = false;  // `@linear`: значение закрывается ровно один раз (Р57)
     bool union_ = false;  // `@union`: поля делят память, раскладка C (Р62); c тоже true
+    std::string c_header;  // `@c("SDL3/SDL.h")`: структура C из этого заголовка (Р76)
     Span span;
     std::vector<FieldDef> fields;
     const ast::StructItem* node = nullptr;

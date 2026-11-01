@@ -464,7 +464,8 @@ class Gen:
                 lines.append(f'pub extern type {n}')
         lines.append('')
         for n, fields in structs.items():
-            lines.append('@union' if self.types[n][0] == 'union' else '@c')
+            # Р76: структура C из заголовка — заголовок --lib включает его.
+            lines.append(('@union' if self.types[n][0] == 'union' else '@c') + '("SDL3/SDL.h")')
             lines.append(f'pub struct {n} {{')
             for fn, ty, comment, _ in fields:
                 lines.append(f'    {fn}: {ty}' + (f'  // {comment}' if comment else ''))
