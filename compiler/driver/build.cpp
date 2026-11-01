@@ -24,8 +24,10 @@ const std::vector<Target>& targets() {
     static const std::vector<Target> list = {
         {"linux-x86_64", "x86_64-linux-gnu", "linux", true, true, "", {}, {"-lm", "-pthread"}, ""},
         // clang + lld поверх MinGW-w64; тесты — под Wine (docs/policy/PLATFORMS.md).
+        // Без времени сборки в заголовке PE — сборка воспроизводима.
         {"windows-x86_64", "x86_64-w64-mingw32", "windows", false, false, ".exe",
-         {"--target=x86_64-w64-mingw32", "-fuse-ld=lld", "-D__USE_MINGW_ANSI_STDIO=1"}, {"-lshell32"}, "wine"},
+         {"--target=x86_64-w64-mingw32", "-fuse-ld=lld", "-Wl,--no-insert-timestamp", "-D__USE_MINGW_ANSI_STDIO=1"},
+         {"-lshell32"}, "wine"},
         // clang из Android NDK, API 24; порт — POSIX, как у Linux (bionic). Статическая
         // программа запускается и в эмуляторе пользовательского режима (qemu-aarch64).
         {"android-arm64", "aarch64-linux-android24", "linux", false, false, "",
@@ -246,6 +248,18 @@ bool prepare(const std::string& c_code, const BuildOptions& opt, TempDir& tmp, S
     return true;
 }
 
+// Перенос путей сборки (docs/policy/DETERMINISM.md, раздел 6): в
+// отладочных сведениях и путях `__FILE__` нет ни каталога сборки, ни
+// временного каталога со случайным именем, ни места runtime. Подходит
+// последнее совпавшее правило (gcc, clang 17+; у старого clang — самое
+// длинное), поэтому общее — первым.
+void prefix_maps(const BuildOptions& opt, const TempDir& tmp, std::vector<std::string>& argv) {
+    std::vector<char> cwd(4096);
+    if (getcwd(cwd.data(), cwd.size())) argv.push_back("-ffile-prefix-map=" + std::string(cwd.data()) + "=.");
+    argv.push_back("-ffile-prefix-map=" + opt.runtime_dir + "=dpl-runtime");
+    if (!tmp.path.empty()) argv.push_back("-ffile-prefix-map=" + tmp.path + "=dpl-build");
+}
+
 // Флаги компилятора C для всех исходников сборки.
 std::vector<std::string> c_flags(const BuildOptions& opt, TempDir& tmp) {
     const Target& t = target_of(opt);
@@ -257,6 +271,7 @@ std::vector<std::string> c_flags(const BuildOptions& opt, TempDir& tmp) {
         argv.push_back("-O0");
         argv.push_back("-g");
     }
+    prefix_maps(opt, tmp, argv);
     if (opt.profile == Profile::Test && t.sanitizers) {
         if (has_sanitizers(opt, tmp)) {
             argv.push_back("-fsanitize=address,undefined");
@@ -386,7 +401,7 @@ int build_lib(const std::string& c_code, const std::string& header, const std::s
     }
     std::string ar = ar_for(t, opt.cc);
     std::string lib = tmp.file("lib.a");
-    std::vector<std::string> argv = {ar, "rcs", lib};
+    std::vector<std::string> argv = {ar, "rcsD", lib};  // D — без времени и владельца членов
     argv.insert(argv.end(), objs.begin(), objs.end());
     int r = spawn_wait(argv);
     if (r != 0) {
