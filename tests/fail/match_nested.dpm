@@ -1,0 +1,46 @@
+// spec: stmt.match pattern.types (Р73)
+// Полнота и лишние ветви по вложенным образцам.
+enum E {
+    A
+    B
+}
+
+enum Shape {
+    Dot
+    Line(i64, ?E)
+    Box { w: i64, kind: E }
+}
+
+fn missing(r: E!?E, s: Shape, o: ?bool) {
+    match r {
+        ok(some(.A)) => return
+        ok(none) => return
+        err(_) => return
+    }
+    match s {
+        .Dot => return
+        .Line(_, some(.B)) => return
+        .Line(_, none) => return
+        .Box { kind: .A } => return
+    }
+    match o {
+        some(true) => return
+        none => return
+    }
+}
+
+fn unreachable(r: E!?E, s: Shape) {
+    match r {
+        ok(_) => return
+        err(.A) => return
+        ok(some(.B)) => return
+        err(.B) => return
+    }
+    match s {
+        .Line(_, _) => return
+        .Line(1, some(.A)) => return
+        _ => return
+    }
+}
+
+fn main() {}

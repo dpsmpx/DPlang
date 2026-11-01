@@ -1,0 +1,17 @@
+--- stderr ---
+match_nested.dpm:15:11: error[E0415]: 'match' does not cover ok(some(.B))
+  15 |     match r {
+     |           ^
+match_nested.dpm:20:11: error[E0415]: 'match' does not cover .Line(_, some(.A)), .Box { kind: .B }
+  20 |     match s {
+     |           ^
+match_nested.dpm:26:11: error[E0415]: 'match' does not cover some(false)
+  26 |     match o {
+     |           ^
+match_nested.dpm:36:9: error[E0416]: this arm is unreachable: earlier arms cover these values
+  36 |         ok(some(.B)) => return
+     |         ^~~~~~~~~~~~
+match_nested.dpm:41:9: error[E0416]: this arm is unreachable: earlier arms cover these values
+  41 |         .Line(1, some(.A)) => return
+     |         ^~~~~~~~~~~~~~~~~~
+[exit 1]
