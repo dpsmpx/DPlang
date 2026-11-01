@@ -2,6 +2,7 @@
  * docs/runtime/README.md). main программы исполняется в потоке с большим
  * стеком: предел глубины вызовов (DP_MAX_DEPTH) должен срабатывать
  * ловушкой раньше, чем кончится стек процесса. */
+#include <malloc.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +40,8 @@ static int dp_run_as(dp_entry_fn entry, const char* what) {
 }
 
 int dp_run(dp_entry_fn entry) { return dp_run_as(entry, "main"); }
+
+size_t dp_sys_alloc_size(void* p) { return malloc_usable_size(p); }
 
 /* --- потоки пула `parallel for` (Р69) */
 

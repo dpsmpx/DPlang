@@ -1875,6 +1875,18 @@ std::string FnEmitter::rvalue(const Rvalue& rv) {
     return "0";
 }
 
+// `p = p + b` у строк: левый операнд — то же место, что и цель.
+static bool append_in_place(const Inst& in) {
+    if (in.kind != InstKind::Assign || in.rv.kind != RvKind::Binary || in.rv.bin != BinKind::Concat) return false;
+    const Operand& a = in.rv.ops[0];
+    if (a.kind != OpKind::Copy || a.place.local != in.dst.local || a.place.proj.size() != in.dst.proj.size()) return false;
+    for (size_t i = 0; i < a.place.proj.size(); i++) {
+        const ir::Proj &x = a.place.proj[i], &y = in.dst.proj[i];
+        if (x.kind != y.kind || x.index != y.index || x.sub != y.sub) return false;
+    }
+    return true;
+}
+
 std::string FnEmitter::inst(const Inst& in) {
     pre_.clear();
     post_.clear();
@@ -1884,6 +1896,12 @@ std::string FnEmitter::inst(const Inst& in) {
         Lv lv = place(in.dst);
         std::string d = drop_of(lv.type, lv.expr);
         if (!d.empty()) line(d);
+    } else if (append_in_place(in)) {
+        // `s = s + b`: дописать в буфер s (dp_str_append). Место — до b, как
+        // чтение s в concat.
+        Lv dst = place(in.dst);
+        std::string b = operand(in.rv.ops[1], false);
+        line("dp_str_append(&" + dst.expr + ", " + b + ", " + loc_ + ");");
     } else {
         std::string v = rvalue(in.rv);
         const Type* t = in.rv.type;
