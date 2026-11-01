@@ -333,7 +333,7 @@ void Checker::let_stmt(LetStmt* l) {
     }
     if (t && linear_in_container(t)) {
         error(Code::E0514, l->type ? l->type->span : l->name_span,
-              "'" + tn(t) + "' holds a '@linear' value in a List, a Map, a Pool or a slice; keep resources in variables");
+              "'" + tn(t) + "' holds a '@linear' value in a List, a Map, a Channel or a slice; keep resources in variables");
     }
     l->local = declare(l->name, l->name_span, t, l->is_var, false, l->value != nullptr);
 }
@@ -549,7 +549,13 @@ void Checker::for_stmt(ForStmt* s) {
     } else {
         const Type* t = infer(s->iter, nullptr);
         if (s->mode == ForMode::Value) {
-            if (t->kind != TK::Error) {
+            // Р75: обход по значению забирает пул ресурсов — только Pool[@linear T].
+            if (t->kind == TK::Pool && linear_type(t->elem)) {
+                elem = t->elem;
+                if (s->parallel) {
+                    error(Code::E0419, s->iter->span, "a loop that takes the pool cannot be 'parallel for'");
+                }
+            } else if (t->kind != TK::Error) {
                 error(Code::E0419, s->iter->span, "iterate a collection through a mark: 'for x in &xs'");
             }
         } else if (t->kind == TK::List) {

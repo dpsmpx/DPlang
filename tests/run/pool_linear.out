@@ -1,0 +1,10 @@
+open 1
+open 2
+open 3
+r2 3
+close r1
+open 4
+close r4
+close r2
+close r3
+failed 1 0 2

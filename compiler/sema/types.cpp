@@ -123,6 +123,7 @@ bool linear_type(const Type* t) {
     if (!t) return false;
     if (t->kind == TK::Struct) return t->sdef->linear;
     if (t->kind == TK::Optional || t->kind == TK::Result) return linear_type(t->elem);
+    if (t->kind == TK::Pool) return linear_type(t->elem);  // пул ресурсов сам линеен (Р75)
     return false;
 }
 
@@ -130,7 +131,8 @@ bool linear_in_container(const Type* t) {
     if (!t) return false;
     switch (t->kind) {
         case TK::List: case TK::Slice: return linear_type(t->elem) || linear_in_container(t->elem);
-        case TK::Map: case TK::Pool: case TK::Channel: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Map: case TK::Channel: return linear_type(t->elem) || linear_in_container(t->elem);
+        case TK::Pool: return linear_in_container(t->elem);  // Pool[@linear T] — Р75
         case TK::Optional: return linear_in_container(t->elem);
         case TK::Result: return linear_in_container(t->elem) || linear_in_container(t->err);
         default: return false;

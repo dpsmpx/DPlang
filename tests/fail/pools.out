@@ -26,10 +26,7 @@ pools.dpm:34:17: error[E0412]: cannot call 'add' on 'ships' while 'for ... in &'
 pools.dpm:36:28: error[E0502]: 'ships' is passed as '&mut' together with another reference into it; pass a copy of the value instead
   36 |     swap_hp(&mut ships[s], &mut ships[h])
      |                            ^~~~~~~~~~~~~
-pools.dpm:37:15: error[E0514]: 'Pool[Buffer]' holds a '@linear' value in a List, a Map, a Pool or a slice; keep resources in variables
-  37 |     var bufs: Pool[Buffer] = []
-     |               ^~~~~~~~~~~~
-pools.dpm:38:12: error[E0314]: 'Handle' takes exactly one type argument: Handle[T]
-  38 |     let w: Handle[i32, i32] = s
+pools.dpm:37:12: error[E0314]: 'Handle' takes exactly one type argument: Handle[T]
+  37 |     let w: Handle[i32, i32] = s
      |            ^~~~~~~~~~~~~~~~
 [exit 1]

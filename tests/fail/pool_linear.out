@@ -1,0 +1,35 @@
+--- stderr ---
+pool_linear.dpm:25:1: error[E0511]: 'pool' is not closed when the function returns here
+  25 | }
+     | ^
+pool_linear.dpm:32:13: error[E0511]: 'break' leaves the loop that takes the pool: the remaining resources would not be closed; record the problem in a variable and close every element
+  32 |             break
+     |             ^~~~~
+pool_linear.dpm:34:9: error[E0511]: 'try' leaves the loop that takes the pool: the remaining resources would not be closed; record the problem in a variable and close every element
+  34 |         try try_close(r)
+     |         ^~~~~~~~~~~~~~~~
+pool_linear.dpm:39:9: error[E0511]: 'return' leaves the loop that takes the pool: the remaining resources would not be closed; record the problem in a variable and close every element
+  39 |         return
+     |         ^~~~~~
+pool_linear.dpm:45:19: error[E0511]: 'r' is not closed at the end of its block; close it or use 'defer'
+  45 |     for r in pool {
+     |                   ^
+pool_linear.dpm:52:13: error[E0513]: a '@linear' element of a Pool cannot be moved out; take it with 'p.remove(h)' or 'for x in p'
+  52 |     let x = pool[h]
+     |             ^~~~~~~
+pool_linear.dpm:54:5: error[E0513]: a '@linear' element of a Pool cannot be replaced; take the old one with 'p.remove(h)' and add the new one
+  54 |     pool[h] = Res { id: 2 }
+     |     ^~~~~~~
+pool_linear.dpm:55:18: error[E0513]: 'get(h)' would copy a resource; read it through 'p[h]' or take it with 'p.remove(h)'
+  55 |     let y = pool.get(h)
+     |                  ^~~
+pool_linear.dpm:56:10: error[E0511]: 'clear()' drops the resources in the pool; take each with 'p.remove(h)' or 'for x in p'
+  56 |     pool.clear()
+     |          ^~~~~
+pool_linear.dpm:60:17: error[E0512]: 'pool' is already closed or moved
+  60 |     let _ = len(pool)
+     |                 ^~~~
+pool_linear.dpm:61:1: error[E0511]: 'y' is not closed when the function returns here
+  61 | }
+     | ^
+[exit 1]

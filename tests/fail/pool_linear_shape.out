@@ -1,0 +1,11 @@
+--- stderr ---
+pool_linear_shape.dpm:14:15: error[E0514]: 'List[Pool[Res]]' holds a '@linear' value in a List, a Map, a Channel or a slice; keep resources in variables or fields of a '@linear' struct
+  14 | fn shapes(ps: List[Pool[Res]]) {
+     |               ^~~~~~~~~~~~~~~
+pool_linear_shape.dpm:16:14: error[E0419]: iterate a collection through a mark: 'for x in &xs'
+  16 |     for v in plain {
+     |              ^~~~~
+pool_linear_shape.dpm:20:23: error[E0419]: a loop that takes the pool cannot be 'parallel for'
+  20 |     parallel for r in pool {
+     |                       ^~~~
+[exit 1]

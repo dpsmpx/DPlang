@@ -411,7 +411,7 @@ private:
         auto container = [&](const ast::Type* node, const sema::Type* t, const ModuleInfo* m) {
             if (node && linear_in_container(t)) {
                 diags_.error(Code::E0514, node->span,
-                             "'" + type_name(t, m) + "' holds a '@linear' value in a List, a Map, a Pool or a slice; "
+                             "'" + type_name(t, m) + "' holds a '@linear' value in a List, a Map, a Channel or a slice; "
                              "keep resources in variables or fields of a '@linear' struct");
             }
         };

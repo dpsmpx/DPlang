@@ -34,6 +34,5 @@ fn main() {
         let _ = ships.add(Ship{hp: x.hp})
     }
     swap_hp(&mut ships[s], &mut ships[h])
-    var bufs: Pool[Buffer] = []
     let w: Handle[i32, i32] = s
 }

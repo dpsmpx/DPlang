@@ -62,6 +62,8 @@ public:
         reported_.assign(f.local_count, 0);
         scopes_.clear();
         loops_.clear();
+        takes_.clear();
+        taking_ = 0;
         errdefer_of_.assign(f.local_count, nullptr);
         pending_.clear();
         scopes_.emplace_back();
@@ -88,6 +90,8 @@ private:
     std::vector<char> reported_;     // по номеру: о переменной уже сообщили (без лавины)
     std::vector<Scope> scopes_;
     std::vector<size_t> loops_;      // число областей снаружи тела каждого цикла
+    std::vector<char> takes_;        // по циклу: обход забирает пул ресурсов (Р75)
+    int taking_ = 0;                 // открытых обходов, забирающих пул
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
     DeferStmt* cur_defer_ = nullptr;  // errdefer, тело которого проверяется
     size_t defer_scope_ = 0;          // область инструкции defer: тело-блок открывает свою
@@ -390,14 +394,18 @@ private:
             }
             case StmtKind::For: {
                 auto* f = static_cast<ForStmt*>(s);
-                expr(f->iter, f->mode == ForMode::Range ? Use::Read : Use::Borrow);
+                // `for x in p` по пулу ресурсов (Р75) забирает пул: каждый
+                // элемент приходит в тело, тело его поглощает.
+                bool takes = f->mode == ForMode::Value;
+                expr(f->iter, f->mode == ForMode::Range ? Use::Read : takes ? Use::Consume : Use::Borrow);
                 expr(f->hi, Use::Read);
-                loop_body(f->body, false);
+                loop_body(f->body, false, takes ? f->local : nullptr);
                 break;
             }
             case StmtKind::Match: match_stmt(static_cast<MatchStmt*>(s)); break;
             case StmtKind::Return: {
                 auto* r = static_cast<ReturnStmt*>(s);
+                early_exit(s->span, "'return'");
                 expr(r->value, Use::Consume);
                 // `return` значения E!T (без обёртки ok) может вернуть и ошибку.
                 bool both = r->value && r->value->type && r->value->type->kind == TK::Result && !r->value->conv;
@@ -406,11 +414,13 @@ private:
                 break;
             }
             case StmtKind::Fail:
+                early_exit(s->span, "'fail'");
                 expr(static_cast<FailStmt*>(s)->value, Use::Read);
                 exit_check(Exit::Error, s->span);
                 flow_.live = false;
                 break;
             case StmtKind::Break: case StmtKind::Continue:
+                if (s->kind == StmtKind::Break && !takes_.empty() && takes_.back()) early_exit(s->span, "'break'");
                 loop_exit(s->span);
                 flow_.live = false;
                 break;
@@ -489,8 +499,11 @@ private:
         if (a->target->type && linear_type(a->target->type)) {
             error(Code::E0513, a->target->span,
                   n ? "'" + n->name + "' is a reference: the caller's resource cannot be replaced"
-                    : std::string("a '@linear' field cannot be replaced; destructure the struct with "
-                                  "'let S { ... } = v'"));
+                    : as<IndexExpr>(a->target)
+                        ? std::string("a '@linear' element of a Pool cannot be replaced; take the old one with "
+                                      "'p.remove(h)' and add the new one")
+                        : std::string("a '@linear' field cannot be replaced; destructure the struct with "
+                                      "'let S { ... } = v'"));
         }
         // Место вычислено до значения (expr.order): поглотить его корень в
         // значении нельзя — запись ушла бы в закрытое.
@@ -517,10 +530,30 @@ private:
 
     static Span end_of(Span s) { return Span{s.file, s.end > 0 ? s.end - 1 : 0, s.end}; }
 
-    void loop_body(Block* body, bool forever) {
+    // Выход из обхода, который забирает пул (Р75), до конца пула: остальные
+    // ресурсы остались бы не закрыты.
+    void early_exit(Span span, const std::string& what) {
+        if (taking_ == 0) return;
+        error(Code::E0511, span, what + " leaves the loop that takes the pool: the remaining resources would not be "
+                                        "closed; record the problem in a variable and close every element");
+    }
+
+    void loop_body(Block* body, bool forever, const Local* takes = nullptr) {
         Flow before = flow_;
         loops_.push_back(scopes_.size());
-        block(body);
+        takes_.push_back(takes != nullptr);
+        taking_ += takes != nullptr;
+        if (takes) {  // переменная цикла — ресурс тела: поглощается на каждом шаге
+            scopes_.emplace_back();
+            declare(takes, true);
+            block(body);
+            if (flow_.live) close_scope(scopes_.back(), body ? body->span : Span{});
+            scopes_.pop_back();
+        } else {
+            block(body);
+        }
+        taking_ -= takes != nullptr;
+        takes_.pop_back();
         loops_.pop_back();
         // Внешние ресурсы тело не трогает (E0513): после цикла — состояние до него.
         flow_ = before;
@@ -632,6 +665,10 @@ private:
             // его корень в них нельзя.
             case ExprKind::Index: {
                 auto* x = static_cast<IndexExpr*>(e);
+                if (lin && use == Use::Consume) {
+                    error(Code::E0513, x->span, "a '@linear' element of a Pool cannot be moved out; take it with "
+                                                "'p.remove(h)' or 'for x in p'");
+                }
                 expr(x->object, Use::Borrow);
                 size_t held = hold_index(x->object);
                 expr(x->index, Use::Read);
@@ -654,6 +691,7 @@ private:
             case ExprKind::Spawn: expr(static_cast<SpawnExpr*>(e)->operand, Use::Read); break;
             case ExprKind::Try: {
                 auto* t = static_cast<TryExpr*>(e);
+                early_exit(t->span, "'try'");
                 expr(t->operand, Use::Consume);
                 exit_check(Exit::Error, t->span);
                 break;
@@ -712,6 +750,17 @@ private:
             }
             case CallKind::Method: {
                 if (f) expr(f->object, Use::Borrow);
+                // Пул ресурсов (Р75): clear() бросил бы ресурсы, get(h) скопировал бы.
+                const Type* pt = f && f->object->type ? f->object->type : nullptr;
+                if (pt && pt->kind == TK::Pool && linear_type(pt->elem)) {
+                    if (c->method == Method::Clear) {
+                        error(Code::E0511, f->name_span, "'clear()' drops the resources in the pool; take each with "
+                                                         "'p.remove(h)' or 'for x in p'");
+                    } else if (c->method == Method::Get) {
+                        error(Code::E0513, f->name_span, "'get(h)' would copy a resource; read it through 'p[h]' or "
+                                                         "take it with 'p.remove(h)'");
+                    }
+                }
                 // Получатель держится до конца вызова: изменяющий метод пишет в него.
                 size_t held = held_.size();
                 if (const Local* l = f ? place_root(f->object) : nullptr) held_.push_back(Held{l, Why::Call});

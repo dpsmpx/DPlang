@@ -2116,6 +2116,46 @@ private:
             cur_ = step;
             assign(local(i), bin(BinKind::AddWrap, copy(local(i)), cint(1, t), t), s->var_span);
             jump(head, s->span);
+        } else if (s->mode == ForMode::Value) {
+            // `for x in p` по пулу ресурсов (Р75): копия хэндлов, затем на
+            // каждом шаге x — значение p.remove(hs[k]). Выйти раньше конца тело
+            // не может (проверка линейности), поэтому после цикла пул пуст и
+            // освобождается как обычно.
+            bool fresh = false;
+            Place base = lvalue(s->iter, fresh);
+            const Type* ht = tt_.pool_handle(s->elem);
+            Rvalue hrv = intrinsic(Intrinsic::PoolHandles, tt_.list(ht));
+            hrv.ops.push_back(copy(base));
+            Place hs = place_of(to_temp(std::move(hrv), s->iter->span), s->iter->span, fresh);
+            uint32_t k = temp(i64);
+            assign(local(k), use(cint(0, i64), i64), s->var_span);
+            jump(head, s->span);
+            cur_ = head;
+            Rvalue len = intrinsic(Intrinsic::Len, i64);
+            len.ops.push_back(copy(hs));
+            Operand n = to_temp(std::move(len), s->iter->span);
+            Operand c = to_temp(bin(BinKind::Lt, copy(local(k)), n, prim(TK::Bool)), s->var_span);
+            branch(c, body, done, s->var_span);
+            cur_ = body;
+            loops_.push_back(Loop{done, step, scopes_.size()});  // continue освобождает и область шага
+            push_scope();
+            Rvalue take = intrinsic(Intrinsic::PoolRemove, tt_.optional(s->elem));
+            take.place = base;
+            take.has_place = true;
+            take.ops.push_back(copy(proj(hs, ProjKind::Index, k)));
+            Place got = place_of(to_temp(std::move(take), s->var_span), s->var_span, fresh);
+            if (s->local) {
+                uint32_t v = var(s->local);
+                assign(local(v), use(copy(proj(got, ProjKind::Unwrap)), s->elem), s->var_span);
+                own(v);
+            }
+            block(s->body);
+            pop_scope(s->span);
+            loops_.pop_back();
+            jump(step, s->span);
+            cur_ = step;
+            assign(local(k), bin(BinKind::AddWrap, copy(local(k)), cint(1, i64), i64), s->var_span);
+            jump(head, s->span);
         } else if (s->iter->type->kind == TK::Pool) {
             // `for e in &p` (Р67): e — элемент живого слота k по возрастанию
             // номера. Число слотов — раз: тело p не меняет (E0412).
