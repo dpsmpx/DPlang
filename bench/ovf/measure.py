@@ -116,7 +116,10 @@ def main():
     layouts = [int(a) for a in args.layouts.split(',')]
     before = subprocess.run(['git', 'rev-parse', '--short', args.before], cwd=ROOT, capture_output=True,
                             text=True).stdout.strip() or args.before
-    data = {'env': native.environment(), 'before': before, 'runs': args.runs, 'layouts': layouts, 'loads': {},
+    env = native.environment()
+    cc = subprocess.run([os.environ.get('CC') or 'cc', '--version'], capture_output=True, text=True).stdout.splitlines()
+    env['cc'] = cc[0] if cc else '?'  # компилятор C сборок — $CC, а не cc
+    data = {'env': env, 'before': before, 'runs': args.runs, 'layouts': layouts, 'loads': {},
             'same_output': True}
     with tempfile.TemporaryDirectory() as tmp:
         runtimes = {'before': runtime_at(args.before, tmp), 'after': os.path.join(ROOT, 'runtime')}
