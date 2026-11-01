@@ -44,6 +44,18 @@ const Type* TypeTable::cfn(const CFnSig& sig) {
     return &t;
 }
 
+const Type* TypeTable::ref_mut(const Type* elem) {
+    auto key = std::make_pair(elem, uint64_t{1});
+    auto it = refs_mut_.find(key);
+    if (it != refs_mut_.end()) return it->second;
+    Type& t = store_.emplace_back();
+    t.kind = TK::Ref;
+    t.elem = elem;
+    t.len = 1;
+    refs_mut_.emplace(key, &t);
+    return &t;
+}
+
 const Type* TypeTable::array(const Type* elem, uint64_t len) {
     auto key = std::make_pair(elem, len);
     auto it = arrays_.find(key);
@@ -98,7 +110,7 @@ std::string type_name(const Type* t, const ModuleInfo* from) {
         case TK::Handle:
             return from && t->hdef->module != from ? t->hdef->module->name + "." + t->hdef->name : t->hdef->name;
         case TK::Array: return "[" + std::to_string(t->len) + "]" + type_name(t->elem, from);
-        case TK::Ref: return "&" + type_name(t->elem, from);
+        case TK::Ref: return (t->len ? "&mut " : "&") + type_name(t->elem, from);
         case TK::CFn: {
             std::string s = "extern fn(";
             for (size_t i = 0; i < t->sig->params.size(); i++) {
@@ -193,10 +205,16 @@ bool c_borrow_field(const Type* t) {
 
 // Поле — заимствующая структура по значению: рекурсия только по значению,
 // а такие циклы — E0423; глубина ограничена на случай ещё не найденного цикла.
+// Поле цепочки вывода `?&mut S` (Р77): структура с ним одним может быть
+// переменной — в переменной поле всегда none.
+bool chain_field(const Type* t) {
+    return t && t->kind == TK::Optional && t->elem->kind == TK::Ref && t->elem->len == 1 && c_struct_type(t->elem->elem);
+}
+
 static bool c_borrowing_at(const Type* t, int depth) {
     if (!t || t->kind != TK::Struct || !t->sdef->c || depth > 64) return false;
     for (const FieldDef& f : t->sdef->fields) {
-        if (c_borrow_field(f.type) || c_borrowing_at(f.type, depth + 1)) return true;
+        if ((c_borrow_field(f.type) && !chain_field(f.type)) || c_borrowing_at(f.type, depth + 1)) return true;
     }
     return false;
 }
@@ -210,7 +228,18 @@ bool holds_view(const Type* t) {
     return false;
 }
 
-bool c_field_type(const Type* t) { return c_value_type(t) || c_borrow_field(t) || c_borrowing(t); }
+static bool c_out_at(const Type* t, int depth) {
+    if (c_value_type(t)) return true;
+    if (!c_struct_type(t) || t->sdef->union_ || depth > 64) return false;
+    for (const FieldDef& f : t->sdef->fields) {
+        if (!chain_field(f.type) && !c_out_at(f.type, depth + 1)) return false;
+    }
+    return true;
+}
+
+bool c_out_type(const Type* t) { return c_out_at(t, 0); }
+
+bool c_field_type(const Type* t) { return c_out_type(t) || c_borrow_field(t) || c_borrowing(t); }
 
 static bool zeroable_at(const Type* t, int depth) {
     if (!t || depth > 64) return false;

@@ -393,7 +393,10 @@ std::string type_text(const Type* t) {
             auto* a = static_cast<const ArrayType*>(t);
             return "[" + a->len_src + "]" + type_text(a->elem);
         }
-        case TypeKind::Ref: return "&" + type_text(static_cast<const RefType*>(t)->inner);
+        case TypeKind::Ref: {
+            auto* r = static_cast<const RefType*>(t);
+            return (r->mut ? "&mut " : "&") + type_text(r->inner);
+        }
         case TypeKind::Fn: {
             auto* f = static_cast<const FnType*>(t);
             std::string s = "extern fn(";

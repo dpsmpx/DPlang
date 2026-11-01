@@ -1,0 +1,49 @@
+// spec: ffi.struct ffi.export (Р77)
+// Цепочка вывода (pNext Vulkan): у структуры поле `?&mut OutBase` — она
+// переменная, поле в ней — none. `&mut v` в литерале — аргументе функции
+// C — звено, в которое функция C пишет; `&mut S { ... }` — заголовок на
+// время вызова. Функции C — в host.c.
+@c
+struct OutBase {
+    kind: u32
+    next: ?&mut OutBase
+}
+
+@c
+struct Props {
+    kind: u32 = 1
+    next: ?&mut OutBase
+    count: i32
+}
+
+@c
+struct Limits {
+    kind: u32 = 2
+    next: ?&mut OutBase
+    max_size: i32
+    max_count: i32
+}
+
+@c
+struct Pair {
+    props: Props
+    weight: f32
+}
+
+extern fn host_fill(p: &mut Props)
+extern fn host_fill_all(ps: &mut List[Props], n: i32)
+extern fn host_pair(p: &mut Pair)
+
+@export
+fn chain_run() i32 {
+    var limits = Limits { next: none, max_size: 0, max_count: 0 }
+    host_fill(&mut Props { next: &mut limits, count: 0 })
+    var props = Props { next: none, count: 0 }
+    host_fill(&mut props)
+    var all: List[Props] = [Props { next: none, count: 0 }, Props { next: none, count: 0 }]
+    host_fill_all(&mut all, 2)
+    var more = Limits { next: none, max_size: 0, max_count: 0 }
+    host_pair(&mut Pair { props: Props { next: &mut more, count: 0 }, weight: 0.5 })
+    let copy = props
+    return limits.max_size * 1000 + limits.max_count * 100 + copy.count + all[1].count + more.max_count
+}

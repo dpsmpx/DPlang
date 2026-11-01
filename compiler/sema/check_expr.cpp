@@ -94,7 +94,9 @@ bool Checker::convertible(const Type* from, const Type* to) {
         return !sf && st && bf < bt;
     }
     if (from->kind == TK::F32 && to->kind == TK::F64) return true;
-    if (from->kind == TK::Ref && to->kind == TK::Ref) return c_prefix(to->elem, from->elem);  // Р62: общее начало
+    if (from->kind == TK::Ref && to->kind == TK::Ref) {  // Р62: общее начало; `&mut` — только в `&mut` (Р77)
+        return from->len == to->len && c_prefix(to->elem, from->elem);
+    }
     if ((from->kind == TK::List || from->kind == TK::Array) && to->kind == TK::Slice) return from->elem == to->elem;
     if (to->kind == TK::Optional && from->kind != TK::Optional) return convertible(from, to->elem);
     if (to->kind == TK::Result && from->kind != TK::Result) return convertible(from, to->elem);
@@ -384,6 +386,13 @@ const Type* Checker::field_expr(FieldExpr* f, const Type* /*hint*/) {
                 f->field = static_cast<int>(i);
                 note_extend(f->object, f);
                 // Р62: заимствованное поле пишется для C; в dpl его не прочесть.
+                // Поле цепочки вывода (Р77) в dpl всегда none.
+                if (chain_field(s->fields[i].type)) {
+                    error(Code::E0328, f->name_span, "field '" + f->name + "' of '" + tn(t) +
+                                                         "' is an output chain for C: in dpl it is always none, "
+                                                         "a link goes in a literal in the call");
+                    return err();
+                }
                 if (c_borrowing(t) && c_borrow_field(s->fields[i].type)) {
                     error(Code::E0328, f->name_span, "field '" + f->name + "' of '" + tn(t) +
                                                          "' is borrowed for C and cannot be read in dpl");
@@ -694,6 +703,14 @@ const Type* Checker::ptr_call(CallExpr* c, const Local& callee) {
 }
 
 void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
+    // Р77: аргумент функции C — там литерал может дать полю цепочки `&mut v`.
+    bool c_call = (c->call == CallKind::Fn && c->fn && c->fn->is_extern) || c->call == CallKind::Ptr;
+    struct Restore {
+        int& n;
+        int old;
+        ~Restore() { n = old; }
+    } restore{c_arg_, c_arg_};
+    c_arg_ = c_call;
     for (size_t i = 0; i < c->args.size(); i++) {
         Expr* a = c->args[i];
         const ParamDef& p = params[i];
@@ -725,8 +742,9 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
         }
         const Type* t = infer(r->operand, p.type);
         r->type = t;
-        // Р62: `&S { ... }` — временное на время вызова (только чтение).
-        bool literal = !r->mut && as<StructLitExpr>(strip_paren(r->operand));
+        // Р62: `&S { ... }` — временное на время вызова (только чтение); у
+        // функции C и `&mut S { ... }` — заголовок цепочки вывода (Р77).
+        bool literal = (!r->mut || c_call) && as<StructLitExpr>(strip_paren(r->operand));
         if (!is_place(r->operand) && !literal) {
             if (t->kind != TK::Error) {
                 error(Code::E0501, r->operand->span, r->mut ? "a reference needs a variable, a field or an element"
@@ -734,7 +752,7 @@ void Checker::check_args(CallExpr* c, const std::vector<ParamDef>& params) {
             }
             continue;
         }
-        if (r->mut && mutable_place(r->operand, "mutate")) note_write(r->operand, "mutate");
+        if (r->mut && !literal && mutable_place(r->operand, "mutate")) note_write(r->operand, "mutate");
         bool prefix = !r->mut && c_prefix(p.type, t);  // Р62: `&S` в `&B` по общему началу
         if (t != p.type && !prefix && t->kind != TK::Error && p.type->kind != TK::Error) {
             error(Code::E0401, r->operand->span, "expected '" + tn(p.type) + "', found '" + tn(t) + "'");
@@ -1467,6 +1485,17 @@ const Type* Checker::spawn_expr(SpawnExpr* sp) {
 const Type* Checker::infer(Expr* e, const Type* hint) {
     if (!e) return err();
     if (e->type) return e->type;
+    // Р77: аргумент функции C — только сам литерал, список, `&` и скобки;
+    // вызов dpl или ветвление внутри уже не аргумент C (указатель утёк бы).
+    struct Restore {
+        int& n;
+        int old;
+        ~Restore() { n = old; }
+    } restore{c_arg_, c_arg_};
+    if (e->kind != ExprKind::StructLit && e->kind != ExprKind::ListLit && e->kind != ExprKind::Ref &&
+        e->kind != ExprKind::Paren) {
+        c_arg_ = 0;
+    }
     const Type* t = err();
     switch (e->kind) {
         case ExprKind::Int: t = int_lit(static_cast<IntExpr*>(e), hint, false, e->span); break;
@@ -1507,6 +1536,20 @@ const Type* Checker::infer(Expr* e, const Type* hint) {
                     error(Code::E0501, r->operand->span, "a reference needs a variable, a field, an element or a struct literal");
                 }
                 t = ot->kind == TK::Error ? err() : tt_.ref(ot);
+                break;
+            }
+            if (h && h->kind == TK::Ref && h->len == 1 && r->mut) {  // Р77: поле цепочки вывода `?&mut S`
+                const Type* ot = infer(r->operand, h->elem);
+                if (c_arg_ == 0) {
+                    error(Code::E0328, e->span, "'&mut' goes into an output chain field only in a literal written in a "
+                                                "call of a C function (spec: ffi.struct)");
+                } else if (!is_place(r->operand)) {
+                    if (ot->kind != TK::Error) error(Code::E0501, r->operand->span, "the output goes into a variable: "
+                                                                                    "'&mut name'");
+                } else if (mutable_place(r->operand, "mutate")) {
+                    note_write(r->operand, "mutate");
+                }
+                t = ot->kind == TK::Error ? err() : tt_.ref_mut(ot);
                 break;
             }
             error(Code::E0501, e->span, "'&' marks only call arguments for '&' and '&mut' parameters, and 'for ... in'");
@@ -1610,8 +1653,8 @@ void Checker::ref_args(CallExpr* c, const std::vector<ParamDef>& params) {
             for (FieldInit& fi : s->fields) borrowed(fi.value ? fi.value : fi.shorthand);
         } else if (auto* l = as<ListLitExpr>(e)) {
             for (Expr* x : l->items) borrowed(x);
-        } else if (auto* r = as<RefExpr>(e)) {
-            if (is_place(r->operand)) refs.push_back({root_local(r->operand), false, e->span, r->operand});
+        } else if (auto* r = as<RefExpr>(e)) {  // `&mut v` поля цепочки (Р77) — изменяемая
+            if (is_place(r->operand)) refs.push_back({root_local(r->operand), r->mut, e->span, r->operand});
             else borrowed(r->operand);
         } else if (Local* root = root_local(e); !root && (as<FieldExpr>(e) || as<IndexExpr>(e) || as<SliceExpr>(e))) {
             // Часть литерала — `[S { p: &x }][0..1]`: заимствования его элементов.

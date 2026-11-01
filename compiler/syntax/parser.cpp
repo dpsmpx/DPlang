@@ -604,8 +604,9 @@ private:
             t->span = span_from(begin);
             return t;
         }
-        if (eat(TokKind::Amp)) {  // `&T` — заимствующее поле `@c` (Р62)
+        if (eat(TokKind::Amp)) {  // `&T` — заимствующее поле `@c` (Р62); `&mut T` — цепочка вывода (Р77)
             auto* t = m_.make<RefType>();
+            t->mut = eat(TokKind::KwMut);
             t->inner = type();
             t->span = span_from(begin);
             return t;

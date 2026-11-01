@@ -163,9 +163,10 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
             out = tt.array(elem, a->len);
             break;
         }
-        case TypeKind::Ref: {  // `&T` поля `@c` (Р62)
-            const sema::Type* inner = type(static_cast<RefType*>(node)->inner);
-            if (inner->kind != TK::Error) out = tt.ref(inner);
+        case TypeKind::Ref: {  // `&T` поля `@c` (Р62); `&mut T` — цепочка вывода (Р77)
+            auto* r = static_cast<RefType*>(node);
+            const sema::Type* inner = type(r->inner);
+            if (inner->kind != TK::Error) out = r->mut ? tt.ref_mut(inner) : tt.ref(inner);
             break;
         }
         case TypeKind::Fn: {  // `extern fn(...)` (Р61)

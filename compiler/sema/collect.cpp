@@ -541,7 +541,7 @@ private:
                 const sema::Type* t = p.type;
                 // `?&T` — параметр функции C: указатель или NULL на время вызова.
                 bool opt_ref = f.is_extern && p.mode == ParamMode::Value && t->kind == TK::Optional &&
-                               t->elem->kind == TK::Ref && c_borrow_field(t);
+                               t->elem->kind == TK::Ref && !t->elem->len && c_borrow_field(t);
                 if (opt_ref) continue;
                 // Срез заимствующих структур — параметр функции C, как поле `@c`:
                 // `vkQueueSubmit(q, 1, [VkSubmitInfo { ... }], none)`.
@@ -578,6 +578,14 @@ private:
                              "field '" + f.name + "' of '@c' struct '" + d.name + "' has type '" + type_name(f.type, d.module) +
                                  "', which has no C layout; use numbers, bool, handles, 'extern fn', '@c' structs, "
                                  "'[N]T' or borrowed 'str', '[]T', '&T', '?&T' (spec: ffi.struct)");
+                continue;
+            }
+            // Р77: `&mut` в поле — только цепочка вывода `?&mut S` к структуре `@c`.
+            const sema::Type* r = f.type && f.type->kind == TK::Optional ? f.type->elem : f.type;
+            if (r && r->kind == TK::Ref && r->len && !chain_field(f.type)) {
+                diags_.error(Code::E0328, d.node->fields[i].type->span,
+                             "field '" + f.name + "' of '@c' struct '" + d.name + "' has type '" + type_name(f.type, d.module) +
+                                 "'; '&mut' is only an output chain '?&mut S' to a '@c' struct S (spec: ffi.struct)");
             }
         }
     }
@@ -595,8 +603,8 @@ private:
                    (t->kind == TK::Optional && t->elem->kind == TK::Str);  // ?str — строка C или NULL
         }
         if (t->kind == TK::Array) return false;
-        return c_value_type(t) || (mode == ParamMode::Ref && c_borrowing(t)) ||
-               (mode == ParamMode::Mut && t->kind == TK::List && c_value_type(t->elem));
+        return c_out_type(t) || (mode == ParamMode::Ref && c_borrowing(t)) ||
+               (mode == ParamMode::Mut && t->kind == TK::List && c_out_type(t->elem));
     }
 
     // Типы функции C — когда известны `@c` всех структур.

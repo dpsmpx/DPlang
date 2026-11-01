@@ -1,0 +1,59 @@
+// spec: ffi.struct
+// Отказы цепочки вывода (Р77): `&mut v` вне литерала — аргумента функции
+// C, в вызове dpl внутри аргумента, не в переменную и не в `var`; чтение
+// поля цепочки; `&mut` в поле не цепочкой, в параметре и переменной.
+@c
+struct OutBase {
+    kind: u32
+    next: ?&mut OutBase
+}
+
+@c
+struct Props {
+    kind: u32 = 1
+    next: ?&mut OutBase
+    count: i32
+}
+
+@c
+struct Limits {
+    kind: u32 = 2
+    next: ?&mut OutBase
+    max_size: i32
+}
+
+@c
+struct Bad {
+    always: &mut OutBase
+    number: ?&mut i32
+}
+
+struct Plain {
+    next: ?&mut OutBase
+}
+
+extern fn host_fill(p: &mut Props)
+extern fn host_read(p: &Props) i32
+extern fn host_opt(p: ?&mut Props)
+
+fn id(p: Props) Props {
+    return p
+}
+
+fn dpl_fill(p: &mut Props) {
+    p.count = 1
+}
+
+fn main() {
+    var l = Limits { next: none, max_size: 0 }
+    let fixed = Limits { next: none, max_size: 0 }
+    let held = Props { next: &mut l, count: 0 }
+    println(str(host_read(&id(Props { next: &mut l, count: 0 }))))
+    host_fill(&mut Props { next: &mut fixed, count: 0 })
+    host_fill(&mut Props { next: &mut Limits { next: none, max_size: 0 }, count: 0 })
+    dpl_fill(&mut Props { next: none, count: 0 })
+    var p = Props { next: none, count: 0 }
+    p.next = &mut l
+    let n = p.next
+    let r: &mut i32 = 0
+}
