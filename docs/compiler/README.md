@@ -242,7 +242,11 @@ ASan worker не запускается. `worker` — золотые тесты 
 
 Проход `example` — программы `examples/X/` с каталогом `expected/`: их
 тесты `dpl test`, запуск интерпретатором, сборка `--release` с тем же
-выводом и канонический вид (`examples/tomlcheck/README.md`, «Проверки»).
+выводом (программа с параллелизмом — и при `DPL_THREADS` 1, 3, 8) и
+канонический вид (`examples/tomlcheck/README.md`, «Проверки»). Если
+инструменты цели есть, сборка `--release` для `windows-x86_64` и
+`android-arm64` запускается под Wine и qemu-aarch64 с тем же выводом:
+повтор `examples/swarm` сверяет x86-64 с arm64.
 
 Проход `bench` — эталонный набор задач на dpl (`bench/tasks/X/dp/`,
 `bench/tasks/README.md`). Проверка решения — `bench/dp_check.py`, та же,
