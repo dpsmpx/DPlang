@@ -496,9 +496,23 @@ private:
     };
     static Doc text(std::string s) { return Doc{Doc::K::Text, std::move(s), {}}; }
     static Doc line(std::string flat) { return Doc{Doc::K::Line, std::move(flat), {}}; }
-    static Doc group(Doc d) { return Doc{Doc::K::Group, {}, {std::move(d)}}; }
-    static Doc nest(Doc d) { return Doc{Doc::K::Nest, {}, {std::move(d)}}; }
+    static Doc wrap(Doc::K k, Doc d) {
+        Doc r{k, {}, {}};
+        r.kids.push_back(std::move(d));
+        return r;
+    }
+    static Doc group(Doc d) { return wrap(Doc::K::Group, std::move(d)); }
+    static Doc nest(Doc d) { return wrap(Doc::K::Nest, std::move(d)); }
     static Doc cat(std::vector<Doc> ds) { return Doc{Doc::K::Cat, {}, std::move(ds)}; }
+    // Части переносятся, а не копируются: у глубокой вложенности копии
+    // поддеревьев на каждом уровне дали бы квадратичное время.
+    template <class... D>
+    static Doc catv(D&&... ds) {
+        Doc r{Doc::K::Cat, {}, {}};
+        r.kids.reserve(sizeof...(ds));
+        (r.kids.push_back(std::forward<D>(ds)), ...);
+        return r;
+    }
     static Doc fill(std::vector<Doc> ds) { return Doc{Doc::K::Fill, {}, std::move(ds)}; }
 
     // Ширина строки в символах (UTF-8).
@@ -521,7 +535,7 @@ private:
             }
             in.push_back(std::move(items[i]));
         }
-        return group(cat({text(open), nest(cat(std::move(in))), line(pad ? " " : ""), text(close)}));
+        return group(catv(text(open), nest(cat(std::move(in))), line(pad ? " " : ""), text(close)));
     }
 
     std::vector<Doc> docs(const std::vector<Expr*>& list) {
@@ -533,10 +547,10 @@ private:
     Doc field_inits(const std::vector<FieldInit>& fields) {
         std::vector<Doc> items;
         for (const FieldInit& f : fields) {
-            if (f.value) items.push_back(cat({text(f.name + ": "), doc(f.value)}));
+            if (f.value) items.push_back(catv(text(f.name + ": "), doc(f.value)));
             else items.push_back(text(f.name));
         }
-        return cat({text(" "), bracket("{", std::move(items), "}", true)});
+        return catv(text(" "), bracket("{", std::move(items), "}", true));
     }
 
     Doc doc(const Expr* e) {
@@ -549,23 +563,23 @@ private:
             case ExprKind::Name: return text(static_cast<const NameExpr*>(e)->name);
             case ExprKind::Field: {
                 auto* f = static_cast<const FieldExpr*>(e);
-                return cat({doc(f->object), text("." + f->name)});
+                return catv(doc(f->object), text("." + f->name));
             }
             case ExprKind::Index: {
                 auto* i = static_cast<const IndexExpr*>(e);
-                return cat({doc(i->object), text("["), doc(i->index), text("]")});
+                return catv(doc(i->object), text("["), doc(i->index), text("]"));
             }
             case ExprKind::Slice: {
                 auto* s = static_cast<const SliceExpr*>(e);
-                return cat({doc(s->object), text("["), doc(s->lo), text(".."), doc(s->hi), text("]")});
+                return catv(doc(s->object), text("["), doc(s->lo), text(".."), doc(s->hi), text("]"));
             }
             case ExprKind::Call: {
                 auto* c = static_cast<const CallExpr*>(e);
-                return cat({doc(c->callee), bracket("(", docs(c->args), ")")});
+                return catv(doc(c->callee), bracket("(", docs(c->args), ")"));
             }
             case ExprKind::Unary: {
                 auto* u = static_cast<const UnaryExpr*>(e);
-                return cat({text(u->op == UnOp::Neg ? "-" : u->op == UnOp::Not ? "!" : "~"), doc(u->operand)});
+                return catv(text(u->op == UnOp::Neg ? "-" : u->op == UnOp::Not ? "!" : "~"), doc(u->operand));
             }
             case ExprKind::Binary: {
                 // Цепочка одного оператора `a + b + c` (левая): на строку —
@@ -583,25 +597,25 @@ private:
                 std::vector<Doc> parts;
                 for (size_t i = ops.size(); i-- > 0;) {
                     if (!parts.empty()) parts.push_back(line(" "));
-                    parts.push_back(i ? cat({doc(ops[i]), text(op)}) : doc(ops[i]));
+                    parts.push_back(i ? catv(doc(ops[i]), text(op)) : doc(ops[i]));
                 }
                 return nest(fill(std::move(parts)));
             }
-            case ExprKind::Try: return cat({text("try "), doc(static_cast<const TryExpr*>(e)->operand)});
-            case ExprKind::Spawn: return cat({text("spawn "), doc(static_cast<const SpawnExpr*>(e)->operand)});
-            case ExprKind::Paren: return cat({text("("), doc(static_cast<const ParenExpr*>(e)->inner), text(")")});
+            case ExprKind::Try: return catv(text("try "), doc(static_cast<const TryExpr*>(e)->operand));
+            case ExprKind::Spawn: return catv(text("spawn "), doc(static_cast<const SpawnExpr*>(e)->operand));
+            case ExprKind::Paren: return catv(text("("), doc(static_cast<const ParenExpr*>(e)->inner), text(")"));
             case ExprKind::Ref: {
                 auto* r = static_cast<const RefExpr*>(e);
-                return cat({text(r->mut ? "&mut " : "&"), doc(r->operand)});
+                return catv(text(r->mut ? "&mut " : "&"), doc(r->operand));
             }
             case ExprKind::StructLit: {
                 auto* s = static_cast<const StructLitExpr*>(e);
-                return cat({doc(s->path), field_inits(s->fields)});
+                return catv(doc(s->path), field_inits(s->fields));
             }
             case ExprKind::VariantLit: {
                 auto* v = static_cast<const VariantLitExpr*>(e);
-                if (v->form == VariantForm::Tuple) return cat({text("." + v->name), bracket("(", docs(v->args), ")")});
-                if (v->form == VariantForm::Record) return cat({text("." + v->name), field_inits(v->fields)});
+                if (v->form == VariantForm::Tuple) return catv(text("." + v->name), bracket("(", docs(v->args), ")"));
+                if (v->form == VariantForm::Record) return catv(text("." + v->name), field_inits(v->fields));
                 return text("." + v->name);
             }
             case ExprKind::ListLit: return bracket("[", docs(static_cast<const ListLitExpr*>(e)->items), "]");
@@ -620,9 +634,7 @@ private:
 
     // Влезает ли next в строку: от колонки до первого переноса остальных
     // команд (rest — в их режимах), с хвостом trail после выражения.
-    static bool fits(Cmd next, const std::vector<Cmd>& rest, int left) {
-        std::vector<Cmd> st{next};
-        size_t r = rest.size();
+    static bool fits(std::vector<Cmd> st, const std::vector<Cmd>& rest, size_t r, int left) {
         while (left >= 0) {
             if (st.empty()) {
                 if (r == 0) return true;
@@ -667,9 +679,7 @@ private:
             if (c.pos == kSep) {  // перенос Fill: в строку, если следующая часть влезает
                 const Cmd& next = st.back();
                 const Doc& nd = next.d->kids[next.pos];
-                std::vector<Cmd> rest(st.begin(), st.end() - 1);
-                Doc both = cat({*c.d, nd});
-                c.flat = c.flat || fits({c.indent, true, &both}, rest, kWidth - col);
+                c.flat = c.flat || fits({{c.indent, true, &nd}, {c.indent, true, c.d}}, st, st.size() - 1, kWidth - col);
             }
             switch (c.d->k) {
                 case Doc::K::Text:
@@ -689,8 +699,12 @@ private:
                     }
                     break;
                 case Doc::K::Group: {
+                    // Отступ у края ширины: перенос ничего не даёт, а у глубокой
+                    // вложенности дал бы квадратичный вывод — в строку.
                     Cmd flat{c.indent, true, &c.d->kids[0]};
-                    st.push_back(c.flat || fits(flat, st, kWidth - col) ? flat : Cmd{c.indent, false, &c.d->kids[0]});
+                    bool deep = c.indent >= kWidth - 20;
+                    st.push_back(c.flat || deep || fits({flat}, st, st.size(), kWidth - col) ? flat
+                                                                                          : Cmd{c.indent, false, &c.d->kids[0]});
                     break;
                 }
                 case Doc::K::Nest: st.push_back({c.indent + 4, c.flat, &c.d->kids[0]}); break;
@@ -707,8 +721,8 @@ private:
                         st.push_back({c.indent, c.flat, c.d, c.pos + 2});
                         st.push_back({c.indent, c.flat, &k[c.pos + 1], kSep});
                     }
-                    st.push_back(c.flat || fits({c.indent, true, part.d}, st, kWidth - col) ? Cmd{c.indent, true, part.d}
-                                                                                                : part);
+                    bool flat = c.flat || c.indent >= kWidth - 20 || fits({{c.indent, true, part.d}}, st, st.size(), kWidth - col);
+                    st.push_back(flat ? Cmd{c.indent, true, part.d} : part);
                     break;
                 }
             }
