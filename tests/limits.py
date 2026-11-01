@@ -92,7 +92,8 @@ SCALE = {
 # Команды на наибольшем принятом n: все проходы компилятора.
 COMMANDS = [['check'], ['debug', 'parse'], ['debug', 'types'], ['debug', 'ir'], ['debug', 'c']]
 # Глубоко вложенные типы: вывод debug types, ir и c растёт квадратично
-# (TODO.md) — на пределе минуты под ASan. Здесь —
+# (docs/compiler/README.md, решение автора 1 ноября 2026) — на пределе
+# минуты под ASan. Здесь —
 # только проверка и разбор; полные проходы на пределе прогнаны вручную.
 SHORT = [['check'], ['debug', 'parse']]
 CASE_COMMANDS = {'lists': SHORT, 'types': SHORT}
