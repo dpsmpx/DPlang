@@ -1,0 +1,263 @@
+// spec: trap.int builtin.functions
+// Края целых типов: сложение, вычитание и умножение каждой пары. Если
+// checked_* даёт значение, печатается обычная операция (путь без
+// ловушки), иначе «-». Сборки на всех целях сверяются с интерпретатором.
+
+fn grid_i8() {
+    let vs: List[i8] = [-128, -127, -1, 0, 1, 126, 127]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "i8 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn grid_i16() {
+    let vs: List[i16] = [-32768, -32767, -1, 0, 1, 32766, 32767]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "i16 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn grid_i32() {
+    let vs: List[i32] = [-2147483648, -2147483647, -46341, -1, 0, 1, 46341, 2147483646, 2147483647]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "i32 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn grid_i64() {
+    let vs: List[i64] = [-9223372036854775807 - 1, -9223372036854775807, -3037000500, -1, 0, 1, 3037000500, 9223372036854775806, 9223372036854775807]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "i64 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn grid_u8() {
+    let vs: List[u8] = [0, 1, 15, 16, 254, 255]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "u8 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn grid_u16() {
+    let vs: List[u16] = [0, 1, 255, 256, 65534, 65535]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "u16 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn grid_u32() {
+    let vs: List[u32] = [0, 1, 65535, 65536, 4294967294, 4294967295]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "u32 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn grid_u64() {
+    let vs: List[u64] = [0, 1, 4294967295, 4294967296, 18446744073709551614, 18446744073709551615]
+    for i in 0..len(vs) {
+        let a = vs[i]
+        var add = "u64 " + str(a) + " +"
+        var sub = "  -"
+        var mul = "  *"
+        for j in 0..len(vs) {
+            let b = vs[j]
+            if let _ = checked_add(a, b) {
+                add += " " + str(a + b)
+            } else {
+                add += " -"
+            }
+            if let _ = checked_sub(a, b) {
+                sub += " " + str(a - b)
+            } else {
+                sub += " -"
+            }
+            if let _ = checked_mul(a, b) {
+                mul += " " + str(a * b)
+            } else {
+                mul += " -"
+            }
+        }
+        println(add)
+        println(sub)
+        println(mul)
+    }
+}
+
+fn main() {
+    grid_i8()
+    grid_i16()
+    grid_i32()
+    grid_i64()
+    grid_u8()
+    grid_u16()
+    grid_u32()
+    grid_u64()
+}

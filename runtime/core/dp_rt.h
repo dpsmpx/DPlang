@@ -132,25 +132,48 @@ static inline uint64_t dp_ubits(uint64_t v, int bits) { return v & dp_umax(bits)
 
 _Noreturn void dp_overflow(const char* op, const char* tname, const char* loc);
 
+/* Проверяемая арифметика (Р53): true и *r — точный результат в типе
+ * ширины bits; false — вне типа. Ловушки нет.
+ *
+ * Сложение, вычитание и умножение — __builtin_*_overflow (gcc и clang,
+ * все цели первой волны): точный результат и признак, помещается ли он в
+ * тип результата ширины bits. bits в месте вызова — постоянная, лишние
+ * ветви компилятор C убирает: у i32 остаются сложение и переход по
+ * переполнению. */
+#define DP_TRY_OP(op, T8, T16, T32, T64) \
+    switch (bits) { \
+        case 8: { T8 x; if (__builtin_##op##_overflow(a, b, &x)) return false; *r = x; return true; } \
+        case 16: { T16 x; if (__builtin_##op##_overflow(a, b, &x)) return false; *r = x; return true; } \
+        case 32: { T32 x; if (__builtin_##op##_overflow(a, b, &x)) return false; *r = x; return true; } \
+        default: { T64 x; if (__builtin_##op##_overflow(a, b, &x)) return false; *r = x; return true; } \
+    }
+static inline bool dp_try_sadd(int64_t a, int64_t b, int bits, int64_t* r) { DP_TRY_OP(add, int8_t, int16_t, int32_t, int64_t) }
+static inline bool dp_try_ssub(int64_t a, int64_t b, int bits, int64_t* r) { DP_TRY_OP(sub, int8_t, int16_t, int32_t, int64_t) }
+static inline bool dp_try_smul(int64_t a, int64_t b, int bits, int64_t* r) { DP_TRY_OP(mul, int8_t, int16_t, int32_t, int64_t) }
+static inline bool dp_try_uadd(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    DP_TRY_OP(add, uint8_t, uint16_t, uint32_t, uint64_t)
+}
+static inline bool dp_try_usub(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    DP_TRY_OP(sub, uint8_t, uint16_t, uint32_t, uint64_t)
+}
+static inline bool dp_try_umul(uint64_t a, uint64_t b, int bits, uint64_t* r) {
+    DP_TRY_OP(mul, uint8_t, uint16_t, uint32_t, uint64_t)
+}
+#undef DP_TRY_OP
+
 static inline int64_t dp_sadd(int64_t a, int64_t b, int bits, const char* t, const char* loc) {
-    if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) dp_overflow("+", t, loc);
-    int64_t r = a + b;
-    if (r < dp_smin(bits) || r > dp_smax(bits)) dp_overflow("+", t, loc);
+    int64_t r;
+    if (!dp_try_sadd(a, b, bits, &r)) dp_overflow("+", t, loc);
     return r;
 }
 static inline int64_t dp_ssub(int64_t a, int64_t b, int bits, const char* t, const char* loc) {
-    if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) dp_overflow("-", t, loc);
-    int64_t r = a - b;
-    if (r < dp_smin(bits) || r > dp_smax(bits)) dp_overflow("-", t, loc);
+    int64_t r;
+    if (!dp_try_ssub(a, b, bits, &r)) dp_overflow("-", t, loc);
     return r;
 }
 static inline int64_t dp_smul(int64_t a, int64_t b, int bits, const char* t, const char* loc) {
-    bool o;
-    if (a > 0) o = b > 0 ? a > INT64_MAX / b : b < INT64_MIN / a;
-    else o = b > 0 ? a < INT64_MIN / b : (a != 0 && b < INT64_MAX / a);
-    if (o) dp_overflow("*", t, loc);
-    int64_t r = a * b;
-    if (r < dp_smin(bits) || r > dp_smax(bits)) dp_overflow("*", t, loc);
+    int64_t r;
+    if (!dp_try_smul(a, b, bits, &r)) dp_overflow("*", t, loc);
     return r;
 }
 static inline int64_t dp_sdiv(int64_t a, int64_t b, int bits, const char* t, const char* loc) {
@@ -174,19 +197,18 @@ static inline int64_t dp_sabs(int64_t a, int bits, const char* t, const char* lo
 }
 
 static inline uint64_t dp_uadd(uint64_t a, uint64_t b, int bits, const char* t, const char* loc) {
-    uint64_t r = a + b;
-    if (r < a || r > dp_umax(bits)) dp_overflow("+", t, loc);
+    uint64_t r;
+    if (!dp_try_uadd(a, b, bits, &r)) dp_overflow("+", t, loc);
     return r;
 }
 static inline uint64_t dp_usub(uint64_t a, uint64_t b, int bits, const char* t, const char* loc) {
-    (void)bits;
-    if (b > a) dp_overflow("-", t, loc);
-    return a - b;
+    uint64_t r;
+    if (!dp_try_usub(a, b, bits, &r)) dp_overflow("-", t, loc);
+    return r;
 }
 static inline uint64_t dp_umul(uint64_t a, uint64_t b, int bits, const char* t, const char* loc) {
-    if (a != 0 && b > UINT64_MAX / a) dp_overflow("*", t, loc);
-    uint64_t r = a * b;
-    if (r > dp_umax(bits)) dp_overflow("*", t, loc);
+    uint64_t r;
+    if (!dp_try_umul(a, b, bits, &r)) dp_overflow("*", t, loc);
     return r;
 }
 static inline uint64_t dp_udiv(uint64_t a, uint64_t b, const char* loc) {
@@ -198,32 +220,8 @@ static inline uint64_t dp_urem(uint64_t a, uint64_t b, const char* loc) {
     return a % b;
 }
 
-/* Проверяемая арифметика (Р53): true и *r — точный результат в типе
- * ширины bits; false — вне типа или делитель 0. Ловушки нет. */
-static inline bool dp_try_sadd(int64_t a, int64_t b, int bits, int64_t* r) {
-    if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) return false;
-    int64_t x = a + b;
-    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
-    *r = x;
-    return true;
-}
-static inline bool dp_try_ssub(int64_t a, int64_t b, int bits, int64_t* r) {
-    if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) return false;
-    int64_t x = a - b;
-    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
-    *r = x;
-    return true;
-}
-static inline bool dp_try_smul(int64_t a, int64_t b, int bits, int64_t* r) {
-    bool o;
-    if (a > 0) o = b > 0 ? a > INT64_MAX / b : b < INT64_MIN / a;
-    else o = b > 0 ? a < INT64_MIN / b : (a != 0 && b < INT64_MAX / a);
-    if (o) return false;
-    int64_t x = a * b;
-    if (x < dp_smin(bits) || x > dp_smax(bits)) return false;
-    *r = x;
-    return true;
-}
+/* Деление и смена знака (Р53): true и *r — результат; false — вне типа
+ * или делитель 0. */
 static inline bool dp_try_sdiv(int64_t a, int64_t b, int bits, int64_t* r) {
     if (b == 0 || (a == dp_smin(bits) && b == -1)) return false;
     *r = a / b;
@@ -232,25 +230,6 @@ static inline bool dp_try_sdiv(int64_t a, int64_t b, int bits, int64_t* r) {
 static inline bool dp_try_sneg(int64_t a, int bits, int64_t* r) {
     if (a == dp_smin(bits)) return false;
     *r = -a;
-    return true;
-}
-static inline bool dp_try_uadd(uint64_t a, uint64_t b, int bits, uint64_t* r) {
-    uint64_t x = a + b;
-    if (x < a || x > dp_umax(bits)) return false;
-    *r = x;
-    return true;
-}
-static inline bool dp_try_usub(uint64_t a, uint64_t b, int bits, uint64_t* r) {
-    (void)bits;
-    if (b > a) return false;
-    *r = a - b;
-    return true;
-}
-static inline bool dp_try_umul(uint64_t a, uint64_t b, int bits, uint64_t* r) {
-    if (a != 0 && b > UINT64_MAX / a) return false;
-    uint64_t x = a * b;
-    if (x > dp_umax(bits)) return false;
-    *r = x;
     return true;
 }
 static inline bool dp_try_udiv(uint64_t a, uint64_t b, int bits, uint64_t* r) {
