@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Цена счётчика глубины вызовов dp_depth в эмулированном TLS (TODO:
-«dp_depth на Android»; docs/policy/BENCHMARKS.md, «цена гарантий»).
+"""Цена счётчика глубины вызовов dp_depth в эмулированном TLS (заметка
+docs/research/notes/13_android_tls.md; docs/policy/BENCHMARKS.md, «цена
+гарантий»).
 
     python3 bench/tls/measure.py [--runs 7] [--layouts 1,16,32,64] [--qemu-cpu cortex-a72] [--targets android,host] [--save NAME]
 
