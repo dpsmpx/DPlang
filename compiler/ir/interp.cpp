@@ -254,9 +254,17 @@ const Value& seq_at(const Value& v, size_t i) {
 }
 
 // Map (Р54) — Seq с парами по порядку вставки: items[2i] — ключ, items[2i + 1] —
-// значение. Ключ — целое, bool или str: сравнение без типа. Поиск — перебором:
-// интерпретатор только для тестов (Р43).
-bool key_equal(const Value& a, const Value& b) { return a.k == b.k && (a.k == Value::K::Str ? a.s == b.s : a.i == b.i); }
+// значение. Ключ — целое, bool, str или хэндл пула (Seq [номер, поколение],
+// Р74): сравнение без типа. Поиск — перебором: интерпретатор только для
+// тестов (Р43).
+bool key_equal(const Value& a, const Value& b) {
+    if (a.k != b.k) return false;
+    if (a.k == Value::K::Str) return a.s == b.s;
+    if (a.k == Value::K::Seq) {
+        return a.items.size() == 2 && b.items.size() == 2 && a.items[0].i == b.items[0].i && a.items[1].i == b.items[1].i;
+    }
+    return a.i == b.i;
+}
 
 // Позиция пары ключа в Map или -1.
 int64_t map_find(const Value& m, const Value& key) {
@@ -463,6 +471,16 @@ void merge_sort(std::vector<T>& v, Less lt) {
 
 void merge_sort(std::vector<Value>& v, const Type* t) {
     merge_sort(v, [t](const Value& a, const Value& b) { return less(a, b, t); });
+}
+
+// Порядок ключей Map (Р54): как `<`, у хэндла — номер слота, затем поколение
+// (Р74; сами хэндлы не упорядочены).
+bool key_less(const Value& a, const Value& b, const Type* kt) {
+    if (kt->kind == TK::PoolHandle) {
+        if (a.items[0].i != b.items[0].i) return a.items[0].i < b.items[0].i;
+        return a.items[1].i < b.items[1].i;
+    }
+    return less(a, b, kt);
 }
 
 // --- встроенное (builtin.functions)
@@ -1454,7 +1472,8 @@ private:
                 const Value& m = arg(0, s0);
                 Value out = seq_value(0);
                 for (size_t i = 0; i < m.items.size(); i += 2) out.items.push_back(m.items[i]);
-                merge_sort(out.items, op_type(fr, rv.ops[0])->key);  // ключи по возрастанию
+                const Type* kt = op_type(fr, rv.ops[0])->key;  // ключи по возрастанию
+                merge_sort(out.items, [kt](const Value& a, const Value& b) { return key_less(a, b, kt); });
                 return out;
             }
             case Intrinsic::MapOrder: {  // номера пар по возрастанию ключа: та же сортировка
@@ -1462,7 +1481,7 @@ private:
                 const Type* kt = op_type(fr, rv.ops[0])->key;
                 std::vector<size_t> pos(m.items.size() / 2);
                 for (size_t i = 0; i < pos.size(); i++) pos[i] = i;
-                merge_sort(pos, [&](size_t a, size_t b) { return less(m.items[2 * a], m.items[2 * b], kt); });
+                merge_sort(pos, [&](size_t a, size_t b) { return key_less(m.items[2 * a], m.items[2 * b], kt); });
                 Value out = seq_value(0);
                 for (size_t i : pos) out.items.push_back(int_value(i));
                 return out;

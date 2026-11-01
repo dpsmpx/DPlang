@@ -873,6 +873,7 @@ private:
     // Хэш ключа Map (Р54): целое и bool — перемешивание, str — FNV-1a (dp_rt.h).
     static std::string hash_of(const Type* k, const std::string& x) {
         if (k->kind == TK::Str) return "dp_hash_str(" + x + ")";
+        if (k->kind == TK::PoolHandle) return "dp_hash_u64(dp_hnd_key(" + x + "))";
         return "dp_hash_u64((uint64_t)(" + x + "))";
     }
 
@@ -963,7 +964,11 @@ private:
             b += "DP_INLINE " + l + " dp_mkeys__" + m + "(const " + n + "* m) {\n    " + l + " r = {0};\n";
             b += "    r.ptr = (" + kc + "*)dp_alloc(m->len, sizeof(" + kc + "), NULL);\n    r.len = m->len;\n    r.cap = m->len;\n";
             b += "    for (int64_t i = 0; i < m->len; i++) r.ptr[i] = " + copy_of(t->key, "m->keys[i]") + ";\n";
-            b += "    dp_sort__" + std::string("L_") + km + "(&r);\n    return r;\n}\n\n";
+            if (t->key->kind == TK::PoolHandle) {  // хэндлы не упорядочены: порядок ключа (Р74)
+                b += "    qsort(r.ptr, (size_t)r.len, sizeof(dp_hnd), dp_hnd_cmp);\n    return r;\n}\n\n";
+            } else {
+                b += "    dp_sort__" + std::string("L_") + km + "(&r);\n    return r;\n}\n\n";
+            }
         }
         if (mangled_.count("L_i64")) {
             // Номера пар по возрастанию ключа — для обхода (Р54). Сортируются
@@ -973,14 +978,15 @@ private:
             // порядок: целые и bool — поразрядно (LSD по байтам, знак — сдвигом
             // к беззнаковому), строки — слиянием.
             std::string kp = "dp_kp__" + m;
-            bool radix = sema::is_integer(t->key) || t->key->kind == TK::Bool;
+            bool radix = sema::is_integer(t->key) || t->key->kind == TK::Bool || t->key->kind == TK::PoolHandle;
             b += "DP_INLINE dp_L_i64 dp_morder__" + m + "(const " + n + "* m) {\n";
             b += "    dp_L_i64 r = {0};\n    int64_t n = m->len;\n    if (n == 0) return r;\n";
             b += "    struct " + kp + " { " + (radix ? std::string("uint64_t") : kc) + " k; int64_t p; };\n";
             b += "    struct " + kp + "* a = (struct " + kp + "*)dp_alloc(n, sizeof(struct " + kp + "), NULL);\n";
             b += "    struct " + kp + "* b = (struct " + kp + "*)dp_alloc(n, sizeof(struct " + kp + "), NULL);\n";
             if (radix) {
-                std::string key = sema::is_signed(t->key)
+                std::string key = t->key->kind == TK::PoolHandle ? "dp_hnd_key(m->keys[i])"
+                                  : sema::is_signed(t->key)
                                       ? "(uint64_t)(int64_t)m->keys[i] ^ UINT64_C(0x8000000000000000)"
                                       : "(uint64_t)m->keys[i]";
                 b += "    for (int64_t i = 0; i < n; i++) {\n        a[i].k = " + key + ";\n        a[i].p = i;\n    }\n";

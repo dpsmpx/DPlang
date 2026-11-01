@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Плавающие (trap.float, docs/policy/DETERMINISM.md): каждая операция
@@ -68,6 +69,13 @@ typedef struct dp_hnd {
 } dp_hnd;
 
 static inline bool dp_hnd_eq(dp_hnd a, dp_hnd b) { return a.index == b.index && a.generation == b.generation; }
+/* Ключ Map (Р74): номер слота, затем поколение — одно число для хэша и
+ * порядка обхода. Хэндлы как значения не упорядочены (E0422). */
+static inline uint64_t dp_hnd_key(dp_hnd h) { return ((uint64_t)h.index << 32) | h.generation; }
+static inline int dp_hnd_cmp(const void* a, const void* b) {
+    uint64_t x = dp_hnd_key(*(const dp_hnd*)a), y = dp_hnd_key(*(const dp_hnd*)b);
+    return x < y ? -1 : x > y;
+}
 
 /* Служебная часть Pool[T] (Р67): поколение и признак жизни слотов и
  * свободные слоты — минимальная куча номеров (add берёт наименьший).

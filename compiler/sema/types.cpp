@@ -153,7 +153,9 @@ bool holds_concurrent(const Type* t) {
     }
 }
 
-bool map_key_type(const Type* t) { return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str); }
+bool map_key_type(const Type* t) {
+    return t && (is_integer(t) || t->kind == TK::Bool || t->kind == TK::Str || t->kind == TK::PoolHandle);
+}
 
 // ?H и ?extern fn — указатель или NULL.
 static bool nullable_pointer(const Type* t) {

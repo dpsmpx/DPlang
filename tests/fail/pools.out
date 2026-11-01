@@ -11,28 +11,25 @@ pools.dpm:28:5: error[E0412]: cannot assign to 'index' of a Handle: it is read-o
 pools.dpm:29:18: error[E0422]: values of type 'Handle[Ship]' cannot be compared with '<'
   29 |     let less = s < s
      |                  ^
-pools.dpm:30:16: error[E0424]: a Map key must be an integer, a bool or a str, found 'Handle[Ship]'
-  30 |     let m: Map[Handle[Ship], i32] = []
-     |                ^~~~~~~~~~~~
-pools.dpm:31:16: error[E0403]: a Pool cannot be sliced; read values with p[h]
-  31 |     let part = ships[0..1]
+pools.dpm:30:16: error[E0403]: a Pool cannot be sliced; read values with p[h]
+  30 |     let part = ships[0..1]
      |                ^~~~~
-pools.dpm:32:11: error[E0410]: 'Pool[Ship]' has no method 'push'
-  32 |     ships.push(Ship{hp: 1})
+pools.dpm:31:11: error[E0410]: 'Pool[Ship]' has no method 'push'
+  31 |     ships.push(Ship{hp: 1})
      |           ^~~~
-pools.dpm:33:22: error[E0422]: values of type 'Pool[Ship]' cannot be compared with '=='
-  33 |     let same = ships == ships
+pools.dpm:32:22: error[E0422]: values of type 'Pool[Ship]' cannot be compared with '=='
+  32 |     let same = ships == ships
      |                      ^~
-pools.dpm:35:17: error[E0412]: cannot call 'add' on 'ships' while 'for ... in &' iterates over its Pool; iterate over a copy of the handles: 'for h in &p.handles()'
-  35 |         let _ = ships.add(Ship{hp: x.hp})
+pools.dpm:34:17: error[E0412]: cannot call 'add' on 'ships' while 'for ... in &' iterates over its Pool; iterate over a copy of the handles: 'for h in &p.handles()'
+  34 |         let _ = ships.add(Ship{hp: x.hp})
      |                 ^~~~~
-pools.dpm:37:28: error[E0502]: 'ships' is passed as '&mut' together with another reference into it; pass a copy of the value instead
-  37 |     swap_hp(&mut ships[s], &mut ships[h])
+pools.dpm:36:28: error[E0502]: 'ships' is passed as '&mut' together with another reference into it; pass a copy of the value instead
+  36 |     swap_hp(&mut ships[s], &mut ships[h])
      |                            ^~~~~~~~~~~~~
-pools.dpm:38:15: error[E0514]: 'Pool[Buffer]' holds a '@linear' value in a List, a Map, a Pool or a slice; keep resources in variables
-  38 |     var bufs: Pool[Buffer] = []
+pools.dpm:37:15: error[E0514]: 'Pool[Buffer]' holds a '@linear' value in a List, a Map, a Pool or a slice; keep resources in variables
+  37 |     var bufs: Pool[Buffer] = []
      |               ^~~~~~~~~~~~
-pools.dpm:39:12: error[E0314]: 'Handle' takes exactly one type argument: Handle[T]
-  39 |     let w: Handle[i32, i32] = s
+pools.dpm:38:12: error[E0314]: 'Handle' takes exactly one type argument: Handle[T]
+  38 |     let w: Handle[i32, i32] = s
      |            ^~~~~~~~~~~~~~~~
 [exit 1]

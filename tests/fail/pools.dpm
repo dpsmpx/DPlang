@@ -27,7 +27,6 @@ fn main() {
     var h = s
     h.index = 3
     let less = s < s
-    let m: Map[Handle[Ship], i32] = []
     let part = ships[0..1]
     ships.push(Ship{hp: 1})
     let same = ships == ships

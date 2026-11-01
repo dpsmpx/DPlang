@@ -1,8 +1,8 @@
 --- stderr ---
-maps.dpm:11:16: error[E0424]: a Map key must be an integer, a bool or a str, found 'f64'
+maps.dpm:11:16: error[E0424]: a Map key must be an integer, a bool, a str or a pool handle, found 'f64'
   11 |     var a: Map[f64, i32] = []
      |                ^~~
-maps.dpm:12:16: error[E0424]: a Map key must be an integer, a bool or a str, found 'P'
+maps.dpm:12:16: error[E0424]: a Map key must be an integer, a bool, a str or a pool handle, found 'P'
   12 |     var b: Map[P, i32] = []
      |                ^
 maps.dpm:13:12: error[E0314]: 'Map' takes exactly two type arguments: Map[K, V]

@@ -118,7 +118,7 @@ const sema::Type* Resolver::type(ast::Type* node, bool allow_void) {
                 if (key->kind == TK::Error || value->kind == TK::Error) break;
                 if (!map_key_type(key)) {
                     diags_.error(Code::E0424, n->args[0]->span,
-                                 "a Map key must be an integer, a bool or a str, found '" + type_name(key) + "'");
+                                 "a Map key must be an integer, a bool, a str or a pool handle, found '" + type_name(key) + "'");
                     break;
                 }
                 out = tt.map(key, value);
