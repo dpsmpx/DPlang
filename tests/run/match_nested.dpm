@@ -1,0 +1,55 @@
+// spec: stmt.match pattern.types (Р73)
+// Полнота по вложенным образцам: ветви без `_` покрывают все значения.
+enum E {
+    A
+    B
+}
+
+enum Shape {
+    Dot
+    Line(i64, ?E)
+    Box { w: i64, kind: E }
+}
+
+fn parse(x: i64) E!i64 {
+    if x < 0 {
+        fail .A
+    }
+    if x == 0 {
+        fail .B
+    }
+    return x
+}
+
+fn name(s: Shape) str {
+    match s {
+        .Dot => return "dot"
+        .Line(n, some(.A)) => return "line a " + str(n)
+        .Line(_, some(.B)) => return "line b"
+        .Line(_, none) => return "line"
+        .Box { w, kind: .A } => return "box a " + str(w)
+        .Box { kind: .B } => return "box b"
+    }
+}
+
+fn flag(o: ?bool) str {
+    match o {
+        some(true) => return "yes"
+        some(false) => return "no"
+        none => return "unknown"
+    }
+}
+
+fn main() {
+    let xs: List[i64] = [-1, 0, 5]
+    for x in &xs {
+        match parse(x) {
+            ok(v) => println("ok " + str(v))
+            err(.A) => println("negative")
+            err(.B) => println("zero")
+        }
+    }
+    println(name(.Dot) + ", " + name(.Line(3, .A)) + ", " + name(.Line(4, .B)) + ", " + name(.Line(5, none)))
+    println(name(.Box { w: 2, kind: .A }) + ", " + name(.Box { w: 2, kind: .B }))
+    println(flag(true) + " " + flag(false) + " " + flag(none))
+}
