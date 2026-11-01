@@ -1,0 +1,27 @@
+// spec: type.map type.handle (Р74)
+// Хэндл пула — ключ Map: данные сущности по хэндлу. Обход и keys() — по
+// номеру слота, затем по поколению.
+struct Unit {
+    name: str
+}
+
+fn main() {
+    var units: Pool[Unit] = []
+    let a = units.add(Unit { name: "a" })
+    let b = units.add(Unit { name: "b" })
+    let c = units.add(Unit { name: "c" })
+    var hp: Map[Handle[Unit], i64] = []
+    hp[c] = 30
+    hp[a] = 10
+    hp[b] = 20
+    let _ = units.remove(a)
+    let d = units.add(Unit { name: "d" })
+    hp[d] = 40
+    let _ = hp.remove(a)
+    hp[b] += 5
+    for h in &hp {
+        println(str(h.index) + "/" + str(h.generation) + " " + units[h].name + " " + str(hp[h]))
+    }
+    let ks = hp.keys()
+    println(str(len(ks)) + " " + str(ks[0] == d) + " " + str(hp.contains(a)) + " " + str(hp.get(d) ?? 0))
+}

@@ -11,7 +11,7 @@ channels.dpm:18:13: error[E0401]: write the element type: 'let ch: Channel[T] = 
 channels.dpm:20:13: error[E0518]: 'c' would hold a copy of 'Channel[i64]'; it is shared, not copied: create it with 'atomic(v)', 'mutex(v)' or 'channel(n)' and pass '&c'
   20 |     let c = b
      |             ^
-channels.dpm:21:12: error[E0514]: 'Channel[Res]' holds a '@linear' value in a List, a Map, a Pool or a slice; keep resources in variables
+channels.dpm:21:12: error[E0514]: 'Channel[Res]' holds a '@linear' value in a List, a Map, a Channel or a slice; keep resources in variables
   21 |     let d: Channel[Res] = channel(1)
      |            ^~~~~~~~~~~~
 channels.dpm:22:7: error[E0410]: 'Channel[i64]' has no method 'push'

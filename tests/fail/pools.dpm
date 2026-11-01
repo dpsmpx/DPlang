@@ -27,7 +27,6 @@ fn main() {
     var h = s
     h.index = 3
     let less = s < s
-    let m: Map[Handle[Ship], i32] = []
     let part = ships[0..1]
     ships.push(Ship{hp: 1})
     let same = ships == ships
@@ -35,6 +34,5 @@ fn main() {
         let _ = ships.add(Ship{hp: x.hp})
     }
     swap_hp(&mut ships[s], &mut ships[h])
-    var bufs: Pool[Buffer] = []
     let w: Handle[i32, i32] = s
 }

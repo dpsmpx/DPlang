@@ -323,8 +323,8 @@ DP_CODE(E0513, "cannot close or move a resource here",
         "index; reading a field or an index is not a reference.")
 DP_CODE(E0514, "linear type not allowed here",
         "A `@linear` value can live in a variable, a field of a `@linear` struct, `?T` and `E!T` (spec: "
-        "ffi.linear, decision R60). Lists, maps, pools, slices and enum variants cannot hold one; pools of "
-        "`@linear` values are a later step (decision R67).")
+        "ffi.linear, decision R60) and a `Pool` (decision R75: the pool is itself linear). Lists, maps, slices, "
+        "channels and enum variants cannot hold one.")
 DP_CODE(E0515, "invalid destructuring",
         "`let S { f, g: x } = v` lists every field of `S` once and works only for a `@linear` struct, inside "
         "the module that declares it (spec: stmt.destructure, decision R60). Outside, close the value with "

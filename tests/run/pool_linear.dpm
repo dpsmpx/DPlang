@@ -1,0 +1,38 @@
+// spec: type.pool ffi.linear stmt.for (Р75)
+// Пул ресурсов: Pool[@linear T] сам линеен, remove отдаёт ресурс, обход по
+// значению закрывает остальные; ошибки закрытия копятся в переменной.
+@linear
+struct Res {
+    id: i64
+    name: str
+}
+
+fn open(id: i64) Res {
+    println("open " + str(id))
+    return Res { id: id, name: "r" + str(id) }
+}
+
+fn close(r: Res) bool {
+    let Res { id, name } = r
+    println("close " + name)
+    return id != 2
+}
+
+fn main() {
+    var pool: Pool[Res] = []
+    let a = pool.add(open(1))
+    let b = pool.add(open(2))
+    let c = pool.add(open(3))
+    println(pool[b].name + " " + str(len(pool)))
+    if let r = pool.remove(a) {
+        let _ = close(r)
+    }
+    let d = pool.add(open(4))
+    var failed = 0
+    for r in pool {
+        if !close(r) {
+            failed += 1
+        }
+    }
+    println("failed " + str(failed) + " " + str(d.index) + " " + str(c.index))
+}

@@ -1,0 +1,25 @@
+// spec: type.pool ffi.linear stmt.for (Р75)
+// Обход по значению — только у пула ресурсов и не parallel; список пулов
+// ресурсов — E0514.
+@linear
+struct Res {
+    id: i64
+}
+
+fn close(r: Res) {
+    let Res { id } = r
+    println(str(id))
+}
+
+fn shapes(ps: List[Pool[Res]]) {
+    var plain: Pool[i64] = []
+    for v in plain {
+        println(str(v))
+    }
+    var pool: Pool[Res] = []
+    parallel for r in pool {
+        close(r)
+    }
+}
+
+fn main() {}

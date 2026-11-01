@@ -1,0 +1,63 @@
+// spec: type.pool ffi.linear stmt.for (Р75)
+// Пул ресурсов сам линеен: его закрывает обход по значению, каждый элемент
+// поглощается в теле; ранний выход, копия и сброс элементов — ошибки.
+@linear
+struct Res {
+    id: i64
+}
+
+enum Bad {
+    Oops
+}
+
+fn close(r: Res) {
+    let Res { id } = r
+    println(str(id))
+}
+
+fn try_close(r: Res) Bad!void {
+    close(r)
+}
+
+fn never_closed() {
+    var pool: Pool[Res] = []
+    let _ = pool.add(Res { id: 1 })
+}
+
+fn early(stop: bool) Bad!void {
+    var pool: Pool[Res] = []
+    for r in pool {
+        if stop {
+            close(r)
+            break
+        }
+        try try_close(r)
+    }
+    var other: Pool[Res] = []
+    for r in other {
+        close(r)
+        return
+    }
+}
+
+fn forgot() {
+    var pool: Pool[Res] = []
+    for r in pool {
+        println(str(r.id))
+    }
+}
+
+fn misuse(h: Handle[Res]) {
+    var pool: Pool[Res] = []
+    let x = pool[h]
+    close(x)
+    pool[h] = Res { id: 2 }
+    let y = pool.get(h)
+    pool.clear()
+    for r in pool {
+        close(r)
+    }
+    let _ = len(pool)
+}
+
+fn main() {}
