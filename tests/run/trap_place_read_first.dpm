@@ -1,0 +1,15 @@
+// spec: expr.order trap.index
+// Правая часть первой читает то же место, что и цель: отдельной проверки
+// цели нет, ловушка — у чтения справа.
+struct P {
+    vy: i64
+}
+
+fn main() {
+    var ps: List[P] = [P { vy: 1 }]
+    ps[0].vy = ps[0].vy + 3
+    println(str(ps[0].vy))
+    let i: i64 = 4
+    ps[i].vy = ps[i].vy + 3
+    println("never")
+}

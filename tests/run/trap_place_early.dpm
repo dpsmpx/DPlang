@@ -1,0 +1,14 @@
+// spec: expr.order trap.index (Р72)
+// Место присваивания проверяется до правой части, даже если она меняет
+// корень места: ловушка индекса — до вызова grow.
+fn grow(xs: &mut List[i64]) i64 {
+    xs.push(5)
+    println("grow")
+    return 7
+}
+
+fn main() {
+    var xs: List[i64] = [1]
+    xs[1] = grow(&mut xs)
+    println("never")
+}
