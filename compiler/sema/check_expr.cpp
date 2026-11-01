@@ -1544,8 +1544,10 @@ const Type* Checker::infer(Expr* e, const Type* hint) {
                     error(Code::E0328, e->span, "'&mut' goes into an output chain field only in a literal written in a "
                                                 "call of a C function (spec: ffi.struct)");
                 } else if (!is_place(r->operand)) {
-                    if (ot->kind != TK::Error) error(Code::E0501, r->operand->span, "the output goes into a variable: "
-                                                                                    "'&mut name'");
+                    // `&mut S { ... }` — звено на время вызова: вход или вывод, который не нужен.
+                    if (!as<StructLitExpr>(strip_paren(r->operand)) && ot->kind != TK::Error) {
+                        error(Code::E0501, r->operand->span, "a link of an output chain is a variable or a struct literal");
+                    }
                 } else if (mutable_place(r->operand, "mutate")) {
                     note_write(r->operand, "mutate");
                 }

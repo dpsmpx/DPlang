@@ -1,8 +1,9 @@
 // spec: module.import ffi.types ffi.struct
 // Привязка Vulkan (Р58, Р62) на программном драйвере lavapipe: экземпляр,
-// физическое устройство и его свойства, логическое устройство с цепочкой
-// pNext, буфер в памяти хоста, команда заливки, отправка в очередь и
-// чтение результата через отображённую память.
+// физическое устройство и его свойства, возможности через цепочку вывода
+// pNext (Р77), логическое устройство с входной цепочкой pNext, буфер в
+// памяти хоста, команда заливки, отправка в очередь и чтение результата
+// через отображённую память.
 import vulkan
 
 extern fn memmove(dst: &mut List[u8], src: vulkan.VkVoid, n: u64) ?vulkan.VkVoid
@@ -67,6 +68,17 @@ fn physical(inst: vulkan.VkInstance) {
                 str(props.device_type == vulkan.VK_PHYSICAL_DEVICE_TYPE_CPU) + ", 1.3: " +
                 str(props.api_version >= vulkan.VK_API_VERSION_1_3) + ", 2D images to 4096: " +
                 str(props.limits.max_image_dimension2d >= 4096)
+        )
+        // Цепочка вывода pNext (Р77): расширение пишется в переменную v13,
+        // заголовок — временный литерал; поля ядра — в переменную f2.
+        var v13 = vulkan.VkPhysicalDeviceVulkan13Features {}
+        vulkan.vkGetPhysicalDeviceFeatures2(pd, &mut vulkan.VkPhysicalDeviceFeatures2 { p_next: &mut v13 })
+        var f2 = vulkan.VkPhysicalDeviceFeatures2 {}
+        vulkan.vkGetPhysicalDeviceFeatures2(pd, &mut f2)
+        println(
+            "synchronization2: " + str(v13.synchronization2 == vulkan.VK_TRUE) + ", dynamic rendering: " +
+                str(v13.dynamic_rendering == vulkan.VK_TRUE) + ", full uint32 index: " +
+                str(f2.features.full_draw_index_uint32 == vulkan.VK_TRUE)
         )
         var qn: u32 = 0
         var families: List[vulkan.VkQueueFamilyProperties] = []

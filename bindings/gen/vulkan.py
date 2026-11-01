@@ -234,6 +234,35 @@ class Gen:
         for n in reg.order:
             if n in reg.used:
                 self.classify(n)
+        self.out_structs = self.output_structs()
+
+    def output_structs(self):
+        """Структуры вывода (Р77): returnedonly, цель неконстантного указателя
+        команды и расширяющие их (structextends). Их pNext — цепочка вывода
+        `?&mut VkBaseOutStructure`: такая структура — переменная, звенья
+        цепочки — `&mut v` в литерале вызова."""
+        reg = self.reg
+        out = {n for n in reg.order if n in reg.used and reg.types[n].get('returnedonly') == 'true'}
+        for c in reg.req_cmds:
+            cmd = reg.commands[c]
+            if cmd.get('alias'):
+                continue
+            for p in cmd.findall('param'):
+                stars = (p.find('type').tail or '').count('*')
+                if api_ok(p) and stars == 1 and not (p.text or '').strip().startswith('const') and \
+                        self.cat(p.find('type').text) == 'struct':
+                    out.add(self.target(p.find('type').text))
+        grew = True
+        while grew:
+            grew = False
+            for n in reg.order:
+                t = reg.types[n]
+                if n in out or n not in reg.used or t.get('alias'):
+                    continue
+                if any(self.target(x) in out for x in (t.get('structextends') or '').split(',') if x):
+                    out.add(n)
+                    grew = True
+        return out
 
     def target(self, n):
         t = self.reg.types.get(n)
@@ -339,9 +368,9 @@ class Gen:
         if cname == 'sType' and m.get('values'):
             return name, 'i32', '', m.get('values'), ''
         if cname == 'pNext':
-            if returned:  # Р62: цепочка вывода не выражается — только NULL
-                return name, '?' + VOID, '', None, 'цепочка вывода — только none'
-            return name, '?&' + ('VkBaseOutStructure' if sname == 'VkBaseOutStructure' else 'VkBaseInStructure'), '', None, ''
+            if sname in self.out_structs or sname == 'VkBaseOutStructure':  # Р77: цепочка вывода
+                return name, '?&mut VkBaseOutStructure', '', None, ''
+            return name, '?&VkBaseInStructure', '', None, ''
         if ':' in (nm.tail or ''):
             raise Skip('битовое поле')
         if stars == 0:
@@ -563,7 +592,8 @@ class Gen:
                 self.skipped.append((n, str(s)))
                 continue
             done[n] = fields
-        # Заимствующие структуры (Р62): поле str, []T, &T, ?&T или такая структура.
+        # Заимствующие структуры (Р62): поле str, []T, &T, ?&T (кроме цепочки
+        # вывода ?&mut, Р77) или такая структура.
         def borrows(n, depth=0):
             if n in self.borrowing:
                 return self.borrowing[n]
@@ -574,7 +604,9 @@ class Gen:
                 base = ty
                 while base.startswith('['):
                     base = base[base.index(']') + 1:]
-                if ty == 'str' or ty.startswith('[]') or ty.startswith('&') or ty.startswith('?&') or borrows(base, depth + 1):
+                chain = ty.startswith('?&mut ')  # Р77: поле цепочки вывода не заимствует
+                if ty == 'str' or ty.startswith('[]') or ty.startswith('&') or (ty.startswith('?&') and not chain) or \
+                        borrows(base, depth + 1):
                     b = True
             self.borrowing[n] = b
             return b

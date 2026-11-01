@@ -230,6 +230,7 @@ bool holds_view(const Type* t) {
 
 static bool c_out_at(const Type* t, int depth) {
     if (c_value_type(t)) return true;
+    if (t && t->kind == TK::Array) return depth <= 64 && c_out_at(t->elem, depth + 1);
     if (!c_struct_type(t) || t->sdef->union_ || depth > 64) return false;
     for (const FieldDef& f : t->sdef->fields) {
         if (!chain_field(f.type) && !c_out_at(f.type, depth + 1)) return false;
@@ -260,7 +261,13 @@ bool c_prefix(const Type* b, const Type* s) {
     if (!b || !s || b->kind != TK::Struct || s->kind != TK::Struct || !b->sdef->c || !s->sdef->c) return false;
     if (b->sdef->union_ || s->sdef->union_ || b->sdef->fields.size() > s->sdef->fields.size()) return false;
     for (size_t i = 0; i < b->sdef->fields.size(); i++) {
-        if (b->sdef->fields[i].type != s->sdef->fields[i].type) return false;
+        const Type* bf = b->sdef->fields[i].type;
+        const Type* sf = s->sdef->fields[i].type;
+        // Звено цепочки (pNext): `?&mut S` читается как `?&B` — входная цепочка
+        // берёт и структуру с цепочкой вывода (Р77); обратно нельзя.
+        bool link = bf->kind == TK::Optional && bf->elem->kind == TK::Ref && !bf->elem->len &&
+                    c_struct_type(bf->elem->elem) && chain_field(sf);
+        if (bf != sf && !link) return false;
     }
     return true;
 }

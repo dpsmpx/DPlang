@@ -2,7 +2,8 @@
 // Цепочка вывода (pNext Vulkan): у структуры поле `?&mut OutBase` — она
 // переменная, поле в ней — none. `&mut v` в литерале — аргументе функции
 // C — звено, в которое функция C пишет; `&mut S { ... }` — заголовок на
-// время вызова. Функции C — в host.c.
+// время вызова. Структура вывода входит и в цепочку ввода (`?&InBase`)
+// по общему началу. Функции C — в host.c.
 @c
 struct OutBase {
     kind: u32
@@ -25,6 +26,19 @@ struct Limits {
 }
 
 @c
+struct InBase {
+    kind: u32
+    next: ?&InBase
+}
+
+@c
+struct Create {
+    kind: u32 = 5
+    next: ?&InBase
+    flags: u32
+}
+
+@c
 struct Pair {
     props: Props
     weight: f32
@@ -33,6 +47,7 @@ struct Pair {
 extern fn host_fill(p: &mut Props)
 extern fn host_fill_all(ps: &mut List[Props], n: i32)
 extern fn host_pair(p: &mut Pair)
+extern fn host_create(c: &Create) i32
 
 @export
 fn chain_run() i32 {
@@ -45,5 +60,9 @@ fn chain_run() i32 {
     var more = Limits { next: none, max_size: 0, max_count: 0 }
     host_pair(&mut Pair { props: Props { next: &mut more, count: 0 }, weight: 0.5 })
     let copy = props
-    return limits.max_size * 1000 + limits.max_count * 100 + copy.count + all[1].count + more.max_count
+    let created = host_create(&Create {
+        next: &Props { next: &mut Limits { next: none, max_size: 8, max_count: 9 }, count: 4 },
+        flags: 1,
+    })
+    return limits.max_size * 1000 + limits.max_count * 100 + copy.count + all[1].count + more.max_count + created
 }

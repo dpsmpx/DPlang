@@ -23,6 +23,17 @@ struct Limits {
     int32_t max_count;
 };
 
+struct InBase {
+    uint32_t kind;
+    const struct InBase* next;
+};
+
+struct Create {
+    uint32_t kind;
+    const struct InBase* next;
+    uint32_t flags;
+};
+
 struct Pair {
     struct Props props;
     float weight;
@@ -51,6 +62,17 @@ void host_fill_all(struct Props* ps, int32_t n) {
 void host_pair(struct Pair* p) {
     printf("pair weight=%.2f\n", (double)p->weight);
     host_fill(&p->props);
+}
+
+int32_t host_create(const struct Create* c) {
+    int32_t sum = 0;
+    printf("create kind=%u flags=%u\n", c->kind, c->flags);
+    for (const struct InBase* b = c->next; b; b = b->next) {
+        printf("  in kind=%u\n", b->kind);
+        if (b->kind == 1) sum += ((const struct Props*)b)->count;
+        if (b->kind == 2) sum += ((const struct Limits*)b)->max_size * ((const struct Limits*)b)->max_count;
+    }
+    return sum;
 }
 
 int main(void) {
