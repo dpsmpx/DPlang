@@ -90,6 +90,7 @@ private:
     std::vector<size_t> loops_;      // число областей снаружи тела каждого цикла
     int defer_ = 0;                  // 1 — тело defer, 2 — тело errdefer
     DeferStmt* cur_defer_ = nullptr;  // errdefer, тело которого проверяется
+    size_t defer_scope_ = 0;          // область инструкции defer: тело-блок открывает свою
     std::vector<DeferStmt*> errdefer_of_;  // по номеру переменной: её errdefer
     // Перенос ресурса с errdefer, который ещё не кончился: вызов или
     // выражение, куда он перенесён, не завершены (Р60). Выход с ошибкой до
@@ -239,7 +240,7 @@ private:
             }
             if (decl_loop_[l->id] < static_cast<int>(loops_.size())) loop_close(l, span);
             st = defer_ == 2 ? St::ErrDeferred : St::Deferred;
-            scopes_.back().defers.push_back({l, defer_ == 2});
+            scopes_[defer_scope_].defers.push_back({l, defer_ == 2});
             if (defer_ == 2 && cur_defer_) {
                 cur_defer_->closes.push_back(l);
                 errdefer_of_[l->id] = cur_defer_;
@@ -417,7 +418,9 @@ private:
                 auto* d = static_cast<DeferStmt*>(s);
                 int saved = defer_;
                 DeferStmt* saved_d = cur_defer_;
+                size_t saved_scope = defer_scope_;
                 defer_ = d->on_error ? 2 : 1;
+                defer_scope_ = scopes_.size() - 1;
                 if (d->on_error) {
                     d->closes.clear();
                     cur_defer_ = d;
@@ -425,6 +428,7 @@ private:
                 stmt(d->body);
                 defer_ = saved;
                 cur_defer_ = saved_d;
+                defer_scope_ = saved_scope;
                 break;
             }
             case StmtKind::Block: block(static_cast<BlockStmt*>(s)->block); break;
