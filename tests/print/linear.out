@@ -76,7 +76,9 @@ fn forward(id: int) IoError!Res {
 fn report(r: IoError!Pair) {
     match r {
         ok(p) => close_pair(p)
-        err(e) => println("pair failed: busy = " + str(e == .Busy) + ", broken = " + str(e == .Broken))
+        err(e) => println(
+            "pair failed: busy = " + str(e == .Busy) + ", broken = " + str(e == .Broken)
+        )
     }
 }
 

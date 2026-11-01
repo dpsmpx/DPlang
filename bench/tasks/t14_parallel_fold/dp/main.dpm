@@ -44,5 +44,8 @@ fn main() {
     print_hist("t=5", &h5)
     let few: List[u32] = [7, 17, 3]
     let h = sol.parallel_histogram(few, 5, 8)
-    println("hist small " + str(h[0]) + " " + str(h[1]) + " " + str(h[2]) + " " + str(h[3]) + " " + str(h[4]))
+    println(
+        "hist small " + str(h[0]) + " " + str(h[1]) + " " + str(h[2]) + " " + str(h[3]) + " " +
+            str(h[4])
+    )
 }

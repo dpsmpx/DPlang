@@ -15,7 +15,8 @@ pub fn receipt(k: &cart.Cart, c: &catalog.Catalog) str {
     for i in 0..len(k.items) {
         let line = catalog.catalog_price(&c, k.items[i]) * i64(k.qtys[i])
         sum += line
-        out += catalog.catalog_code(&c, k.items[i]) + " x" + str(k.qtys[i]) + " " + money.fmt_money(line) + "; "
+        out += catalog.catalog_code(&c, k.items[i]) + " x" + str(k.qtys[i]) + " " +
+            money.fmt_money(line) + "; "
     }
     let total = cart.cart_total(&k, &c)
     if k.discount != 0 {

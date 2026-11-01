@@ -34,5 +34,7 @@ fn main() {
     let three = sol.simulate([0.5, -0.25, 1.0], 2, 2)
     println("three " + str(three[0]) + " " + str(three[1]))
     let empty: List[f64] = []
-    println("empty " + str(len(sol.simulate(empty, 2, 3))) + " none " + str(len(sol.simulate(x, 0, 2))))
+    println(
+        "empty " + str(len(sol.simulate(empty, 2, 3))) + " none " + str(len(sol.simulate(x, 0, 2)))
+    )
 }

@@ -172,11 +172,17 @@ fn atom(c: &mut Calc) i32 {
     }
     if t.kind == .Num {
         let n = take(&mut c)
-        return add(&mut c, Node { kind: .Num, op: ' ', value: n.value, name: "", left: -1, right: -1, col: n.col })
+        return add(
+            &mut c,
+            Node { kind: .Num, op: ' ', value: n.value, name: "", left: -1, right: -1, col: n.col }
+        )
     }
     if t.kind == .Name {
         let n = take(&mut c)
-        return add(&mut c, Node { kind: .Var, op: ' ', value: 0, name: n.text, left: -1, right: -1, col: n.col })
+        return add(
+            &mut c,
+            Node { kind: .Var, op: ' ', value: 0, name: n.text, left: -1, right: -1, col: n.col }
+        )
     }
     if is_op(&mut c, "(") {
         _ = take(&mut c)
@@ -264,7 +270,18 @@ fn stmt(c: &mut Calc) i32 {
             if c.failed {
                 return -1
             }
-            return add(&mut c, Node { kind: .Assign, op: '=', value: 0, name: name.text, left: e, right: -1, col: op.col })
+            return add(
+                &mut c,
+                Node {
+                    kind: .Assign,
+                    op: '=',
+                    value: 0,
+                    name: name.text,
+                    left: e,
+                    right: -1,
+                    col: op.col
+                }
+            )
         }
     }
     return expr(&mut c)
@@ -411,7 +428,17 @@ fn binary(c: &mut Calc, n: Node) ?i64 {
 
 pub fn calc(src: str) str {
     let first = Token { kind: .End, text: "", col: 0, value: 0, end: 0 }
-    var c = Calc { src, pos: 0, has_peek: false, peeked: first, nodes: [], failed: false, err_col: 0, err_msg: "", vars: [] }
+    var c = Calc {
+        src,
+        pos: 0,
+        has_peek: false,
+        peeked: first,
+        nodes: [],
+        failed: false,
+        err_col: 0,
+        err_msg: "",
+        vars: []
+    }
     var stmts: List[i32] = []
     stmts.push(stmt(&mut c))
     while !c.failed && is_op(&mut c, ";") {

@@ -15,15 +15,22 @@ import shaders
 import vulkan
 
 const W: u32 = 64
+
 const H: u32 = 64
+
 const FORMAT: i32 = vulkan.VK_FORMAT_R8G8B8A8_UNORM
+
 const FOREVER: u64 = 18446744073709551615
+
 // FNV-1a 32 пикселей RGB эталонного кадра (reference/frame.ppm).
 const REFERENCE: u32 = 1933328421
 
 extern fn memmove(dst: &mut List[u8], src: vulkan.VkVoid, n: u64) ?vulkan.VkVoid
+
 extern fn fopen(path: str, mode: str) ?File
+
 extern fn fwrite(data: []u8, size: u64, n: u64, f: File) u64
+
 extern fn fclose(f: File) i32
 
 extern type File
@@ -85,7 +92,12 @@ fn main() Fail!void {
     }
     defer sdl3.SDL_Quit()
     let driver = sdl3.SDL_GetCurrentVideoDriver() ?? ""
-    if let w = sdl3.SDL_CreateWindow("dpl triangle", 512, 512, sdl3.SDL_WINDOW_VULKAN | sdl3.SDL_WINDOW_RESIZABLE) {
+    if let w = sdl3.SDL_CreateWindow(
+        "dpl triangle",
+        512,
+        512,
+        sdl3.SDL_WINDOW_VULKAN | sdl3.SDL_WINDOW_RESIZABLE
+    ) {
         defer sdl3.SDL_DestroyWindow(w)
         try run(w, driver, true, args)
         return
@@ -163,7 +175,7 @@ fn run(w: sdl3.SDL_Window, driver: str, vulkan_window: bool, args: List[str]) Fa
         buffer: buffer,
         buffer_memory: buffer_memory,
         commands: commands,
-        fence: fence,
+        fence: fence
     }
     var chain: ?Chain = none
     if let s = surface {
@@ -198,7 +210,12 @@ fn run(w: sdl3.SDL_Window, driver: str, vulkan_window: bool, args: List[str]) Fa
             let report = try read_frame(&gpu, &frame)
             println(report.line)
             if driver == "android" {
-                _ = sdl3.SDL_ShowSimpleMessageBox(sdl3.SDL_MESSAGEBOX_INFORMATION, "dpl triangle", report.line, w)
+                _ = sdl3.SDL_ShowSimpleMessageBox(
+                    sdl3.SDL_MESSAGEBOX_INFORMATION,
+                    "dpl triangle",
+                    report.line,
+                    w
+                )
             }
         }
         if !shown {
@@ -266,7 +283,8 @@ fn instance_extensions(driver: str) List[str] {
     props = repeat(vulkan.VkExtensionProperties {}, int(n))
     _ = vulkan.vkEnumerateInstanceExtensionProperties(none, &mut n, &mut props)
     let platform = surface_extension(driver)
-    if platform != "" && has_extension(props, vulkan.VK_KHR_SURFACE_EXTENSION_NAME) && has_extension(props, platform) {
+    if platform != "" && has_extension(props, vulkan.VK_KHR_SURFACE_EXTENSION_NAME) &&
+        has_extension(props, platform) {
         return [vulkan.VK_KHR_SURFACE_EXTENSION_NAME, platform]
     }
     return []
@@ -274,14 +292,21 @@ fn instance_extensions(driver: str) List[str] {
 
 fn create_instance(exts: List[str]) Fail!vulkan.VkInstance {
     var inst: ?vulkan.VkInstance = none
-    try vk(vulkan.vkCreateInstance(&vulkan.VkInstanceCreateInfo {
-        p_application_info: &vulkan.VkApplicationInfo {
-            p_application_name: "dpl triangle",
-            p_engine_name: "dpl",
-            api_version: vulkan.VK_API_VERSION_1_0,
-        },
-        pp_enabled_extension_names: exts,
-    }, none, &mut inst), "vkCreateInstance")
+    try vk(
+        vulkan.vkCreateInstance(
+            &vulkan.VkInstanceCreateInfo {
+                p_application_info: &vulkan.VkApplicationInfo {
+                    p_application_name: "dpl triangle",
+                    p_engine_name: "dpl",
+                    api_version: vulkan.VK_API_VERSION_1_0
+                },
+                pp_enabled_extension_names: exts
+            },
+            none,
+            &mut inst
+        ),
+        "vkCreateInstance"
+    )
     if let i = inst {
         return i
     }
@@ -326,7 +351,13 @@ fn create_gpu(inst: vulkan.VkInstance, surface: ?vulkan.VkSurfaceKHR) Fail!Gpu {
                 var memory = vulkan.VkPhysicalDeviceMemoryProperties {}
                 vulkan.vkGetPhysicalDeviceMemoryProperties(pd, &mut memory)
                 if let q = queue {
-                    return Gpu { physical: pd, device: device, queue: q, family: family, memory: memory }
+                    return Gpu {
+                        physical: pd,
+                        device: device,
+                        queue: q,
+                        family: family,
+                        memory: memory
+                    }
                 }
             }
         }
@@ -341,10 +372,23 @@ fn create_device(pd: vulkan.VkPhysicalDevice, family: u32, swapchain: bool) Fail
         exts = [vulkan.VK_KHR_SWAPCHAIN_EXTENSION_NAME]
     }
     var device: ?vulkan.VkDevice = none
-    try vk(vulkan.vkCreateDevice(pd, &vulkan.VkDeviceCreateInfo {
-        p_queue_create_infos: [vulkan.VkDeviceQueueCreateInfo { queue_family_index: family, p_queue_priorities: [1.0] }],
-        pp_enabled_extension_names: exts,
-    }, none, &mut device), "vkCreateDevice")
+    try vk(
+        vulkan.vkCreateDevice(
+            pd,
+            &vulkan.VkDeviceCreateInfo {
+                p_queue_create_infos: [
+                    vulkan.VkDeviceQueueCreateInfo {
+                        queue_family_index: family,
+                        p_queue_priorities: [1.0]
+                    }
+                ],
+                pp_enabled_extension_names: exts
+            },
+            none,
+            &mut device
+        ),
+        "vkCreateDevice"
+    )
     if let d = device {
         return d
     }
@@ -366,10 +410,15 @@ fn memory_type(gpu: &Gpu, bits: u32, want: u32) Fail!u32 {
 fn allocate(gpu: &Gpu, req: &vulkan.VkMemoryRequirements, want: u32) Fail!vulkan.VkDeviceMemory {
     let kind = try memory_type(&gpu, req.memory_type_bits, want)
     var memory: ?vulkan.VkDeviceMemory = none
-    try vk(vulkan.vkAllocateMemory(gpu.device, &vulkan.VkMemoryAllocateInfo {
-        allocation_size: req.size,
-        memory_type_index: kind,
-    }, none, &mut memory), "vkAllocateMemory")
+    try vk(
+        vulkan.vkAllocateMemory(
+            gpu.device,
+            &vulkan.VkMemoryAllocateInfo { allocation_size: req.size, memory_type_index: kind },
+            none,
+            &mut memory
+        ),
+        "vkAllocateMemory"
+    )
     if let m = memory {
         return m
     }
@@ -379,27 +428,43 @@ fn allocate(gpu: &Gpu, req: &vulkan.VkMemoryRequirements, want: u32) Fail!vulkan
 // --- кадр вне окна
 
 fn color_range() vulkan.VkImageSubresourceRange {
-    return vulkan.VkImageSubresourceRange { aspect_mask: vulkan.VK_IMAGE_ASPECT_COLOR_BIT, level_count: 1, layer_count: 1 }
+    return vulkan.VkImageSubresourceRange {
+        aspect_mask: vulkan.VK_IMAGE_ASPECT_COLOR_BIT,
+        level_count: 1,
+        layer_count: 1
+    }
 }
 
 fn color_layers() vulkan.VkImageSubresourceLayers {
-    return vulkan.VkImageSubresourceLayers { aspect_mask: vulkan.VK_IMAGE_ASPECT_COLOR_BIT, layer_count: 1 }
+    return vulkan.VkImageSubresourceLayers {
+        aspect_mask: vulkan.VK_IMAGE_ASPECT_COLOR_BIT,
+        layer_count: 1
+    }
 }
 
 fn create_image(gpu: &Gpu) Fail!vulkan.VkImage {
     var image: ?vulkan.VkImage = none
-    try vk(vulkan.vkCreateImage(gpu.device, &vulkan.VkImageCreateInfo {
-        image_type: vulkan.VK_IMAGE_TYPE_2D,
-        format: FORMAT,
-        extent: vulkan.VkExtent3D { width: W, height: H, depth: 1 },
-        mip_levels: 1,
-        array_layers: 1,
-        samples: vulkan.VK_SAMPLE_COUNT_1_BIT,
-        tiling: vulkan.VK_IMAGE_TILING_OPTIMAL,
-        usage: vulkan.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | vulkan.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        sharing_mode: vulkan.VK_SHARING_MODE_EXCLUSIVE,
-        initial_layout: vulkan.VK_IMAGE_LAYOUT_UNDEFINED,
-    }, none, &mut image), "vkCreateImage")
+    try vk(
+        vulkan.vkCreateImage(
+            gpu.device,
+            &vulkan.VkImageCreateInfo {
+                image_type: vulkan.VK_IMAGE_TYPE_2D,
+                format: FORMAT,
+                extent: vulkan.VkExtent3D { width: W, height: H, depth: 1 },
+                mip_levels: 1,
+                array_layers: 1,
+                samples: vulkan.VK_SAMPLE_COUNT_1_BIT,
+                tiling: vulkan.VK_IMAGE_TILING_OPTIMAL,
+                usage: vulkan.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                    vulkan.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                sharing_mode: vulkan.VK_SHARING_MODE_EXCLUSIVE,
+                initial_layout: vulkan.VK_IMAGE_LAYOUT_UNDEFINED
+            },
+            none,
+            &mut image
+        ),
+        "vkCreateImage"
+    )
     if let i = image {
         return i
     }
@@ -416,12 +481,20 @@ fn bind_image(gpu: &Gpu, image: vulkan.VkImage) Fail!vulkan.VkDeviceMemory {
 
 fn create_view(gpu: &Gpu, image: vulkan.VkImage) Fail!vulkan.VkImageView {
     var view: ?vulkan.VkImageView = none
-    try vk(vulkan.vkCreateImageView(gpu.device, &vulkan.VkImageViewCreateInfo {
-        image: image,
-        view_type: vulkan.VK_IMAGE_VIEW_TYPE_2D,
-        format: FORMAT,
-        subresource_range: color_range(),
-    }, none, &mut view), "vkCreateImageView")
+    try vk(
+        vulkan.vkCreateImageView(
+            gpu.device,
+            &vulkan.VkImageViewCreateInfo {
+                image: image,
+                view_type: vulkan.VK_IMAGE_VIEW_TYPE_2D,
+                format: FORMAT,
+                subresource_range: color_range()
+            },
+            none,
+            &mut view
+        ),
+        "vkCreateImageView"
+    )
     if let v = view {
         return v
     }
@@ -430,50 +503,78 @@ fn create_view(gpu: &Gpu, image: vulkan.VkImage) Fail!vulkan.VkImageView {
 
 fn create_render_pass(gpu: &Gpu) Fail!vulkan.VkRenderPass {
     var pass: ?vulkan.VkRenderPass = none
-    try vk(vulkan.vkCreateRenderPass(gpu.device, &vulkan.VkRenderPassCreateInfo {
-        p_attachments: [vulkan.VkAttachmentDescription {
-            format: FORMAT,
-            samples: vulkan.VK_SAMPLE_COUNT_1_BIT,
-            load_op: vulkan.VK_ATTACHMENT_LOAD_OP_CLEAR,
-            store_op: vulkan.VK_ATTACHMENT_STORE_OP_STORE,
-            stencil_load_op: vulkan.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            stencil_store_op: vulkan.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            initial_layout: vulkan.VK_IMAGE_LAYOUT_UNDEFINED,
-            final_layout: vulkan.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        }],
-        p_subpasses: [vulkan.VkSubpassDescription {
-            pipeline_bind_point: vulkan.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            p_color_attachments: [vulkan.VkAttachmentReference {
-                attachment: 0,
-                layout: vulkan.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            }],
-        }],
-        // Запись цвета — до копирования кадра.
-        p_dependencies: [vulkan.VkSubpassDependency {
-            src_subpass: 0,
-            dst_subpass: vulkan.VK_SUBPASS_EXTERNAL,
-            src_stage_mask: vulkan.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            dst_stage_mask: vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT,
-            src_access_mask: vulkan.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            dst_access_mask: vulkan.VK_ACCESS_TRANSFER_READ_BIT,
-        }],
-    }, none, &mut pass), "vkCreateRenderPass")
+    // Запись цвета — до копирования кадра.
+    try vk(
+        vulkan.vkCreateRenderPass(
+            gpu.device,
+            &vulkan.VkRenderPassCreateInfo {
+                p_attachments: [
+                    vulkan.VkAttachmentDescription {
+                        format: FORMAT,
+                        samples: vulkan.VK_SAMPLE_COUNT_1_BIT,
+                        load_op: vulkan.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                        store_op: vulkan.VK_ATTACHMENT_STORE_OP_STORE,
+                        stencil_load_op: vulkan.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                        stencil_store_op: vulkan.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                        initial_layout: vulkan.VK_IMAGE_LAYOUT_UNDEFINED,
+                        final_layout: vulkan.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                    }
+                ],
+                p_subpasses: [
+                    vulkan.VkSubpassDescription {
+                        pipeline_bind_point: vulkan.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        p_color_attachments: [
+                            vulkan.VkAttachmentReference {
+                                attachment: 0,
+                                layout: vulkan.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                            }
+                        ]
+                    }
+                ],
+                p_dependencies: [
+                    vulkan.VkSubpassDependency {
+                        src_subpass: 0,
+                        dst_subpass: vulkan.VK_SUBPASS_EXTERNAL,
+                        src_stage_mask: vulkan.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        dst_stage_mask: vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        src_access_mask: vulkan.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                        dst_access_mask: vulkan.VK_ACCESS_TRANSFER_READ_BIT
+                    }
+                ]
+            },
+            none,
+            &mut pass
+        ),
+        "vkCreateRenderPass"
+    )
     if let p = pass {
         return p
     }
     fail .Vk
 }
 
-fn create_framebuffer(gpu: &Gpu, pass: vulkan.VkRenderPass, view: vulkan.VkImageView) Fail!vulkan.VkFramebuffer {
+fn create_framebuffer(
+    gpu: &Gpu,
+    pass: vulkan.VkRenderPass,
+    view: vulkan.VkImageView
+) Fail!vulkan.VkFramebuffer {
     var fb: ?vulkan.VkFramebuffer = none
-    try vk(vulkan.vkCreateFramebuffer(gpu.device, &vulkan.VkFramebufferCreateInfo {
-        render_pass: pass,
-        attachment_count: 1,
-        p_attachments: [view],
-        width: W,
-        height: H,
-        layers: 1,
-    }, none, &mut fb), "vkCreateFramebuffer")
+    try vk(
+        vulkan.vkCreateFramebuffer(
+            gpu.device,
+            &vulkan.VkFramebufferCreateInfo {
+                render_pass: pass,
+                attachment_count: 1,
+                p_attachments: [view],
+                width: W,
+                height: H,
+                layers: 1
+            },
+            none,
+            &mut fb
+        ),
+        "vkCreateFramebuffer"
+    )
     if let f = fb {
         return f
     }
@@ -482,8 +583,15 @@ fn create_framebuffer(gpu: &Gpu, pass: vulkan.VkRenderPass, view: vulkan.VkImage
 
 fn create_layout(gpu: &Gpu) Fail!vulkan.VkPipelineLayout {
     var layout: ?vulkan.VkPipelineLayout = none
-    try vk(vulkan.vkCreatePipelineLayout(gpu.device, &vulkan.VkPipelineLayoutCreateInfo {}, none, &mut layout),
-           "vkCreatePipelineLayout")
+    try vk(
+        vulkan.vkCreatePipelineLayout(
+            gpu.device,
+            &vulkan.VkPipelineLayoutCreateInfo {},
+            none,
+            &mut layout
+        ),
+        "vkCreatePipelineLayout"
+    )
     if let l = layout {
         return l
     }
@@ -492,49 +600,87 @@ fn create_layout(gpu: &Gpu) Fail!vulkan.VkPipelineLayout {
 
 fn create_shader(gpu: &Gpu, code: []u8) Fail!vulkan.VkShaderModule {
     var module: ?vulkan.VkShaderModule = none
-    try vk(vulkan.vkCreateShaderModule(gpu.device, &vulkan.VkShaderModuleCreateInfo { p_code: code }, none, &mut module),
-           "vkCreateShaderModule")
+    try vk(
+        vulkan.vkCreateShaderModule(
+            gpu.device,
+            &vulkan.VkShaderModuleCreateInfo { p_code: code },
+            none,
+            &mut module
+        ),
+        "vkCreateShaderModule"
+    )
     if let m = module {
         return m
     }
     fail .Vk
 }
 
-fn create_pipeline(gpu: &Gpu, layout: vulkan.VkPipelineLayout, pass: vulkan.VkRenderPass, vert: vulkan.VkShaderModule,
-                   frag: vulkan.VkShaderModule) Fail!vulkan.VkPipeline {
+fn create_pipeline(
+    gpu: &Gpu,
+    layout: vulkan.VkPipelineLayout,
+    pass: vulkan.VkRenderPass,
+    vert: vulkan.VkShaderModule,
+    frag: vulkan.VkShaderModule
+) Fail!vulkan.VkPipeline {
     var pipelines: List[?vulkan.VkPipeline] = [none]
-    try vk(vulkan.vkCreateGraphicsPipelines(gpu.device, none, 1, [vulkan.VkGraphicsPipelineCreateInfo {
-        stage_count: 2,
-        p_stages: [
-            vulkan.VkPipelineShaderStageCreateInfo { stage: vulkan.VK_SHADER_STAGE_VERTEX_BIT, module: vert, p_name: "main" },
-            vulkan.VkPipelineShaderStageCreateInfo { stage: vulkan.VK_SHADER_STAGE_FRAGMENT_BIT, module: frag, p_name: "main" },
-        ],
-        p_vertex_input_state: &vulkan.VkPipelineVertexInputStateCreateInfo {},
-        p_input_assembly_state: &vulkan.VkPipelineInputAssemblyStateCreateInfo {
-            topology: vulkan.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        },
-        p_viewport_state: &vulkan.VkPipelineViewportStateCreateInfo {
-            viewport_count: 1,
-            p_viewports: [vulkan.VkViewport { width: f32(W), height: f32(H), max_depth: 1.0 }],
-            scissor_count: 1,
-            p_scissors: [vulkan.VkRect2D { extent: vulkan.VkExtent2D { width: W, height: H } }],
-        },
-        p_rasterization_state: &vulkan.VkPipelineRasterizationStateCreateInfo {
-            polygon_mode: vulkan.VK_POLYGON_MODE_FILL,
-            cull_mode: vulkan.VK_CULL_MODE_NONE,
-            front_face: vulkan.VK_FRONT_FACE_COUNTER_CLOCKWISE,
-            line_width: 1.0,
-        },
-        p_multisample_state: &vulkan.VkPipelineMultisampleStateCreateInfo {
-            rasterization_samples: vulkan.VK_SAMPLE_COUNT_1_BIT,
-        },
-        p_color_blend_state: &vulkan.VkPipelineColorBlendStateCreateInfo {
-            attachment_count: 1,
-            p_attachments: [vulkan.VkPipelineColorBlendAttachmentState { color_write_mask: 15 }],
-        },
-        layout: layout,
-        render_pass: pass,
-    }], none, &mut pipelines), "vkCreateGraphicsPipelines")
+    try vk(
+        vulkan.vkCreateGraphicsPipelines(
+            gpu.device,
+            none,
+            1,
+            [
+                vulkan.VkGraphicsPipelineCreateInfo {
+                    stage_count: 2,
+                    p_stages: [
+                        vulkan.VkPipelineShaderStageCreateInfo {
+                            stage: vulkan.VK_SHADER_STAGE_VERTEX_BIT,
+                            module: vert,
+                            p_name: "main"
+                        },
+                        vulkan.VkPipelineShaderStageCreateInfo {
+                            stage: vulkan.VK_SHADER_STAGE_FRAGMENT_BIT,
+                            module: frag,
+                            p_name: "main"
+                        }
+                    ],
+                    p_vertex_input_state: &vulkan.VkPipelineVertexInputStateCreateInfo {},
+                    p_input_assembly_state: &vulkan.VkPipelineInputAssemblyStateCreateInfo {
+                        topology: vulkan.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+                    },
+                    p_viewport_state: &vulkan.VkPipelineViewportStateCreateInfo {
+                        viewport_count: 1,
+                        p_viewports: [
+                            vulkan.VkViewport { width: f32(W), height: f32(H), max_depth: 1.0 }
+                        ],
+                        scissor_count: 1,
+                        p_scissors: [
+                            vulkan.VkRect2D { extent: vulkan.VkExtent2D { width: W, height: H } }
+                        ]
+                    },
+                    p_rasterization_state: &vulkan.VkPipelineRasterizationStateCreateInfo {
+                        polygon_mode: vulkan.VK_POLYGON_MODE_FILL,
+                        cull_mode: vulkan.VK_CULL_MODE_NONE,
+                        front_face: vulkan.VK_FRONT_FACE_COUNTER_CLOCKWISE,
+                        line_width: 1.0
+                    },
+                    p_multisample_state: &vulkan.VkPipelineMultisampleStateCreateInfo {
+                        rasterization_samples: vulkan.VK_SAMPLE_COUNT_1_BIT
+                    },
+                    p_color_blend_state: &vulkan.VkPipelineColorBlendStateCreateInfo {
+                        attachment_count: 1,
+                        p_attachments: [
+                            vulkan.VkPipelineColorBlendAttachmentState { color_write_mask: 15 }
+                        ]
+                    },
+                    layout: layout,
+                    render_pass: pass
+                }
+            ],
+            none,
+            &mut pipelines
+        ),
+        "vkCreateGraphicsPipelines"
+    )
     if let p = pipelines[0] {
         return p
     }
@@ -543,11 +689,19 @@ fn create_pipeline(gpu: &Gpu, layout: vulkan.VkPipelineLayout, pass: vulkan.VkRe
 
 fn create_buffer(gpu: &Gpu) Fail!vulkan.VkBuffer {
     var buffer: ?vulkan.VkBuffer = none
-    try vk(vulkan.vkCreateBuffer(gpu.device, &vulkan.VkBufferCreateInfo {
-        size: u64(W * H * 4),
-        usage: vulkan.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        sharing_mode: vulkan.VK_SHARING_MODE_EXCLUSIVE,
-    }, none, &mut buffer), "vkCreateBuffer")
+    try vk(
+        vulkan.vkCreateBuffer(
+            gpu.device,
+            &vulkan.VkBufferCreateInfo {
+                size: u64(W * H * 4),
+                usage: vulkan.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                sharing_mode: vulkan.VK_SHARING_MODE_EXCLUSIVE
+            },
+            none,
+            &mut buffer
+        ),
+        "vkCreateBuffer"
+    )
     if let b = buffer {
         return b
     }
@@ -557,7 +711,8 @@ fn create_buffer(gpu: &Gpu) Fail!vulkan.VkBuffer {
 fn bind_buffer(gpu: &Gpu, buffer: vulkan.VkBuffer) Fail!vulkan.VkDeviceMemory {
     var req = vulkan.VkMemoryRequirements {}
     vulkan.vkGetBufferMemoryRequirements(gpu.device, buffer, &mut req)
-    let host = vulkan.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | vulkan.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    let host = vulkan.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        vulkan.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     let memory = try allocate(&gpu, &req, host)
     try vk(vulkan.vkBindBufferMemory(gpu.device, buffer, memory, 0), "vkBindBufferMemory")
     return memory
@@ -565,10 +720,18 @@ fn bind_buffer(gpu: &Gpu, buffer: vulkan.VkBuffer) Fail!vulkan.VkDeviceMemory {
 
 fn create_pool(gpu: &Gpu) Fail!vulkan.VkCommandPool {
     var pool: ?vulkan.VkCommandPool = none
-    try vk(vulkan.vkCreateCommandPool(gpu.device, &vulkan.VkCommandPoolCreateInfo {
-        flags: vulkan.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        queue_family_index: gpu.family,
-    }, none, &mut pool), "vkCreateCommandPool")
+    try vk(
+        vulkan.vkCreateCommandPool(
+            gpu.device,
+            &vulkan.VkCommandPoolCreateInfo {
+                flags: vulkan.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                queue_family_index: gpu.family
+            },
+            none,
+            &mut pool
+        ),
+        "vkCreateCommandPool"
+    )
     if let p = pool {
         return p
     }
@@ -577,11 +740,18 @@ fn create_pool(gpu: &Gpu) Fail!vulkan.VkCommandPool {
 
 fn allocate_commands(gpu: &Gpu, pool: vulkan.VkCommandPool) Fail!vulkan.VkCommandBuffer {
     var buffers: List[?vulkan.VkCommandBuffer] = [none]
-    try vk(vulkan.vkAllocateCommandBuffers(gpu.device, &vulkan.VkCommandBufferAllocateInfo {
-        command_pool: pool,
-        level: vulkan.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        command_buffer_count: 1,
-    }, &mut buffers), "vkAllocateCommandBuffers")
+    try vk(
+        vulkan.vkAllocateCommandBuffers(
+            gpu.device,
+            &vulkan.VkCommandBufferAllocateInfo {
+                command_pool: pool,
+                level: vulkan.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                command_buffer_count: 1
+            },
+            &mut buffers
+        ),
+        "vkAllocateCommandBuffers"
+    )
     if let b = buffers[0] {
         return b
     }
@@ -590,7 +760,10 @@ fn allocate_commands(gpu: &Gpu, pool: vulkan.VkCommandPool) Fail!vulkan.VkComman
 
 fn create_fence(gpu: &Gpu) Fail!vulkan.VkFence {
     var fence: ?vulkan.VkFence = none
-    try vk(vulkan.vkCreateFence(gpu.device, &vulkan.VkFenceCreateInfo {}, none, &mut fence), "vkCreateFence")
+    try vk(
+        vulkan.vkCreateFence(gpu.device, &vulkan.VkFenceCreateInfo {}, none, &mut fence),
+        "vkCreateFence"
+    )
     if let f = fence {
         return f
     }
@@ -599,7 +772,8 @@ fn create_fence(gpu: &Gpu) Fail!vulkan.VkFence {
 
 fn create_semaphore(gpu: &Gpu) ?vulkan.VkSemaphore {
     var s: ?vulkan.VkSemaphore = none
-    if vulkan.vkCreateSemaphore(gpu.device, &vulkan.VkSemaphoreCreateInfo {}, none, &mut s) != vulkan.VK_SUCCESS {
+    if vulkan.vkCreateSemaphore(gpu.device, &vulkan.VkSemaphoreCreateInfo {}, none, &mut s) !=
+        vulkan.VK_SUCCESS {
         return none
     }
     return s
@@ -635,7 +809,8 @@ fn chain_format(gpu: &Gpu, surface: vulkan.VkSurfaceKHR) ?vulkan.VkSurfaceFormat
 
 fn create_chain(w: sdl3.SDL_Window, gpu: &Gpu, surface: vulkan.VkSurfaceKHR) ?Chain {
     var caps = vulkan.VkSurfaceCapabilitiesKHR {}
-    if vulkan.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu.physical, surface, &mut caps) != vulkan.VK_SUCCESS {
+    if vulkan.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu.physical, surface, &mut caps) !=
+        vulkan.VK_SUCCESS {
         return none
     }
     if (caps.supported_usage_flags & vulkan.VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0 {
@@ -656,25 +831,35 @@ fn create_chain(w: sdl3.SDL_Window, gpu: &Gpu, surface: vulkan.VkSurfaceKHR) ?Ch
         count = min(count, caps.max_image_count)
     }
     if let format = chain_format(&gpu, surface) {
-        let alpha = first_bit(caps.supported_composite_alpha, [vulkan.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-                                                              vulkan.VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
-                                                              vulkan.VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
-                                                              vulkan.VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR])
+        let alpha = first_bit(
+            caps.supported_composite_alpha,
+            [
+                vulkan.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                vulkan.VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+                vulkan.VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+                vulkan.VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR
+            ]
+        )
         var swapchain: ?vulkan.VkSwapchainKHR = none
-        let rc = vulkan.vkCreateSwapchainKHR(gpu.device, &vulkan.VkSwapchainCreateInfoKHR {
-            surface: surface,
-            min_image_count: count,
-            image_format: format.format,
-            image_color_space: format.color_space,
-            image_extent: extent,
-            image_array_layers: 1,
-            image_usage: vulkan.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-            image_sharing_mode: vulkan.VK_SHARING_MODE_EXCLUSIVE,
-            pre_transform: caps.current_transform,
-            composite_alpha: alpha,
-            present_mode: vulkan.VK_PRESENT_MODE_FIFO_KHR,
-            clipped: vulkan.VK_TRUE,
-        }, none, &mut swapchain)
+        let rc = vulkan.vkCreateSwapchainKHR(
+            gpu.device,
+            &vulkan.VkSwapchainCreateInfoKHR {
+                surface: surface,
+                min_image_count: count,
+                image_format: format.format,
+                image_color_space: format.color_space,
+                image_extent: extent,
+                image_array_layers: 1,
+                image_usage: vulkan.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                image_sharing_mode: vulkan.VK_SHARING_MODE_EXCLUSIVE,
+                pre_transform: caps.current_transform,
+                composite_alpha: alpha,
+                present_mode: vulkan.VK_PRESENT_MODE_FIFO_KHR,
+                clipped: vulkan.VK_TRUE
+            },
+            none,
+            &mut swapchain
+        )
         if rc != vulkan.VK_SUCCESS {
             eprintln("vkCreateSwapchainKHR: VkResult " + str(rc))
             return none
@@ -687,7 +872,13 @@ fn create_chain(w: sdl3.SDL_Window, gpu: &Gpu, surface: vulkan.VkSurfaceKHR) ?Ch
             _ = vulkan.vkGetSwapchainImagesKHR(gpu.device, sc, &mut n, &mut images)
             if let acquired = create_semaphore(&gpu) {
                 if let rendered = create_semaphore(&gpu) {
-                    return Chain { swapchain: sc, images: images, extent: extent, acquired: acquired, rendered: rendered }
+                    return Chain {
+                        swapchain: sc,
+                        images: images,
+                        extent: extent,
+                        acquired: acquired,
+                        rendered: rendered
+                    }
                 }
                 vulkan.vkDestroySemaphore(gpu.device, acquired, none)
             }
@@ -705,18 +896,39 @@ fn destroy_chain(gpu: &Gpu, c: &Chain) {
 
 // --- кадр
 
-fn image_barrier(cb: vulkan.VkCommandBuffer, image: vulkan.VkImage, from: i32, to: i32, src_access: u32,
-                 dst_access: u32, src_stage: u32, dst_stage: u32) {
-    vulkan.vkCmdPipelineBarrier(cb, src_stage, dst_stage, 0, 0, [], 0, [], 1, [vulkan.VkImageMemoryBarrier {
-        src_access_mask: src_access,
-        dst_access_mask: dst_access,
-        old_layout: from,
-        new_layout: to,
-        src_queue_family_index: vulkan.VK_QUEUE_FAMILY_IGNORED,
-        dst_queue_family_index: vulkan.VK_QUEUE_FAMILY_IGNORED,
-        image: image,
-        subresource_range: color_range(),
-    }])
+fn image_barrier(
+    cb: vulkan.VkCommandBuffer,
+    image: vulkan.VkImage,
+    from: i32,
+    to: i32,
+    src_access: u32,
+    dst_access: u32,
+    src_stage: u32,
+    dst_stage: u32
+) {
+    vulkan.vkCmdPipelineBarrier(
+        cb,
+        src_stage,
+        dst_stage,
+        0,
+        0,
+        [],
+        0,
+        [],
+        1,
+        [
+            vulkan.VkImageMemoryBarrier {
+                src_access_mask: src_access,
+                dst_access_mask: dst_access,
+                old_layout: from,
+                new_layout: to,
+                src_queue_family_index: vulkan.VK_QUEUE_FAMILY_IGNORED,
+                dst_queue_family_index: vulkan.VK_QUEUE_FAMILY_IGNORED,
+                image: image,
+                subresource_range: color_range()
+            }
+        ]
+    )
 }
 
 // Кадр: треугольник, копия в буфер чтения и, если есть цепочка, в окно.
@@ -727,51 +939,127 @@ fn draw(gpu: &Gpu, f: &Frame, chain: ?Chain) Fail!bool {
     var shown = false
     var target: ?vulkan.VkImage = none
     if let c = chain {
-        let rc = vulkan.vkAcquireNextImageKHR(gpu.device, c.swapchain, FOREVER, c.acquired, none, &mut index)
+        let rc = vulkan.vkAcquireNextImageKHR(
+            gpu.device,
+            c.swapchain,
+            FOREVER,
+            c.acquired,
+            none,
+            &mut index
+        )
         if rc == vulkan.VK_SUCCESS || rc == vulkan.VK_SUBOPTIMAL_KHR {
             target = c.images[int(index)]
         } else if rc != vulkan.VK_ERROR_OUT_OF_DATE_KHR {
             try vk(rc, "vkAcquireNextImageKHR")
         }
     }
-    try vk(vulkan.vkBeginCommandBuffer(cb, &vulkan.VkCommandBufferBeginInfo {
-        flags: vulkan.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    }), "vkBeginCommandBuffer")
-    vulkan.vkCmdBeginRenderPass(cb, &vulkan.VkRenderPassBeginInfo {
-        render_pass: f.render_pass,
-        framebuffer: f.framebuffer,
-        render_area: vulkan.VkRect2D { extent: vulkan.VkExtent2D { width: W, height: H } },
-        clear_value_count: 1,
-        p_clear_values: [vulkan.VkClearValue { color: vulkan.VkClearColorValue { float32: [0.0, 0.2, 0.4, 1.0] } }],
-    }, vulkan.VK_SUBPASS_CONTENTS_INLINE)
+    try vk(
+        vulkan.vkBeginCommandBuffer(
+            cb,
+            &vulkan.VkCommandBufferBeginInfo {
+                flags: vulkan.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+            }
+        ),
+        "vkBeginCommandBuffer"
+    )
+    vulkan.vkCmdBeginRenderPass(
+        cb,
+        &vulkan.VkRenderPassBeginInfo {
+            render_pass: f.render_pass,
+            framebuffer: f.framebuffer,
+            render_area: vulkan.VkRect2D { extent: vulkan.VkExtent2D { width: W, height: H } },
+            clear_value_count: 1,
+            p_clear_values: [
+                vulkan.VkClearValue {
+                    color: vulkan.VkClearColorValue { float32: [0.0, 0.2, 0.4, 1.0] }
+                }
+            ]
+        },
+        vulkan.VK_SUBPASS_CONTENTS_INLINE
+    )
     vulkan.vkCmdBindPipeline(cb, vulkan.VK_PIPELINE_BIND_POINT_GRAPHICS, f.pipeline)
     vulkan.vkCmdDraw(cb, 3, 1, 0, 0)
     vulkan.vkCmdEndRenderPass(cb)
-    vulkan.vkCmdCopyImageToBuffer(cb, f.image, vulkan.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, f.buffer, 1, [
-        vulkan.VkBufferImageCopy {
-            image_subresource: color_layers(),
-            image_extent: vulkan.VkExtent3D { width: W, height: H, depth: 1 },
-        },
-    ])
+    vulkan.vkCmdCopyImageToBuffer(
+        cb,
+        f.image,
+        vulkan.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        f.buffer,
+        1,
+        [
+            vulkan.VkBufferImageCopy {
+                image_subresource: color_layers(),
+                image_extent: vulkan.VkExtent3D { width: W, height: H, depth: 1 }
+            }
+        ]
+    )
     // Буфер — хосту после копирования.
-    vulkan.vkCmdPipelineBarrier(cb, vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT, vulkan.VK_PIPELINE_STAGE_HOST_BIT, 0, 1, [
-        vulkan.VkMemoryBarrier { src_access_mask: vulkan.VK_ACCESS_TRANSFER_WRITE_BIT, dst_access_mask: vulkan.VK_ACCESS_HOST_READ_BIT },
-    ], 0, [], 0, [])
+    vulkan.vkCmdPipelineBarrier(
+        cb,
+        vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vulkan.VK_PIPELINE_STAGE_HOST_BIT,
+        0,
+        1,
+        [
+            vulkan.VkMemoryBarrier {
+                src_access_mask: vulkan.VK_ACCESS_TRANSFER_WRITE_BIT,
+                dst_access_mask: vulkan.VK_ACCESS_HOST_READ_BIT
+            }
+        ],
+        0,
+        [],
+        0,
+        []
+    )
     if let c = chain {
         if let img = target {
-            image_barrier(cb, img, vulkan.VK_IMAGE_LAYOUT_UNDEFINED, vulkan.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-                          vulkan.VK_ACCESS_TRANSFER_WRITE_BIT, vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT,
-                          vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT)
-            vulkan.vkCmdBlitImage(cb, f.image, vulkan.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img,
-                                  vulkan.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, [vulkan.VkImageBlit {
-                src_subresource: color_layers(),
-                src_offsets: [vulkan.VkOffset3D {}, vulkan.VkOffset3D { x: i32(W), y: i32(H), z: 1 }],
-                dst_subresource: color_layers(),
-                dst_offsets: [vulkan.VkOffset3D {}, vulkan.VkOffset3D { x: i32(c.extent.width), y: i32(c.extent.height), z: 1 }],
-            }], vulkan.VK_FILTER_NEAREST)
-            image_barrier(cb, img, vulkan.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vulkan.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                          vulkan.VK_ACCESS_TRANSFER_WRITE_BIT, 0, vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT,
-                          vulkan.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT)
+            image_barrier(
+                cb,
+                img,
+                vulkan.VK_IMAGE_LAYOUT_UNDEFINED,
+                vulkan.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                0,
+                vulkan.VK_ACCESS_TRANSFER_WRITE_BIT,
+                vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT
+            )
+            vulkan.vkCmdBlitImage(
+                cb,
+                f.image,
+                vulkan.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                img,
+                vulkan.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                [
+                    vulkan.VkImageBlit {
+                        src_subresource: color_layers(),
+                        src_offsets: [
+                            vulkan.VkOffset3D {},
+                            vulkan.VkOffset3D { x: i32(W), y: i32(H), z: 1 }
+                        ],
+                        dst_subresource: color_layers(),
+                        dst_offsets: [
+                            vulkan.VkOffset3D {},
+                            vulkan.VkOffset3D {
+                                x: i32(c.extent.width),
+                                y: i32(c.extent.height),
+                                z: 1
+                            }
+                        ]
+                    }
+                ],
+                vulkan.VK_FILTER_NEAREST
+            )
+            image_barrier(
+                cb,
+                img,
+                vulkan.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                vulkan.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                vulkan.VK_ACCESS_TRANSFER_WRITE_BIT,
+                0,
+                vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                vulkan.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+            )
         }
     }
     try vk(vulkan.vkEndCommandBuffer(cb), "vkEndCommandBuffer")
@@ -787,26 +1075,43 @@ fn draw(gpu: &Gpu, f: &Frame, chain: ?Chain) Fail!bool {
     if len(waits) > 0 {
         stages = [vulkan.VK_PIPELINE_STAGE_TRANSFER_BIT]
     }
-    try vk(vulkan.vkQueueSubmit(gpu.queue, 1, [vulkan.VkSubmitInfo {
-        p_wait_semaphores: waits,
-        p_wait_dst_stage_mask: stages,
-        p_command_buffers: [cb],
-        p_signal_semaphores: signals,
-    }], f.fence), "vkQueueSubmit")
+    try vk(
+        vulkan.vkQueueSubmit(
+            gpu.queue,
+            1,
+            [
+                vulkan.VkSubmitInfo {
+                    p_wait_semaphores: waits,
+                    p_wait_dst_stage_mask: stages,
+                    p_command_buffers: [cb],
+                    p_signal_semaphores: signals
+                }
+            ],
+            f.fence
+        ),
+        "vkQueueSubmit"
+    )
     if let c = chain {
         if target != none {
-            let rc = vulkan.vkQueuePresentKHR(gpu.queue, &vulkan.VkPresentInfoKHR {
-                p_wait_semaphores: [c.rendered],
-                p_swapchains: [c.swapchain],
-                p_image_indices: [index],
-            })
+            let rc = vulkan.vkQueuePresentKHR(
+                gpu.queue,
+                &vulkan.VkPresentInfoKHR {
+                    p_wait_semaphores: [c.rendered],
+                    p_swapchains: [c.swapchain],
+                    p_image_indices: [index]
+                }
+            )
             shown = rc == vulkan.VK_SUCCESS
-            if rc != vulkan.VK_SUCCESS && rc != vulkan.VK_SUBOPTIMAL_KHR && rc != vulkan.VK_ERROR_OUT_OF_DATE_KHR {
+            if rc != vulkan.VK_SUCCESS && rc != vulkan.VK_SUBOPTIMAL_KHR &&
+                rc != vulkan.VK_ERROR_OUT_OF_DATE_KHR {
                 try vk(rc, "vkQueuePresentKHR")
             }
         }
     }
-    try vk(vulkan.vkWaitForFences(gpu.device, 1, [f.fence], vulkan.VK_TRUE, FOREVER), "vkWaitForFences")
+    try vk(
+        vulkan.vkWaitForFences(gpu.device, 1, [f.fence], vulkan.VK_TRUE, FOREVER),
+        "vkWaitForFences"
+    )
     try vk(vulkan.vkResetFences(gpu.device, 1, [f.fence]), "vkResetFences")
     return shown
 }
@@ -816,7 +1121,10 @@ fn draw(gpu: &Gpu, f: &Frame, chain: ?Chain) Fail!bool {
 fn read_frame(gpu: &Gpu, f: &Frame) Fail!Report {
     let size = W * H * 4
     var mapped: ?vulkan.VkVoid = none
-    try vk(vulkan.vkMapMemory(gpu.device, f.buffer_memory, 0, vulkan.VK_WHOLE_SIZE, 0, &mut mapped), "vkMapMemory")
+    try vk(
+        vulkan.vkMapMemory(gpu.device, f.buffer_memory, 0, vulkan.VK_WHOLE_SIZE, 0, &mut mapped),
+        "vkMapMemory"
+    )
     var rgba: List[u8] = repeat(u8(0), int(size))
     if let at = mapped {
         _ = memmove(&mut rgba, at, u64(size))
@@ -838,8 +1146,9 @@ fn read_frame(gpu: &Gpu, f: &Frame) Fail!Report {
             triangle = triangle + 1
         }
     }
-    let line = "frame " + str(W) + "x" + str(H) + ": " + str(triangle) + " triangle pixels, fnv1a " + str(hash) +
-               ", matches the reference: " + str(hash == REFERENCE)
+    let line = "frame " + str(W) + "x" + str(H) + ": " + str(triangle) +
+        " triangle pixels, fnv1a " + str(hash) + ", matches the reference: " +
+        str(hash == REFERENCE)
     return Report { line: line, ppm: ppm }
 }
 

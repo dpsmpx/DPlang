@@ -22,7 +22,15 @@ pub struct Totals {
 }
 
 // Рабочий: номера — из общего счётчика, итоги — в общие атомики.
-fn worker(jobs: &List[i64], next: &Atomic[i64], stop: &Atomic[bool], bad: &Atomic[i64], count: &Atomic[i64], sum: &Atomic[i64], odd: &Atomic[i64]) {
+fn worker(
+    jobs: &List[i64],
+    next: &Atomic[i64],
+    stop: &Atomic[bool],
+    bad: &Atomic[i64],
+    count: &Atomic[i64],
+    sum: &Atomic[i64],
+    odd: &Atomic[i64]
+) {
     let n = i64(len(jobs))
     while !stop.load() {
         let j = next.add(1)

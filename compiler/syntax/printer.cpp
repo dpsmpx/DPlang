@@ -13,7 +13,8 @@
 //   между объявлениями модуля пустая строка есть всегда (кроме
 //   соседних import).
 // Ни один комментарий не теряется и не повторяется: это проверяет круг
-// `debug parse` и фаззер.
+// `debug parse` и фаззер. Строки — до 100 символов: выражение и параметры
+// функции раскладываются документом с группами (Doc, render).
 #include "syntax/printer.h"
 
 #include "syntax/ast_dump.h"
@@ -192,17 +193,16 @@ private:
                     if (i) pad(0);
                     out += f->attrs[i].text() + "\n";
                 }
-                out += pub + (f->is_extern ? "extern fn " : "fn ") + f->name + "(";
-                for (size_t i = 0; i < f->params.size(); i++) {
-                    const Param& p = f->params[i];
-                    if (i) out += ", ";
-                    out += p.name + ": ";
-                    if (p.mode == ParamMode::Ref) out += "&";
-                    if (p.mode == ParamMode::Mut) out += "&mut ";
-                    out += type_text(p.type);
+                out += pub + (f->is_extern ? "extern fn " : "fn ") + f->name;
+                // Параметры не влезают в строку — по одному на строку.
+                std::vector<Doc> ps;
+                for (const Param& p : f->params) {
+                    std::string mode = p.mode == ParamMode::Ref ? "&" : p.mode == ParamMode::Mut ? "&mut " : "";
+                    ps.push_back(text(p.name + ": " + mode + type_text(p.type)));
                 }
-                out += ")";
-                if (f->ret) out += " " + type_text(f->ret);
+                std::string ret = f->ret ? " " + type_text(f->ret) : "";
+                render(bracket("(", std::move(ps), ")"), width(ret) + (f->body ? 2 : 0));
+                out += ret;
                 if (!f->body) break;  // extern fn — без тела
                 out += " ";
                 block(f->body, 0);
@@ -329,7 +329,7 @@ private:
             case StmtKind::While: {
                 auto* w = static_cast<const WhileStmt*>(s);
                 out += "while ";
-                expr(w->cond);
+                expr(w->cond, 2);
                 out += " ";
                 block(w->body, d);
                 break;
@@ -339,10 +339,10 @@ private:
                 out += std::string(f->parallel ? "parallel for " : "for ") + f->var + " in ";
                 if (f->mode == ForMode::Ref) out += "&";
                 if (f->mode == ForMode::Mut) out += "&mut ";
-                expr(f->iter);
+                expr(f->iter, f->mode == ForMode::Range ? 0 : 2);
                 if (f->mode == ForMode::Range) {
                     out += "..";
-                    expr(f->hi);
+                    expr(f->hi, 2);
                 }
                 out += " ";
                 block(f->body, d);
@@ -351,7 +351,7 @@ private:
             case StmtKind::Match: {
                 auto* m = static_cast<const MatchStmt*>(s);
                 out += "match ";
-                expr(m->subject);
+                expr(m->subject, 2);
                 out += " {";
                 Lines l{d + 1, LinesMode::Lines};
                 after_open(brace_after(m->subject ? m->subject->span.end : m->span.begin, m->span.end), l);
@@ -407,10 +407,10 @@ private:
     void if_stmt(const IfStmt* i, int d) {
         out += "if ";
         if (i->cond) {
-            expr(i->cond);
+            expr(i->cond, 2);
         } else {
             out += "let " + i->let_name + " = ";
-            expr(i->let_value);
+            expr(i->let_value, 2);
         }
         out += " ";
         block(i->then, d);
@@ -477,117 +477,255 @@ private:
         }
     }
 
-    void exprs(const std::vector<Expr*>& list) {
-        for (size_t i = 0; i < list.size(); i++) {
-            if (i) out += ", ";
-            expr(list[i]);
-        }
+    // --- выражения: документ и раскладка в ширину kWidth
+    //
+    // Выражение строится документом (текст, перенос, группа, отступ) и
+    // раскладывается с текущей колонки: группа печатается в строку, если
+    // влезает до следующего возможного переноса, иначе её переносы — концы
+    // строк. Переносятся списки (аргументы вызова, элементы списка, поля
+    // литерала, данные варианта — по одному на строку с отступом +4) и
+    // бинарные операторы (после оператора, продолжение с отступом +4):
+    // там конец строки выражения не кончает (syntax.newline).
+    static constexpr int kWidth = 100;
+    static constexpr size_t kSep = SIZE_MAX;  // Cmd.pos у переноса Fill
+
+    struct Doc {
+        enum class K : uint8_t { Text, Line, Group, Nest, Cat, Fill } k = K::Cat;  // Fill: часть, перенос, часть…
+        std::string s;          // Text — текст; Line — текст в строку
+        std::vector<Doc> kids;  // Group, Nest, Cat
+    };
+    static Doc text(std::string s) { return Doc{Doc::K::Text, std::move(s), {}}; }
+    static Doc line(std::string flat) { return Doc{Doc::K::Line, std::move(flat), {}}; }
+    static Doc wrap(Doc::K k, Doc d) {
+        Doc r{k, {}, {}};
+        r.kids.push_back(std::move(d));
+        return r;
+    }
+    static Doc group(Doc d) { return wrap(Doc::K::Group, std::move(d)); }
+    static Doc nest(Doc d) { return wrap(Doc::K::Nest, std::move(d)); }
+    static Doc cat(std::vector<Doc> ds) { return Doc{Doc::K::Cat, {}, std::move(ds)}; }
+    // Части переносятся, а не копируются: у глубокой вложенности копии
+    // поддеревьев на каждом уровне дали бы квадратичное время.
+    template <class... D>
+    static Doc catv(D&&... ds) {
+        Doc r{Doc::K::Cat, {}, {}};
+        r.kids.reserve(sizeof...(ds));
+        (r.kids.push_back(std::forward<D>(ds)), ...);
+        return r;
+    }
+    static Doc fill(std::vector<Doc> ds) { return Doc{Doc::K::Fill, {}, std::move(ds)}; }
+
+    // Ширина строки в символах (UTF-8).
+    static int width(std::string_view s) {
+        int n = 0;
+        for (unsigned char c : s) n += (c & 0xC0) != 0x80;
+        return n;
     }
 
-    void field_inits(const std::vector<FieldInit>& fields) {
-        out += " {";
-        for (size_t i = 0; i < fields.size(); i++) {
-            out += i ? ", " : " ";
-            out += fields[i].name;
-            if (fields[i].value) {
-                out += ": ";
-                expr(fields[i].value);
+    // Список в скобках: в строку — `open a, b close`, иначе по элементу на
+    // строку. pad — пробел у скобок в строку (литерал структуры).
+    static Doc bracket(const std::string& open, std::vector<Doc> items, const std::string& close, bool pad = false) {
+        if (items.empty()) return text(open + close);
+        std::vector<Doc> in;
+        in.push_back(line(pad ? " " : ""));
+        for (size_t i = 0; i < items.size(); i++) {
+            if (i) {
+                in.push_back(text(","));
+                in.push_back(line(" "));
             }
+            in.push_back(std::move(items[i]));
         }
-        out += fields.empty() ? "}" : " }";
+        return group(catv(text(open), nest(cat(std::move(in))), line(pad ? " " : ""), text(close)));
     }
 
-    void expr(const Expr* e) {
-        if (!e) return;
+    std::vector<Doc> docs(const std::vector<Expr*>& list) {
+        std::vector<Doc> out_;
+        for (const Expr* e : list) out_.push_back(doc(e));
+        return out_;
+    }
+
+    Doc field_inits(const std::vector<FieldInit>& fields) {
+        std::vector<Doc> items;
+        for (const FieldInit& f : fields) {
+            if (f.value) items.push_back(catv(text(f.name + ": "), doc(f.value)));
+            else items.push_back(text(f.name));
+        }
+        return catv(text(" "), bracket("{", std::move(items), "}", true));
+    }
+
+    Doc doc(const Expr* e) {
+        if (!e) return text("");
         switch (e->kind) {
             case ExprKind::Int: case ExprKind::Float: case ExprKind::Str: case ExprKind::Byte:
-                out += source_of(e);
-                break;
-            case ExprKind::Bool: out += static_cast<const BoolExpr*>(e)->value ? "true" : "false"; break;
-            case ExprKind::None: out += "none"; break;
-            case ExprKind::Name: out += static_cast<const NameExpr*>(e)->name; break;
+                return text(std::string(source_of(e)));
+            case ExprKind::Bool: return text(static_cast<const BoolExpr*>(e)->value ? "true" : "false");
+            case ExprKind::None: return text("none");
+            case ExprKind::Name: return text(static_cast<const NameExpr*>(e)->name);
             case ExprKind::Field: {
                 auto* f = static_cast<const FieldExpr*>(e);
-                expr(f->object);
-                out += "." + f->name;
-                break;
+                return catv(doc(f->object), text("." + f->name));
             }
             case ExprKind::Index: {
                 auto* i = static_cast<const IndexExpr*>(e);
-                expr(i->object);
-                out += "[";
-                expr(i->index);
-                out += "]";
-                break;
+                return catv(doc(i->object), text("["), doc(i->index), text("]"));
             }
             case ExprKind::Slice: {
                 auto* s = static_cast<const SliceExpr*>(e);
-                expr(s->object);
-                out += "[";
-                expr(s->lo);
-                out += "..";
-                expr(s->hi);
-                out += "]";
-                break;
+                return catv(doc(s->object), text("["), doc(s->lo), text(".."), doc(s->hi), text("]"));
             }
             case ExprKind::Call: {
                 auto* c = static_cast<const CallExpr*>(e);
-                expr(c->callee);
-                out += "(";
-                exprs(c->args);
-                out += ")";
-                break;
+                return catv(doc(c->callee), bracket("(", docs(c->args), ")"));
             }
             case ExprKind::Unary: {
                 auto* u = static_cast<const UnaryExpr*>(e);
-                out += u->op == UnOp::Neg ? "-" : u->op == UnOp::Not ? "!" : "~";
-                expr(u->operand);
-                break;
+                return catv(text(u->op == UnOp::Neg ? "-" : u->op == UnOp::Not ? "!" : "~"), doc(u->operand));
             }
             case ExprKind::Binary: {
+                // Цепочка одного оператора `a + b + c` (левая): на строку —
+                // сколько влезает, оператор в конце строки.
                 auto* b = static_cast<const BinaryExpr*>(e);
-                expr(b->lhs);
-                out += " " + std::string(bin_op_text(b->op)) + " ";
-                expr(b->rhs);
-                break;
+                std::vector<const Expr*> ops{b->rhs};
+                const Expr* head = b->lhs;
+                while (auto* l = as<const BinaryExpr>(head)) {
+                    if (l->op != b->op) break;
+                    ops.push_back(l->rhs);
+                    head = l->lhs;
+                }
+                ops.push_back(head);
+                std::string op = " " + std::string(bin_op_text(b->op));
+                std::vector<Doc> parts;
+                for (size_t i = ops.size(); i-- > 0;) {
+                    if (!parts.empty()) parts.push_back(line(" "));
+                    parts.push_back(i ? catv(doc(ops[i]), text(op)) : doc(ops[i]));
+                }
+                return nest(fill(std::move(parts)));
             }
-            case ExprKind::Try: out += "try "; expr(static_cast<const TryExpr*>(e)->operand); break;
-            case ExprKind::Spawn: out += "spawn "; expr(static_cast<const SpawnExpr*>(e)->operand); break;
-            case ExprKind::Paren:
-                out += "(";
-                expr(static_cast<const ParenExpr*>(e)->inner);
-                out += ")";
-                break;
+            case ExprKind::Try: return catv(text("try "), doc(static_cast<const TryExpr*>(e)->operand));
+            case ExprKind::Spawn: return catv(text("spawn "), doc(static_cast<const SpawnExpr*>(e)->operand));
+            case ExprKind::Paren: return catv(text("("), doc(static_cast<const ParenExpr*>(e)->inner), text(")"));
             case ExprKind::Ref: {
                 auto* r = static_cast<const RefExpr*>(e);
-                out += r->mut ? "&mut " : "&";
-                expr(r->operand);
-                break;
+                return catv(text(r->mut ? "&mut " : "&"), doc(r->operand));
             }
             case ExprKind::StructLit: {
                 auto* s = static_cast<const StructLitExpr*>(e);
-                expr(s->path);
-                field_inits(s->fields);
-                break;
+                return catv(doc(s->path), field_inits(s->fields));
             }
             case ExprKind::VariantLit: {
                 auto* v = static_cast<const VariantLitExpr*>(e);
-                out += "." + v->name;
-                if (v->form == VariantForm::Tuple) {
-                    out += "(";
-                    exprs(v->args);
-                    out += ")";
-                } else if (v->form == VariantForm::Record) {
-                    field_inits(v->fields);
-                }
-                break;
+                if (v->form == VariantForm::Tuple) return catv(text("." + v->name), bracket("(", docs(v->args), ")"));
+                if (v->form == VariantForm::Record) return catv(text("." + v->name), field_inits(v->fields));
+                return text("." + v->name);
             }
-            case ExprKind::ListLit:
-                out += "[";
-                exprs(static_cast<const ListLitExpr*>(e)->items);
-                out += "]";
-                break;
-            case ExprKind::Error: break;
+            case ExprKind::ListLit: return bracket("[", docs(static_cast<const ListLitExpr*>(e)->items), "]");
+            case ExprKind::Error: return text("");
+        }
+        return text("");
+    }
+
+    // Раскладка: команды — (отступ, в строку, документ).
+    struct Cmd {
+        int indent;
+        bool flat;
+        const Doc* d;
+        size_t pos = 0;  // Fill: номер следующей части
+    };
+
+    // Влезает ли next в строку: от колонки до первого переноса остальных
+    // команд (rest — в их режимах), с хвостом trail после выражения.
+    static bool fits(std::vector<Cmd> st, const std::vector<Cmd>& rest, size_t r, int left) {
+        while (left >= 0) {
+            if (st.empty()) {
+                if (r == 0) return true;
+                st.push_back(rest[--r]);
+                continue;
+            }
+            Cmd c = st.back();
+            st.pop_back();
+            switch (c.d->k) {
+                case Doc::K::Text: left -= width(c.d->s); break;
+                case Doc::K::Line:
+                    if (!c.flat) return true;
+                    left -= width(c.d->s);
+                    break;
+                case Doc::K::Group: st.push_back({c.indent, c.flat, &c.d->kids[0]}); break;
+                case Doc::K::Nest: st.push_back({c.indent + 4, c.flat, &c.d->kids[0]}); break;
+                case Doc::K::Cat: case Doc::K::Fill:
+                    for (auto it = c.d->kids.rbegin(); it != c.d->kids.rend(); ++it) st.push_back({c.indent, c.flat, &*it});
+                    break;
+            }
+        }
+        return false;
+    }
+
+    // Выражение с текущей позиции out; trail — ширина текста после него на
+    // той же строке (` {` у заголовка блока).
+    void expr(const Expr* e, int trail = 0) {
+        if (e) render(doc(e), trail);
+    }
+
+    void render(const Doc& d, int trail) {
+        size_t nl = out.rfind('\n');
+        size_t line_start = nl == std::string::npos ? 0 : nl + 1;
+        int col = width(std::string_view(out).substr(line_start));
+        int base = 0;
+        while (line_start + static_cast<size_t>(base) < out.size() && out[line_start + static_cast<size_t>(base)] == ' ') base++;
+        Doc tail = text(std::string(static_cast<size_t>(trail), ' '));
+        std::vector<Cmd> st{{base, true, &tail}, {base, false, &d}};
+        while (!st.empty()) {
+            Cmd c = st.back();
+            st.pop_back();
+            if (c.pos == kSep) {  // перенос Fill: в строку, если следующая часть влезает
+                const Cmd& next = st.back();
+                const Doc& nd = next.d->kids[next.pos];
+                c.flat = c.flat || fits({{c.indent, true, &nd}, {c.indent, true, c.d}}, st, st.size() - 1, kWidth - col);
+            }
+            switch (c.d->k) {
+                case Doc::K::Text:
+                    if (c.d != &tail) {
+                        out += c.d->s;
+                        col += width(c.d->s);
+                    }
+                    break;
+                case Doc::K::Line:
+                    if (c.flat) {
+                        out += c.d->s;
+                        col += width(c.d->s);
+                    } else {
+                        out += '\n';
+                        out.append(static_cast<size_t>(c.indent), ' ');
+                        col = c.indent;
+                    }
+                    break;
+                case Doc::K::Group: {
+                    // Отступ у края ширины: перенос ничего не даёт, а у глубокой
+                    // вложенности дал бы квадратичный вывод — в строку.
+                    Cmd flat{c.indent, true, &c.d->kids[0]};
+                    bool deep = c.indent >= kWidth - 20;
+                    st.push_back(c.flat || deep || fits({flat}, st, st.size(), kWidth - col) ? flat
+                                                                                          : Cmd{c.indent, false, &c.d->kids[0]});
+                    break;
+                }
+                case Doc::K::Nest: st.push_back({c.indent + 4, c.flat, &c.d->kids[0]}); break;
+                case Doc::K::Cat:
+                    for (auto it = c.d->kids.rbegin(); it != c.d->kids.rend(); ++it) st.push_back({c.indent, c.flat, &*it});
+                    break;
+                case Doc::K::Fill: {
+                    // Часть pos; перед следующей частью перенос — только если
+                    // она с переносом в строку не влезает.
+                    const auto& k = c.d->kids;
+                    if (c.pos >= k.size()) break;
+                    Cmd part{c.indent, c.flat, &k[c.pos]};
+                    if (c.pos + 1 < k.size()) {
+                        st.push_back({c.indent, c.flat, c.d, c.pos + 2});
+                        st.push_back({c.indent, c.flat, &k[c.pos + 1], kSep});
+                    }
+                    bool flat = c.flat || c.indent >= kWidth - 20 || fits({{c.indent, true, part.d}}, st, st.size(), kWidth - col);
+                    st.push_back(flat ? Cmd{c.indent, true, part.d} : part);
+                    break;
+                }
+            }
         }
     }
 };

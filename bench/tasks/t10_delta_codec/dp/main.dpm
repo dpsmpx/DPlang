@@ -45,7 +45,13 @@ fn edit(x: i32, y: i32, z: i32, block: i32) sol.Edit {
 }
 
 fn main() {
-    let edits = [edit(0, 0, 0, 1), edit(1, 0, 0, 1), edit(1, 64, -3, 300), edit(-100000, 64, -3, 65535), edit(2147483647, -2147483648, 0, 0)]
+    let edits = [
+        edit(0, 0, 0, 1),
+        edit(1, 0, 0, 1),
+        edit(1, 64, -3, 300),
+        edit(-100000, 64, -3, 65535),
+        edit(2147483647, -2147483648, 0, 0)
+    ]
     let bytes = sol.encode(edits)
     hex(bytes)
     dec(bytes)

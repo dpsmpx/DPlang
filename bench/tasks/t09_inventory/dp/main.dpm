@@ -4,7 +4,10 @@ import sol
 fn add(inv: &mut sol.Inventory, item: i32, count: i32) {
     match sol.inv_add(&mut inv, item, count) {
         err(e) => println("add " + str(item) + " " + str(count) + " invalid")
-        ok(left) => println("add " + str(item) + " " + str(count) + " left " + str(left) + " | " + sol.inv_describe(&inv))
+        ok(left) => println(
+            "add " + str(item) + " " + str(count) + " left " + str(left) + " | " +
+                sol.inv_describe(&inv)
+        )
     }
 }
 
@@ -35,5 +38,7 @@ fn main() {
     rem(&mut inv, 1, 20)
     rem(&mut inv, 200, 1)
     add(&mut inv, 2, 70)
-    println("total 2 = " + str(sol.inv_total(&inv, 2)) + ", total 1 = " + str(sol.inv_total(&inv, 1)))
+    println(
+        "total 2 = " + str(sol.inv_total(&inv, 2)) + ", total 1 = " + str(sol.inv_total(&inv, 1))
+    )
 }

@@ -236,7 +236,11 @@ def discover(pattern):
         for ex in sorted(os.listdir(EXAMPLES)):
             if os.path.isdir(os.path.join(EXAMPLES, ex, 'expected')):
                 cases = EXAMPLE_CASES + tuple(c for c in CROSS if cross_tools(c) is None)
-                deep += [('example', f'{ex}/{c}') for c in cases if pattern in f'example/{ex}/{c}']
+            elif os.path.exists(os.path.join(EXAMPLES, ex, 'main.dpm')):
+                cases = ('fmt',)  # без ожидаемого (графика, Р64) — только канонический вид
+            else:
+                continue
+            deep += [('example', f'{ex}/{c}') for c in cases if pattern in f'example/{ex}/{c}']
     if os.path.isdir(BENCH_TASKS):
         for t in sorted(os.listdir(BENCH_TASKS)):
             if os.path.isdir(os.path.join(BENCH_TASKS, t, 'dp')):

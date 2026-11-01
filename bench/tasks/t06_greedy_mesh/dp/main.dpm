@@ -5,7 +5,9 @@ fn run(w: i32, h: i32, cells: []i32) {
     let q = sol.greedy_mesh(w, h, cells)
     println("quads " + str(len(q)))
     for r in &q {
-        println("  " + str(r.x) + " " + str(r.y) + " " + str(r.w) + " " + str(r.h) + " " + str(r.block))
+        println(
+            "  " + str(r.x) + " " + str(r.y) + " " + str(r.w) + " " + str(r.h) + " " + str(r.block)
+        )
     }
 }
 

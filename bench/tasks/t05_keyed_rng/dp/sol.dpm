@@ -12,6 +12,7 @@ fn raw(seed: u64, x: i32, y: i32) i32 {
 }
 
 pub fn height(seed: u64, x: i32, y: i32) i32 {
-    let sum = raw(seed, x, y) + raw(seed, x - 1, y) + raw(seed, x + 1, y) + raw(seed, x, y - 1) + raw(seed, x, y + 1)
+    let sum = raw(seed, x, y) + raw(seed, x - 1, y) + raw(seed, x + 1, y) + raw(seed, x, y - 1) +
+        raw(seed, x, y + 1)
     return sum / 5
 }

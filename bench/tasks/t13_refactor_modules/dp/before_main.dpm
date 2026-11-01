@@ -22,7 +22,8 @@ fn do_blast(w: &mut world.World, cx: i32, cy: i32, r: i32, dmg: i32) {
         before.push(world.unit_hp(&w, i32(i)))
     }
     let n = combat.blast(&mut w, cx, cy, r, dmg)
-    var line = "blast (" + str(cx) + "," + str(cy) + ") r" + str(r) + " " + str(dmg) + ": " + str(n) + " hit:"
+    var line = "blast (" + str(cx) + "," + str(cy) + ") r" + str(r) + " " + str(dmg) + ": " +
+        str(n) + " hit:"
     for i in 0..len(w.units) {
         if world.unit_hp(&w, i32(i)) != before[i] {
             line += " " + str(i)
@@ -47,5 +48,8 @@ fn main() {
     do_blast(&mut w, 2, 0, 2, 14)
     do_blast(&mut w, 10, 10, 0, 100)
     do_hit(&mut w, b, 1)
-    println("hp " + str(world.unit_hp(&w, a)) + " " + str(world.unit_hp(&w, 9)) + " " + str(world.unit_hp(&w, -1)))
+    println(
+        "hp " + str(world.unit_hp(&w, a)) + " " + str(world.unit_hp(&w, 9)) + " " +
+            str(world.unit_hp(&w, -1))
+    )
 }
