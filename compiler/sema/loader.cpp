@@ -48,7 +48,7 @@ public:
             diags_.error(Code::E0001, "cannot read source file '" + path + "'");
             return nullptr;
         }
-        return load(stem_of(path), path, std::move(text));
+        return load(stem_of(path), path, std::move(text), path);
     }
 
 private:
@@ -65,12 +65,15 @@ private:
         return opt_.reader ? opt_.reader->read(path, out) : read_file(path, out);
     }
 
-    ModuleInfo* load(const std::string& name, const std::string& path, std::string text) {
+    // shown — путь в сообщениях, местах ловушек и `#line`; у модулей
+    // библиотеки и привязок — без каталога установки: сборка не зависит от
+    // него (docs/policy/DETERMINISM.md, раздел 6).
+    ModuleInfo* load(const std::string& name, const std::string& path, std::string text, const std::string& shown) {
         auto owned = std::make_unique<ModuleInfo>();
         ModuleInfo* m = owned.get();
         m->name = name;
         m->path = path;
-        m->file = sources_.add(path, std::move(text));
+        m->file = sources_.add(shown, std::move(text));
         size_t errors_before = diags_.error_count();
         ParseOptions po;
         po.max_nesting = opt_.max_nesting;
@@ -118,16 +121,21 @@ private:
             return it->second;
         }
         std::vector<std::string> places = {root_dir_ + name + ".dpm"};
+        std::vector<std::string> shown = places;
         size_t lib = std::string::npos;  // номер места стандартной библиотеки
         if (!opt_.stdlib_dir.empty()) {
             lib = places.size();
             places.push_back(opt_.stdlib_dir + "/" + name + ".dpm");
+            shown.push_back("stdlib/" + name + ".dpm");
         }
-        if (!opt_.bindings_dir.empty()) places.push_back(opt_.bindings_dir + "/" + name + "/" + name + ".dpm");
+        if (!opt_.bindings_dir.empty()) {
+            places.push_back(opt_.bindings_dir + "/" + name + "/" + name + ".dpm");
+            shown.push_back("bindings/" + name + "/" + name + ".dpm");
+        }
         for (size_t i = 0; i < places.size(); i++) {
             std::string text;
             if (!read(places[i], text)) continue;
-            ModuleInfo* m = load(name, places[i], std::move(text));
+            ModuleInfo* m = load(name, places[i], std::move(text), shown[i]);
             if (m && i == lib) m->stdlib = true;  // найден в стандартной библиотеке
             return m;
         }
